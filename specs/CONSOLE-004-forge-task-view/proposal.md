@@ -1,7 +1,7 @@
 ---
 id: "CONSOLE-004-forge-task-view"
 type: spec
-status: draft # draft | implementing | verifying | archived
+status: implementing # draft | implementing | verifying | archived
 created: "2026-10-21"
 issue: "mlorentedev/kubelab#2570"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal]

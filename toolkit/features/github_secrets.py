@@ -37,6 +37,7 @@ class GitHubSecretsManager:
                 ["gh", "--version"],
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
                 check=True,
             )
             logger.debug(f"GitHub CLI version: {result.stdout.strip()}")
@@ -46,6 +47,7 @@ class GitHubSecretsManager:
                 ["gh", "auth", "status"],
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
                 check=True,
             )
             logger.debug("GitHub CLI authentication status: OK")
@@ -65,6 +67,7 @@ class GitHubSecretsManager:
                 ["gh", "repo", "view", "--json", "name,owner"],
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
                 check=True,
                 cwd=self.project_root,
             )
@@ -83,6 +86,7 @@ class GitHubSecretsManager:
                 ["gh", "secret", "list", "--repo", self.repo_slug, "--json", "name"],
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
                 check=True,
             )
             secrets_data = json.loads(result.stdout)
@@ -110,6 +114,7 @@ class GitHubSecretsManager:
                 ],
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
                 check=True,
             )
             logger.debug(f"Set secret: {name}")
@@ -125,6 +130,7 @@ class GitHubSecretsManager:
                 ["gh", "secret", "delete", name, "--repo", self.repo_slug],
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
                 check=True,
             )
             logger.debug(f"Deleted secret: {name}")

@@ -17,6 +17,7 @@ import ipaddress
 import json
 import re
 import subprocess
+import textwrap
 from functools import cache
 from pathlib import Path
 
@@ -153,6 +154,12 @@ def test_a_pull_past_the_budget_is_refused_unless_the_run_allows_it():
     assert _decide(2970, OPEN_WEBUI_BYTES, image_pull_budget_seconds=5000)[0]
     assert _decide(2970, 100_000_000) == (True, 270 * 2 + 300 + 50)
     assert _decide(2970, 0) == (True, 300 + 50), "a held image still gets a bound"
+
+
+def test_the_budget_counts_transfer_while_the_bound_also_grants_the_pauses():
+    """Pauses are spent only on failure, and 3900 s of them pass the 1800 s default
+    alone: a wall-clock budget would refuse every pull at the edge (#2873)."""
+    assert _decide(2970, 100_000_000, docker_max_download_attempts="40") == (True, 270 * 2 + 300 + 3900)
 
 
 def test_an_explicit_timeout_bounds_the_pull_whatever_the_estimate():
@@ -616,10 +623,15 @@ def test_a_play_that_sizes_a_pull_gathers_the_architecture_it_estimates_for():
 
 
 def test_open_webui_is_pulled_through_the_include():
+    """With SearXNG beside it (spec AI-025): both images of the project, one pull."""
     text = AGENT_STACK.read_text(encoding="utf-8")
     block = text[text.index("- name: Pull the Open WebUI image") :].split("\n\n")[0]
     assert "_includes/image-pull.yml" in block
-    assert 'image_pull_images: ["{{ agent_stack_webui.image }}"]' in block
+    task = yaml.safe_load(textwrap.dedent(" " * 4 + block))[0]
+    assert task["vars"]["image_pull_images"] == [
+        "{{ agent_stack_webui.image }}",
+        "{{ agent_stack_webui.web_search.searxng.image }}",
+    ]
     assert "compose-webui.yml pull" not in text, "a second, bare pull of the same stack"
 
 

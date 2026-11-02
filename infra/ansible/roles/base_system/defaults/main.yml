@@ -61,7 +61,12 @@ deploy_base_dir: "/opt"
 # rpi3 outage 2026-05-11: journald ran volatile, crash forensics lost on power cycle.
 # These are explicit (do not rely on Storage=auto) and capped for low-disk nodes.
 journald_storage: "persistent"
+# 20M is the SD-card and small-disk bound, and a busy node overruns it in a day.
+# A play for a node with room sets journald_system_max_use to the larger value:
+# 1G holds 14 days up to about 3 MB an hour, three times what ace2 writes (#2702).
+# A busier node still reaches the two boots; list-boots after a provision says which.
 journald_system_max_use: "20M"
+journald_large_disk_max_use: "1G"
 journald_system_keep_free: "50M"
 journald_runtime_max_use: "10M"
 
@@ -95,3 +100,11 @@ base_system_release_holds: false
 # dropping dns_resilience's block. Nodes installed from the ISO already carry
 # the marker, which the installer writes. The edge's play turns it on.
 base_system_disable_cloud_init: false
+
+# The netplan file this role owns, and its timed revert (tasks/netplan.yml, #2909).
+base_system_netplan_path: /etc/netplan/50-cloud-init.yaml
+base_system_netplan_revert_path: /usr/local/sbin/kubelab-netplan-revert
+base_system_netplan_revert_unit: kubelab-netplan-revert
+base_system_netplan_revert_after: 180s
+# A name only a working resolver answers: it is in no node's /etc/hosts.
+base_system_netplan_probe_host: github.com

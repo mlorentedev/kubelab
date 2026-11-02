@@ -32,6 +32,7 @@ SHARED_BUCKET = "kubelab-backups"
 SHARED_SECRETS = ("backup.r2.access_key_id", "backup.r2.secret_access_key", "backup.restic_password")
 PATHS_SECTIONS = (
     "What exists",
+    "Before you trust any of it",
     "Backing up on demand",
     "Restoring — normal case",
     "Restoring — the disaster case",
@@ -64,9 +65,8 @@ def sops_claim_problems(section: str, recipient_count: int) -> list[str]:
     key, #1852 has landed and the warning must go, or it describes a hole that
     no longer exists.
     """
-    has_ticket = "#1852" in section
     if recipient_count <= 1:
-        return ["#1852 has landed: remove its warning"] if has_ticket else []
+        return ["#1852 has landed: remove its warning"] if section else []
     missing = [
         claim
         for claim, needle in (
@@ -130,8 +130,9 @@ def test_the_sops_claim_helper_reads_both_recipient_counts() -> None:
     complete = "#1852: .sops.yaml; read every node's history; remove a lock rule"
     assert sops_claim_problems(complete, 2) == []
     assert sops_claim_problems(complete, 1) == ["#1852 has landed: remove its warning"]
-    assert sops_claim_problems("nothing about it", 1) == []
-    assert len(sops_claim_problems("nothing about it", 2)) == 4
+    assert sops_claim_problems("the warning, with its ticket number deleted", 1) != []
+    assert sops_claim_problems("", 1) == []
+    assert len(sops_claim_problems("", 2)) == 4
 
 
 @pytest.mark.parametrize("title", PATHS_SECTIONS)
@@ -165,3 +166,12 @@ def test_the_rebuild_runbook_points_at_the_node_buckets() -> None:
     assert "kubelab-backup-<node>" in text
     assert SHARED_BUCKET not in text
     assert "`backup.r2.*`" not in text, "that glob is the shared pair, which reads no node's bucket root"
+
+
+def test_the_commands_that_proved_the_shared_bucket_are_gone(offsite: str) -> None:
+    section = _section(offsite, "Before you trust any of it")
+    assert "backup-isolation-probe" in section and "backup-drill-node" in section
+    makefile = (REPO / "Makefile").read_text(encoding="utf-8")
+    for retired in ("backup-verify-destination", "backup-verify-restic"):
+        assert retired not in offsite
+        assert retired not in makefile

@@ -7,7 +7,7 @@ from toolkit.config.settings import get_settings
 from toolkit.core.logging import console, logger
 from toolkit.features import command
 from toolkit.features.configuration import ConfigurationManager
-from toolkit.features.monitoring import apply_monitors, export_monitors, import_monitors
+from toolkit.features.monitoring import apply_monitors, export_monitors
 from toolkit.features.monitoring import bootstrap as bootstrap_fn
 
 app = typer.Typer(
@@ -145,17 +145,6 @@ def export_cmd() -> None:
     export_monitors(settings.project_root)
 
 
-@app.command("import")
-def import_cmd() -> None:
-    """Import monitors from JSON seed files into Uptime Kuma.
-
-    Reads from infra/config/uptime-kuma/monitors.json and applies to
-    the running instance. Existing monitors with same name are skipped.
-    """
-    settings = get_settings()
-    import_monitors(settings.project_root)
-
-
 @app.command("apply")
 def apply_cmd(
     check: bool = typer.Option(False, "--check", help="Print the sync plan and write nothing."),
@@ -181,11 +170,11 @@ def apply_cmd(
 
 @app.command("bootstrap")
 def bootstrap_cmd() -> None:
-    """Full disaster recovery: create admin user + import monitors.
+    """Full disaster recovery: create admin user + apply monitors.
 
     For fresh Uptime Kuma instances (new SD card). Creates admin user
-    from SOPS credentials, then imports monitors + notifications from
-    JSON seed files. Idempotent — safe to re-run.
+    from SOPS credentials, then creates the monitors from the seed.
+    Notifications are not restored. Idempotent — safe to re-run.
     """
     settings = get_settings()
     bootstrap_fn(settings.project_root)

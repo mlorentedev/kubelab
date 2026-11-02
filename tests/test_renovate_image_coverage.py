@@ -38,10 +38,12 @@ def _python_pattern() -> re.Pattern[str]:
 
     Converted for the test only — the file keeps the syntax Renovate parses.
     Rewriting the file to suit the test would be the test dictating the
-    production artifact.
+    production artifact. Renovate compiles the pattern without the multiline
+    flag, so none is added here: with `re.M` this test stayed green while
+    Renovate found no image at all (#2931).
     """
     raw = _config()["customManagers"][0]["matchStrings"][0]
-    return re.compile(re.sub(r"\(\?<([a-zA-Z]\w*)>", r"(?P<\1>", raw), re.M)
+    return re.compile(re.sub(r"\(\?<([a-zA-Z]\w*)>", r"(?P<\1>", raw))
 
 
 def _declared_images() -> list[str]:
@@ -161,3 +163,26 @@ def test_grouped_updates_never_include_a_major() -> None:
             assert "major" not in rule["matchUpdateTypes"], (
                 f"rule {rule.get('groupName')!r} groups major updates with others"
             )
+
+
+def test_every_vendored_operator_is_tracked_from_its_release_source() -> None:
+    """The operator manager reads `version` and `source.repo` from the SSOT (#694)."""
+    manager = next(m for m in _config()["customManagers"] if m.get("datasourceTemplate") == "github-releases")
+    assert manager["managerFilePatterns"] == ["/^infra/config/values/common\\.yaml$/"]
+    raw = manager["matchStrings"][0]
+    pattern = re.compile(re.sub(r"\(\?<([a-zA-Z]\w*)>", r"(?P<\1>", raw))
+    found = {m["depName"]: m["currentValue"] for m in pattern.finditer(COMMON.read_text(encoding="utf-8"))}
+    declared = {
+        e["source"]["repo"]: e["version"]
+        for e in yaml.safe_load(COMMON.read_text(encoding="utf-8"))["cluster_bootstrap"]
+        if e.get("source")
+    }
+    assert declared
+    assert found == declared
+
+
+def test_the_operator_rule_runs_after_the_default_grouping() -> None:
+    """Later rules win, so an earlier `groupName: null` would lose to the weekly group."""
+    rules = _config()["packageRules"]
+    assert rules[-1].get("matchDatasources") == ["github-releases"]
+    assert rules[-1]["groupName"] is None

@@ -13,6 +13,16 @@
 ---
 apiVersion: 1
 
+# OBS-042: the title and the cause line are the notice contract. The title names
+# the environment (derived from `.ExternalURL`, never a per-overlay literal), the
+# state, and marks a firing Grafana raised because the query returned nothing or
+# failed. Grafana 13 sets the `grafana_state_reason` annotation to `NoData` or
+# `Error` when `noDataState`/`execErrState` maps to Alerting, so a silent emitter
+# no longer reads like a fault. Every rule declares `runbook_url`; the body
+# carries it so the notice names its first move.
+#
+# A template error here fails at DELIVERY, not at provisioning: prove a change
+# with a real delivery before merging it (spec OBS-042, verification.md).
 templates:
   - orgId: 1
     name: apprise-body
@@ -21,10 +31,31 @@ templates:
       {{ if eq .Status "firing" }}failure{{ else }}success{{ end }}
       {{- end -}}
 
+      {{- define "notice.env" -}}
+      {{ if match "\\.staging\\." .ExternalURL }}staging{{ else }}prod{{ end }}
+      {{- end -}}
+
+      {{- define "apprise.title" -}}
+      [{{ template "notice.env" . }}] {{ if eq .Status "firing" }}FIRING{{ else }}RESOLVED{{ end }}
+      {{- if eq .CommonAnnotations.grafana_state_reason "NoData" }} (no data)
+      {{- else if eq .CommonAnnotations.grafana_state_reason "Error" }} (query error)
+      {{- end }}: {{ .CommonLabels.alertname }}
+      {{- end -}}
+
+      {{- define "notice.cause" -}}
+      {{- if eq .Annotations.grafana_state_reason "NoData" -}}
+      Cause: no data. The rule's source stopped reporting; the condition itself was not evaluated.
+      {{ else if eq .Annotations.grafana_state_reason "Error" -}}
+      Cause: query error. The rule could not evaluate its query; the condition itself was not evaluated.
+      {{ end -}}
+      {{- end -}}
+
       {{ define "apprise.body" }}
       {{- range .Alerts }}
+      {{ template "notice.cause" . -}}
       {{ if .Annotations.summary }}{{ .Annotations.summary }}{{ else }}{{ .Labels.alertname }}{{ end }}
       {{ if .Labels.domain }}Domain: {{ .Labels.domain }}
+      {{ end }}{{ if .Annotations.runbook_url }}Runbook: {{ .Annotations.runbook_url }}
       {{ end }}Started: {{ .StartsAt }}
       {{ end }}
       Source: {{ .ExternalURL }}

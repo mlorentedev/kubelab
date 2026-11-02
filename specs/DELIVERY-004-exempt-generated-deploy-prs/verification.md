@@ -21,6 +21,20 @@ created: "2026-09-03"
 - AC4/AC5 (PR 2): `tests/test_deploy_shape_widening.py`. `make mutate`, each RED: `tag_pattern` -> `{7,}` unbounded;
   `env` -> `prod`; an extra key in `mechanical`; a `gh pr merge` line in a workflow not declared in `MERGERS`.
 
+- AC6/AC7 (PR 3, #2656, switch off): `tests/test_deploy_merge.py` and the widening test. The follow-ups were
+  #2888 (scope the default-branch guard to dispatch), #2898 (correct the guard comment to the measured payload)
+  and #2910 (accept `unstable` when every required context is green, after #2883 was skipped as `unstable`).
+  #2910 is proven by `test_an_unstable_pr_with_every_required_context_green_merges` and
+  `test_unstable_does_not_excuse_a_red_required_context`. The widening test pins `MERGE_STATES_OK`.
+- Dry-run evidence (switch off, operator N = 3), logged on #1619: #2948 and #2949 were judged `merge` at their
+  heads, merged by hand at 05:50Z on 2026-11-02, and deploy-verify run 41396476626 passed on 3752be80. Third case
+  pending.
+- Review finding Major 1 (#2982): pins the merge and close feeds, the triggers and the token scope of
+  `deploy-merge.yml`. Each of these edits goes RED under `make mutate`: `select(.action == "merge")` ->
+  `!= "skip"`; `.head_sha` -> `.pr`; `contents: read` -> `write`; the cron changed. The review's two untested guards
+  are covered in the same PR, and each goes RED: `evaluate()`'s `base_ref != default_branch` -> `False`, and
+  dropping `or shape.head_sha != head` from `judge()`.
+
 ## Test status
 
 - `make test`: 6406 passed, 2 failed before fixes (pinned `gh pr view` field list, stale toolkit README); both fixed, targeted rerun green.

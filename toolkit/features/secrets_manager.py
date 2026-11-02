@@ -74,6 +74,10 @@ class SecretSpec:
     # and powerless. A floor, not proof: consequence checks (e.g. `make n8n-probe`)
     # show the value works. Empty means "any non-empty value".
     value_pattern: str = ""
+    # True for a value whose absence is a decision, not a gap: `audit` does not call
+    # it missing, and still holds it to `value_pattern` once it is set. Not for a
+    # credential something reads, where "absent" has to stay loud.
+    optional: bool = False
     rotate_note: str = ""  # What breaks or needs restarting on rotation
     envs: tuple[str, ...] = ("dev", "staging", "prod")  # Which envs need this
     # Declares that this secret is DELIVERED to Google Secret Manager for the GCP
@@ -803,39 +807,6 @@ SECRET_CATALOG: list[SecretSpec] = [
         # Stored in common.enc.yaml (one App for every environment); `envs` is the audit dimension.
         envs=("prod",),
     ),
-    SecretSpec(
-        key_path="apps.services.core.gitea.github_migration_token",
-        description=(
-            "Fine-grained GitHub PAT that Gitea's migration endpoint uses to READ "
-            "issues, pull requests and contents from the repositories ADR-065 moves"
-        ),
-        # EXTERNAL for the same reason as `bot_token`: GitHub issues it, only
-        # GitHub honours it, and a locally generated string would pass every audit
-        # while authenticating nothing. Unlike `bot_token` it is used by the
-        # RECONCILER calling Gitea, not by Gitea calling us — it is passed per
-        # migration request and (with `mirror: false`, which is what ADR-065's
-        # "move" means) Gitea has nothing to re-sync and so nothing to store.
-        kind=SecretKind.EXTERNAL,
-        services=("gitea",),
-        rotate_note=(
-            "Read-only by construction — Contents/Metadata/Issues/Pull requests, no write "
-            "anywhere, because the migration only reads from GitHub and Gitea writes on its "
-            "own side. Regenerate at github.com/settings/personal-access-tokens, then "
-            "`toolkit secrets set <key> --env prod --stdin`. Verify by consequence before "
-            "trusting it: a granted private repo answers 200 and one outside the grant "
-            "answers 404 (NOT 403 — GitHub does not confirm existence to an unauthorised "
-            "caller, and reading that 404 as 'the repo is gone' is the wrong lesson)."
-        ),
-        # PROVIDER, and it genuinely resolves: `github_pat_expiry` reads the
-        # `github-authentication-token-expiration` header GitHub returns on any
-        # authenticated call. Measured 2026-08-28 against this very token —
-        # 2026-10-27, 59 days left. This is the module's "asked, not remembered"
-        # rule paying off: no date is recorded here to drift.
-        expiry=Expiry.PROVIDER,
-        # prod, matching `bot_token` above: the forge's identity environment is
-        # prod, and `envs` is the audit dimension rather than the file (ANSIBLE-033).
-        envs=("prod",),
-    ),
     # --- Actions secrets delivered to forge repositories (TOOL-062) ---------
     #
     # personal/resume's Google Drive publish (resume#272). The three OAuth values
@@ -1309,12 +1280,33 @@ SECRET_CATALOG: list[SecretSpec] = [
         services=("headscale",),
         format_hint="an IPv4/IPv6 address or CIDR, or a comma-separated list of them",
         value_pattern=r"[0-9A-Fa-f:./]+(,[0-9A-Fa-f:./]+)*",
+        # SEC-037 leaves it unset on purpose: the client's egress may rotate, and a
+        # stale pin would lock the audit out. Drop this flag once a pin exists, so that
+        # losing it reads as Missing.
+        optional=True,
         rotate_note=(
             "Update common.enc.yaml, then `make deploy TARGET=vps ENV=prod` "
             "(or deploy-vps with `--tags headscale`). Removing it drops the `from=` pin."
         ),
         # The VPS is prod-only. The value lives in common.enc.yaml, which deploy-vps
         # merges under the env file (`envs` is the audit dimension, ANSIBLE-033).
+        envs=("prod",),
+    ),
+    SecretSpec(
+        # The whole subtree. Key names are plaintext in SOPS, so each segment sits
+        # under a neutral key (`tenant-1`) and its tenant's name stays in the value
+        # (VPN-ACL-014). This entry must never name one.
+        key_path="apps.services.core.headscale.segments",
+        expiry=Expiry.NEVER,
+        description=(
+            "Tenant segments of the shared Headscale, rendered into its ACL policy. Not a "
+            "credential: tenant inventory, kept out of the public tree."
+        ),
+        kind=SecretKind.EXTERNAL,
+        services=("headscale",),
+        format_hint="mapping of neutral key -> {owner, hosts_tag, clients_tag, ports}",
+        rotate_note="Not rotated. Edit the segment, then `make deploy TARGET=vps ENV=prod`.",
+        # Same reasoning as `audit_sources`: the VPS is prod-only.
         envs=("prod",),
     ),
     # =========================================================================
@@ -1855,6 +1847,14 @@ SECRET_CATALOG: list[SecretSpec] = [
         envs=("staging", "prod"),
     ),
     SecretSpec(
+        key_path="apps.platform.api.db_password",
+        description="PostgreSQL password for the api tenant role (DATA-007)",
+        kind=SecretKind.RANDOM_TOKEN,
+        services=("api", "postgres"),
+        rotate_note="provision-postgres-tenant and apply-secrets for api-secrets, restart api.",
+        envs=("staging", "prod"),
+    ),
+    SecretSpec(
         key_path="apps.platform.api.beehiiv_api_key",
         expiry=Expiry.NEVER,
         description="Beehiiv newsletter API key",
@@ -2276,7 +2276,7 @@ class SecretsManager:
                     result.malformed.append(spec.key_path)
                 else:
                     result.present.append(spec.key_path)
-            else:
+            elif not spec.optional:
                 result.missing.append(spec.key_path)
 
         # The reverse direction, which `AuditResult.unexpected` has declared
@@ -2521,6 +2521,7 @@ class SecretsManager:
             ["sops", "-d", str(sops_file)],
             capture_output=True,
             text=True,
+            encoding="utf-8",
             env=age_key_env(),  # auto-discover SOPS_AGE_KEY_FILE (toolkit/core/sops.py)
         )
         if result.returncode != 0:
@@ -2566,6 +2567,7 @@ class SecretsManager:
             ["sops", "set", str(sops_file), sops_path, json.dumps(value)],
             capture_output=True,
             text=True,
+            encoding="utf-8",
             env=age_key_env(),  # auto-discover SOPS_AGE_KEY_FILE (toolkit/core/sops.py)
         )
 
@@ -2596,6 +2598,7 @@ class SecretsManager:
             ["sops", "unset", str(sops_file), sops_path],
             capture_output=True,
             text=True,
+            encoding="utf-8",
             env=age_key_env(),  # auto-discover SOPS_AGE_KEY_FILE (toolkit/core/sops.py)
         )
 

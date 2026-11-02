@@ -37,17 +37,12 @@ that exists.
 ## Before you trust any of it
 
 ```bash
-make backup-verify-destination ENV=prod   # the bucket works
-make backup-verify-restic ENV=prod        # restic works in the bucket
+make backup-isolation-probe ENV=prod          # each bucket refuses the others' pairs and locks its data
+make backup-drill-node NODE=<node> ENV=prod   # that node's data restores
 ```
 
-These are two different claims and the second is the one backups depend on. Both
-are safe against the live destination — they write a throwaway object under
-`_smoketest/` and remove it.
-
-**Both still probe the shared bucket every node left on 2026-10-08, not the node
-buckets (#2917).** Until that closes, what proves a node's own bucket is
-`make backup-isolation-probe ENV=prod` and `make backup-drill-node NODE=<node> ENV=prod`.
+These are two different claims, and the second is the one a restore depends on.
+The probe's deletes are meant to be refused, and it fails if one is accepted.
 
 ## Is everything actually backed up?
 
@@ -122,7 +117,6 @@ The lock does not cover:
 
 - **The admin token.** `cloudflare.r2_admin_token` can remove a lock rule. It is held in SOPS, decrypted on the operator workstation for `make tf-r2-apply`, and no node receives it. The lock bounds a compromised node, not a compromised Cloudflare account.
 - **Data older than R.** The rule ages an object from when it was written. Once an object is older than R days, a node's own credential can delete it, so a compromised node can destroy everything it wrote more than R days ago. That half was measured on a scratch bucket, not in prod: DELETEs of objects past R were accepted.
-- **A SOPS recipient key, until #1852 lands.** `.sops.yaml` still lists the CI key as a recipient of every `*.enc.yaml`. Whoever holds it can read every node's history in one decrypt and, through `cloudflare.r2_admin_token` in the same files, remove a lock rule and delete.
 
 The watcher's secret holds every node's restic password and an Object Read pair, so it can read every history and delete none.
 

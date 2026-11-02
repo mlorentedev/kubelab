@@ -119,6 +119,11 @@ agent_stack_curator_out: "{{ agent_stack_vault_clone }}/{{ agent_stack_vault_zon
 # never from the agent's clone. `git` holds the history, `tree` the notes.
 agent_stack_vault_mirror: "{{ agent_stack_dir }}/vault-mirror"
 agent_stack_vault_mirror_unit: agent-stack-vault-mirror
+# AI-030 (#2921): the fetch's own bound, in seconds, well under the unit's
+# TimeoutStartSec, and how old the tree may get, in seconds, while the remote is
+# unreachable before the mirror pages. Six hours is 24 runs at the sync interval.
+agent_stack_vault_mirror_fetch_timeout: 120
+agent_stack_vault_mirror_stale_after: 21600
 
 # The repository's `docs/`, read-only (spec AI-012 AC10), from a public remote: no token. One
 # bare repository and two root-owned checkouts of it. `tree` is for the MCP bridge, in the

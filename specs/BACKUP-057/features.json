@@ -51,7 +51,7 @@
   {
     "id": "BACKUP-057-f6",
     "behavior": "In prod, under the lock, every node ships and the watcher reports every declared node healthy; a young data/ delete and a cross-node list are refused; no node-backup-prune.service failure in the seven days from 2026-11-07, with a forget logged on each migrated node (AC1, AC3)",
-    "verification": "make backup-node NODE=all ENV=prod && make backup-isolation-probe ENV=prod && make watcher-run ENV=prod; then, manual, on or after 2026-11-14: make backup-schedule NODE=all ENV=prod reports no prune failure in that window (tasks.md PR 4), both recorded in verification.md",
+    "verification": "make backup-node NODE=all ENV=prod && make backup-isolation-probe ENV=prod && make watcher-run ENV=prod; then, manual, on or after 2026-11-14 02:30 UTC: make backup-schedule NODE=all ENV=prod reports no prune failure in that window (tasks.md PR 4), both recorded in verification.md",
     "state": "pending",
     "evidence": ""
   },

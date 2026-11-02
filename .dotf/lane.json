@@ -1,0 +1,6 @@
+{
+  "queue": [],
+  "branch_prefix": "fix",
+  "base": "origin/master",
+  "template": ".dotf/lane-prompt.md"
+}
