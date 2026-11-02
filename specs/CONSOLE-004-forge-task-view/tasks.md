@@ -80,7 +80,9 @@ created: "2026-10-21"
 - [ ] [AC7] Test that the read model rebuilds from the forges alone
 - [x] ✓ 2026-11-01 [AC4] [AC7] Create the GitHub App for the read adapter, store its credential in SOPS with a catalog entry (App `kubelab-console`, App ID 5573076, installed on `mlorentedev/kubelab` only as installation 177667607; Issues, Pull requests and Metadata read-only, webhooks off; private key at `apps.services.core.github_app.private_key` in `common.enc.yaml`; GitHub App keys carry no expiry, so the catalog entry is `Expiry.NEVER`)
 - [x] ✓ 2026-11-01 [AC4] Deliver the App ID, installation ID and private key to the API: the two IDs at `infra.forge.github.*` reach the ConfigMap as `INFRA_FORGE_GITHUB_APP_ID` and `INFRA_FORGE_GITHUB_INSTALLATION_ID`; the key reaches `api-secrets` as `FORGE_GITHUB_PRIVATE_KEY`
-- [ ] [AC4] Mint an installation token from the App ID, installation ID and key (JWT signed with the key, exchanged at `/app/installations/{id}/access_tokens`, cached until shortly before it expires), then read once to measure the App's grant. Needs the image deployed, so it runs after promotion
+- [ ] [AC4] Mint an installation token from the App ID, installation ID and key, then read once to measure the App's grant. Needs the image deployed, so it runs after promotion
+  - [x] ✓ 2026-11-02 `forge.AppTokens`: RS256 JWT with the standard library, exchanged at `/app/installations/{id}/access_tokens`, cached until five minutes before expiry; `GitHub.Tokens` takes it per read, and a failed mint is a `SourceError`
+  - [ ] Read once with the deployed image to measure the grant
 - [ ] [AC7] Runbook: rebuild, restore, rotate tokens; token expiry dates in the SOPS catalog
 
 ### 6. End to end
