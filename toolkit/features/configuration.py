@@ -99,6 +99,7 @@ class ConfigurationManager:
                 ["sops", "-d", "--output-type", "yaml", str(path)],
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
                 check=True,
                 env=age_key_env(),  # auto-discover SOPS_AGE_KEY_FILE (toolkit/core/sops.py)
             )
@@ -395,6 +396,7 @@ class ConfigurationManager:
             subprocess.run(
                 ["sops", "--encrypt", "--in-place", str(file_path)],
                 text=True,
+                encoding="utf-8",
                 check=True,
                 capture_output=True,
                 env=age_key_env(),  # auto-discover SOPS_AGE_KEY_FILE (toolkit/core/sops.py)
@@ -426,6 +428,7 @@ class ConfigurationManager:
             subprocess.run(
                 ["sops", "--encrypt", "--in-place", str(file_path)],
                 text=True,
+                encoding="utf-8",
                 check=True,
                 capture_output=True,
                 env=age_key_env(),  # auto-discover SOPS_AGE_KEY_FILE (toolkit/core/sops.py)
@@ -464,6 +467,7 @@ class ConfigurationManager:
                 ["sops", "-d", "--output-type", "yaml", str(file_to_update)],
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
                 check=True,
                 env=age_key_env(),  # auto-discover SOPS_AGE_KEY_FILE (toolkit/core/sops.py)
             )
