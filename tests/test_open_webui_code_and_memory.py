@@ -32,9 +32,15 @@ def test_code_runs_in_the_browser_not_on_ace2() -> None:
 
 def test_memories_are_saved_without_being_asked() -> None:
     """Off by default in v0.12.5: a memory was saved only when the model chose to
-    call its tool. The review reads the chat every N user turns (`utils/memory.py`)."""
+    call its tool. The review reads the chat every N user turns (`utils/memory.py`).
+
+    The env is what the instance runs: with ENABLE_PERSISTENT_CONFIG=false
+    (asserted in test_agent_stack_role.py), `Config.get()` returns the env value
+    and never reads the database row (v0.12.5 `models/config.py`)."""
     env = _env()
     assert env["ENABLE_MEMORIES"] == "true"
     assert env["ENABLE_MEMORY_BACKGROUND_REVIEW"] == "true"
     assert env["MEMORIES_REVIEW_INTERVAL_TURNS"] == str(_memory()["review_interval_turns"])
-    assert 1 <= _memory()["review_interval_turns"] <= 10
+    # More often than v0.12.5's default of 10, the reason the key is set at all;
+    # 0 would never review.
+    assert 1 <= _memory()["review_interval_turns"] < 10
