@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
+
 import pytest
 
 from toolkit.features.r2_backup_health import run_r2_backup_health_check
@@ -19,31 +20,31 @@ def mock_cm() -> MagicMock:
 def test_r2_backup_health_success(mock_cm: MagicMock) -> None:
     with (
         patch("toolkit.features.r2_backup_health.ConfigurationManager", return_value=mock_cm),
-        patch("toolkit.features.r2_backup_health.verify_destination", return_value=True),
+        patch("toolkit.features.r2_backup_health.probe_fleet", return_value=True),
         patch("toolkit.features.r2_backup_health.coverage", return_value=True),
         patch("toolkit.features.r2_backup_health._dispatch_notification") as mock_dispatch,
     ):
         result = run_r2_backup_health_check(env="prod", notify=True)
         assert result is True
-        mock_dispatch.assert_called_once_with(mock_cm, env="prod", is_healthy=True, dest_ok=True, cov_ok=True)
+        mock_dispatch.assert_called_once_with(mock_cm, env="prod", is_healthy=True, isolation_ok=True, cov_ok=True)
 
 
 def test_r2_backup_health_failure(mock_cm: MagicMock) -> None:
     with (
         patch("toolkit.features.r2_backup_health.ConfigurationManager", return_value=mock_cm),
-        patch("toolkit.features.r2_backup_health.verify_destination", return_value=True),
+        patch("toolkit.features.r2_backup_health.probe_fleet", return_value=True),
         patch("toolkit.features.r2_backup_health.coverage", return_value=False),
         patch("toolkit.features.r2_backup_health._dispatch_notification") as mock_dispatch,
     ):
         result = run_r2_backup_health_check(env="prod", notify=True)
         assert result is False
-        mock_dispatch.assert_called_once_with(mock_cm, env="prod", is_healthy=False, dest_ok=True, cov_ok=False)
+        mock_dispatch.assert_called_once_with(mock_cm, env="prod", is_healthy=False, isolation_ok=True, cov_ok=False)
 
 
 def test_r2_backup_health_no_notify(mock_cm: MagicMock) -> None:
     with (
         patch("toolkit.features.r2_backup_health.ConfigurationManager", return_value=mock_cm),
-        patch("toolkit.features.r2_backup_health.verify_destination", return_value=True),
+        patch("toolkit.features.r2_backup_health.probe_fleet", return_value=True),
         patch("toolkit.features.r2_backup_health.coverage", return_value=True),
         patch("toolkit.features.r2_backup_health._dispatch_notification") as mock_dispatch,
     ):

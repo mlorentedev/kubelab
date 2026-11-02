@@ -57,8 +57,6 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit backup migrate` | Move one node's restic history into its own bucket (BACKUP-057 AC4). |
 | `toolkit backup mint-node-tokens` | Mint each node's own R2 token and restic password into SOPS (BACKUP-057). |
 | `toolkit backup restore-window` | Pause an env's Argo CD auto-sync and stop one app, so its data can be replaced (BACKUP-070). |
-| `toolkit backup verify-destination` | Prove the R2 destination is usable: scope, reach, and a write/read/delete round-trip. |
-| `toolkit backup verify-restic` | Prove restic can create, use and verify a repository in R2. |
 | `toolkit board` | Bitácora board governance: keep the Stream field true to the registry. |
 | `toolkit board deps` | Report open issues named by a dependency keyword in another open issue's body (GOV-005 AC3 guard). |
 | `toolkit board ids` | Report (default) or check for open issues that share a ticket id. |
