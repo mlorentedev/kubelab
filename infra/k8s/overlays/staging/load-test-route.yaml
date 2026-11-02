@@ -1,0 +1,47 @@
+---
+# OPS-054: the only change `make load-test` makes to the cluster, and the way it
+# measures the platform instead of SEC-004's limiter (30/s, burst 150, per host).
+#
+# NOT in kustomization.yaml, deliberately: the run applies this file, measures, and
+# deletes it, so between runs every route carries `rate-limit` and the invariant in
+# tests/infra/test_rate_limit.py holds with no exception. Argo CD never tracks it,
+# so master moving during a run does not touch it. The shared Middleware is not
+# edited: every request without the header below keeps going through the limiter.
+#
+# Same hosts as the real routes, so no new DNS name or certificate. Same chain as
+# the real routes minus `rate-limit`. The header is not a secret: the object lives
+# for one run on a staging edge reachable only from the VPN and the LAN. If a run
+# dies before its cleanup, tests/infra/test_rate_limit.py fails on this route, and
+# `make load-test-clear ENV=staging` removes it.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: load-test
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: load-test
+    app.kubernetes.io/part-of: kubelab
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`api.staging.kubelab.live`) && Path(`/health`) && Header(`X-Load-Test`, `ops-054`)
+      kind: Rule
+      priority: 1000
+      services:
+        - name: api
+          port: 8080
+      middlewares:
+        - name: secure-headers
+        - name: error-pages
+    - match: Host(`staging.mlorente.dev`) && Path(`/`) && Header(`X-Load-Test`, `ops-054`)
+      kind: Rule
+      priority: 1000
+      services:
+        - name: web
+          port: 8080
+      middlewares:
+        - name: secure-headers
+        - name: error-pages
+  tls:
+    certResolver: letsencrypt

@@ -71,6 +71,13 @@ OUT_OF_BAND: dict[str, OutOfBand] = {
             "it are Kustomize-managed."
         ),
     ),
+    "infra/k8s/overlays/staging/load-test-route.yaml": OutOfBand(
+        trigger="load-test",
+        reason=(
+            "Lives only for one load-test run: the run applies it and deletes it, so "
+            "between runs every route carries rate-limit with no exception (OPS-054)."
+        ),
+    ),
     "infra/k8s/overlays/prod/secrets.yaml": OutOfBand(
         trigger="apply-secrets",
         reason="Placeholders only (REPLACE_WITH_SOPS_VALUE); real values injected from SOPS at deploy time (ADR-014/ADR-038).",

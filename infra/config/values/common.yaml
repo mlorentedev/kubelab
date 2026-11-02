@@ -737,6 +737,16 @@ argocd:
       node: vps    # → networking.vps.tailscale_ip
 
 # ===========================================================================
+# LOAD TEST (OPS-054, docs/runbooks/load-test.md)
+# ===========================================================================
+# k6 runs on generator_node, on the LAN next to target_node. The image tag is
+# the pin Renovate tracks; the run records the digest it actually used.
+load_test:
+  target_node: ace1
+  generator_node: ace2
+  image: grafana/k6:2.3.0
+
+# ===========================================================================
 # CLUSTER ACCESS (operator transport — ADR-052)
 # ===========================================================================
 # How an operator machine fetches and reaches each cluster's kubeconfig, so
