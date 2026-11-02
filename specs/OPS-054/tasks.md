@@ -22,12 +22,10 @@ created: "2026-11-01"
 > Replace these with the actual steps for this feature. Keep them small (one commit each) and in TDD order.
 > The `[P]` / `[AC<n>]` markers are optional — see the legend above. Behaviors 1 and 2 below are independent, so their *first* test task carries `[P]`.
 
-- [ ] [P] [AC1] Write failing test for <behavior 1>
-- [ ] [AC1] Implement <module/function> to make it pass
-- [ ] Refactor for clarity (extract, rename, dedupe)
-- [ ] [P] [AC2] Write failing test for <behavior 2>
-- [ ] [AC2] Implement to make it pass
-- [ ] ...
+- [x] [AC2] Guards and verdict rules with tests (`tests/test_load_test.py`)
+- [x] [AC1] [AC3] k6 script, toolkit module, `make load-test`
+- [x] [AC4] Run-scoped limiter bypass route
+- [x] [AC5] [AC6] Runs and report
 
 ## Closing
 

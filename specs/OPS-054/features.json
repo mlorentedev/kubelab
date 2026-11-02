@@ -1,9 +1,9 @@
 [
   {
     "id": "OPS-054-f1",
-    "behavior": "Outcome 1",
-    "verification": "echo 'not implemented' && exit 1",
-    "state": "pending",
-    "evidence": ""
+    "behavior": "The load test refuses anything but staging and judges steps by declared rules",
+    "verification": ".venv/bin/python -m pytest tests/test_load_test.py tests/test_orphan_manifests.py -q",
+    "state": "passing",
+    "evidence": "docs/load-test/report-2026-11-02.md"
   }
 ]

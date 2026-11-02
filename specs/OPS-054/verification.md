@@ -9,9 +9,13 @@ created: "2026-11-01"
 
 Map every acceptance criterion from `proposal.md` to concrete proof (commit hash, test name, or observed behavior).
 
-- [ ] Criterion 1 -> commit `<hash>` / test `<name>`
-- [ ] Criterion 2 -> commit `<hash>` / test `<name>`
-- [ ] Criterion 3 -> commit `<hash>` / test `<name>`
+- [x] AC1 -> `make load-test ENV=staging`, `docs/runbooks/load-test.md`, image pinned at `load_test.image`, digest in results
+- [x] AC2 -> `tests/test_load_test.py::TestStaysInStaging`; mutants of the env guard, the host check and `maxRedirects` go red under `make mutate`; `make load-test ENV=prod` refused; the k6 script refused `api.kubelab.live`
+- [x] AC3 -> `docs/load-test/2026-11-02-7ccf57f4.{md,json}`
+- [x] AC4 -> `infra/k8s/overlays/staging/load-test-route.yaml`, stated in the report; route `NotFound` after both runs
+- [x] AC5 -> `docs/load-test/report-2026-11-02.md`
+- [x] AC6 -> report, "How staging differs from production"
+- [x] AC7 -> #2975, #2977
 
 ## Test status
 
