@@ -500,10 +500,8 @@ class TestPushMonitorRoundTrip:
     raw-socket create path bypasses. Both facts are invisible from a fixture and
     produce a monitor Kuma accepts and no sender can reach.
 
-    Deliberately proven through export -> **apply**, not export -> import:
-    `import_monitors` sends Kuma v1's backup envelope, confirmed to time out
-    against v2 (#1042), so a round-trip routed that way would be exercising a
-    known-broken path and proving nothing about this one.
+    Proven through export -> apply, the only path: the v1 backup envelope timed
+    out against v2 and its import command was retired (#1042).
     """
 
     KEY = "ops-backup-pvc-prod"

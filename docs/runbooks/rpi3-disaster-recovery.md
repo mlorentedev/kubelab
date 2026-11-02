@@ -85,4 +85,4 @@ make monitoring-export     # Re-export to verify monitors match seed
 - RPi3 has NO LAN IP — Tailscale only (external to homelab for independent monitoring)
 - Docker volume `uptime-kuma_uptime_kuma_data` preserves data across compose recreates
 - Bootstrap is idempotent — safe to re-run on existing instance
-- If upload_backup times out on import, monitors can be added manually or via `make monitoring-import` after provisioning
+- Monitors are created one by one with `make monitoring-apply`; the seed is never uploaded as a backup, because that call times out against Kuma v2

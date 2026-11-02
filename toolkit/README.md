@@ -154,7 +154,6 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit monitoring apply` | Declarative sync: apply monitors from seed JSON to Uptime Kuma. |
 | `toolkit monitoring bootstrap` | Full disaster recovery: create admin user + import monitors. |
 | `toolkit monitoring export` | Export monitors and notifications to JSON (config-as-code). |
-| `toolkit monitoring import` | Import monitors from JSON seed files into Uptime Kuma. |
 | `toolkit monitoring status` | Check Uptime Kuma connectivity and container status on RPi3. |
 | `toolkit obs` | Agentic Observability & SRE triage commands (Loki, Grafana, Slack). |
 | `toolkit obs alerts` | List active Grafana alerts and their firing states. |
