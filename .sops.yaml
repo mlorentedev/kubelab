@@ -8,9 +8,7 @@ creation_rules:
     key_groups:
       - age:
           - "age166v8efpskctmxxes5lcqpxkj0ny3q74l3v0pswpdpa63wlkqmc8q35fkdw"  # human (workstation)
-          - "age1wpqxa7vqkr6watypd6zlw7kspz506kq2kvluxnluhz72mgtaga3qlg84cv"  # ci (github-actions)
   - path_regex: .*\.pem(\.enc)?$
     key_groups:
       - age:
           - "age166v8efpskctmxxes5lcqpxkj0ny3q74l3v0pswpdpa63wlkqmc8q35fkdw"  # human (workstation)
-          - "age1wpqxa7vqkr6watypd6zlw7kspz506kq2kvluxnluhz72mgtaga3qlg84cv"  # ci (github-actions)

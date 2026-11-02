@@ -185,6 +185,7 @@ toolkit secrets apply --env staging
 #        - "age1new_collaborator_key..."
 
 # 3. Re-encrypt all secrets with both keys
+sops updatekeys infra/config/secrets/common.enc.yaml
 sops updatekeys infra/config/secrets/dev.enc.yaml
 sops updatekeys infra/config/secrets/staging.enc.yaml
 sops updatekeys infra/config/secrets/prod.enc.yaml
