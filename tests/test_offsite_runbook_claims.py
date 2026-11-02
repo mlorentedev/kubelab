@@ -64,9 +64,8 @@ def sops_claim_problems(section: str, recipient_count: int) -> list[str]:
     key, #1852 has landed and the warning must go, or it describes a hole that
     no longer exists.
     """
-    has_ticket = "#1852" in section
     if recipient_count <= 1:
-        return ["#1852 has landed: remove its warning"] if has_ticket else []
+        return ["#1852 has landed: remove its warning"] if section else []
     missing = [
         claim
         for claim, needle in (
@@ -130,8 +129,9 @@ def test_the_sops_claim_helper_reads_both_recipient_counts() -> None:
     complete = "#1852: .sops.yaml; read every node's history; remove a lock rule"
     assert sops_claim_problems(complete, 2) == []
     assert sops_claim_problems(complete, 1) == ["#1852 has landed: remove its warning"]
-    assert sops_claim_problems("nothing about it", 1) == []
-    assert len(sops_claim_problems("nothing about it", 2)) == 4
+    assert sops_claim_problems("the warning, with its ticket number deleted", 1) != []
+    assert sops_claim_problems("", 1) == []
+    assert len(sops_claim_problems("", 2)) == 4
 
 
 @pytest.mark.parametrize("title", PATHS_SECTIONS)
