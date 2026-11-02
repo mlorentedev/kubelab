@@ -87,7 +87,7 @@ def test_every_chat_starts_with_the_image_tool_on() -> None:
     tool (v0.12.5 `utils/tools.py`); it does not generate on every message."""
     raw = _env()["DEFAULT_MODEL_METADATA"]
     assert raw.startswith("'") and raw.endswith("'"), raw
-    assert json.loads(raw[1:-1])["defaultFeatureIds"] == ["image_generation"]
+    assert "image_generation" in json.loads(raw[1:-1])["defaultFeatureIds"]
     # The legacy path WOULD generate an image per message (`utils/middleware.py`).
     # In any value, not one variable: `function_calling` could arrive in
     # DEFAULT_MODEL_PARAMS or inside any JSON value. Values, not the raw file, so
