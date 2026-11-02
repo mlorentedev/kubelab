@@ -1,0 +1,72 @@
+# Arming envelope for one unattended run. The run reads the committed copy only.
+version: 1
+run_id: "ap-20261102-kubelab-console"
+armed_by: manu
+armed_at: 2026-11-02T05:55:00Z
+expires_at: 2026-11-02T17:55:00Z
+objective: >-
+  Land the forge console's data path (#2933, #2932, #2943, the migration Job) to
+  prod, measure both forge grants with a real read, and advance CONSOLE-004's
+  tasks.md in order; then work kubelab Backlog P1/P2 items no other lane holds.
+scope:
+  write_paths:
+    - "apps/api/**"
+    - "infra/k8s/base/**"
+    - "infra/k8s/overlays/**"
+    - "infra/k8s/templates/**"
+    - "infra/config/values/**"
+    - "infra/config/platform.json"
+    - "infra/config/secrets/staging.enc.yaml"
+    - "infra/config/secrets/prod.enc.yaml"
+    - "toolkit/**"
+    - "tests/**"
+    - "Makefile"
+    - "docs/adr/adr-051-postgres-data-service.md"
+    - "docs/adr/adr-066-self-hosted-task-platform.md"
+    - "docs/lessons/**"
+    - "docs/runbooks/**"
+    - "specs/CONSOLE-004-forge-task-view/**"
+    - ".agent/runs/**"
+  frozen_paths:
+    - ".github/**"
+    - "harness/**"
+    - "**/AGENTS.md"
+    - "**/CLAUDE.md"
+    - ".agent/unattended.yml"
+    - "infra/config/secrets/common.enc.yaml"
+    - "toolkit/features/credentials.py"
+    - "toolkit/features/oidc_clients.py"
+    - "infra/k8s/argocd/**"
+    - "infra/stacks/services/core/vikunja/**"
+  max_files: 28
+  max_loc: 300
+allowed_commands: [dotf, gh, git, make, poetry, go, atlas, docker, kubectl, caffeinate]
+queue:
+  source: bitacora
+  filter: >-
+    First #2570 and #2652 in tasks.md order. Then kubelab Backlog spec/bug/chore
+    items, P1 before P2, whose paths fit scope.write_paths and that no other lane
+    holds. Skip, as held by the backup run: #2917, #1222, #1908, #2754, #2955,
+    #1774, #1042, #942. Read assignees and peers' claims before every pick.
+  max_items: 8
+budget:
+  max_iterations: 14
+  max_minutes_per_iteration: 60
+  max_consecutive_failures: 2
+authority:
+  merge: standing-grant
+  push: true
+  open_pr: true
+  advisor_tier: top
+# Operator authorization, given at arming (2026-11-02), for this run only:
+#  - prod: `make apply-secrets ENV=prod`, `make provision-postgres-tenant ENV=prod`,
+#    merging #2943 and the migration Job, and promoting the API image to prod to
+#    measure the Gitea grant. Each step verified before the next; a failed prod
+#    step stops the prod chain and parks the item, no improvised repair.
+#  - #2943 and the Job carry SOPS and SECRET_CATALOG hunks; the operator's answer
+#    covers merging those two. Any other PR touching secrets or the catalog stays open.
+# Never: Vikunja or its tokens, public-facing web changes, destructive SQL, node
+# provisioning, force push. The migrations may only add to the `api` database.
+# Staging slot: read targetRevision first, refuse if a branch holds it, return it
+# to master when validation ends. GitHub GraphQL is rate limited across parallel
+# sessions: prefer REST, and wait for reset rather than retry.
