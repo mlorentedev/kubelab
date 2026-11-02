@@ -119,7 +119,11 @@ def test_the_uncovered_cases_are_named(offsite: str) -> None:
 
 def test_the_sops_recipient_case_matches_sops_yaml(offsite: str) -> None:
     recipients = _sops_recipients(SOPS.read_text(encoding="utf-8"))
-    assert not sops_claim_problems(_section(offsite, COVERAGE_SECTION), len(recipients))
+    # The bullet alone: the admin token's bullet also says "remove a lock rule",
+    # so reading the whole section would pass with the SOPS half deleted.
+    bullets = _section(offsite, COVERAGE_SECTION).splitlines()
+    bullet = next((line for line in bullets if line.startswith("- **A SOPS recipient key")), "")
+    assert not sops_claim_problems(bullet, len(recipients))
 
 
 def test_the_sops_claim_flips_when_the_ci_recipient_goes() -> None:
