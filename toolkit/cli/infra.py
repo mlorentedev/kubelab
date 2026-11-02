@@ -353,7 +353,11 @@ def load_test_run(
         _, address, _ = resolve_nodes(staging, prod)
         targets = build_targets(staging, prod)
         commit = subprocess.run(
-            ["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True, check=True
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            check=True,
         ).stdout.strip()
         result = run(lab, staging["load_test"]["image"], targets, address, repeats, seconds, max_rate)
     except (LoadTestRefused, subprocess.SubprocessError) as e:

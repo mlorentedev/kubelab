@@ -211,7 +211,7 @@ class Lab:
     def ssh(self, node: str, command: str, stdin: str | None = None, timeout: int = 60) -> str:
         done = subprocess.run(
             ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", node, command],
-            input=stdin, capture_output=True, text=True, timeout=timeout, check=True,
+            input=stdin, capture_output=True, text=True, encoding="utf-8", timeout=timeout, check=True,
         )  # fmt: skip
         return done.stdout
 
@@ -219,7 +219,7 @@ class Lab:
         cmd = ["kubectl", "--kubeconfig", self.kubeconfig, *args]
         if impersonate:
             cmd.append(f"--as={self.operator_as}")
-        return subprocess.run(cmd, capture_output=True, text=True, timeout=60, check=True).stdout
+        return subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", timeout=60, check=True).stdout
 
     def assert_cluster(self) -> None:
         """The kubeconfig reaches the single staging node, or nothing is applied."""
