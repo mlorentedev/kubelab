@@ -107,13 +107,13 @@ deadline. The review also confirmed `toolkit infra headscale policy-check` green
 
 Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`. `dotf spec archive` refuses a line left unanswered, a `no` without a reason, and a `yes` whose file does not exist; a `00_meta/` path is looked up in the vault.
 
-- [ ] Lesson for the repo's `docs/lessons/`? Pending rollout: candidate "a wildcard destination makes every tenant visible, because a grant in either direction shows both peers".
-- [ ] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? Pending: possibly an ADR-041 amendment for tenant segments on the shared instance.
-- [ ] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. Pending.
+- [x] Lesson for the repo's `docs/lessons/`? yes: docs/lessons/networking-dns/lesson-697-a-wildcard-destination-makes-every-tenant-visible.md
+- [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? yes: docs/adr/adr-041-agent-fleet-vpn-segmentation.md
+- [x] New pattern candidate for `00_meta/patterns/`? no: one project only; the tenant-segment shape is specific to this shared Headscale, and the general rule is carried by lesson-697.
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/VPN-ACL-014-tenant-segments/` -> `specs/archive/VPN-ACL-014-tenant-segments/`
+- [x] `proposal.md` frontmatter set to `status: archived`
+- [x] Folder moved: `specs/VPN-ACL-014-tenant-segments/` -> `specs/archive/VPN-ACL-014-tenant-segments/`
 - [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
-- [ ] Promotions above executed (if any)
+- [x] Promotions above executed (if any)
