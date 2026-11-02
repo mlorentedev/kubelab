@@ -57,8 +57,9 @@ def test_a_file_the_role_does_not_own_is_removed() -> None:
 def test_the_apply_condition_reads_the_live_link_and_not_only_the_file() -> None:
     """A file already on disk says nothing about an apply that never ran (lesson-620)."""
     condition = " ".join(APPLY["when"])
-    assert "_netplan_live_servers" in condition
-    assert "_netplan_foreign" in condition
+    assert "_netplan_live_servers != [netplan_gateway]" in condition
+    assert "_netplan_foreign | length > 0" in condition
+    assert "_netplan_declared is changed" in condition
 
 
 def test_the_revert_is_armed_before_anything_is_written_and_disarmed_last() -> None:

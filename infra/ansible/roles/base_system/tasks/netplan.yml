@@ -91,17 +91,21 @@
       command: resolvectl dns {{ netplan_interface }}
       register: _netplan_applied_dns
       changed_when: false
+      check_mode: false
+      ignore_errors: "{{ ansible_check_mode }}"
       retries: 6
       delay: 5
-      until: _netplan_applied_dns.stdout.split(':', 1)[-1].split() == [netplan_gateway]
+      until: _netplan_applied_dns.stdout.split(':', 1)[-1].split() == [netplan_gateway] or ansible_check_mode
 
     - name: Prove a name resolves over the new resolvers
       command: getent hosts {{ base_system_netplan_probe_host }}
       changed_when: false
+      check_mode: false
+      ignore_errors: "{{ ansible_check_mode }}"
       retries: 6
       delay: 5
       register: _netplan_probe
-      until: _netplan_probe.rc == 0
+      until: _netplan_probe.rc == 0 or ansible_check_mode
 
     - name: Disarm the revert
       command: systemctl stop {{ base_system_netplan_revert_unit }}.timer
