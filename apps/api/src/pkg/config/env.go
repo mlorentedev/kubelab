@@ -39,6 +39,9 @@ type Config struct {
 		GitHubAppID          string
 		GitHubInstallationID string
 		GitHubPrivateKey     string // PEM of the GitHub App, never logged
+		GitHubWebhookSecret  string // empty rejects every delivery
+		GiteaWebhookSecret   string // empty rejects every delivery
+		Sources              string // forge:owner/repo, comma separated; empty reads nothing
 	}
 	Email struct {
 		Host   string
@@ -114,6 +117,9 @@ func populateConfig() (*Config, error) {
 	cfg.Forge.GitHubAppID = os.Getenv("INFRA_FORGE_GITHUB_APP_ID")
 	cfg.Forge.GitHubInstallationID = os.Getenv("INFRA_FORGE_GITHUB_INSTALLATION_ID")
 	cfg.Forge.GitHubPrivateKey = os.Getenv("FORGE_GITHUB_PRIVATE_KEY")
+	cfg.Forge.GitHubWebhookSecret = os.Getenv("FORGE_GITHUB_WEBHOOK_SECRET")
+	cfg.Forge.GiteaWebhookSecret = os.Getenv("FORGE_GITEA_WEBHOOK_SECRET")
+	cfg.Forge.Sources = os.Getenv("INFRA_FORGE_SOURCES")
 
 	// Validate configuration
 	if err := validateConfig(cfg); err != nil {

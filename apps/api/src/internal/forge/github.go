@@ -18,10 +18,12 @@ const (
 
 // GitHub reads a repository through the issues endpoint, which lists pull
 // requests too. BaseURL is the API root (https://api.github.com); Token is
-// optional, and an empty one sends no Authorization header.
+// optional, and an empty one sends no Authorization header. Tokens, when set,
+// supplies a fresh token per read and wins over Token (AppTokens.Token).
 type GitHub struct {
 	BaseURL string
 	Token   string
+	Tokens  func(context.Context) (string, error)
 	HTTP    *http.Client
 }
 
@@ -47,6 +49,14 @@ var nextLink = regexp.MustCompile(`<([^>]+)>;\s*rel="next"`)
 
 // ListItems pages through every item changed since the given time.
 func (g *GitHub) ListItems(ctx context.Context, src Source, since time.Time) ([]Item, error) {
+	token := g.Token
+	if g.Tokens != nil {
+		fresh, err := g.Tokens(ctx)
+		if err != nil {
+			return nil, &SourceError{Source: src, Err: err}
+		}
+		token = fresh
+	}
 	q := url.Values{"state": {"all"}, "per_page": {fmt.Sprint(githubPerPage)}}
 	if !since.IsZero() {
 		q.Set("since", since.UTC().Format(time.RFC3339))
@@ -59,8 +69,8 @@ func (g *GitHub) ListItems(ctx context.Context, src Source, since time.Time) ([]
 		HTTP:     g.HTTP,
 		Auth: func(req *http.Request) {
 			req.Header.Set("Accept", "application/vnd.github+json")
-			if g.Token != "" {
-				req.Header.Set("Authorization", "Bearer "+g.Token)
+			if token != "" {
+				req.Header.Set("Authorization", "Bearer "+token)
 			}
 		},
 	})

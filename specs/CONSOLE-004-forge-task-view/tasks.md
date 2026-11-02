@@ -48,10 +48,13 @@ created: "2026-10-21"
 - [ ] [AC1] Regression test: a source that is down renders unreachable with its last read time, never empty
 - [ ] [P] [AC4] Webhook receiver: reject an invalid HMAC, store the event before projecting it
   - [x] ✓ 2026-10-22 Signature verification for both forges, GitHub `sha256=` prefix and Gitea bare hex (#2636)
-  - [ ] Receiver endpoint and the event store. Projection upserts the `forge_source` row first: `forge_item` holds a foreign key to it, and an event can arrive before that repository's first full read (PR-Agent finding on #2933)
-- [ ] [AC4] Test: the same delivery twice projects once
-- [ ] [AC4] Periodic reconcile per source every 10 minutes under the hourly call ceiling, with a guard test that counts calls
+  - [x] ✓ 2026-11-02 Receiver endpoint and the event store: `POST /api/forge/webhooks/:forge`, HMAC before any write, a redelivery is a no-op. The two webhook secrets are not delivered yet, so every delivery is refused until they are
+  - [x] ✓ 2026-11-02 Projection: every 10 seconds, the `forge_source` row first because of the foreign key, item and delivery mark in one transaction, and a late older delivery does not overwrite a newer read (PR-Agent finding on #2933)
+  - [ ] Deliver `FORGE_GITHUB_WEBHOOK_SECRET` and `FORGE_GITEA_WEBHOOK_SECRET` through SOPS and `SECRET_CATALOG`
+- [x] ✓ 2026-11-02 [AC4] Test: the same delivery twice projects once (`TestSameDeliveryProjectsOnce`, against Postgres)
+- [x] ✓ 2026-11-02 [AC4] Periodic reconcile per source every 10 minutes under the hourly call ceiling, with a guard test that counts calls. `infra.forge.sources` declares GitHub only: which Gitea repository to read is the operator's call, and the Gitea reader is wired with it
 - [ ] [AC1] Queue endpoint with the inbox reason (author, requested reviewer, failing CI, waiting on me)
+  - [ ] The queue lists declared sources only, so a repository removed from `infra.forge.sources` leaves the view, and an item deleted upstream goes on the next full rebuild (PR-Agent finding on #3001)
 
 ### 2. Access and UI
 
@@ -77,10 +80,14 @@ created: "2026-10-21"
 ### 5. Operations
 
 - [ ] [P] [AC7] Declare the read model in the Postgres backup coverage and rehearse one restore
+  - [x] ✓ 2026-11-02 Covered: the prod dump is `pg_dumpall`, so the `api` database is in it without a change
+  - [ ] Rehearse one restore
 - [ ] [AC7] Test that the read model rebuilds from the forges alone
 - [x] ✓ 2026-11-01 [AC4] [AC7] Create the GitHub App for the read adapter, store its credential in SOPS with a catalog entry (App `kubelab-console`, App ID 5573076, installed on `mlorentedev/kubelab` only as installation 177667607; Issues, Pull requests and Metadata read-only, webhooks off; private key at `apps.services.core.github_app.private_key` in `common.enc.yaml`; GitHub App keys carry no expiry, so the catalog entry is `Expiry.NEVER`)
 - [x] ✓ 2026-11-01 [AC4] Deliver the App ID, installation ID and private key to the API: the two IDs at `infra.forge.github.*` reach the ConfigMap as `INFRA_FORGE_GITHUB_APP_ID` and `INFRA_FORGE_GITHUB_INSTALLATION_ID`; the key reaches `api-secrets` as `FORGE_GITHUB_PRIVATE_KEY`
-- [ ] [AC4] Mint an installation token from the App ID, installation ID and key (JWT signed with the key, exchanged at `/app/installations/{id}/access_tokens`, cached until shortly before it expires), then read once to measure the App's grant. Needs the image deployed, so it runs after promotion
+- [x] ✓ 2026-11-02 [AC4] Mint an installation token from the App ID, installation ID and key, then read once to measure the App's grant
+  - [x] ✓ 2026-11-02 `forge.AppTokens`: RS256 JWT with the standard library, exchanged at `/app/installations/{id}/access_tokens`, cached until five minutes before expiry; `GitHub.Tokens` takes it per read, and a failed mint is a `SourceError`
+  - [x] ✓ 2026-11-02 Read once with the deployed image: on staging at `sha-75346a3` the first full read returned 2936 items, and each of the four counts (issues and pull requests, open and closed) equals GitHub's search count. The pod used 11 MiB. The App's grant needs nothing more
 - [ ] [AC7] Runbook: rebuild, restore, rotate tokens; token expiry dates in the SOPS catalog
 
 ### 6. End to end
