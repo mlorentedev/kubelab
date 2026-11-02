@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -182,5 +183,61 @@ func TestAbortedProberDoesNotPoisonTheCache(t *testing.T) {
 	}
 	if *hits != 1 {
 		t.Fatalf("hits = %d, want 1 (the aborted probe's verdict is the cached one)", *hits)
+	}
+}
+
+func withPostgres(c *config.Config) *config.Config {
+	c.Postgres = config.Postgres{Host: "postgres", Port: "5432", Tenant: "api"}
+	c.Postgres.Password = strings.Repeat("x", 8) // built at run time: not a credential
+	return c
+}
+
+func postgresChecks(r Response) []Check {
+	var out []Check
+	for _, ck := range r.Checks {
+		if ck.Component == "postgres" {
+			out = append(out, ck)
+		}
+	}
+	return out
+}
+
+func TestReadyReportsPostgresOK(t *testing.T) {
+	h, _, _ := newHandler(t, http.StatusOK, withPostgres(fullConfig()), nil)
+	h.PingPostgres = func(context.Context, *config.Config) error { return nil }
+
+	code, resp := get(t, h, "/ready")
+	got := postgresChecks(resp)
+	if code != http.StatusOK || resp.Status != StatusReady || len(got) != 1 || got[0].Status != checkOK {
+		t.Fatalf("code %d status %q postgres %+v", code, resp.Status, got)
+	}
+}
+
+// A database outage degrades the API but never takes it out of rotation, and the driver's error,
+// which can carry connection details, does not reach the response.
+func TestReadyDegradesWithoutGatingWhenPostgresIsDown(t *testing.T) {
+	h, _, _ := newHandler(t, http.StatusOK, withPostgres(fullConfig()), nil)
+	h.PingPostgres = func(context.Context, *config.Config) error { return errors.New("dial failed: driver detail") }
+
+	code, resp := get(t, h, "/ready")
+	got := postgresChecks(resp)
+	if code != http.StatusOK || resp.Status != StatusDegraded || len(got) != 1 {
+		t.Fatalf("code %d status %q postgres %+v", code, resp.Status, got)
+	}
+	if got[0].Message != "postgres unreachable" {
+		t.Fatalf("message leaks the driver error: %q", got[0].Message)
+	}
+}
+
+func TestReadyOmitsPostgresWhereItIsNotConfigured(t *testing.T) {
+	h, _, _ := newHandler(t, http.StatusOK, fullConfig(), nil)
+	h.PingPostgres = func(context.Context, *config.Config) error {
+		t.Fatal("must not ping an unconfigured database")
+		return nil
+	}
+
+	code, resp := get(t, h, "/ready")
+	if code != http.StatusOK || resp.Status != StatusReady || len(postgresChecks(resp)) != 0 {
+		t.Fatalf("code %d status %q checks %+v", code, resp.Status, resp.Checks)
 	}
 }

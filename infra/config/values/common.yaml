@@ -913,7 +913,7 @@ edge:
 
   cloudflared:
     name: cloudflared
-    image: cloudflare/cloudflared:latest
+    image: cloudflare/cloudflared:2026.10.7
     resources:
       cpu_limit: "0.25"
       memory_limit: 128M
@@ -2164,7 +2164,7 @@ apps:
         location: always-on
         # Internal-only, no public DNS record — each env overrides its own domain.
         image: crowdsecurity/crowdsec:v1.7.6
-        bouncer_image: fbonalair/traefik-crowdsec-bouncer:latest
+        bouncer_image: fbonalair/traefik-crowdsec-bouncer:0.5.0
         bouncer_name: crowdsec-bouncer-traefik
         enable_bouncer_middleware: true  # Set false in dev — bouncer blocks localhost traffic
         enable_auth: true
