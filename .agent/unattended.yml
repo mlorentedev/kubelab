@@ -1,0 +1,54 @@
+# Arming envelope for one unattended run. The run reads the committed copy only.
+version: 1
+run_id: "ap-20261102-kubelab-delivery"
+armed_by: manu
+armed_at: 2026-11-02T05:55:00Z
+expires_at: 2026-11-02T17:55:00Z
+objective: >-
+  Advance DELIVERY-004 (#1619) to the flip: log the evidence cases (#2948, #2949 and the next
+  staging deploy PR) with their deploy-verify runs, and get the spec's adversarial review; then
+  work delivery/CI backlog items in toolkit/tests scope that pass the 3 a.m. test.
+scope:
+  write_paths:
+    - "toolkit/**"
+    - "tests/**"
+    - "apps/api/**/*_test.go"
+    - "docs/lessons/**"
+    - "docs/runbooks/**"
+    - "specs/DELIVERY-004-exempt-generated-deploy-prs/**"
+    - ".agent/runs/**"
+  frozen_paths:
+    - ".github/**"
+    - "harness/**"
+    - "**/AGENTS.md"
+    - "**/CLAUDE.md"
+    - "Makefile"
+    - "infra/**"
+    - "apps/api/**/*.go.mod"
+    # Held tonight by the backup lane's run (feat-backup-057-closeout).
+    - "toolkit/features/backup_*"
+    - "toolkit/features/platform_manifest.py"
+    - "toolkit/features/secrets_manager.py"
+    - "toolkit/features/credentials.py"
+    - "toolkit/features/oidc_clients.py"
+  max_files: 12
+  max_loc: 300
+allowed_commands: [dotf, gh, git, make, poetry, go, caffeinate]
+queue:
+  source: bitacora
+  filter: >-
+    In order: #1619 (evidence logging on the issue, and the adversarial review by the reviewer
+    persona into specs/DELIVERY-004-exempt-generated-deploy-prs/review.md; PR 4 itself touches
+    harness/ and stays the operator's); then unassigned kubelab issues #1694 (CI-004), #1691
+    (CI-003), #837 (CI-GATE-004), #1737 (DELIVERY-008, new *_test.go files only). Skip any item
+    whose fix needs a frozen path, or one claimed by another session.
+  max_items: 5
+budget:
+  max_iterations: 8
+  max_minutes_per_iteration: 60
+  max_consecutive_failures: 2
+authority:
+  merge: standing-grant
+  push: true
+  open_pr: true
+  advisor_tier: top
