@@ -121,6 +121,14 @@ install -d -m 0700 "$SPOOL"
 exec 8>"$SPOOL/.lock"
 
 # Any notice kept, or the unit given, still waiting in the spool.
+# A node with no RTC boots weeks behind until NTP steps its clock (the RPi4, 26
+# days), so a notice kept in that window has no true time. It says so, and a mark
+# beside it holds the age check until the clock is set, then ages it from there
+# (#2866). Only a plain `no` counts: a node that cannot answer keeps its clock's word.
+clock_unset() {
+  [ "$(timedatectl show -p NTPSynchronized --value 2>/dev/null)" = no ]
+}
+
 kept() {
   local f name
   for f in "$SPOOL"/[0-9]*; do
@@ -166,9 +174,19 @@ if [ "$MODE" = flush ]; then
     esac
     # A payload n8n refuses for good would hold every later notice behind it.
     # Past the age, it is dropped and said so here, in this unit's journal.
-    if [ $(( $(date +%s) - 10#$stamp / 1000000000 )) -gt {{ node_notify_spool_max_age_seconds }} ]; then
+    born=$(( 10#$stamp / 1000000000 ))
+    mark="$SPOOL/.clockless-$name"
+    if [ -e "$mark" ]; then
+      if clock_unset; then
+        born="$(date +%s)"
+      else
+        [ -s "$mark" ] || date +%s > "$mark"
+        born="$(cat "$mark")"
+      fi
+    fi
+    if [ $(( $(date +%s) - born )) -gt {{ node_notify_spool_max_age_seconds }} ]; then
       echo "dropped $name: undelivered for more than {{ node_notify_spool_max_age_seconds }}s" >&2
-      rm -f "$oldest"
+      rm -f "$oldest" "$mark"
       continue
     fi
     # Stops at the first refusal: what follows waits behind it, in order. A
@@ -177,7 +195,7 @@ if [ "$MODE" = flush ]; then
       echo "n8n did not take $name; it stays in the spool" >&2
       exit 1
     fi
-    rm -f "$oldest"
+    rm -f "$oldest" "$mark"
   done
 fi
 
@@ -398,16 +416,20 @@ fi
 # when it arrives, not when its unit failed. Written aside and renamed in, so a
 # write that dies half-way leaves nothing the flush would deliver.
 keep() {
-  local tmp
+  local tmp name at="$NOW"
   tmp="$(mktemp "$SPOOL/.new.XXXXXX")"
-  printf '%s' "$PAYLOAD" | NOTIFY_AT="$NOW" python3 -c "
+  clock_unset && at=""
+  printf '%s' "$PAYLOAD" | NOTIFY_AT="$at" python3 -c "
 import json, os, sys, time
 envelope = json.load(sys.stdin)
-at = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(int(os.environ['NOTIFY_AT'])))
-envelope['title'] += f' (at {at}, delivered late)'
+at = os.environ['NOTIFY_AT']
+at = 'at ' + time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(int(at))) if at else 'time unknown'
+envelope['title'] += f' ({at}, delivered late)'
 print(json.dumps(envelope))
 " > "$tmp"
-  mv "$tmp" "$SPOOL/$(date +%s%N)-$UNIT"
+  name="$(date +%s%N)-$UNIT"
+  [ -n "$at" ] || : > "$SPOOL/.clockless-$name"
+  mv "$tmp" "$SPOOL/$name"
 }
 
 # Sent directly only with the spool's lock and nothing in it; otherwise kept

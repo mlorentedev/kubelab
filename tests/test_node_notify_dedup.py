@@ -641,6 +641,50 @@ def test_a_page_neither_delivered_nor_kept_does_not_count_as_sent(node: Node) ->
     assert "failed on" in title and "still failing" not in title, title
 
 
+def _kept_behind_the_clock(node: Node) -> Path:
+    """A notice kept before NTP stepped the clock, whose stamp now reads 26 days old."""
+    node._shim("timedatectl", "echo no")
+    node.curl_exit.write_text("6", encoding="utf-8")
+    node.run()
+    [kept] = node.spooled()
+    stale = (int(time.time()) - 26 * 86400) * 10**9
+    behind = node.spool / f"{stale}-{UNIT}"
+    kept.rename(behind)
+    (node.spool / f".clockless-{kept.name}").rename(node.spool / f".clockless-{behind.name}")
+    node._shim("timedatectl", "echo yes")
+    node.curl_exit.write_text("0", encoding="utf-8")
+    return behind
+
+
+def test_a_notice_kept_before_the_clock_stepped_is_delivered_with_no_time(node: Node) -> None:
+    """The stamp would read 26 days old and be dropped as past the week (#2866)."""
+    _kept_behind_the_clock(node)
+    assert node.flush().returncode == 0
+    [title] = node.titles()
+    assert "(time unknown, delivered late)" in title and " at " not in title.split(" (")[-1]
+    assert not list(node.spool.glob(".clockless-*")), "a delivered notice left its mark"
+
+
+def test_a_notice_with_no_time_ages_from_the_first_flush_that_knows_it(node: Node) -> None:
+    """Otherwise a payload n8n refuses for good would hold every later notice forever (#2866)."""
+    behind = _kept_behind_the_clock(node)
+    max_age = int(_defaults()["node_notify_spool_max_age_seconds"])  # type: ignore[call-overload]
+    node.curl_exit.write_text("22", encoding="utf-8")
+    assert node.flush().returncode == 1
+    mark = node.spool / f".clockless-{behind.name}"
+    assert mark.read_text(encoding="utf-8").strip(), "the first flush with a set clock starts the age"
+    mark.write_text(f"{int(time.time()) - max_age - 60}\n", encoding="utf-8")
+    assert node.flush().returncode == 0
+    assert not node.spooled() and not mark.exists()
+
+
+def test_a_node_that_cannot_read_its_clock_state_keeps_the_time_in_the_title(node: Node) -> None:
+    node.curl_exit.write_text("6", encoding="utf-8")
+    node.run()
+    assert not list(node.spool.glob(".clockless-*"))
+    assert "(at " in json.loads(node.spooled()[0].read_text(encoding="utf-8"))["title"]
+
+
 def test_a_notice_older_than_the_spool_keeps_is_dropped(node: Node) -> None:
     """A payload n8n refuses for good would otherwise hold every later notice behind it."""
     max_age = int(_defaults()["node_notify_spool_max_age_seconds"])  # type: ignore[call-overload]
