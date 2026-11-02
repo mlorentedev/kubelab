@@ -32,7 +32,7 @@ k3s_traefik_https_port: 443
 k3s_traefik_acme_enabled: false
 k3s_traefik_acme_email: ""
 k3s_traefik_acme_dns_provider: "cloudflare"
-k3s_traefik_acme_dns_resolvers: "1.1.1.1:53,8.8.8.8:53"
+k3s_traefik_acme_dns_resolvers: "{{ config.networking.public_resolvers | map('regex_replace', '$', ':53') | join(',') }}"
 k3s_traefik_acme_secret_name: "cloudflare-api-token"
 k3s_traefik_acme_cloudflare_token: ""  # From SOPS (secrets.cloudflare.acme_dns_token)
 # Before asking Let's Encrypt to validate, lego checks the DNS-01 record against the

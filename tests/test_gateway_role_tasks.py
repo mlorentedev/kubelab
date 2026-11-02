@@ -34,6 +34,9 @@ ROLE = REPO / "infra" / "ansible" / "roles" / "gateway"
 TASKS: list[dict[str, Any]] = yaml.safe_load((ROLE / "tasks" / "main.yml").read_text(encoding="utf-8"))
 HANDLERS: list[dict[str, Any]] = yaml.safe_load((ROLE / "handlers" / "main.yml").read_text(encoding="utf-8"))
 DEFAULTS: dict[str, Any] = yaml.safe_load((ROLE / "defaults" / "main.yml").read_text(encoding="utf-8"))
+PUBLIC_RESOLVERS = yaml.safe_load((REPO / "infra" / "config" / "values" / "common.yaml").read_text(encoding="utf-8"))[
+    "networking"
+]["public_resolvers"]
 NETWORKING = yaml.safe_load((REPO / "infra" / "config" / "values" / "common.yaml").read_text(encoding="utf-8"))[
     "networking"
 ]
@@ -62,9 +65,9 @@ def _template_task(dest: str) -> tuple[int, dict[str, Any]]:
 def test_the_resolver_is_a_template_the_role_owns() -> None:
     _, task = _template_task("/etc/resolv.conf")
     env = ansible_env(str(ROLE / "templates"), trim_blocks=True)
-    rendered = env.get_template(task["template"]["src"]).render(gateway_dns_servers=DEFAULTS["gateway_dns_servers"])
+    rendered = env.get_template(task["template"]["src"]).render(gateway_dns_servers=PUBLIC_RESOLVERS)
     nameservers = [line.split()[1] for line in rendered.splitlines() if line.startswith("nameserver ")]
-    assert nameservers == DEFAULTS["gateway_dns_servers"].split(",")
+    assert nameservers == PUBLIC_RESOLVERS
 
 
 def test_no_shell_task_hides_its_changes() -> None:
