@@ -551,9 +551,10 @@ secrets-audit:
 
 # Read-only: GETs against the Cloudflare API with the ACME token, which is used
 # and never printed. 403 on zone settings is the expected answer (#2459).
+# `LIVE=1` also compares each cluster's Secret with it (#2928).
 .PHONY: acme-token-scope
 acme-token-scope:
-	@$(TOOLKIT) secrets acme-token-scope
+	@$(TOOLKIT) secrets acme-token-scope $(if $(LIVE),--live,)
 
 # Plan only. `APPLY=1` is what creates organizations and repositories for real —
 # opt-in because the first run mutates a live forge (TOOL-035, #1076).
