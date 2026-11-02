@@ -1,5 +1,5 @@
 ---
-id: lesson-688-measure-the-model-before-tuning-open-webuis-background-calls
+id: lesson-690-measure-the-model-before-tuning-open-webuis-background-calls
 type: lesson
 status: active
 created: "2026-11-01"

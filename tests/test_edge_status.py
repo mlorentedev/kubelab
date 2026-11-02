@@ -53,7 +53,7 @@ UP, PORTAL, DEAD, UNKNOWN = 0, 2, 3, 4
 
 def _render(name: str, **variables: Any) -> str:
     env = ansible_env(str(ROLE / "templates"), trim_blocks=True, lstrip_blocks=True)
-    return env.get_template(f"{name}.j2").render(**{**DEFAULTS, **variables})
+    return env.get_template(f"{name}.j2").render(**{**DEFAULTS, "gateway_dns_servers": PUBLIC_RESOLVERS, **variables})
 
 
 def _task_dest(src: str) -> str:
@@ -61,7 +61,9 @@ def _task_dest(src: str) -> str:
     return (task.get("template") or task.get("copy"))["dest"]
 
 
-PUBLIC_RESOLVERS = DEFAULTS["gateway_dns_servers"].split(",")
+PUBLIC_RESOLVERS = yaml.safe_load((REPO / "infra" / "config" / "values" / "common.yaml").read_text(encoding="utf-8"))[
+    "networking"
+]["public_resolvers"]
 CURL = """echo "curl $*" >>"$FAKE/calls"
 code=$(cat "$FAKE/http_code" 2>/dev/null || echo 000)
 printf '%s' "$code"

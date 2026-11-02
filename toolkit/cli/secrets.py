@@ -823,6 +823,18 @@ def catalog(
     logger.console.print(table)
 
 
+def _headscale_key_paths() -> list[str]:
+    """Stored keys Headscale issued: PROVIDER expiry, and no check that asks by value."""
+    from toolkit.features.secret_expiry import PROVIDER_CHECKS, Expiry, resolve_expiry
+    from toolkit.features.secrets_manager import SECRET_CATALOG
+
+    return [
+        spec.key_path
+        for spec in SECRET_CATALOG
+        if resolve_expiry(spec) is Expiry.PROVIDER and spec.key_path not in PROVIDER_CHECKS
+    ]
+
+
 @app.command("check-expiry")
 def check_expiry(
     warn_days: Annotated[
@@ -855,6 +867,7 @@ def check_expiry(
         Expiry,
         ExpiryUnavailableError,
         headscale_apikeys,
+        is_unreferenced_expired,
         resolve_expiry,
     )
     from toolkit.features.secrets_manager import SECRET_CATALOG
@@ -920,9 +933,12 @@ def check_expiry(
         logger.error(f"headscale  CANNOT CHECK: {exc}")
         raise typer.Exit(2) from exc
 
+    stored = [value for path in _headscale_key_paths() if (value := _dig(path))]
     for key in sorted(keys, key=lambda k: k.expires_at):
         line = f"{key.prefix}  expires {key.expires_at:%Y-%m-%d}  ({key.days_left}d)"
-        if key.days_left < warn_days:
+        if is_unreferenced_expired(key, stored):
+            logger.warning(f"{line}: expired and held by nothing, safe to delete on the server")
+        elif key.days_left < warn_days:
             logger.error(line)
             expiring.append(key.prefix)
         else:
@@ -946,7 +962,12 @@ def check_expiry(
 
 
 @app.command("acme-token-scope")
-def acme_token_scope() -> None:
+def acme_token_scope(
+    live: Annotated[
+        bool,
+        typer.Option("--live", help="Also check that each cluster's Secret holds this same token (#2928)"),
+    ] = False,
+) -> None:
     """Ask Cloudflare what the ACME DNS-01 token may do on each issuing zone (#2459).
 
     Every request is a GET; the token is used, never printed. Expected per
@@ -959,8 +980,12 @@ def acme_token_scope() -> None:
 
     Exits 1 when a probe answers differently (a 200 on zone settings means the
     token is broader than DNS), 2 when Cloudflare cannot be asked.
+
+    These answers describe the SOPS value, and a Secret changes only at
+    provision. `--live` also compares each cluster's Secret with it, exiting 1 on
+    a difference and 2 when a cluster cannot be read.
     """
-    from toolkit.features.acme_token_scope import ScopeUncheckableError, probe_acme_token
+    from toolkit.features.acme_token_scope import ScopeUncheckableError, cluster_holds_token, probe_acme_token
     from toolkit.features.configuration import ConfigurationManager
 
     logger.section("ACME DNS-01 token scope")
@@ -992,6 +1017,26 @@ def acme_token_scope() -> None:
         logger.error(f"{len(wrong)} probe(s) answered differently than an ACME-only token should")
         raise typer.Exit(1)
     logger.success(f"{len(probes)} probes as expected: the token reaches DNS on its zones and nothing more")
+
+    if not live:
+        return
+    # Each cluster on its own: staging is on-demand, and a powered-off homelab must
+    # not stop the always-on cluster from being read.
+    differing: list[str] = []
+    unreadable = 0
+    for env in ("staging", "prod"):
+        try:
+            if not cluster_holds_token(env, token):
+                differing.append(env)
+        except ScopeUncheckableError as exc:
+            logger.error(f"CANNOT CHECK: {exc}")
+            unreadable += 1
+    if differing:
+        logger.error(f"Secret differs from cloudflare.acme_dns_token on: {', '.join(differing)}. Provision the node.")
+        raise typer.Exit(1)
+    if unreadable:
+        raise typer.Exit(2)
+    logger.success("both clusters' Secrets hold this token")
 
 
 @app.command("preauth-keys")
