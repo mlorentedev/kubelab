@@ -86,3 +86,4 @@ make monitoring-export     # Re-export to verify monitors match seed
 - Docker volume `uptime-kuma_uptime_kuma_data` preserves data across compose recreates
 - Bootstrap is idempotent — safe to re-run on existing instance
 - Monitors are created one by one with `make monitoring-apply`; the seed is never uploaded as a backup, because that call times out against Kuma v2
+- **No command restores notifications** (#1042): `infra/config/uptime-kuma/notifications.json` is a reference. On a rebuild, recreate the channels in the Kuma UI from it before relying on any alert

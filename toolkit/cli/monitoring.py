@@ -170,7 +170,7 @@ def apply_cmd(
 
 @app.command("bootstrap")
 def bootstrap_cmd() -> None:
-    """Full disaster recovery: create admin user + import monitors.
+    """Full disaster recovery: create admin user + apply monitors.
 
     For fresh Uptime Kuma instances (new SD card). Creates admin user
     from SOPS credentials, then imports monitors + notifications from

@@ -152,7 +152,7 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit infra vps snapshot` | Snapshot the VPS through the Hetzner API: the rollback of last resort (PREP-002). |
 | `toolkit monitoring` | Uptime Kuma monitoring: status and config-as-code (backup is node_backup) |
 | `toolkit monitoring apply` | Declarative sync: apply monitors from seed JSON to Uptime Kuma. |
-| `toolkit monitoring bootstrap` | Full disaster recovery: create admin user + import monitors. |
+| `toolkit monitoring bootstrap` | Full disaster recovery: create admin user + apply monitors. |
 | `toolkit monitoring export` | Export monitors and notifications to JSON (config-as-code). |
 | `toolkit monitoring status` | Check Uptime Kuma connectivity and container status on RPi3. |
 | `toolkit obs` | Agentic Observability & SRE triage commands (Loki, Grafana, Slack). |
