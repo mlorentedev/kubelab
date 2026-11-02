@@ -17,6 +17,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from toolkit.cli.secrets import _headscale_key_paths
 from toolkit.features.secret_expiry import (
     Expiry,
     ExpiryUnavailableError,
@@ -383,3 +384,8 @@ class TestUnreferencedExpiredKey:
     def test_a_live_key_held_by_nothing_is_not_excused(self) -> None:
         key = KeyExpiry(self.PREFIX, self.FUTURE)
         assert is_unreferenced_expired(key, []) is False
+
+    def test_the_key_a_hub_reads_counts_as_stored(self) -> None:
+        """The wiring: an empty list here would excuse every stored key that expires."""
+        assert "gcp.headscale_api_key" in _headscale_key_paths()
+        assert "cloudflare.api_token" not in _headscale_key_paths()
