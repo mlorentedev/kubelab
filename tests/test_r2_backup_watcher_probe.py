@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import os
 import pathlib
+import re
 import subprocess
 import time
 
@@ -567,6 +568,40 @@ def test_each_node_logs_how_long_its_listing_took(fleet) -> None:
     proc = subprocess.run([*shell, str(PROBE)], env=env, capture_output=True, text=True, timeout=60)
     assert "r2-backup-watcher: vps: size listing took 3s\n" in proc.stderr
     assert "r2-backup-watcher: fleet: bucket kubelab-backups listing took 3s\n" in proc.stderr
+
+
+def test_each_restic_call_logs_how_long_it_took(fleet) -> None:
+    """The margin under RESTIC_TIMEOUT is read from these lines, never guessed.
+
+    Without them a call that took 61 s and one that never answered both read
+    `signal terminated received, cleaning up` (staging, Beelink, 2026-10-27 on).
+    """
+    _, _, env = fleet
+    shell = env.get("PROBE_SHELL", "sh").split()
+    proc = subprocess.run([*shell, str(PROBE)], env=env, capture_output=True, text=True, timeout=60)
+    # A format, not `0s`: the fakes are real processes, and one that straddles
+    # a second boundary logs `1s` with nothing wrong.
+    for call in ("snapshots", "ls", "cat"):
+        assert re.search(rf"^r2-backup-watcher: vps: restic {call} took [0-9]+s$", proc.stderr, re.M), proc.stderr
+
+
+def test_a_timed_out_call_says_so_in_the_log_and_the_reason(fleet) -> None:
+    fake, _, env = fleet
+    (fake / "kubelab-vps.hang").write_text("", encoding="utf-8")
+    shell = env.get("PROBE_SHELL", "sh").split()
+    proc = subprocess.run([*shell, str(PROBE)], env=env, capture_output=True, text=True, timeout=60)
+    nodes = [json.loads(line) for line in proc.stdout.splitlines() if '"r2_backup_node"' in line]
+    assert "r2-backup-watcher: vps: restic snapshots timed out after 2s\n" in proc.stderr, proc.stderr
+    assert _node(nodes, "vps")["reason"] == "unreadable: timed out after 2s"
+    assert _node(nodes, "vps")["healthy"] == 0, "a timeout stays a failure: it is not proof the repository is fine"
+
+
+def test_a_timed_out_rejected_credential_still_names_the_401(fleet) -> None:
+    fake, _, env = fleet
+    (fake / "kubelab-vps.refuse").write_text("", encoding="utf-8")
+    _, nodes, _ = _run(env)
+    reason = _node(nodes, "vps")["reason"]
+    assert reason.startswith("unreadable: timed out after 2s: ") and "Unauthorized" in reason, reason
 
 
 def test_a_probe_that_stops_early_reports_no_fleet_size(fleet) -> None:

@@ -137,6 +137,15 @@ SECRET_DEFINITIONS: list[SecretMapping] = [
             "ZOHO_CLIENT_ID": "APPS_PLATFORM_API_ZOHO_CLIENT_ID",
             "ZOHO_CLIENT_SECRET": "APPS_PLATFORM_API_ZOHO_CLIENT_SECRET",
         },
+        optional_keys={
+            # The forge task view's credentials (CONSOLE-004). Optional on purpose, and unlike
+            # the Vikunja keys that once took prod down: the API starts without them and reports
+            # the source unreachable (`config.Forge`, pinned by `TestPopulateConfigForge`), because
+            # staging holds no Gitea token. The generated Deployment mounts only `<app>-secrets`,
+            # so a separate Secret would never reach the pod.
+            "FORGE_GITEA_TOKEN": "APPS_SERVICES_CORE_GITEA_ISSUE_READER_TOKEN",
+            "FORGE_GITHUB_PRIVATE_KEY": "APPS_SERVICES_CORE_GITHUB_APP_PRIVATE_KEY",
+        },
     ),
     SecretMapping(
         name="pr-agent-secrets",
