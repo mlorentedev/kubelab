@@ -32,6 +32,9 @@ TEMPLATES = ROLE / "templates"
 TASKS: list[dict[str, Any]] = yaml.safe_load((ROLE / "tasks" / "main.yml").read_text(encoding="utf-8"))
 HANDLERS: list[dict[str, Any]] = yaml.safe_load((ROLE / "handlers" / "main.yml").read_text(encoding="utf-8"))
 DEFAULTS: dict[str, Any] = yaml.safe_load((ROLE / "defaults" / "main.yml").read_text(encoding="utf-8"))
+PUBLIC_RESOLVERS = yaml.safe_load((REPO / "infra" / "config" / "values" / "common.yaml").read_text(encoding="utf-8"))[
+    "networking"
+]["public_resolvers"]
 NETWORKING = yaml.safe_load((REPO / "infra" / "config" / "values" / "common.yaml").read_text(encoding="utf-8"))[
     "networking"
 ]
@@ -59,7 +62,7 @@ def _vars(**overrides: Any) -> dict[str, Any]:
         "gateway_dhcp_range_start": DEFAULTS["gateway_dhcp_range_start"],
         "gateway_dhcp_range_end": DEFAULTS["gateway_dhcp_range_end"],
         "gateway_dhcp_lease": DEFAULTS["gateway_dhcp_lease"],
-        "gateway_dns_servers": DEFAULTS["gateway_dns_servers"],
+        "gateway_dns_servers": PUBLIC_RESOLVERS,
         "gateway_dhcp_reservations": [{"mac": ACE1["mac"], "hostname": "kubelab-ace1", "ip": ACE1["lan_ip"]}],
         "gateway_uplink_regdomain": EDGE["uplink"]["regdomain"],
         "gateway_ap_interface": AP,

@@ -49,7 +49,7 @@ agent_stack_nan_api_base_url: https://api.nan.builders/v1
 # Authelia issuer the way the host does, because Docker never passes the host's
 # 100.100.100.100 into a container. The public entry is only for a Tailscale
 # outage.
-agent_stack_docker_dns_servers: ["100.100.100.100", "1.1.1.1"]
+agent_stack_docker_dns_servers: "{{ config.networking.tailnet_first_resolvers }}"
 
 # The agent's user (ADR-068 D2). A system user, so useradd allocates it no
 # subordinate ids of its own: the role declares them, and asserts at every run
@@ -91,7 +91,7 @@ agent_stack_egress_table: "{{ agent_stack_dir }}/agent-egress.nft"
 # MagicDNS (100.100.100.100) sits inside the refused range, so the agent's
 # containers resolve through public resolvers only, the headscale role's pair.
 # Everything they need (NaN, Slack, GitHub, the prod issuer) is public DNS.
-agent_stack_hermes_dns_servers: ["1.1.1.1", "8.8.8.8"]
+agent_stack_hermes_dns_servers: "{{ config.networking.public_resolvers }}"
 agent_stack_egress_probe_port: 443
 
 # The hook the agent's vault clone commits through: root's, outside the agent's
