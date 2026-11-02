@@ -12,20 +12,20 @@ created: "2026-11-01"
 
 - [x] [AC1] [AC2] Failing tests read the rendered ConfigMap: title define, environment from `.ExternalURL`, cause line for `NoData`/`Error`, runbook link, every rule declares runbook and summary (`tests/test_alert_notice_contract.py`)
 - [x] [AC1] [AC2] `apprise.title` and the cause and runbook lines in `templates.yaml`; both apprise contact points take the title from the define
+- [x] [AC1] Staging cluster delivery from the PR branch (drill, 2026-11-02 09:30Z); merged as #2987
 - [x] [AC1] Delivery proven from a local grafana-oss:13.0.2 firing real rules (fault, no data, query error, resolved), both tiers and both root URLs; recorded in verification.md
 - [ ] After merge: one real prod delivery observed with the new title before the next prod-bound merge
 
-## PR 2: state history in Loki (AC3, #2924)
+## PR 2: a record of every page (AC3, #2924)
 
-- [ ] Read whether prod Grafana's database survives a restart, and attribute #2924's eight pages from its history first
-- [ ] Failing test on the rendered Grafana env: state history enabled with the Loki backend, both envs
-- [ ] Enable it; confirm Grafana may reach Loki under its NetworkPolicy
-- [ ] Read a real transition back from Loki in staging, then in prod after merge
+- [x] Read prod Grafana's state history for 10-26..11-02 (2026-11-02): its database is on the `grafana-data` PVC, so the history is already durable, and none of #2924's eight pages came from a Grafana rule (only Pending instances, which send nothing)
+- [ ] Re-plan: the missing record is at Apprise, for the senders other than Grafana (Uptime Kuma, the n8n notify router). Attribute the eight pages from n8n's execution history and Uptime Kuma's event log first, then decide where each delivery's sender and title are recorded without logging Apprise's configuration (it holds the channel tokens). AC3 is reworded with that decision
+- [ ] Read a real delivery back from that record in staging, then in prod after merge
 
 ## PR 3: one question per rule (AC4, #1668, #1320)
 
-- [ ] Split the PVC rule into PVC health (`noDataState: OK`) and watcher liveness; single-cause summaries
-- [ ] Guard enumerating every `noDataState: Alerting` rule against its emitter period, floor 2 samples
+- [x] Split the PVC rule into PVC health (`noDataState: OK`) and watcher liveness; single-cause summaries (#2991)
+- [x] Guard enumerating every `noDataState: Alerting` rule against its emitter period, floor 2 samples (#2991)
 - [ ] Daytime: #1668's resolve trace and silence drill in staging
 
 ## PR 4: node notices (AC5)

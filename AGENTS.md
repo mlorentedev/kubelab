@@ -33,7 +33,7 @@ streams A, B, C3, D, E, G in the vault roadmap.
 |------|---------|
 | `infra/k8s/` | K8s manifests (base + overlays) |
 | `infra/config/values/` | Environment config SSOT (dev/staging/prod) |
-| `infra/ansible/` | Node provisioning (K3s server/agent, errors, DNS) |
+| `infra/ansible/` | Node provisioning (K3s server, errors, DNS) |
 | `infra/stacks/` | Docker Compose stacks (local dev) |
 | `toolkit/` | Python CLI (`tk` / `toolkit`) — will become kubelab-cli |
 | `edge/` | Traefik, DNS gateway; `edge/errors/` error-pages source |

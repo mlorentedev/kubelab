@@ -27,6 +27,7 @@ family alerted on a stopped watcher for a day and a half.
 from __future__ import annotations
 
 import pathlib
+import re
 
 import pytest
 import yaml
@@ -58,6 +59,32 @@ def test_the_scan_finds_the_rules_it_claims_to_guard() -> None:
     assert {"obs015-pvc-unbound-failure", "obs015-disk-root-saturation"} <= uids
 
 
+def _queries(rule: dict) -> str:
+    return "".join(str((item.get("model") or {}).get("expr", "")) for item in rule.get("data") or [])
+
+
+def _containers(rule: dict) -> set[str]:
+    return {c for c in CRONJOB_CONTAINERS if f'container="{c}"' in _queries(rule)}
+
+
+def _is_liveness(rule: dict) -> bool:
+    """A rule whose only question is "is the watcher still reporting".
+
+    It alerts on no data and its query has no grouping, so its label set cannot
+    vanish: silence of the stream is the only way it goes empty (#1668).
+    """
+    return rule.get("noDataState") == "Alerting" and not re.search(r"\bby\s*\(", _queries(rule))
+
+
+def _watched_containers() -> set[str]:
+    return {c for _, _, r in _rules_over_cronjob_streams() if _is_liveness(r) for c in _containers(r)}
+
+
+def test_the_disk_watcher_has_a_liveness_rule() -> None:
+    """Anti-vacuity for the exemption below: the split of #1668 rests on it."""
+    assert "disk-watcher" in _watched_containers()
+
+
 @pytest.mark.parametrize(
     ("filename", "uid"),
     [(f, u) for f, u, _ in _rules_over_cronjob_streams()],
@@ -69,29 +96,38 @@ def test_no_data_is_not_reported_as_health(filename: str, uid: str) -> None:
     `noDataState: OK` on a rule fed by a single watcher converts that watcher's
     death into a green dashboard. The rule can then never fail: it reports the
     watcher's opinion when there is one, and health when there is not.
+
+    The one way out is a separate liveness rule for the same container (#1668):
+    then silence still pages, from a rule that says so, and the per-object rule
+    can let a vanished label set resolve instead of holding it FIRING.
     """
     rule = next(r for f, u, r in _rules_over_cronjob_streams() if f == filename and u == uid)
-    assert rule.get("noDataState") == "Alerting", (
-        f"{uid} ({filename}) has noDataState={rule.get('noDataState')!r}. It reads a stream "
-        "produced by a single CronJob, so no-data means the watcher stopped — not that the "
-        "thing being watched is well. If this rule genuinely should tolerate silence (an "
-        "on-demand node per ADR-028, say), it must not share a stream with one that does not."
+    if rule.get("noDataState") == "Alerting":
+        return
+    unwatched = _containers(rule) - _watched_containers()
+    assert not unwatched, (
+        f"{uid} ({filename}) has noDataState={rule.get('noDataState')!r} and reads {sorted(unwatched)}, "
+        "which no liveness rule watches. No-data there means the watcher stopped, not that the "
+        "thing being watched is well. Add an ungrouped `noDataState: Alerting` rule for the "
+        "container (see `obs042-disk-watcher-silent`), or keep this one at Alerting."
     )
 
 
 @pytest.mark.parametrize(
     ("filename", "uid"),
-    [(f, u) for f, u, _ in _rules_over_cronjob_streams()],
-    ids=[f"{u}" for _, u, _ in _rules_over_cronjob_streams()],
+    [(f, u) for f, u, r in _rules_over_cronjob_streams() if r.get("noDataState") == "Alerting" and not _is_liveness(r)],
+    ids=[u for _, u, r in _rules_over_cronjob_streams() if r.get("noDataState") == "Alerting" and not _is_liveness(r)],
 )
 def test_the_summary_names_the_watcher_as_a_cause(filename: str, uid: str) -> None:
-    """`noDataState: Alerting` gives the rule two causes, and a summary naming
-    only the interesting one sends the responder to the wrong system.
+    """`noDataState: Alerting` on a per-object rule gives it two causes, and a
+    summary naming only the interesting one sends the responder to the wrong system.
 
     Not hypothetical: #1377 ran for a day and a half because the summary said a
     storage backend was preventing provisioning while every PVC was Bound and
     the real fault was a query that could not parse its own input. Trading a
     silent failure for a misleading alert is not a fix.
+
+    A liveness rule is exempt: silence is its single cause, and its summary says so.
     """
     rule = next(r for f, u, r in _rules_over_cronjob_streams() if f == filename and u == uid)
     summary = str((rule.get("annotations") or {}).get("summary", "")).lower()
