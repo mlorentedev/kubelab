@@ -126,7 +126,7 @@ def test_the_sops_recipient_case_matches_sops_yaml(offsite: str) -> None:
     assert not sops_claim_problems(bullet, len(recipients))
 
 
-def test_the_sops_claim_flips_when_the_ci_recipient_goes() -> None:
+def test_the_sops_claim_helper_reads_both_recipient_counts() -> None:
     complete = "#1852: .sops.yaml; read every node's history; remove a lock rule"
     assert sops_claim_problems(complete, 2) == []
     assert sops_claim_problems(complete, 1) == ["#1852 has landed: remove its warning"]
@@ -156,6 +156,7 @@ def test_the_disaster_case_says_the_r2_pair_is_not_escrowed(offsite: str) -> Non
     # The token that step creates is Object Read, and restic's default lock is a write.
     restic_calls = [line for line in section.splitlines() if line.strip().startswith("restic ")]
     assert restic_calls, "the disaster case must spell out its restic calls"
+    assert 'REPO="s3:' in section, "this section is followed with no checkout, so it defines its own repository"
     assert all("--no-lock" in call for call in restic_calls), restic_calls
 
 

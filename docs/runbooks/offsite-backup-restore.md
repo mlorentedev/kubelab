@@ -792,6 +792,8 @@ unreadable.
 6. Restore into a scratch directory, with `--no-lock` on every call:
 
    ```bash
+   # The S3 endpoint is on the bucket's page in the Cloudflare dashboard.
+   REPO="s3:https://<account_id>.r2.cloudflarestorage.com/kubelab-backup-<node>"
    restic -r "$REPO" snapshots --no-lock
    restic -r "$REPO" restore <snapshot-id> --target /tmp/restore-check --no-lock
    ```
