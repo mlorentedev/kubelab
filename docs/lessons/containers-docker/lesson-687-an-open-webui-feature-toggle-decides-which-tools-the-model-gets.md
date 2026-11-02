@@ -12,7 +12,7 @@ tags: [kubelab, containers-docker, open-webui, nan, image-generation]
 
 **Context**: After the v0.12.5 upgrade (#2885), the operator asked a chat model on
 `chat.kubelab.live` for a picture. Image generation was configured and enabled
-(`ENABLE_IMAGE_GENERATION=true`, NaN as the engine).
+(`ENABLE_IMAGE_GENERATION=true`, NaN as the OpenAI-compatible backend).
 
 **Problem**: The model answered that it had no image generator, then drew an SVG
 by hand and created a workspace skill to store it. Enabling a feature globally
