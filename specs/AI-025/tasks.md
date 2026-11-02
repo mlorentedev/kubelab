@@ -27,8 +27,8 @@ PR 1 (web search):
 
 PR 2 (code interpreter and memory):
 
-- [ ] [AC3] [AC5] Failing test, then `code_interpreter` in `defaultFeatureIds`
-- [ ] [AC4] Failing test, then `ENABLE_MEMORY_BACKGROUND_REVIEW=true`
+- [x] [AC3] [AC5] Failing test, then `code_interpreter` in `defaultFeatureIds`
+- [x] [AC4] Failing test, then `ENABLE_MEMORY_BACKGROUND_REVIEW=true`, every 5 user turns
 - [ ] [AC3] [AC4] Provision, then the operator runs Python in a chat and sees a fact carried to a new chat
 
 ## Closing
