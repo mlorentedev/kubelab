@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import re
 
-from tests.test_agent_stack_role import _common, _context, _env, _render
+from tests.test_agent_stack_role import _common, _context, _env
 
 
 def _models() -> dict:
@@ -89,9 +89,10 @@ def test_every_chat_starts_with_the_image_tool_on() -> None:
     assert raw.startswith("'") and raw.endswith("'"), raw
     assert json.loads(raw[1:-1])["defaultFeatureIds"] == ["image_generation"]
     # The legacy path WOULD generate an image per message (`utils/middleware.py`).
-    # Anywhere in the file, not one variable: `function_calling` could arrive in
-    # DEFAULT_MODEL_PARAMS or inside any JSON value.
-    assert "function_calling" not in _render("webui.env.j2")
+    # In any value, not one variable: `function_calling` could arrive in
+    # DEFAULT_MODEL_PARAMS or inside any JSON value. Values, not the raw file, so
+    # a comment that names the setting is not an override.
+    assert not [k for k, v in _env().items() if "function_calling" in v]
 
 
 def test_the_image_request_asks_for_what_nan_answers() -> None:
