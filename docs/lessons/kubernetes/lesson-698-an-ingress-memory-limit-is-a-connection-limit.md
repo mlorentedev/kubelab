@@ -1,5 +1,5 @@
 ---
-id: lesson-697-an-ingress-memory-limit-is-a-connection-limit
+id: lesson-698-an-ingress-memory-limit-is-a-connection-limit
 type: lesson
 status: active
 title: "An ingress memory limit is a connection limit"
