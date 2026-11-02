@@ -143,9 +143,10 @@ restic_read() {
         echo "r2-backup-watcher: $node: restic $1 timed out after ${TIMEOUT}s" >&2
         first="$(head -n 1 "$errfile")"
         case "$first" in
-            # Only what restic prints when the timeout kills it; anything else
-            # it said first (R2's 401, #1939) is the cause and stays named.
-            '' | *'signal terminated'*) printf 'timed out after %ss\n' "$TIMEOUT" >"$errfile" ;;
+            # Only what is printed when the timeout kills the call: restic's own
+            # words, or a shell's `Terminated` (busybox, the image's shell, on CI);
+            # anything else said first (R2's 401, #1939) is the cause and stays named.
+            '' | *'signal terminated'* | Terminated) printf 'timed out after %ss\n' "$TIMEOUT" >"$errfile" ;;
             *) printf 'timed out after %ss: %s\n' "$TIMEOUT" "$first" >"$errfile" ;;
         esac
     else
