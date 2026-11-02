@@ -74,11 +74,16 @@ declaration is `networking.vps.ssh_bootstrap: {user: hs-bootstrap, permit_open:
   the list is emptied by a second PR once AC3 holds.
 - [ ] [AC1] [AC2] `make mutate` on the Match block's `PermitOpen` and on the
   `restrict` prefix. Expected: both RED.
-- [ ] Update `docs/runbooks/headscale-setup.md` (enrol and revoke a bootstrap key) and
+- [ ] Update `docs/runbooks/headscale-setup.md` (enrol and revoke a bootstrap key; also
+  correct its claim that the segments live in `common.enc.yaml`: they are in
+  `prod.enc.yaml`) and
   the CLAUDE.md RPi4-jump-host gotcha's sibling line for the VPS.
 
 ## Rollout (operator, in this order)
 
+- [x] [AC3] Operator workstation's key (ed25519, no passphrase: it can only reach the
+  public control plane, and ssh-agent is disabled there) written to `prod.enc.yaml` as
+  `bootstrap_ssh_keys.client-1` ✓ 2026-11-02. Lab hosts add theirs at enrolment.
 - [ ] [AC3] Write each enrolled machine's public key to SOPS, then
   `make deploy TARGET=vps ENV=prod`: creates `hs-bootstrap` and its keys. No sshd
   change yet.

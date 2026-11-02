@@ -37,8 +37,8 @@ included, is an open relay for any key it holds.
   SOCKS forward asks for the control plane by name, which is what `PermitOpen`
   matches.
 - Its `authorized_keys` is rendered from SOPS, one public key per enrolled machine
-  under a neutral key (`apps.services.core.headscale.bootstrap_ssh_keys` in
-  `common.enc.yaml`, `envs=("prod",)`, following the segments entry), each line
+  under a neutral key (`apps.services.core.headscale.bootstrap_ssh_keys.<client-N>` in
+  `prod.enc.yaml`, beside the segments, `envs=("prod",)`), each line
   prefixed `restrict,port-forwarding,permitopen="vpn.kubelab.live:443"`. The file is
   owned by root and not writable by the account. Removing a key from SOPS and
   deploying revokes it.
