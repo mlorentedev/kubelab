@@ -8,6 +8,7 @@ defaults is what brings that back, whatever the variable is called.
 from __future__ import annotations
 
 import ipaddress
+import re
 from pathlib import Path
 
 import yaml
@@ -45,3 +46,26 @@ def test_the_tailnet_first_list_leads_with_magicdns_and_falls_back_to_a_declared
     head, fallback = TAILNET_FIRST
     assert ipaddress.ip_address(head) in TAILNET
     assert fallback in PUBLIC
+
+
+def test_every_resolver_variable_reads_the_ssot() -> None:
+    """Catches an address the SSOT does not declare, which the literal scan cannot."""
+    variables = {
+        f"{path.relative_to(ROLES)}: {name}": value
+        for path in ROLES.glob("*/defaults/*.yml")
+        for name, value in (yaml.safe_load(path.read_text(encoding="utf-8")) or {}).items()
+        if name.endswith(("dns_servers", "acme_dns_resolvers"))
+    }
+    assert len(variables) == 7, variables
+    wrong = {name: value for name, value in variables.items() if "config.networking." not in str(value)}
+    assert not wrong
+
+
+def test_no_play_overrides_a_resolver_variable() -> None:
+    """A play's `vars:` outranks the role default, so a literal there skips the SSOT."""
+    overrides = [
+        path.name
+        for path in (REPO / "infra/ansible/playbooks").glob("*.yml")
+        if re.search(r"^\s+\w*(dns_servers|acme_dns_resolvers):", path.read_text(encoding="utf-8"), re.MULTILINE)
+    ]
+    assert not overrides
