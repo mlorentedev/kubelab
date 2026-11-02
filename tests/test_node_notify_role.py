@@ -943,6 +943,12 @@ def test_provisioning_clears_the_notifiers_a_refused_page_left_failed() -> None:
     assert task_runs(reset, {listing["register"]: listed}), "a failed notifier was left failed"
 
 
+def test_a_notifier_vanishing_before_the_reset_does_not_fail_the_play() -> None:
+    """The listing and the reset are two calls, and the script's own reset logs and goes on (#2870)."""
+    [reset] = [t for t in _tasks() if "reset-failed" in t.get("command", {}).get("argv", [])]
+    assert reset["failed_when"] is False
+
+
 def test_the_cleanup_resets_each_unit_the_listing_names() -> None:
     """The reset's argv is built from `list-units` lines, which start with the unit's name."""
     from tests.ansible_jinja import ansible_env

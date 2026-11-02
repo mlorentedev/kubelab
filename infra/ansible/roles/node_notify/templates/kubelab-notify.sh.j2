@@ -171,6 +171,13 @@ if [ "$MODE" = flush ]; then
       exit 1
     fi
     rm -f "$oldest"
+    # systemd would kill a flush that outruns its unit's timeout and leave the unit
+    # failed with nothing wrong. The lock wait outlasts one delivery, so stopping
+    # that far short always leaves room for the one under way; the timer takes the rest.
+    if [ "$SECONDS" -ge {{ (node_notify_spool_timeout_seconds | int) - (node_notify_lock_wait_seconds | int) }} ]; then
+      echo "out of time for this run; the next one delivers the rest" >&2
+      exit 0
+    fi
   done
 fi
 
@@ -303,7 +310,8 @@ fi
 # that page will not, and hours of outage would deliver one per hour, all at
 # once (#2787). It is folded into the kept page, and still renews the state:
 # otherwise the incident would outlive the TTL and start over with a second
-# `failed` page.
+# `failed` page. A kept reminder's count stays what it was when kept, so the page
+# reads as of that time, which its title states (#2870).
 if [ "$KIND" = again ] && kept "$UNIT"; then
   printf '%s %s %s\n' "$COUNT" "$FIRST" "$NOW" > "$STATE_FILE.tmp" && mv "$STATE_FILE.tmp" "$STATE_FILE"
   exit 0

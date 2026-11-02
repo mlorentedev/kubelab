@@ -28,6 +28,9 @@ import pytest
 
 from tests.test_node_notify_role import _defaults, _render
 
+# util-linux; macOS has no flock, so the script under test cannot run there.
+pytestmark = pytest.mark.skipif(shutil.which("flock") is None, reason="needs flock")
+
 UNIT = "hermes-kubelab-vault-sync.service"
 REMINDER = int(_defaults()["node_notify_reminder_seconds"])  # type: ignore[call-overload]
 TTL = int(_defaults()["node_notify_state_ttl_seconds"])  # type: ignore[call-overload]
@@ -408,6 +411,39 @@ def test_a_reminder_of_a_page_still_kept_is_folded_into_it(node: Node) -> None:
     node.age_state(REMINDER + 5)
     node.run()
     assert len(node.spooled()) == 1
+
+
+def test_a_kept_reminder_keeps_the_count_it_was_kept_with(node: Node) -> None:
+    """The count is frozen at keep time, and the title says when that was (#2870)."""
+    node.run()
+    node.curl_exit.write_text("6", encoding="utf-8")
+    node.age_state(REMINDER + 5)
+    node.run()
+    node.age_state(REMINDER + 5)
+    node.run()
+    assert len(node.spooled()) == 1
+    node.curl_exit.write_text("0", encoding="utf-8")
+    assert node.flush().returncode == 0
+    late = node.titles()[-1]
+    assert "(2 failures since the first page)" in late and "delivered late" in late, late
+
+
+def test_a_flush_out_of_time_stops_cleanly_and_the_next_run_delivers_the_rest(tmp_path: Path) -> None:
+    """A flush killed at its timeout leaves its unit failed with nothing wrong (#2870)."""
+    wait = _defaults()["node_notify_lock_wait_seconds"]
+    node = Node(tmp_path, node_notify_spool_timeout_seconds=wait)
+    node.curl_exit.write_text("6", encoding="utf-8")
+    node.run()
+    node.run(unit="node-backup-ship.service")
+    assert len(node.spooled()) == 2
+    node.curl_exit.write_text("0", encoding="utf-8")
+
+    first = node.flush()
+    assert first.returncode == 0, first.stderr
+    assert len(node.spooled()) == 1, "one delivery is always made, and the deadline stops the next"
+    assert "next one delivers the rest" in first.stderr
+    assert node.flush().returncode == 0
+    assert not node.spooled()
 
 
 def test_a_reminder_is_folded_only_into_a_page_of_its_own_unit(node: Node) -> None:
