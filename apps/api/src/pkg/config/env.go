@@ -31,6 +31,15 @@ type Config struct {
 		APIKey string
 		PubID  string
 	}
+	// Forge holds what the forge task view needs to read issues and pull requests (CONSOLE-004).
+	// Every field may be empty: staging carries no Gitea token, and a source without a credential
+	// is reported unreachable instead of stopping the API from starting.
+	Forge struct {
+		GiteaToken           string // read:issue token on the reviewer's account
+		GitHubAppID          string
+		GitHubInstallationID string
+		GitHubPrivateKey     string // PEM of the GitHub App, never logged
+	}
 	Email struct {
 		Host   string
 		Port   string
@@ -95,6 +104,13 @@ func populateConfig() (*Config, error) {
 	cfg.Email.User = os.Getenv("INFRA_SMTP_USER")
 	cfg.Email.Pass = os.Getenv("INFRA_SMTP_PASS")
 	cfg.Email.Secure = getBoolEnv("INFRA_SMTP_SECURE", true)
+
+	// Forge credentials (CONSOLE-004). The two IDs come from the ConfigMap under their shared
+	// infra names (ADR-036); the token and the key come from api-secrets. None is required.
+	cfg.Forge.GiteaToken = os.Getenv("FORGE_GITEA_TOKEN")
+	cfg.Forge.GitHubAppID = os.Getenv("INFRA_FORGE_GITHUB_APP_ID")
+	cfg.Forge.GitHubInstallationID = os.Getenv("INFRA_FORGE_GITHUB_INSTALLATION_ID")
+	cfg.Forge.GitHubPrivateKey = os.Getenv("FORGE_GITHUB_PRIVATE_KEY")
 
 	// Validate configuration
 	if err := validateConfig(cfg); err != nil {
