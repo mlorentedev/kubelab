@@ -130,6 +130,9 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit infra k8s render-apply` | Render RESOLVE_* placeholders (MagicDNS) in a single manifest, then server-side apply. |
 | `toolkit infra k8s restart` | Restart any K8s deployment (rollout restart + wait) on the env's cluster. |
 | `toolkit infra k8s status` | Show K8s resource status for the kubelab namespace. |
+| `toolkit infra load-test` | Measure staging's capacity (OPS-054); never prod |
+| `toolkit infra load-test clear` | Remove the route a run that died left behind. Idempotent. |
+| `toolkit infra load-test run` | Measure staging: a baseline under the limiter, then ramps to the first degraded step. |
 | `toolkit infra n8n` | n8n workflow import (TOOL-009) + notification-fabric smoke (NOTIFY-001) |
 | `toolkit infra n8n import` | Reconstruct the n8n workflow + Header Auth credential from Git + SOPS (TOOL-009). |
 | `toolkit infra n8n probe` | Probe the public n8n webhooks end to end (APP-CONFIG-015 AC4/AC5). |
