@@ -417,6 +417,7 @@ config-check-drift:
 	_paths="infra/k8s/overlays/$(ENV)/generated/ingress.yaml \
 	        infra/k8s/overlays/$(ENV)/generated/configmaps.yaml \
 	        infra/k8s/overlays/$(ENV)/generated/hooks.yaml \
+	        infra/k8s/overlays/$(ENV)/generated/migrations.yaml \
 	        infra/ansible/generated/$(ENV)/hosts.yml"; \
 	if [ $$_status -ne 0 ]; then \
 		echo "✗ A generator failed for $(ENV); nothing was compared"; \
