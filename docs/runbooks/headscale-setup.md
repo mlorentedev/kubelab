@@ -15,8 +15,8 @@ See [adr-010-headscale-over-tailscale-cloud](../adr/adr-010-headscale-over-tails
 
 ## Prerequisites
 
-- VPS deployed and accessible via SSH (`ssh deployer@kubelab-vps`)
-- Docker Compose running on VPS
+- VPS deployed and accessible via SSH (`ssh vps-pub`: the public-IP alias of Phase 5, user `networking.ssh_users.cloud` in `common.yaml`, `deployer`). Headscale is the bootstrap, so reach it by the public address, never through the mesh it serves
+- Docker installed on the VPS (the `headscale` role creates the `kubelab` network and starts the stack)
 - B0 hardware provisioning complete (all homelab nodes reachable via LAN)
 - Domain `vpn.kubelab.live` → VPS IP (Cloudflare A record, **DNS-only / grey cloud**)
 - Cloudflare API token with access to **both** zones: `mlorente.dev` + `kubelab.live`
@@ -25,17 +25,17 @@ See [adr-010-headscale-over-tailscale-cloud](../adr/adr-010-headscale-over-tails
 
 ## Phase 1: Deploy Headscale on VPS
 
-### 1.1 Create directory and config
+The `headscale` Ansible role (`infra/ansible/roles/headscale/`, run by `infra/ansible/playbooks/deploy-vps.yml`) does all of Phase 1 except 1.7. Nothing is created, copied or started by hand on the VPS:
 
 ```bash
-ssh deployer@kubelab-vps "sudo mkdir -p /opt/headscale/config && sudo chown -R deployer:deployer /opt/headscale"
+make deploy TARGET=vps ENV=prod              # the whole VPS play
+make deploy TARGET=vps ENV=prod TAGS=headscale   # only this role
+make deploy TARGET=vps ENV=prod CHECK=1      # dry run
 ```
 
-Copy config from repo:
+### 1.1 Directory and config (rendered)
 
-```bash
-scp infra/stacks/services/core/headscale/config/config.yaml deployer@kubelab-vps:/opt/headscale/config/
-```
+The role creates `/opt/headscale` and `/opt/headscale/config`, then renders `config/config.yaml` from `infra/ansible/roles/headscale/templates/config.yaml.j2`. The values come from `common.yaml` through `deploy-vps.yml`: the domain, the listen and STUN ports, `networking.tailscale_cidr`, split DNS from `networking.staging_zones` (6.1) and the ACL policy path (Phase 8). Headscale reads `config.yaml` only at startup, so the role restarts the stack whenever the rendered file changes. Do not edit it on the VPS: the next deploy overwrites the edit. Change the value in `common.yaml` (or the template) and deploy.
 
 ### 1.2 docker-compose.yml on the VPS (rendered)
 
@@ -113,7 +113,7 @@ openssl s_client -connect vpn.kubelab.live:443 -servername vpn.kubelab.live </de
 > (`HostSNI(...)` + `tls.passthrough: true`) with Headscale terminating TLS, because,
 > per lesson-075, Traefik v3.0 did not carry `Upgrade: tailscale-control-protocol`
 > ([traefik#12609](https://github.com/traefik/traefik/issues/12609), still open). The
-> file it created, `/opt/traefik/dynamic/app-headscale.yml`, and the reasoning are in
+> dynamic config file it created, and the reasoning, are in
 > lesson-075. It no longer applies.
 
 Current route (prod): `infra/k8s/overlays/prod/headscale.yaml` defines an IngressRoute
@@ -127,19 +127,27 @@ HTTP/1.1, which is where the Noise `Upgrade` request exists. Details and the his
 
 ### 1.5 Deploy
 
-```bash
-ssh deployer@kubelab-vps
-cd /opt/headscale
-docker compose up -d
-```
+`make deploy TARGET=vps ENV=prod` (see the top of Phase 1). In order, the role:
+
+1. creates the `kubelab` Docker network if it is missing;
+2. renders `docker-compose.yml` (1.2) and `config.yaml` (1.1);
+3. pulls the image and runs `docker compose up -d`;
+4. restarts the stack if the compose file or `config.yaml` changed;
+5. waits until the container reports `healthy` (up to 12 tries, 5 s apart);
+6. renders the ACL policy and hot-reloads it, then probes the mesh and reverts the policy if the probe fails (Phase 8);
+7. installs the audit SSH identities declared in `common.yaml`, and purges the retired certbot and nginx packages (OPS-047).
+
+A second run with nothing changed reports `changed=0` for the Headscale tasks.
 
 ### 1.6 Verify
 
+Headscale v0.28 has no HTTP `/health` endpoint: `curl https://vpn.kubelab.live/health` does not return `{"status":"pass"}`, so do not use it. The container's own health state is the check (its healthcheck runs `headscale version`, 1.2):
+
 ```bash
-# On VPS
+# On VPS (ssh vps-pub)
+docker inspect --format '{{.State.Health.Status}}' headscale
+# → healthy
 docker logs headscale --tail 20
-curl -s https://vpn.kubelab.live/health
-# → {"status":"pass"}
 ```
 
 From workstation:
@@ -159,7 +167,7 @@ curl --http1.1 -s -X POST https://vpn.kubelab.live/ts2021 \
 # → (the Upgrade header reaches Headscale through K3s Traefik)
 ```
 
-### 1.6 Create user and pre-auth key
+### 1.7 Create user and pre-auth key
 
 ```bash
 # Headscale v0.28 CLI syntax (uses positional args and numeric user IDs)
@@ -466,21 +474,21 @@ Headscale routes `*.staging.kubelab.live` queries to RPi 4 (100.64.0.10), where 
 
 Full setup documented in [dns-homelab](dns-homelab.md).
 
-### 6.1 Headscale config change (on VPS)
+### 6.1 Headscale config (rendered)
 
-Edit `/opt/headscale/config/config.yaml`:
+The role renders split DNS from `networking.staging_zones` in `common.yaml`: `deploy-vps.yml` points every zone in that list at `networking.nodes.rpi4.tailscale_ip` and `config.yaml.j2` writes the result under `dns.nameservers.split`. `tests/test_headscale_runbook_compose.py` fails when this snippet stops matching what the template renders.
 
 ```yaml
 dns:
   nameservers:
     split:
       staging.kubelab.live:
-        - 100.64.0.5      # RPi4 Pi-hole (port 53) → CoreDNS (port 5353)
+        - 100.64.0.10
+      staging.mlorente.dev:
+        - 100.64.0.10
 ```
 
-```bash
-cd /opt/headscale && sudo docker compose restart headscale
-```
+`100.64.0.10` is RPi4 (Pi-hole on port 53, forwarding to CoreDNS). To add or remove a zone, edit `networking.staging_zones` and run `make deploy TARGET=vps ENV=prod`; the role restarts Headscale because `config.yaml` changed. Do not edit `/opt/headscale/config/config.yaml` on the VPS. Keep zones under `staging.`: a broad `kubelab.live` zone sends prod lookups to RPi4 (2026-03-03 entry in "Last tested").
 
 ### 6.2 Client config
 
@@ -506,42 +514,30 @@ dig api.staging.kubelab.live +short
 
 ### TLS cert not issued for vpn.kubelab.live
 
-**Symptoms**: `curl` returns self-signed cert error, `000` status code.
+**Symptoms**: `curl` returns a certificate error (Traefik's default self-signed certificate) or `000`.
+
+K3s Traefik issues this certificate (1.3), not a container on the VPS: there is no Traefik container and no Traefik directory on the VPS. Read the ACME error first, then match it against the table in [acme-alerting](acme-alerting.md):
+
+```bash
+kubectl --kubeconfig ~/.kube/kubelab-prod-config \
+  logs -n kube-system -l app.kubernetes.io/name=traefik --tail=400 \
+  | sed 's/\x1b\[[0-9;]*m//g' | grep -iE 'acme.*(err|unable|fail)'
+```
 
 **Root causes (in order of likelihood)**:
-1. **Cloudflare API token missing zone access**: Token must have access to `kubelab.live` zone (not just `mlorente.dev`). Verify:
-   ```bash
-   CF_TOKEN=$(docker inspect traefik --format '{{range .Config.Env}}{{println .}}{{end}}' | grep CF_DNS_API_TOKEN | cut -d= -f2)
-   curl -s -H "Authorization: Bearer $CF_TOKEN" "https://api.cloudflare.com/client/v4/zones?name=kubelab.live" | python3 -m json.tools | head -5
-   ```
-   Fix: Edit token in Cloudflare dashboard → add `kubelab.live` zone.
+1. **Cloudflare API token missing zone access**: the DNS-01 challenge uses the token the Traefik pod reads as `CF_DNS_API_TOKEN`. It must have access to the `kubelab.live` zone (not just `mlorente.dev`); the log shows `unauthorized` or `403` from Cloudflare. Fix the token in the Cloudflare dashboard (add the zone), or rotate it in SOPS and run `make apply-secrets ENV=prod`, then restart Traefik.
 
-2. **ACME storage path mismatch**: VPS `traefik.yml` has `storage: /letsencrypt/acme.json` (matching the Docker volume mount). If someone overwrites with the toolkit-generated version, the path changes to `/etc/traefik/acme/acme.json` which doesn't match the mount → resolver fails silently.
-   ```bash
-   # Check mount
-   docker inspect traefik --format '{{json .Mounts}}' | python3 -m json.tools | grep acme
-   # Check config
-   grep storage /opt/traefik/traefik.yml
-   # These MUST match
-   ```
+2. **ACME storage not persistent**: the resolver stores certificates in `/data/acme.json`, which must be on the persistent volume (`persistence.enabled: true` in `traefik-helmconfig.yaml.j2`). On an `emptyDir`, every pod restart discards them and requests new ones until Let's Encrypt's rate limit (5 certificates per domain set per 168h) refuses. The HelmChartConfig is rendered by the `k3s_server` role: `make deploy TARGET=k3s ENV=prod` re-applies it. Never create one by hand.
 
 3. **Cloudflare proxy enabled**: `vpn.kubelab.live` MUST be DNS-only (grey cloud). WireGuard/DERP cannot traverse Cloudflare proxy.
 
-4. **Failed attempt cached**: Remove stale entry and restart:
-   ```bash
-   docker stop traefik
-   cp /opt/traefik/certs/acme.json /opt/traefik/certs/acme.json.bak
-   # Remove vpn.kubelab.live entry if present
-   docker start traefik
-   ```
-
 ### Router uses a non-existent certificate resolver
 
-**Symptom**: All routers show `non-existent certificate resolver` error.
+**Symptom**: a router shows `non-existent certificate resolver` in Traefik's log.
 
-**Root cause**: ACME storage path in `traefik.yml` doesn't match Docker volume mount. Traefik can't initialize the resolver.
+**Root cause**: the route names `certResolver: letsencrypt` but the Traefik that is running has no such resolver. The resolver is defined by the HelmChartConfig the `k3s_server` role renders when ACME is enabled (`--certificatesresolvers.letsencrypt.*`), so the resolver is missing when that config was not applied or the ACME block rendered disabled.
 
-**Fix**: Ensure `storage` path in config matches the container mount path (`/letsencrypt/acme.json` on VPS).
+**Fix**: `make deploy TARGET=k3s ENV=prod` (the `deploy-k3s.yml` play sets `k3s_traefik_acme_enabled: true`), then check the Traefik pod's arguments for `--certificatesresolvers.letsencrypt.acme.storage=/data/acme.json`. The name is `letsencrypt`, not `cloudflare`: Cloudflare is the DNS challenge provider.
 
 ### jet1 (Jetson Nano) — tailscale logged out after reboot {#incident-jet1-dns-boot}
 
@@ -652,21 +648,17 @@ sudo chattr +i /etc/resolv.conf
 
 ---
 
-## VPS vs Repo Differences (Critical)
+## What the prod VPS runs
 
-| Setting | VPS (prod) | Repo (toolkit-generated) |
-|---------|-----------|-------------------------|
-| Docker network | `kubelab` (renamed from `proxy`, ADR-020 Phase 2b) | `kubelab` |
-| ACME storage | `/letsencrypt/acme.json` | `/etc/traefik/acme/acme.json` |
-| Wildcard cert | `*.mlorente.dev` | `*.kubelab.live` |
-| Headscale TLS | K3s Traefik terminates TLS (certbot was the pre-K3s setup; the `headscale` role purges it, OPS-047) | Traefik terminates TLS |
-| Headscale routing | K3s Traefik IngressRoute → plain HTTP `:8080`, HTTP/1.1 ALPN (the TCP passthrough is superseded) | HTTP reverse proxy |
-| Traefik version | v3.0 | v3.6 |
-| traefik.yml path | `/opt/traefik/traefik.yml` | `edge/traefik/generated/prod/` |
-| Dynamic configs | `/opt/traefik/dynamic/app-*.yml` | Single `apps.yml` |
+The VPS is a `k3s_server` in prod, so ingress there is **K3s Traefik**, configured by the `k3s_server` role (`make deploy TARGET=k3s ENV=prod`). The Docker Compose Traefik (`traefik_vps` role) and the Docker Compose error pages (`errors` role) are skipped by `deploy-vps.yml` (`when: "'k3s_servers' not in group_names"`). So the VPS has no `traefik.yml`, no ACME file and no dynamic configs to edit or overwrite. Only Headscale stays in Docker Compose (ADR-015).
 
-> **DO NOT overwrite VPS traefik.yml with toolkit-generated version** until full prod migration
-> (PROD-004b: Traefik upgrade, network rename, path alignment).
+| Setting | Prod VPS |
+|---------|----------|
+| Docker network | `kubelab` (renamed from `proxy`, ADR-020 Phase 2b) |
+| Headscale TLS | K3s Traefik terminates it (certbot was the pre-K3s setup; the `headscale` role purges it, OPS-047) |
+| Headscale routing | K3s Traefik IngressRoute, plain HTTP `:8080`, HTTP/1.1 ALPN (the TCP passthrough is superseded) |
+| Certificates | K3s Traefik's `letsencrypt` resolver (ACME DNS-01), stored in `/data/acme.json` on its persistent volume |
+| Headscale files | Rendered under `/opt/headscale` by the `headscale` role; an edit on the VPS is overwritten by the next deploy |
 
 ---
 
@@ -702,7 +694,7 @@ were already >= v1.74. Re-test SUCCESSFUL: ts-bridge registered as 100.64.0.11 (
 Previous broad scope caused total DNS failure for prod domains (status.kubelab.live etc.)
 when RPi4 was off — Tailscale MagicDNS sent all `*.kubelab.live` queries to RPi4 instead of
 public Cloudflare DNS. Now only staging domains require RPi4; prod resolves via 1.1.1.1.
-Config also updated in repo IaC (`infra/stacks/services/core/headscale/config/config.yaml`).
+The repo IaC was updated the same day (today it is `networking.staging_zones` rendered by the `headscale` role).
 2026-10-26: OPS-047 (#2701) makes the `headscale` role purge certbot and nginx and remove `/etc/letsencrypt` from
 the VPS. What it retires: three expired certificates, a `certbot.service` failing every 12 hours and a refused
 Cloudflare token on disk. The live certificate for `vpn.kubelab.live` is K3s Traefik's (Let's Encrypt, valid to
@@ -775,61 +767,52 @@ xfreerdp /v:<HEADSCALE_IP> /u:user /p:pass
 
 ## Phase 8: ACL Policy Management
 
-> **Added 2026-02-25.** Ref: [ADR-013](../adr/adr-013-vpn-consolidation.md).
+> **Added 2026-02-25.** Ref: [ADR-013](../adr/adr-013-vpn-consolidation.md), ADR-041.
 
-Headscale ACLs control which nodes can communicate. kubelab uses **file-based ACLs** for IaC/Git traceability.
+Headscale ACLs control which nodes can communicate. kubelab uses a **file-mode policy rendered from the repo**, so every change is reviewed in Git and applied by the `headscale` role.
 
-### 8.1 ACL file location
+### 8.1 Where the policy comes from
 
-The policy file lives in the kubelab repo and is mounted into the Headscale container:
-
-```
-kubelab/infra/stacks/services/core/headscale/config/policy.hujson
-```
+The source is the template `infra/ansible/roles/headscale/templates/policy.hujson.j2`. The role renders it to `/opt/headscale/config/policy.hujson` on the VPS, which is `/etc/headscale/policy.hujson` inside the container (`headscale_policy_path` in `deploy-vps.yml`). The host aliases (`vps`, `lan-rpi4`, one per node) are built from the Tailscale IPs and `networking.lan_cidr` in `common.yaml`, so no address is written in the template. Tenant segments (VPN-ACL-014) come from SOPS at `apps.services.core.headscale.segments`, never from this repo.
 
 ### 8.2 Identity model
 
-| Headscale User | Purpose | Devices |
-|----------------|---------|---------|
-| `kubelab` | Admin (full mesh access) | workstation, corporate workstation (ts-bridge), phone (future) |
-| `work` | Windows PCs (RDP targets, implicit deny outbound) | 3+ Windows mini PCs (ts-bridge server) |
-| `contractors` | External access (future, restricted scope) | Contractor machines (ts-bridge client) |
+| Headscale User | ID | Purpose | Devices |
+|----------------|----|---------|---------|
+| `manu` | 1 | Personal | Holds only a stale `localhost` |
+| `kubelab` | 2 | Admin and infrastructure nodes (full mesh access) | workstation, corporate workstation (ts-bridge), phone (future), fleet nodes |
+| `work` | 3 | Windows PCs (RDP targets, implicit deny outbound) | 3+ Windows mini PCs (ts-bridge server) |
+| `agents` | 4 | Owns the preauth keys of tagged agent nodes (ADR-041); Headscale lists those nodes under `tagged-devices`, not under this user | Agent hosts carrying `tag:hermes` |
+| `contractors` | (future) | External access, restricted scope | Contractor machines (ts-bridge client) |
 
-**Key:** The human user (manu) always authenticates as `kubelab`. The `work` user represents a device class, not a person.
+The IDs are the ones in `common.yaml` (`apps.services.core.headscale`); `users list` is the live answer. **Key:** the human user (manu) always authenticates as `kubelab`. The `work` user represents a device class, not a person.
 
 ### 8.3 ACL rules summary
 
+The template renders these rules; it is the source, this table is a reading of it.
+
 | Source | Destination | Action | Notes |
 |--------|-------------|--------|-------|
-| `group:admin` | `*:*` | Accept | Full mesh access |
-| `group:contractors` | `group:work:3389` | Accept | RDP only to Windows PCs |
-| `group:work` | (anything) | **Deny** | Implicit deny — no outbound rules |
+| `kubelab@`, `manu@`, `work@` | `kubelab@`, `manu@`, `work@`, `agents@`, `tag:hermes`, `lan-rpi4` (every port) | Accept | Rule 1: named destinations, never a wildcard, so tenant segments stay out of reach |
+| `tag:hermes` | `vps:443` | Accept | Rule 2: agent egress to Gitea through the prod ingress. Nothing grants `vps:8080`, `*:6443` or peer `:22` |
+| each segment's clients tag | its hosts tag, declared ports | Accept | Rule 3: one per tenant segment from SOPS; its hosts originate nothing |
+
+Anything not accepted is denied.
 
 ### 8.4 Applying ACL changes
 
+Edit the template (or the `common.yaml` values it reads), validate, then deploy:
+
 ```bash
-# After editing policy.hujson in the repo:
-scp infra/stacks/services/core/headscale/config/policy.hujson deployer@kubelab-vps:/opt/headscale/config/
-docker exec headscale headscale policy reload
-# Or restart: cd /opt/headscale && docker compose restart headscale
+make check-headscale-policy                    # render + `headscale policy check` via Docker
+make deploy TARGET=vps ENV=prod                # render, SIGHUP reload, probe
 ```
 
-### 8.5 Enable file-based ACLs in Headscale config
+On a changed policy the role does, in order: keep the last-applied file as `policy.hujson.prev`, render the new one, hot-reload it with `docker kill --signal=HUP headscale` (no restart, existing sessions are untouched), run `toolkit infra headscale probe` from the controller and, if the probe fails, restore the previous policy (or a segment-free one) and fail the play. Nothing is copied to the VPS by hand, and there is no `headscale policy reload` step.
 
-In `/opt/headscale/config/config.yaml`:
+### 8.5 File-mode ACLs in the Headscale config
 
-```yaml
-policy:
-  mode: file
-  path: /etc/headscale/policy.hujson
-```
-
-Mount the file in `docker-compose.yml`:
-
-```yaml
-volumes:
-  - ./config:/etc/headscale:ro
-```
+Already on. `config.yaml.j2` renders `policy.mode: file` and `policy.path` from `headscale_policy_path`, and `docker-compose.yml.j2` mounts `./config` at `/etc/headscale` (1.2). Neither is written by hand; with `headscale_policy_path` empty Headscale would run allow-all, which prod does not.
 
 ---
 
