@@ -5,8 +5,11 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/mlorentedev/kubelab/apps/api/internal/forge"
 	"github.com/mlorentedev/kubelab/apps/api/pkg/config"
 )
 
@@ -61,4 +64,74 @@ func StoreEvent(ctx context.Context, p config.Postgres, forgeName, deliveryID, e
 		VALUES ($1, $2, $3, $4) ON CONFLICT (forge, delivery_id) DO NOTHING`,
 		forgeName, deliveryID, eventType, string(payload))
 	return err
+}
+
+// ForgeModel is the read model on Postgres.
+type ForgeModel struct{ Conf config.Postgres }
+
+// LastRead returns the zero time for a source never read.
+func (m ForgeModel) LastRead(ctx context.Context, src forge.Source) (time.Time, error) {
+	db, err := Pool(m.Conf)
+	if err != nil {
+		return time.Time{}, err
+	}
+	var asOf *time.Time
+	err = db.QueryRow(ctx, `SELECT as_of FROM forge_source WHERE forge = $1 AND owner = $2 AND repo = $3`,
+		src.Forge, src.Owner, src.Repo).Scan(&asOf)
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && asOf == nil) {
+		return time.Time{}, nil
+	}
+	if err != nil {
+		return time.Time{}, err
+	}
+	return *asOf, nil
+}
+
+// SaveRead writes the source row first, because forge_item holds a foreign key to it.
+func (m ForgeModel) SaveRead(ctx context.Context, src forge.Source, items []forge.Item, asOf time.Time) error {
+	db, err := Pool(m.Conf)
+	if err != nil {
+		return err
+	}
+	return pgx.BeginFunc(ctx, db, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, `INSERT INTO forge_source (forge, owner, repo, as_of, source_reachable, last_attempt_at)
+			VALUES ($1, $2, $3, $4, true, $4)
+			ON CONFLICT (forge, owner, repo) DO UPDATE
+			SET as_of = $4, source_reachable = true, last_attempt_at = $4`,
+			src.Forge, src.Owner, src.Repo, asOf); err != nil {
+			return err
+		}
+		for _, it := range items {
+			if _, err := tx.Exec(ctx, `INSERT INTO forge_item
+				(forge, owner, repo, number, kind, title, state, author, assignees, labels, url, updated_at)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+				ON CONFLICT (forge, owner, repo, number) DO UPDATE SET
+				kind = $5, title = $6, state = $7, author = $8, assignees = $9, labels = $10, url = $11, updated_at = $12`,
+				src.Forge, src.Owner, src.Repo, it.Number, string(it.Kind), it.Title, it.State, it.Author,
+				nonNil(it.Assignees), nonNil(it.Labels), it.URL, it.UpdatedAt); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// MarkUnreachable keeps as_of, so the source still shows when it was last read.
+func (m ForgeModel) MarkUnreachable(ctx context.Context, src forge.Source, at time.Time) error {
+	db, err := Pool(m.Conf)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(ctx, `INSERT INTO forge_source (forge, owner, repo, source_reachable, last_attempt_at)
+		VALUES ($1, $2, $3, false, $4)
+		ON CONFLICT (forge, owner, repo) DO UPDATE SET source_reachable = false, last_attempt_at = $4`,
+		src.Forge, src.Owner, src.Repo, at)
+	return err
+}
+
+func nonNil(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
 }

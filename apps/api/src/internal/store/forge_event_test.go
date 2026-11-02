@@ -5,8 +5,10 @@ import (
 	"os"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/mlorentedev/kubelab/apps/api/internal/forge"
 	"github.com/mlorentedev/kubelab/apps/api/internal/store"
 	"github.com/mlorentedev/kubelab/apps/api/pkg/config"
 )
@@ -39,5 +41,34 @@ func TestStoreEventTwiceKeepsOneRow(t *testing.T) {
 	}
 	if rows != 1 {
 		t.Fatalf("rows = %d, want 1", rows)
+	}
+}
+
+func TestReadModelRoundTrip(t *testing.T) {
+	port := os.Getenv("FORGE_TEST_POSTGRES_PORT")
+	if port == "" {
+		t.Skip("FORGE_TEST_POSTGRES_PORT is not set")
+	}
+	conf := config.Postgres{Host: "127.0.0.1", Port: port, Tenant: "api", Password: "fixture"}
+	ctx := context.Background()
+	model := store.ForgeModel{Conf: conf}
+	src := forge.Source{Forge: "github", Owner: "o", Repo: "r"}
+
+	if got, err := model.LastRead(ctx, src); err != nil || !got.IsZero() {
+		t.Fatalf("unread source: %v, %v", got, err)
+	}
+	now := time.Date(2026, 11, 2, 8, 0, 0, 0, time.UTC)
+	item := forge.Item{Number: 1, Kind: forge.KindIssue, Title: "t", State: "open", Author: "a", URL: "u", UpdatedAt: now}
+	for i := 0; i < 2; i++ {
+		if err := model.SaveRead(ctx, src, []forge.Item{item}, now); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := model.MarkUnreachable(ctx, src, now.Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	got, err := model.LastRead(ctx, src)
+	if err != nil || !got.Equal(now) {
+		t.Fatalf("as_of after a failure = %v, %v", got, err)
 	}
 }

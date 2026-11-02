@@ -52,8 +52,9 @@ created: "2026-10-21"
   - [ ] Projection. It upserts the `forge_source` row first: `forge_item` holds a foreign key to it, and an event can arrive before that repository's first full read (PR-Agent finding on #2933)
   - [ ] Deliver `FORGE_GITHUB_WEBHOOK_SECRET` and `FORGE_GITEA_WEBHOOK_SECRET` through SOPS and `SECRET_CATALOG`
 - [ ] [AC4] Test: the same delivery twice projects once
-- [ ] [AC4] Periodic reconcile per source every 10 minutes under the hourly call ceiling, with a guard test that counts calls
+- [x] ✓ 2026-11-02 [AC4] Periodic reconcile per source every 10 minutes under the hourly call ceiling, with a guard test that counts calls. `infra.forge.sources` declares GitHub only: which Gitea repository to read is the operator's call, and the Gitea reader is wired with it
 - [ ] [AC1] Queue endpoint with the inbox reason (author, requested reviewer, failing CI, waiting on me)
+  - [ ] The queue lists declared sources only, so a repository removed from `infra.forge.sources` leaves the view, and an item deleted upstream goes on the next full rebuild (PR-Agent finding on #3001)
 
 ### 2. Access and UI
 
