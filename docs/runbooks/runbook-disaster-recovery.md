@@ -18,7 +18,7 @@ owner: manu
 - SOPS key (`age` key in `~/.config/sops/age/keys.txt`)
 - SSH key pair (`~/.ssh/id_ed25519`)
 - Tailscale running on workstation
-- Access to the R2 restic repositories (credentials in SOPS `backup.r2.*`, escrow in Bitwarden) — see [offsite-backup-restore](offsite-backup-restore.md)
+- Access to the node's R2 restic repository, bucket `kubelab-backup-<node>` (its own pair at `backup.r2.nodes.<node>.*` in SOPS, its restic password escrowed in Bitwarden) — see [offsite-backup-restore](offsite-backup-restore.md)
 
 ## Step 1: Create new VPS (Terraform)
 
@@ -71,7 +71,7 @@ This installs: packages, SSH hardening, Docker, Tailscale, Headscale, Traefik ro
 
 ## Step 5: Restore backups
 
-Node data is backed up by `node_backup` (restic to Cloudflare R2, one repository per node; sources in `backup.sources`, `common.yaml`). There is no restore playbook: restore with restic, following [offsite-backup-restore](offsite-backup-restore.md) — "Restoring — normal case" when SOPS and the repo are available, "Restoring — the disaster case" when they are not. Restore into a scratch directory first, then move the data into place.
+Node data is backed up by `node_backup` (restic to Cloudflare R2, one bucket, credential and password per node, the last R days under a bucket lock; sources in `backup.sources`, `common.yaml`). What the isolation and the lock leave uncovered is in [What the lock does and does not cover](offsite-backup-restore.md#what-the-lock-does-and-does-not-cover). There is no restore playbook: restore with restic, following [offsite-backup-restore](offsite-backup-restore.md) — "Restoring — normal case" when SOPS and the repo are available, "Restoring — the disaster case" when they are not. Restore into a scratch directory first, then move the data into place.
 
 Once the node is back, redeploy the pipeline so backups resume: `make backup ENV=prod`.
 

@@ -120,13 +120,13 @@ The size decides whether R = 30 fits the free tier. It is measured by the watche
 
 ## PR 5 — close out
 
-- [ ] [AC5] `offsite-backup-restore.md` and `runbook-disaster-recovery.md` state what was measured:
+- [x] [AC5] (✓ 2026-11-01. The restore steps themselves were stale as well: they read the shared bucket and pair, and the escrow step named a pair no node uses) `offsite-backup-restore.md` and `runbook-disaster-recovery.md` state what was measured:
   - per-node isolation;
   - the lock on four prefixes;
   - what it does not cover: the admin token (where it is held; no node has it), data older than R, and a SOPS recipient key (until #1852, every node's history is readable with it, and the Cloudflare token it decrypts can remove a lock rule).
 
   They also give the recovery procedure for a node whose index was deleted (`restic repair index`).
-- [ ] [AC5] `tests/test_offsite_runbook_claims.py`:
+- [x] [AC5] (✓ 2026-11-01. Red before the runbook edit, 12 of 14 failing) `tests/test_offsite_runbook_claims.py`:
   - the runbook names every node bucket derived from `backup.sources`;
   - it names the four locked prefixes and R read from `common.yaml`;
   - it names the three uncovered cases: the admin token, data older than R, and a SOPS recipient key, as both a read and a lock-removal path (the last only while `.sops.yaml` lists more than the operator's key);
@@ -140,7 +140,7 @@ The size decides whether R = 30 fits the free tier. It is measured by the watche
 - [x] [AC5] (✓ 2026-10-07, landed ahead of PR 5 on its own: it depends on nothing the migration changes. The Bitwarden side is `dotf secrets probe`, which already reports sha256[:12] without the value, so no value crosses into the toolkit) `make backup-escrow-check`. For every restic password in SOPS (`backup.restic_password` and each `backup.nodes.<n>.restic_password`), it compares that value's hash with the hash of its `dotf` Bitwarden entry (`KUBELAB_RESTIC_PASSWORD[_<NODE>]`). No value is printed. It exits non-zero on a missing or stale entry.
 
   On 2026-10-03 this comparison was made by hand. The runbook's "if the escrow is missing or stale, there is no recovery" is otherwise checked by no one. The R2 pairs are re-mintable and stay out of the escrow.
-- [ ] After AC4 has been verified on all four nodes **and** one weekly `check` has passed on every new bucket: delete `kubelab-backups` and its token, and remove `backup.r2.bucket` / `backup.r2.access_key_id` from `common.yaml` and SOPS. This is its own PR if the weekly check lands after PR 5.
+- [ ] (Needs #2917 first: `backup-verify-*` read `backup.r2.bucket`) After AC4 has been verified on all four nodes **and** one weekly `check` has passed on every new bucket: delete `kubelab-backups` and its token, and remove `backup.r2.bucket` / `backup.r2.access_key_id` from `common.yaml` and SOPS. This is its own PR if the weekly check lands after PR 5.
 
 ## Closing
 
