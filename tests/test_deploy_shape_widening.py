@@ -142,3 +142,38 @@ class TestMergingActorDoesNotWiden:
         holders = [s["name"] for s in steps if "RELEASE_PLEASE_TOKEN" in str(s)]
         merger = [s["name"] for s in writers if "gh pr merge" in s["run"]]
         assert holders == merger, f"RELEASE_PLEASE_TOKEN reaches {holders}, not only the merge: {DECIDED}"
+
+    # What feeds the merge and close loops: the judge's decisions, filtered to exactly
+    # one action, each carrying the sha the judge read. Widening the filter (say to
+    # `!= "skip"`) or feeding anything but `.head_sha` as the sha leaves the merge line
+    # above intact and still widens what merges (adversarial review of #1619).
+    FEEDS = {
+        "merge": """done < <(jq -r '.decisions[] | select(.action == "merge") | "\\(.pr) \\(.head_sha)"' "$RUNNER_TEMP/decisions.json")""",
+        "close": """jq -r '.decisions[] | select(.action == "close") | "\\(.pr) \\(.head_sha)"' "$RUNNER_TEMP/decisions.json" |""",
+    }
+
+    def test_the_merge_and_close_loops_read_only_their_own_decisions_and_the_judged_sha(self) -> None:
+        text = (WORKFLOWS / "deploy-merge.yml").read_text(encoding="utf-8")
+        feeds = [line.strip() for line in text.splitlines() if "decisions.json" in line and "select(" in line]
+        writers = [line for line in feeds if "would " not in line]
+        assert sorted(writers) == sorted(self.FEEDS.values()), f"deploy-merge.yml feeds its writes with {writers}: {DECIDED}"
+
+    def test_the_triggers_and_the_token_scope_are_the_approved_ones(self) -> None:
+        """When the merger runs and what its GITHUB_TOKEN may do. A wildcard
+        workflow_run or a `contents: write` grant changes the actor, not the class."""
+        import yaml
+
+        wf = yaml.safe_load((WORKFLOWS / "deploy-merge.yml").read_text(encoding="utf-8"))
+        triggers = wf.get("on", wf.get(True))  # PyYAML reads the bare key `on` as True
+        assert triggers == {
+            "workflow_run": {"workflows": ["CI", "review-attestation", "deploy-shape"], "types": ["completed"]},
+            "schedule": [{"cron": "17,47 * * * *"}],
+            "workflow_dispatch": None,
+        }, f"deploy-merge.yml triggers on {triggers}: {DECIDED}"
+        assert wf["permissions"] == {
+            "contents": "read",
+            "pull-requests": "write",
+            "checks": "read",
+            "statuses": "read",
+        }, f"deploy-merge.yml's token scope is {wf['permissions']}: {DECIDED}"
+        assert "permissions" not in wf["jobs"]["merge"], f"a job-level grant overrides the pinned one: {DECIDED}"
