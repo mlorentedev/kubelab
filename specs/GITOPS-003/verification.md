@@ -72,7 +72,7 @@ A reviewer subagent that did not implement the spec read the contract and the PR
 - Minor: AC5's test checks the expression text rather than evaluating it. **Declined:** three mutations of the nil and `oncePer` guards turned it red, so it is not vacuous. An expr-lang evaluator in the suite is not worth a dependency.
 - Minor: `features.json` f2 omitted `tests/test_deploy_verify_workflow.py`, and f4 did not name exit 4. **Applied.** f1 reads only staging's `success` at run time. **Declined:** it is a live check by design.
 - Minor: 48 vs 49 tests, and f3's first-prod-sync evidence was missing here. **Applied** (above).
-- Minor, REAL: staging alerts route to the archive tier (`policies.yaml:19-21`), and the incidents behind this spec were staging ones. **Declined, by design:** ADR-028 makes prod plus Uptime Kuma the monitoring of record, never staging, and a staging delivery failure already turns `deploy-verify` red on the deploy PR (AC7), which is where it is acted on.
+- Minor, REAL: staging alerts route to the archive tier (`policies.yaml:19-21`), and the incidents behind this spec were staging ones. **Ticketed:** #1710 (Grafana routes by environment, not by severity). Until it lands, a failed staging sync still turns the post-merge `deploy-verify` run red on master's commit.
 - Minor: the runbook's `make verify-product APP=<app>` works only for contract products. **Applied:** the step now says `APP=web`.
 - Minor: AC2's "never as a broken deploy" read as "never alerts", but the rule alerts on no data. **Applied:** AC2 text.
 - Speculative: `fetch_statuses` does not paginate past 100. **Declined:** a master commit carries a handful of contexts.
