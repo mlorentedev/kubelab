@@ -110,40 +110,34 @@ Monitors both staging (via Tailscale) and production (public URLs).
 ```bash
 # RPi 3 access (via Tailscale)
 # Uptime Kuma UI: http://100.64.0.6:3001
-# Compose file (source of truth): infra/stacks/services/observability/uptime/compose.yml
+# Deployment (source of truth): the rpi3_services role, applied by make provision NODE=rpi3 ENV=prod
 ```
 
 #### RPi3 initial setup / reprovisioning
 
-If RPi3 needs to be rebuilt from scratch:
+If RPi3 needs to be rebuilt from scratch, `provision-rpi3.yml` does the work. It needs three things it does not install, because the node is reached over its Tailscale address (`ansible_host`) and the play stops at its pre-flight if Docker is not running:
 
 ```bash
-# 1. Install Docker
+# On the node. These are the play's preconditions, not a deployment.
+# 1. Docker: the docker role is Ubuntu-only, and rpi3 runs Debian (ANSIBLE-036)
 curl -fsSL https://get.docker.com | sh
-sudo usermod -aG docker manu
 
-# 2. Install CA certificates (required for HTTPS monitors)
+# 2. CA certificates, required for HTTPS monitors: no role installs them
 sudo apt update && sudo apt install -y ca-certificates
-sudo update-ca-certificates
 
-# 3. Install Tailscale and join the network
+# 3. Tailscale, so Ansible can reach the node
 curl -fsSL https://tailscale.com/install.sh | sh
 sudo tailscale up --login-server https://vpn.kubelab.live
-
-# 4. Deploy Uptime Kuma
-mkdir -p ~/uptime-kuma
-# Copy compose.yml from repo (from workstation):
-# scp infra/stacks/services/observability/uptime/compose.yml manu@100.64.0.6:~/uptime-kuma/
-cd ~/uptime-kuma && docker compose up -d
-
-# 5. Rebuild the monitors from the seed (from workstation):
-# toolkit monitoring bootstrap
-#    (history and settings come back only from a node_backup restore)
 ```
 
-**Key detail**: The compose.yml includes `dns: [100.64.0.10, 1.1.1.1]` so the container
-can resolve `*.staging.kubelab.live` via Pi-hole. Without this, staging monitors fail
-with `getaddrinfo ENOTFOUND`.
+```bash
+# From the workstation
+make provision NODE=rpi3 ENV=prod
+```
+
+The play renders the Compose stack and its boot unit, applies the port allowlist (#2482), starts Uptime Kuma and checks its health, then bootstraps the admin account and imports the monitors from the seed. That last step does not stop the play if it fails, so read its result in the report task. History and settings come back only from a `node_backup` restore.
+
+**Key detail**: the role pins `docker_dns_servers` to `networking.tailnet_first_resolvers`, so the container can resolve `*.staging.kubelab.live`. Without this, staging monitors fail with `getaddrinfo ENOTFOUND`.
 
 #### How to add monitors in Uptime Kuma
 

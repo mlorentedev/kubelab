@@ -156,6 +156,12 @@ def test_a_pull_past_the_budget_is_refused_unless_the_run_allows_it():
     assert _decide(2970, 0) == (True, 300 + 50), "a held image still gets a bound"
 
 
+def test_the_budget_counts_transfer_while_the_bound_also_grants_the_pauses():
+    """Pauses are spent only on failure, and 3900 s of them pass the 1800 s default
+    alone: a wall-clock budget would refuse every pull at the edge (#2873)."""
+    assert _decide(2970, 100_000_000, docker_max_download_attempts="40") == (True, 270 * 2 + 300 + 3900)
+
+
 def test_an_explicit_timeout_bounds_the_pull_whatever_the_estimate():
     """The lever when the estimate is wrong: a held tag counts 0, and gets 300 s."""
     assert _decide(2970, 0, image_pull_timeout_seconds="5400") == (True, 5400)

@@ -6,57 +6,12 @@ from typing import Annotated, Optional
 import typer
 
 from toolkit.core.logging import logger
-from toolkit.features.backup_destination import verify_destination
 
 app = typer.Typer(
     name="backup",
     help="Offsite backup pipeline (Cloudflare R2 / restic).",
     no_args_is_help=True,
 )
-
-
-@app.command("verify-destination")
-def verify_destination_cmd(
-    env: Annotated[
-        str,
-        typer.Option("--env", "-e", help="Environment whose merged config is used"),
-    ] = "prod",
-    project_root: Annotated[
-        Optional[Path],
-        typer.Option("--project-root", help="Repo root (defaults to auto-detection)"),
-    ] = None,
-) -> None:
-    """Prove the R2 destination is usable: scope, reach, and a write/read/delete round-trip.
-
-    Writes 1 KB of throwaway data under `_smoketest/` and removes it. Safe to run
-    against a live destination, and worth running before trusting a backup to it —
-    a token without delete permission lets backups look healthy until the bucket
-    fills and retention turns out never to have retained anything.
-    """
-    if not verify_destination(env=env, project_root=project_root):
-        raise typer.Exit(code=1)
-
-
-@app.command("verify-restic")
-def verify_restic_cmd(
-    node: Annotated[
-        str,
-        typer.Option("--node", "-n", help="Repository name (one repository per node)"),
-    ] = "_smoketest-probe",
-    env: Annotated[str, typer.Option("--env", "-e", help="Environment whose merged config is used")] = "prod",
-    keep: Annotated[bool, typer.Option("--keep", help="Do not delete the probe repository afterwards")] = False,
-    project_root: Annotated[Optional[Path], typer.Option("--project-root", help="Repo root")] = None,
-) -> None:
-    """Prove restic can create, use and verify a repository in R2.
-
-    Runs the whole lifecycle — init, backup, snapshots, `restic check` — against a
-    throwaway repository, then removes it. "The bucket accepts objects" and
-    "restic works here" are different claims; only the second one matters.
-    """
-    from toolkit.features.backup_destination import verify_restic
-
-    if not verify_restic(node=node, env=env, project_root=project_root, keep=keep):
-        raise typer.Exit(code=1)
 
 
 @app.command("mint-node-tokens")
@@ -348,10 +303,10 @@ def health_check_cmd(
     notify: Annotated[bool, typer.Option("--notify/--no-notify", help="Dispatch notification to Slack")] = True,
     project_root: Annotated[Optional[Path], typer.Option("--project-root", help="Repo root")] = None,
 ) -> None:
-    """Run full R2 destination verification + fleet coverage check and notify Slack.
+    """Run the isolation probe and the fleet coverage check, and notify Slack.
 
-    Executes verify-destination (scope, reach, write/read/delete round-trip) and
-    coverage (fleet snapshot checks), then dispatches a structured SRE report
+    Executes isolation-probe (prod only) and coverage (fleet snapshot checks),
+    then dispatches a structured SRE report
     to Slack #ops-log (on success) or #alerts (on failure).
     """
     from toolkit.features.r2_backup_health import run_r2_backup_health_check

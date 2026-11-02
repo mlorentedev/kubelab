@@ -1160,7 +1160,7 @@ def k8s_alert_smoke(
 # simply stops growing, indistinguishable from a healthy backup until someone
 # needs a restore.
 #
-# The replacement is `make backup-node` / `make backup-verify-restic`, and the
+# The replacement is `make backup-node` / `make backup-drill-node`, and the
 # restore procedure is docs/runbooks/offsite-backup-restore.md.
 #
 # `networking.vps.backup.*` in common.yaml is now read by nothing. Left in
