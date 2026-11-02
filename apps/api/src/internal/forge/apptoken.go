@@ -97,8 +97,9 @@ func (a *AppTokens) exchange(ctx context.Context, now time.Time) (string, time.T
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		return "", time.Time{}, fmt.Errorf("decode installation token: %w", err)
 	}
-	if body.Token == "" {
-		return "", time.Time{}, errors.New("exchange installation token: empty token")
+	// A zero expiry would defeat the cache and spend an exchange on every read.
+	if body.Token == "" || body.ExpiresAt.IsZero() {
+		return "", time.Time{}, errors.New("exchange installation token: incomplete answer")
 	}
 	return body.Token, body.ExpiresAt, nil
 }

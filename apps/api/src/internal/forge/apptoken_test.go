@@ -118,3 +118,16 @@ func TestGitHubTokensFailureIsUnreachable(t *testing.T) {
 		t.Fatalf("err = %v, want SourceError", err)
 	}
 }
+
+func TestAppTokensRefusesAnAnswerWithNoExpiry(t *testing.T) {
+	_, keyPEM := genKey(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusCreated)
+		fmt.Fprint(w, `{"token":"t"}`)
+	}))
+	defer srv.Close()
+	a := &forge.AppTokens{BaseURL: srv.URL, AppID: "42", InstallationID: "1", PrivateKeyPEM: keyPEM, HTTP: srv.Client()}
+	if _, err := a.Token(context.Background()); err == nil {
+		t.Fatal("want an error")
+	}
+}
