@@ -153,6 +153,10 @@ def test_the_disaster_case_says_the_r2_pair_is_not_escrowed(offsite: str) -> Non
     section = _section(offsite, "Restoring — the disaster case")
     assert "KUBELAB_RESTIC_PASSWORD_<NODE>" in section
     assert "Cloudflare dashboard" in section, "the node's R2 pair is minted again, not read from the escrow"
+    # The token that step creates is Object Read, and restic's default lock is a write.
+    restic_calls = [line for line in section.splitlines() if line.strip().startswith("restic ")]
+    assert restic_calls, "the disaster case must spell out its restic calls"
+    assert all("--no-lock" in call for call in restic_calls), restic_calls
 
 
 def test_the_rebuild_runbook_points_at_the_node_buckets() -> None:

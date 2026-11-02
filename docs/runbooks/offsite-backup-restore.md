@@ -789,7 +789,16 @@ unreadable.
    in the escrow, so this login has to survive the disaster too.
 4. Export the pair and the password by hand into the environment as above.
 5. Install restic (`aarch64` / any platform — it is a single static binary).
-6. Restore as in the normal case.
+6. Restore into a scratch directory, with `--no-lock` on every call:
+
+   ```bash
+   restic -r "$REPO" snapshots --no-lock
+   restic -r "$REPO" restore <snapshot-id> --target /tmp/restore-check --no-lock
+   ```
+
+   An Object Read token cannot write under `locks/`, so without the flag restic
+   stops at `unable to create lock in backend` (lesson-538). Measured on
+   2026-11-02 with a read-only pair on `snapshots`; the whole restore was not run.
 
 You need nothing from this repository to do that: no checkout, no toolkit, no
 `bw serve`, no age key. That independence is the entire design and is why the

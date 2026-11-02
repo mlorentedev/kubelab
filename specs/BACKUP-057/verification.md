@@ -236,6 +236,8 @@ The stale text was worse than a wrong claim. "Restoring — normal case" read th
 
 The new restore path was run read-only, with the commands the runbook gives and the pinned `restic/restic:0.19.1`, values passed by environment name: `rpi3` listed 170 snapshots (40 copies), `vps` 194 (39 copies), both rc 0, both with snapshots from 2026-11-02 UTC. The copy counts equal the migration table for vps and rpi3 (39, 40).
 
+A read-only pair needs `--no-lock`: with the watcher pair and rpi3's password, `snapshots --no-lock` returned rc 0, and plain `snapshots` returned rc 1 with `unable to create lock in backend: client.PutObject: Access Denied`. The disaster case therefore spells out its calls.
+
 Not measured: a whole disaster-case restore with a freshly created dashboard token, and whether the old shared pair can reach a node bucket (the probe was declined by the harness's permission check). The runbook depends on neither: it creates a new token and scopes it to the node's bucket.
 
 Found on the way: `backup-verify-destination` and `backup-verify-restic` still probe the shared bucket. Filed as #2917, named in the runbook, and it must close before `kubelab-backups` is deleted.
