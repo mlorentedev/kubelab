@@ -67,7 +67,7 @@ First read which red it is, from the run's error annotation:
 
 Then:
 
-1. Read the message on the hub: `make verify-product APP=<app> ENV=<env>` prints the Application's last operation with its `operationState.message`.
+1. Read the message on the hub: `make verify-product APP=web ENV=<env>` (a product with a contract; any other app is refused with exit 2) prints the Application's last operation with its `operationState.message`.
 2. Fix the cause the message names, then start the sync Argo will not retry by itself: `make sync-app APP=kubelab-<env>`.
 3. Only if the same controller panic repeats after a sync: `make restart-argocd`.
 
