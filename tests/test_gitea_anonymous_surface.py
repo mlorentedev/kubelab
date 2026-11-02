@@ -73,6 +73,7 @@ def _vars() -> dict:
         **_EXTERNAL,
         "gitea_image": common["apps"]["services"]["core"]["gitea"]["image"],
         "tailscale_ip": _beelink_tailscale_ip(),
+        "gitea_dns_servers": common["networking"]["public_resolvers"],
     }
 
 
