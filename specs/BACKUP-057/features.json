@@ -50,8 +50,8 @@
   },
   {
     "id": "BACKUP-057-f6",
-    "behavior": "In prod, under the lock, every node ships and the watcher reports healthy:4; a young data/ delete and a cross-node list are refused ; the prune-failure alert stays silent for the seven days after the last migration (AC1, AC3)",
-    "verification": "make backup-node NODE=all ENV=prod && make backup-isolation-probe ENV=prod && make watcher-run ENV=prod; then, manual, seven days after the last migration: make alerts and the Grafana alert history show no prune-failure firing in that window (tasks.md PR 4), both recorded in verification.md",
+    "behavior": "In prod, under the lock, every node ships and the watcher reports every declared node healthy; a young data/ delete and a cross-node list are refused; no node-backup-prune.service failure in the seven days from 2026-11-07, with a forget logged on each migrated node (AC1, AC3)",
+    "verification": "make backup-node NODE=all ENV=prod && make backup-isolation-probe ENV=prod && make watcher-run ENV=prod; then, manual, on or after 2026-11-14: make backup-schedule NODE=all ENV=prod reports no prune failure in that window (tasks.md PR 4), both recorded in verification.md",
     "state": "pending",
     "evidence": ""
   },
@@ -59,7 +59,7 @@
     "id": "BACKUP-057-f7",
     "behavior": "The offsite restore runbook states the measured isolation and lock, and what the lock does not cover (AC5)",
     "verification": "poetry run pytest tests/test_offsite_runbook_claims.py --no-cov -q",
-    "state": "pending",
-    "evidence": ""
+    "state": "passing",
+    "evidence": "tests/test_offsite_runbook_claims.py, red on the old runbook, green on the new one, 2026-11-01"
   }
 ]
