@@ -6,7 +6,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: api-migrations-dc4b244cb1
+  name: api-migrations-0af59188bc
   namespace: kubelab
   labels:
     app.kubernetes.io/name: api-migrate
@@ -70,7 +70,7 @@ data:
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: api-migrate-dc4b244cb1
+  name: api-migrate-0af59188bc
   namespace: kubelab
   labels:
     app.kubernetes.io/name: api-migrate
@@ -96,7 +96,7 @@ spec:
       volumes:
         - name: migrations
           configMap:
-            name: api-migrations-dc4b244cb1
+            name: api-migrations-0af59188bc
       containers:
         - name: atlas
           image: arigaio/atlas:1.3.0

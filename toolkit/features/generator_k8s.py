@@ -302,24 +302,28 @@ class K8sGenerator(BaseGenerator):
         }
 
     def _build_migrations(self, env_vars: dict[str, str]) -> dict[str, Any]:
-        """The API's Atlas migration directory, with a hash of its content (DATA-007)."""
+        """The API's Atlas migration directory, with a hash of everything the Job renders from.
+
+        A Job's spec is immutable, so anything that changes the rendered Job has to change its
+        name, or the sync that applies it is refused (DATA-007).
+        """
         files = {
             path.name: path.read_text(encoding="utf-8")
             for path in sorted((self.project_root / "apps" / "api" / "migrations").iterdir())
             if path.is_file()
         }
-        digest = hashlib.sha256()
-        for name, content in files.items():
-            digest.update(name.encode("utf-8"))
-            digest.update(content.encode("utf-8"))
-        return {
-            "files": files,
-            "hash": digest.hexdigest()[:10],
+        job = {
             "image": env_vars["INFRA_POSTGRES_ATLAS_IMAGE"],
             "tenant": env_vars["APPS_PLATFORM_API_POSTGRES_TENANT"],
             "host": env_vars["INFRA_POSTGRES_HOST"],
             "port": env_vars["INFRA_POSTGRES_PORT"],
         }
+        template = self.project_root / "infra" / "k8s" / "templates" / "migrations.yaml.j2"
+        digest = hashlib.sha256()
+        for name, content in [*files.items(), *job.items(), ("template", template.read_text(encoding="utf-8"))]:
+            digest.update(name.encode("utf-8"))
+            digest.update(content.encode("utf-8"))
+        return {"files": files, "hash": digest.hexdigest()[:10], **job}
 
     @classmethod
     def _placement_keys(cls, env_vars: dict[str, str]) -> frozenset[str]:
