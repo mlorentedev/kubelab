@@ -54,8 +54,9 @@ def _known() -> set[str]:
     for relative in ("values/common.yaml", "values/dev.yaml", "secrets/common.enc.yaml", "secrets/dev.enc.yaml"):
         _merge(config, _load(relative))
     config.pop("sops", None)
-    flatten = ConfigurationManager._flatten_dict
-    return set(flatten(ConfigurationManager.__new__(ConfigurationManager), config)) | DERIVED_BY_THE_LOADER
+    flat = ConfigurationManager._flatten_dict(ConfigurationManager.__new__(ConfigurationManager), config)
+    # A blank value reaches Compose as the same empty string as an unset one.
+    return {key for key, value in flat.items() if value not in ("", None)} | DERIVED_BY_THE_LOADER
 
 
 def unresolved(text: str, known: set[str]) -> list[str]:
