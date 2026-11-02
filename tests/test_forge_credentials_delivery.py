@@ -41,7 +41,7 @@ def _configmaps(env: str) -> dict[str, dict[str, str]]:
     path = REPO_ROOT / "infra" / "k8s" / "overlays" / env / "generated" / "configmaps.yaml"
     return {
         doc["metadata"]["name"]: doc.get("data") or {}
-        for doc in yaml.safe_load_all(path.read_text())
+        for doc in yaml.safe_load_all(path.read_text(encoding="utf-8"))
         if doc and doc.get("kind") == "ConfigMap"
     }
 
@@ -71,7 +71,7 @@ class TestSecretsReachTheApi:
         assert "FORGE_GITHUB_PRIVATE_KEY" not in API_SECRETS.keys
 
     def test_the_go_side_reads_exactly_these_names(self) -> None:
-        source = GO_CONFIG.read_text()
+        source = GO_CONFIG.read_text(encoding="utf-8")
         for name in (
             "FORGE_GITEA_TOKEN",
             "FORGE_GITHUB_PRIVATE_KEY",
@@ -85,9 +85,8 @@ class TestOnlyPublicValuesReachAConfigMap:
     def test_the_ids_are_in_the_api_configmap_and_match_the_ssot(self) -> None:
         # Asserted on `api-config` itself: a merged view would pass while only another
         # component's ConfigMap carried the IDs, and the API is the one that reads them.
-        github = yaml.safe_load((REPO_ROOT / "infra/config/values/common.yaml").read_text())["infra"]["forge"][
-            "github"
-        ]
+        common = yaml.safe_load((REPO_ROOT / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
+        github = common["infra"]["forge"]["github"]
         for env in ("staging", "prod"):
             data = _configmaps(env)["api-config"]
             assert data["INFRA_FORGE_GITHUB_APP_ID"] == str(github["app_id"])
