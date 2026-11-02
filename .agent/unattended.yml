@@ -1,0 +1,69 @@
+version: 1
+run_id: "ap-20261102-kubelab-edge"
+armed_by: manu
+armed_at: 2026-11-02T16:12:18Z
+expires_at: 2026-11-02T22:12:18Z
+objective: >-
+  Land OPS-054 (#2995), then close the defects it found: make the load test
+  keep its results (#3000) and give Traefik a declared memory limit proven by a
+  staging rerun and applied to prod (#2975); then work #2977, #2993 and #2986.
+scope:
+  write_paths:
+    - "toolkit/features/load_test.py"
+    - "toolkit/cli/infra.py"
+    - "tests/**"
+    - "infra/load-test/**"
+    - "infra/ansible/roles/k3s_server/**"
+    - "infra/k8s/base/governance/kube-system-limitrange.yaml"
+    - "docs/**"
+    - "AGENTS.md"
+    - "toolkit/README.md"
+    - "specs/OPS-054/**"
+    - "specs/archive/**"
+    - "specs/OBS-043*/**"
+    - "specs/DELIVERY-012*/**"
+    - ".agent/runs/**"
+  frozen_paths:
+    - ".github/**"
+    - "harness/**"
+    - "**/CLAUDE.md"
+    - ".agent/unattended.yml"
+    - "infra/config/secrets/**"
+    - "infra/k8s/argocd/**"
+    - "toolkit/features/credentials.py"
+    - "toolkit/features/oidc_clients.py"
+  max_files: 16
+  max_loc: 300
+allowed_commands: [dotf, gh, git, make, poetry, kubectl, caffeinate]
+queue:
+  source: bitacora
+  filter: >-
+    In order: land #2995 and close OPS-054 (spec review, then archive); #3000;
+    #2975 (OBS-043); #2977 (DELIVERY-012); #2993; #2986. Skip any item a peer
+    has assigned or whose paths a peer's open PR holds.
+  max_items: 6
+budget:
+  max_iterations: 10
+  max_minutes_per_iteration: 60
+  max_consecutive_failures: 2
+authority:
+  merge: standing-grant
+  push: true
+  open_pr: true
+  advisor_tier: top
+# Operator authorization, given at arming (2026-11-02), for this run only:
+#  - Merge #2995 under the standing grant, overriding the earlier "Manu merges".
+#  - Load tests against staging, which may OOM and restart its ingress.
+#  - For #2975 only: after a staging rerun validates the limit and the PR has
+#    merged, provision the k3s_server role on prod from master. Read prod routes
+#    and Traefik restarts afterwards. A prod regression stops the chain and
+#    parks the item; no improvised repair beyond reverting that PR.
+#  - No load test against prod, ever: the tool refuses it.
+# Never: .github, secrets or SOPS, release PRs, force push, git reset --hard,
+# the web repo, spending money.
+# Staging is one slot: read targetRevision first and refuse if another branch
+# holds it; return it to master when validation ends. Warn peers before a run.
+# Peer lanes armed until about 17:55Z: obs, console, backup, tooling, auth.
+# Check their open PRs for the same files before each pick and push.
+# infra/config/platform.json conflicts with most merges: regenerate it with
+# make sync-platform-json. It stays outside write_paths except for that merge.
