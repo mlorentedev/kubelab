@@ -236,10 +236,17 @@ class Lab:
     def pod(self, workload: str, namespace: str = "kubelab") -> dict[str, Any]:
         out = self.kubectl("get", "pods", "-n", namespace, "-l", f"app.kubernetes.io/name={workload}", "-o", "json")
         items = [p for p in json.loads(out)["items"] if p["status"].get("phase") == "Running"]
+        if not items:
+            raise LoadTestRefused(f"no running pod for {workload} in {namespace}")
         return items[0]
 
     def restarts(self, workload: str, namespace: str = "kubelab") -> int:
         return sum(c["restartCount"] for c in self.pod(workload, namespace)["status"]["containerStatuses"])
+
+    def edge_state(self) -> tuple[str, int]:
+        """The pod's identity with its count: a replaced pod starts counting from zero again."""
+        pod = self.pod(EDGE_WORKLOAD, EDGE_NAMESPACE)
+        return pod["metadata"]["uid"], sum(c["restartCount"] for c in pod["status"]["containerStatuses"])
 
     def edge_ready(self) -> bool:
         return all(c["ready"] for c in self.pod(EDGE_WORKLOAD, EDGE_NAMESPACE)["status"]["containerStatuses"])
@@ -270,7 +277,7 @@ def run_step(
     before = {n: lab.cpu_line(n) for n in (lab.target_node, lab.generator)}
     stat_before = lab.cpu_stat(target.workload)
     pod_before = lab.pod(target.workload)["metadata"]["uid"]
-    edge_before = lab.restarts(EDGE_WORKLOAD, EDGE_NAMESPACE)
+    edge_before = lab.edge_state()
     with ThreadPoolExecutor(max_workers=2) as pool:
         k6 = pool.submit(lab.ssh, lab.generator, k6_command(image, env), script, seconds + 120)
         mid = pool.submit(_sample_mid_step, lab, target.workload, min(TOP_AFTER_SECONDS, seconds))
@@ -282,7 +289,7 @@ def run_step(
     step["node_mem_available_mb"] = memory
     step["pods_top"] = top
     step["throttled_ms"] = throttled_ms(stat_before, lab.cpu_stat(target.workload))
-    step["edge_restarts"] = lab.restarts(EDGE_WORKLOAD, EDGE_NAMESPACE) - edge_before
+    step["edge_restarts"] = edge_restarts_between(edge_before, lab.edge_state())
     step["pod_replaced"] = lab.pod(target.workload)["metadata"]["uid"] != pod_before
     step["reasons"] = classify(step, rate, bypass)
     return step
@@ -293,6 +300,19 @@ def _sample_mid_step(lab: Lab, workload: str, delay: int) -> tuple[dict[str, str
 
     time.sleep(delay)
     return lab.top(workload), lab.memory_available_mb(lab.target_node)
+
+
+def edge_restarts_between(before: tuple[str, int], after: tuple[str, int]) -> int:
+    """Restarts between two readings; a pod replaced in between counts as at least one."""
+    return after[1] - before[1] if after[0] == before[0] else max(after[1], 1)
+
+
+def cleanup(lab: Lab, image: str) -> None:
+    """Both halves always run: a route left armed still fails the command that left it."""
+    try:
+        lab.disarm()
+    finally:
+        lab.ssh(lab.generator, f"docker image rm {image} >/dev/null 2>&1 || true")
 
 
 def wait_for_stable_edge(ready: Any, restarts: Any, sleep: Any, stable: int, limit: int, poll: int = 10) -> None:
@@ -355,7 +375,7 @@ def run(
     facts = _runtime_facts(lab, image)
     steps = tuple(rate for rate in STEPS if rate <= max_rate)
     restarts = {t.workload: lab.restarts(t.workload) for t in targets}
-    edge_restarts = lab.restarts(EDGE_WORKLOAD, EDGE_NAMESPACE)
+    edge_at_start = lab.edge_state()
 
     def stable_edge() -> None:
         wait_for_stable_edge(
@@ -382,8 +402,7 @@ def run(
                 ramps.append({"target": target.name, "repeat": repeat, "steps": done, "knee": knee(done)})
                 stable_edge()
     finally:
-        lab.disarm()
-        lab.ssh(lab.generator, f"docker image rm {image} >/dev/null 2>&1 || true")
+        cleanup(lab, image)
     return {
         "facts": facts,
         "criteria": {
@@ -398,7 +417,7 @@ def run(
         "ramps": ramps,
         "restarts_during_run": {
             **{w: lab.restarts(w) - before for w, before in restarts.items()},
-            EDGE_WORKLOAD: lab.restarts(EDGE_WORKLOAD, EDGE_NAMESPACE) - edge_restarts,
+            EDGE_WORKLOAD: edge_restarts_between(edge_at_start, lab.edge_state()),
         },
     }
 

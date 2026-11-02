@@ -24,7 +24,10 @@ def _values(api: str, web: str) -> dict:
     return {
         "apps": {"platform": {"api": {"domain": api}, "web": {"domain": web}}},
         "load_test": {"target_node": "ace1", "generator_node": "ace2"},
-        "networking": {"nodes": {"ace1": {"lan_ip": "10.0.0.2"}}, "vps": {"public_ip": "1.2.3.4", "tailscale_ip": "5.6.7.8"}},
+        "networking": {
+            "nodes": {"ace1": {"lan_ip": "10.0.0.2"}},
+            "vps": {"public_ip": "1.2.3.4", "tailscale_ip": "5.6.7.8"},
+        },
     }
 
 
@@ -33,7 +36,16 @@ PROD = _values("api.kubelab.live", "mlorente.dev")
 
 
 def _step(rate: int = 100, **over: float) -> dict:
-    return {"rate": rate, "status_429": 0, "error_rate": 0.0, "p95_ms": 10.0, "achieved_rps": float(rate), "generator_cpu": 10.0, "vus_peak": 7, **over}
+    return {
+        "rate": rate,
+        "status_429": 0,
+        "error_rate": 0.0,
+        "p95_ms": 10.0,
+        "achieved_rps": float(rate),
+        "generator_cpu": 10.0,
+        "vus_peak": 7,
+        **over,
+    }
 
 
 class TestStaysInStaging:
@@ -45,7 +57,9 @@ class TestStaysInStaging:
     def test_the_declared_staging_hosts_pass(self) -> None:
         assert [t.host for t in lt.build_targets(STAGING, PROD)] == ["api.staging.kubelab.live", "staging.mlorente.dev"]
 
-    @pytest.mark.parametrize("api", ["api.kubelab.live", "kubelab.live", "stagingkubelab.live", "api.notstaging.kubelab.live"])
+    @pytest.mark.parametrize(
+        "api", ["api.kubelab.live", "kubelab.live", "stagingkubelab.live", "api.notstaging.kubelab.live"]
+    )
     def test_a_host_that_is_not_a_staging_name_is_refused(self, api: str) -> None:
         with pytest.raises(lt.LoadTestRefused):
             lt.build_targets(_values(api, "staging.mlorente.dev"), PROD)
@@ -189,10 +203,50 @@ class TestParsing:
             "vus": {"values": {"max": 9}},
         }
         got = lt.parse_summary("noise\n" + json.dumps(metrics) + "\n")
-        assert (got["p95_ms"], got["achieved_rps"], got["vus_peak"], got["dropped"], got["status_429"]) == (4, 10.0, 9, 0, 0)
+        assert (got["p95_ms"], got["achieved_rps"], got["vus_peak"], got["dropped"], got["status_429"]) == (
+            4,
+            10.0,
+            9,
+            0,
+            0,
+        )
 
     def test_cpu_counts_iowait_as_idle(self) -> None:
         assert lt.cpu_percent("cpu 0 0 0 100 0 0 0 0 0 0", "cpu 25 0 0 150 25 0 0 0 0 0") == 25.0
 
     def test_throttling_is_a_delta(self) -> None:
         assert lt.throttled_ms("nr_throttled 1\nthrottled_usec 1000", "nr_throttled 2\nthrottled_usec 5000") == 4.0
+
+
+class TestEdgeReadings:
+    def test_a_restart_in_place_is_the_difference(self) -> None:
+        assert lt.edge_restarts_between(("a", 2), ("a", 5)) == 3
+
+    def test_a_replaced_pod_counts_even_though_its_count_went_down(self) -> None:
+        assert lt.edge_restarts_between(("a", 5), ("b", 0)) == 1
+        assert lt.edge_restarts_between(("a", 5), ("b", 2)) == 2
+
+    def test_no_running_pod_is_a_refusal_not_a_traceback(self) -> None:
+        lab = lt.Lab.__new__(lt.Lab)
+        lab.kubectl = lambda *_args, **_kw: json.dumps({"items": [{"status": {"phase": "Pending"}}]})
+        with pytest.raises(lt.LoadTestRefused, match="no running pod"):
+            lab.pod("traefik", "kube-system")
+
+
+class TestCleanup:
+    def test_the_image_goes_even_when_the_route_could_not(self) -> None:
+        calls: list[str] = []
+
+        class Lab:
+            generator = "gen"
+
+            def disarm(self) -> None:
+                raise RuntimeError("api unreachable")
+
+            def ssh(self, _node: str, command: str) -> str:
+                calls.append(command)
+                return ""
+
+        with pytest.raises(RuntimeError):
+            lt.cleanup(Lab(), "grafana/k6:x")
+        assert calls and "docker image rm" in calls[0]
