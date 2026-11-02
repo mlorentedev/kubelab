@@ -1676,9 +1676,9 @@ vikunja-audit-users: ## List Vikunja accounts, separating password signups from 
 	@$(TOOLKIT) services vikunja audit-users --env $(ENV)
 
 .PHONY: provision-postgres-tenant
-provision-postgres-tenant: ## Idempotently provision PostgreSQL tenant role and database
-	@test -n "$(filter $(ENV),staging prod)" || (echo "Usage: make provision-postgres-tenant ENV=staging|prod TENANT=vikunja" && exit 1)
-	@$(TOOLKIT) infra k8s provision-postgres-tenant --env $(ENV) --tenant $(or $(TENANT),vikunja)
+provision-postgres-tenant: ## Idempotently provision PostgreSQL tenant roles and databases (TENANT=x for one)
+	@test -n "$(filter $(ENV),staging prod)" || (echo "Usage: make provision-postgres-tenant ENV=staging|prod [TENANT=api]" && exit 1)
+	@$(TOOLKIT) infra k8s provision-postgres-tenant --env $(ENV) $(if $(TENANT),--tenant $(TENANT))
 
 .PHONY: validate-sync
 validate-sync:

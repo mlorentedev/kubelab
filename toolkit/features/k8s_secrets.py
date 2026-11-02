@@ -122,8 +122,8 @@ SECRET_DEFINITIONS: list[SecretMapping] = [
         name="postgres-secrets",
         keys={
             # Shared data-service (ADR-051). The server reads POSTGRES_PASSWORD;
-            # POSTGRES_USER/DB are non-secret literals in the manifest. The api
-            # gets INFRA_POSTGRES_PASSWORD added to api-secrets in PR-1b.
+            # POSTGRES_USER/DB are non-secret literals in the manifest. The owner
+            # password stays here: the api connects as its own tenant.
             "POSTGRES_PASSWORD": "INFRA_POSTGRES_PASSWORD",
         },
     ),
@@ -145,6 +145,9 @@ SECRET_DEFINITIONS: list[SecretMapping] = [
             # so a separate Secret would never reach the pod.
             "FORGE_GITEA_TOKEN": "APPS_SERVICES_CORE_GITEA_ISSUE_READER_TOKEN",
             "FORGE_GITHUB_PRIVATE_KEY": "APPS_SERVICES_CORE_GITHUB_APP_PRIVATE_KEY",
+            # The API's Postgres tenant (DATA-007). Optional for the same reason: without it the
+            # API omits the check and starts.
+            "POSTGRES_TENANT_PASSWORD": "APPS_PLATFORM_API_DB_PASSWORD",
         },
     ),
     SecretMapping(
