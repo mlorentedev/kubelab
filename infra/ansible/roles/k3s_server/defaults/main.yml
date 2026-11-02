@@ -25,6 +25,10 @@ k3s_etcd_snapshot_retention: 5
 
 # Traefik HelmChartConfig — ports from SSOT (config.k3s.traefik.*)
 k3s_configure_traefik: true
+# Staging's load test OOMKilled Traefik at 384Mi with 2,400-4,000 open connections,
+# so about 120 KiB each. 768Mi is about 6,000 (docs/load-test/report-2026-11-02.md).
+k3s_traefik_memory_request: 128Mi
+k3s_traefik_memory_limit: 768Mi
 k3s_traefik_http_port: 80
 k3s_traefik_https_port: 443
 
