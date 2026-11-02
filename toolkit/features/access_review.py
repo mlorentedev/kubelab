@@ -466,6 +466,7 @@ def _live_users_database(env: str) -> str:
             ],
             capture_output=True,
             text=True,
+            encoding="utf-8",
             check=False,
             timeout=KUBECTL_TIMEOUT_S,
         )
@@ -535,6 +536,7 @@ def _live_argocd_oidc_config() -> str:
             ],
             capture_output=True,
             text=True,
+            encoding="utf-8",
             check=False,
             timeout=KUBECTL_TIMEOUT_S,
         )
@@ -620,6 +622,7 @@ def argocd_rbac_disagreements(
             + [image, "sh", "-c", script],
             capture_output=True,
             text=True,
+            encoding="utf-8",
             timeout=EVALUATOR_TIMEOUT_S,
             check=False,
         )
@@ -678,6 +681,7 @@ def _live_argocd_rbac() -> tuple[str, str]:
             ],
             capture_output=True,
             text=True,
+            encoding="utf-8",
             check=False,
             timeout=KUBECTL_TIMEOUT_S,
         )

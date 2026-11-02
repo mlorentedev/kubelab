@@ -54,7 +54,7 @@ contactPoints:
               {{- coll.Dict
                     "tag"   .Vars.tag
                     "type"  (tmpl.Exec "apprise.type" .)
-                    "title" (printf "%s: %s" .Status .CommonLabels.alertname)
+                    "title" (tmpl.Exec "apprise.title" .)
                     "body"  (tmpl.Exec "apprise.body" .)
                   | data.ToJSON -}}
 
@@ -82,7 +82,7 @@ contactPoints:
               {{- coll.Dict
                     "tag"   .Vars.tag
                     "type"  (tmpl.Exec "apprise.type" .)
-                    "title" (printf "%s: %s" .Status .CommonLabels.alertname)
+                    "title" (tmpl.Exec "apprise.title" .)
                     "body"  (tmpl.Exec "apprise.body" .)
                   | data.ToJSON -}}
 

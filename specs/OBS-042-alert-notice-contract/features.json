@@ -1,0 +1,16 @@
+[
+  {
+    "id": "OBS-042-alert-notice-contract-f1",
+    "behavior": "Every notification title names its environment and state and marks a no-data or query-error firing; the body states the cause",
+    "verification": "poetry run pytest -q tests/test_alert_notice_contract.py -k 'title or environment or cause or contact_points'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "OBS-042-alert-notice-contract-f2",
+    "behavior": "Every notification body carries the rule's runbook_url, and every rule declares one",
+    "verification": "poetry run pytest -q tests/test_alert_notice_contract.py -k 'runbook'",
+    "state": "pending",
+    "evidence": ""
+  }
+]

@@ -58,6 +58,8 @@
   gather_facts: true
 
   vars:
+    # A large disk keeps the history a post-mortem needs (#2702).
+    journald_system_max_use: "{{ journald_large_disk_max_use }}"
     deploy_env: staging
 
     # ANSIBLE-037. The node is staging; the forge it authenticates to is not.
