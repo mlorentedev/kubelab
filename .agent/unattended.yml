@@ -1,0 +1,81 @@
+version: 1
+run_id: "ap-20261102-kubelab-obs"
+armed_by: manu
+armed_at: 2026-11-02T05:55:00Z
+expires_at: 2026-11-02T17:55:00Z
+objective: >-
+  Open the OBS-042 alert notice contract spec (#2929) and land its first PRs:
+  the contract plus the Grafana notice template, then the no-data split across
+  the rules (#1668, #1320) and a record of every delivered prod page (#2924);
+  then make ace2's vault mirror fail fast (#2921).
+scope:
+  write_paths:
+    - "infra/k8s/base/services/grafana-alerting/**"
+    - "infra/k8s/base/services/grafana-config/**"
+    - "infra/k8s/base/services/grafana.yaml"
+    - "infra/k8s/base/services/apprise.yaml"
+    - "infra/k8s/base/services/disk-watcher.yaml"
+    - "infra/k8s/base/services/quota-watcher.yaml"
+    - "infra/k8s/overlays/staging/grafana*"
+    - "infra/k8s/overlays/prod/grafana*"
+    - "infra/ansible/roles/agent_stack/**"
+    - "tests/**"
+    - "docs/lessons/**"
+    - "docs/runbooks/**"
+    - "docs/adr/**"
+    - "specs/OBS-042*/**"
+    - ".agent/runs/**"
+  frozen_paths:
+    - ".github/**"
+    - "harness/**"
+    - "**/AGENTS.md"
+    - "**/CLAUDE.md"
+    - ".agent/unattended.yml"
+    - "infra/config/secrets/**"
+    - "infra/config/values/**"
+    - "infra/k8s/argocd/**"
+    - "infra/k8s/base/services/r2-backup-watcher/**"
+    - "infra/ansible/roles/node_backup/**"
+    - "docs/runbooks/*offsite*"
+    - "toolkit/features/credentials.py"
+    - "toolkit/features/oidc_clients.py"
+  max_files: 16
+  max_loc: 300
+allowed_commands: [dotf, gh, git, make, poetry, kubectl, caffeinate]
+queue:
+  source: bitacora
+  filter: >-
+    In order: #2929 (dotf spec init OBS-042 with --over-wip-limit "absorbs six
+    open alert tickets: #2924, #2923, #1320, #1668, #1583, #1710"), its PRs for
+    #1668 with #1320 and #2924, then #2921. Not tonight, held or handed to the
+    backup lane: #2920, #2923. #1710 (routing by severity) and #1583 stay
+    planned in the spec, not implemented. Skip any item a peer has assigned.
+  max_items: 5
+budget:
+  max_iterations: 10
+  max_minutes_per_iteration: 60
+  max_consecutive_failures: 2
+authority:
+  merge: standing-grant
+  push: true
+  open_pr: true
+  advisor_tier: top
+# Operator authorization, given at arming (2026-11-02), for this run only:
+#  - --over-wip-limit for OBS-042 (13/10 active specs).
+#  - Merge under the standing grant, including grafana-alerting changes that
+#    reach prod through Argo CD on merge. Each such PR is validated in staging
+#    first; after its merge, read prod alert state and the next notice before
+#    the next prod-bound merge. A prod regression stops the prod chain and
+#    parks the item; no improvised repair.
+#  - Node provisioning of the agent_stack role on ace2 only
+#    (`make provision NODE=ace2 ENV=prod TAGS=<agent_stack tag>`), run twice
+#    to prove changed=0. No other node, no other role.
+# Never: .github, secrets or SOPS, release PRs, node_backup, r2-backup-watcher,
+# the offsite runbook, force push, Vikunja.
+# Peer lanes armed the same night: backup (#2917...), console (CONSOLE-004,
+# writes infra/k8s/base/**), tooling (infra/ansible/roles/**). Before each pick
+# and before each push, check their open PRs for the same files.
+# Staging slot is shared with the console run: read targetRevision first,
+# refuse if another branch holds it, return it to master when validation ends.
+# GitHub GraphQL is rate limited across parallel sessions: prefer REST, and
+# wait for the reset rather than retry.
