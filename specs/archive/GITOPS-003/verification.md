@@ -79,6 +79,15 @@ A reviewer subagent that did not implement the spec read the contract and the PR
 - Minor: AC2's "never as a broken deploy" read as "never alerts", but the rule alerts on no data. **Applied:** AC2 text.
 - Speculative: `fetch_statuses` does not paginate past 100. **Declined:** a master commit carries a handful of contexts.
 
+## Signed review, 2026-11-02 (`review.md`, PASS-WITH-GAPS)
+
+- Major, THEORETICAL: the delivery watcher's CronJob was guarded by no test. **Applied:** `tests/test_delivery_watcher_manifest.py` renders both overlays and asserts `ARGO_ENV` per environment, `GRACE_SECONDS: "600"`, `backoffLimit: 0`, `concurrencyPolicy: Forbid`, no API token, and a rule window of at least two runs. `make mutate` setting prod's `ARGO_ENV` to `staging` turned it red.
+- Minor, THEORETICAL: `deploy-verify.yml` echoes Argo's message where a line can start a workflow command. **Ticketed:** GITOPS-010 (#2942).
+- Minor, SPECULATIVE: the route probe accepts a prefix of `400 text/plain`. **Ticketed:** GITOPS-010 (#2942).
+- Minor, SPECULATIVE: `wait-status` reads the list endpoint, capped at 100. **Declined:** as in the pre-review, a master commit carries a handful of contexts.
+- Minor, REAL: a doubled comma in `proposal.md` §4. **Declined:** cosmetic, and `proposal.md` is in the reviewed contract set.
+- Question: the review base spans 864 merged commits. **Tracked:** dotfiles#1727.
+
 ## Decisions made during implementation
 
 - Product-agnostic, decided with the operator 2026-10-20: host and image from the contract snapshot, `/version.json` a platform convention; no contract schema change (IDP-042 untouched).
@@ -92,13 +101,13 @@ A reviewer subagent that did not implement the spec read the contract and the PR
 
 Before archiving, flag what (if anything) should be promoted to the vault. If all three are "no", archive in repo is the only persistence.
 
-- [x] Lesson for the repo's `docs/lessons/`? yes: lesson-609 (Synced at HEAD is `sync.revision`), lesson-611 (an `appTree` Application cannot name its Degraded resource); lesson-407 already holds the incident
-- [ ] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? <yes / no - one line of what>
-- [ ] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. <yes / no - one line>
+- [x] Lesson for the repo's `docs/lessons/`? yes: docs/lessons/gitops-delivery/lesson-609-synced-at-head-is-read-from-sync-revision-not-from-the-last-operation.md, docs/lessons/gitops-delivery/lesson-611-an-application-on-apptree-cannot-name-its-degraded-resource.md, docs/lessons/gitops-delivery/lesson-683-a-commit-that-changes-only-a-hook-starts-no-sync-so-the-hook-never-runs.md; docs/lessons/gitops-delivery/lesson-407-a-failed-auto-sync-is-not-retried-and-a-merge-is-not-a-deploy.md already holds the incident
+- [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? no: the one decision with a lifetime beyond this spec, the Argo-to-GitHub credential, is recorded in `proposal.md` (decided 2026-08-28) and is on the PAT inventory that SEC-017 replaces; the rest applies ADR-046 and ADR-063
+- [x] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. no: verifying a GitOps delivery by consequence is specific to this repo's Argo CD hub; no other project runs one
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/GITOPS-003/` -> `specs/archive/GITOPS-003/`
+- [x] `proposal.md` frontmatter set to `status: archived`
+- [x] Folder moved: `specs/GITOPS-003/` -> `specs/archive/GITOPS-003/`
 - [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
-- [ ] Promotions above executed (if any)
+- [x] Promotions above executed (if any)
