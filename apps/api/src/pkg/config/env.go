@@ -39,6 +39,7 @@ type Config struct {
 		User   string
 		Pass   string
 	}
+	Postgres Postgres
 }
 
 var config *Config
@@ -87,6 +88,8 @@ func populateConfig() (*Config, error) {
 	// Beehiiv Configuration
 	cfg.Beehiiv.APIKey = os.Getenv("BEEHIIV_API_KEY")
 	cfg.Beehiiv.PubID = os.Getenv("BEEHIIV_PUB_ID")
+
+	cfg.Postgres = loadPostgres()
 
 	// SMTP Configuration (shared infra namespace — ADR-036 / SSOT-012)
 	cfg.Email.Host = os.Getenv("INFRA_SMTP_HOST")
