@@ -31,6 +31,7 @@ SECRET_INPUTS = (
     "_agent_stack_webui_secret_key",
     "_agent_stack_hermes_api_key",
     "_agent_stack_mcp_bridge_key",
+    "_agent_stack_searxng_key",
 )
 COMPOSE_FILES = ("compose-webui.yml.j2", "compose-hermes.yml.j2")
 CONFIGURED = "agent_stack_webui_configured | bool"
@@ -65,6 +66,7 @@ def _context() -> dict:
         "_agent_stack_agent_uid": 999,
         "_agent_stack_hermes_api_key": "hermes-api-key-sentinel",
         "_agent_stack_mcp_bridge_key": "mcp-bridge-key-sentinel",
+        "_agent_stack_searxng_key": "searxng-key-sentinel",
         "agent_stack_webui_bridge": common["networking"]["nodes"]["ace2"]["webui_bridge"],
     }
 
