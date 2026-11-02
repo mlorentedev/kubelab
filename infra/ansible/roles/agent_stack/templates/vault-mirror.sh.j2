@@ -16,13 +16,19 @@ gitdir='{{ agent_stack_vault_mirror }}/git'
 tree='{{ agent_stack_vault_mirror }}/tree'
 remote='{{ agent_stack_hermes.vault_sync.remote }}'
 branch='{{ agent_stack_hermes.vault_sync.branch }}'
+# AI-030 (#2921): the fetch has its own bound, well under the unit's, and a
+# remote this run cannot reach is quiet while the tree is younger than
+# `stale_after`. `stamp` holds the epoch of the last successful fetch.
+fetch_timeout='{{ agent_stack_vault_mirror_fetch_timeout }}'
+stale_after='{{ agent_stack_vault_mirror_stale_after }}'
+stamp='{{ agent_stack_vault_mirror }}/last-fetch'
 
 export GIT_TERMINAL_PROMPT=0
 
 # No hooks run and no reflog keeps a replaced tip alive; the token comes from
 # the credential systemd hands this run, never from a URL or the repository.
 mgit() {
-  git --git-dir="$gitdir" --work-tree="$tree" \
+  ${MGIT_TIMEOUT:+timeout "$MGIT_TIMEOUT"} git --git-dir="$gitdir" --work-tree="$tree" \
       -c credential.helper= -c 'credential.helper={{ agent_stack_vault_libexec }}/vault-credential' \
       -c core.hooksPath=/dev/null -c core.logAllRefUpdates=false -c gc.pruneExpire=now "$@"
 }
@@ -30,7 +36,36 @@ mgit() {
 [ -d "$gitdir" ] || git init --quiet --bare "$gitdir"
 mkdir -p "$tree"
 
-mgit fetch --quiet --depth 1 --no-tags "$remote" "$branch"
+# The exit status the unit treats as success (`SuccessExitStatus=75`): nothing
+# fetched, nothing wrong with the mirror, and no notice for it.
+unreachable() {
+  if [ -r "$stamp" ] && age=$(( $(date +%s) - $(cat "$stamp") )) && [ "$age" -lt "$stale_after" ]; then
+    echo "remote unreachable, kept the tree fetched $((age / 60))m ago: $1"
+    exit 75
+  fi
+  echo "remote unreachable and the tree is stale (last fetch: $(cat "$stamp" 2>/dev/null || echo never)): $1" >&2
+  exit 1
+}
+
+MGIT_TIMEOUT="$fetch_timeout"
+set +e
+err=$(mgit fetch --quiet --depth 1 --no-tags "$remote" "$branch" 2>&1)
+rc=$?
+set -e
+MGIT_TIMEOUT=
+if [ "$rc" -ne 0 ]; then
+  # Only a failure to reach the remote is quiet. Anything else, a refused token
+  # or a broken repository, is the mirror's own fault and pages as before.
+  case "$err" in
+    *"Could not resolve host"* | *"Failed to connect"* | *"Connection refused"* | \
+    *"Connection timed out"* | *"Network is unreachable"* | *"Operation timed out"*)
+      unreachable "$(printf '%s\n' "$err" | head -n 1)" ;;
+  esac
+  [ "$rc" -ne 124 ] || unreachable "no answer from the remote within ${fetch_timeout}s"
+  printf '%s\n' "$err" >&2
+  exit "$rc"
+fi
 mgit checkout --quiet --force --detach FETCH_HEAD
 mgit clean --quiet -ffdx
 mgit gc --auto --quiet
+date +%s > "$stamp"

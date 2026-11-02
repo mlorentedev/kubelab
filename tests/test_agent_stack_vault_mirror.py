@@ -10,7 +10,9 @@ script runs here against a real bare repository standing in for the remote.
 from __future__ import annotations
 
 import configparser
+import socket
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -195,3 +197,102 @@ def test_the_run_is_proved_by_the_commit_it_checked_out() -> None:
     # A dry run reads the live mirror, and a node the run never reached does not fail it.
     assert proof["check_mode"] is False and "when" not in proof
     assert proof["ignore_errors"] == "{{ ansible_check_mode }}"
+
+
+# --------------------------------------------------------------------------- an unreachable remote (AI-030, #2921)
+#
+# The mirror timed out 21 times in ten days on a remote it could not reach, each
+# run waiting out the unit's ten minutes and each one a page and a recovery. An
+# unreachable remote is now bounded, named, and quiet while the tree is fresh.
+
+#: A port nothing listens on: the connection is refused at once.
+REFUSED = "http://127.0.0.1:9/knowledge.git"
+
+
+def _script_for(tmp_path: Path, root: Path, remote: str, **overrides: object) -> Path:
+    script = tmp_path / f"vault-mirror-{abs(hash(remote))}"
+    script.write_text(
+        _render(
+            "vault-mirror.sh.j2",
+            agent_stack_vault_mirror=str(root),
+            agent_stack_hermes={**HERMES, "vault_sync": {**SYNC, "remote": remote}},
+            **overrides,
+        ),
+        encoding="utf-8",
+    )
+    script.chmod(0o755)
+    return script
+
+
+def _age_stamp(root: Path, seconds: int) -> None:
+    stamp = root / "last-fetch"
+    stamp.write_text(f"{int(time.time()) - seconds}\n", encoding="utf-8")
+
+
+def test_a_successful_run_records_when_it_fetched(mirror) -> None:
+    _, root, script = mirror
+    before = int(time.time())
+    assert _run(script).returncode == 0
+    assert int((root / "last-fetch").read_text(encoding="utf-8")) >= before
+
+
+def test_an_unreachable_remote_while_the_tree_is_fresh_is_a_quiet_skip(mirror, tmp_path: Path) -> None:
+    _, root, script = mirror
+    _run(script)
+    result = _run(_script_for(tmp_path, root, REFUSED))
+    assert result.returncode == 75, result.stderr
+    assert "unreachable" in result.stdout
+    assert (root / "tree/10_projects/kubelab/roadmap.md").read_text(encoding="utf-8") == "seed\n"
+
+
+def test_an_unreachable_remote_fails_once_the_tree_is_stale_and_names_the_cause(mirror, tmp_path: Path) -> None:
+    _, root, script = mirror
+    _run(script)
+    _age_stamp(root, _defaults()["agent_stack_vault_mirror_stale_after"] + 60)
+    result = _run(_script_for(tmp_path, root, REFUSED))
+    assert result.returncode == 1
+    assert "unreachable" in result.stderr and "stale" in result.stderr
+    assert "127.0.0.1" in result.stderr, "the notice carries git's own reason"
+
+
+def test_an_unreachable_remote_with_no_record_of_a_fetch_fails(tmp_path: Path) -> None:
+    result = _run(_script_for(tmp_path, tmp_path / "mirror", REFUSED))
+    assert result.returncode == 1
+
+
+def test_a_remote_that_never_answers_is_cut_off_at_the_fetch_timeout(mirror, tmp_path: Path) -> None:
+    _, root, script = mirror
+    _run(script)
+    with socket.socket() as silent:
+        silent.bind(("127.0.0.1", 0))
+        silent.listen(1)
+        port = silent.getsockname()[1]
+        started = time.monotonic()
+        result = _run(_script_for(tmp_path, root, f"http://127.0.0.1:{port}/k.git", agent_stack_vault_mirror_fetch_timeout=2))
+        elapsed = time.monotonic() - started
+    assert result.returncode == 75, result.stderr
+    assert elapsed < 15
+    assert "no answer" in result.stdout
+
+
+def test_a_failure_that_is_not_the_network_still_pages(mirror, tmp_path: Path) -> None:
+    _, root, script = mirror
+    _run(script)
+    (tmp_path / "origin.git").rename(tmp_path / "moved.git")
+    result = _run(script)
+    assert result.returncode not in (0, 75), "a missing repository is not an unreachable network"
+
+
+def test_the_fetch_is_bounded_well_under_the_unit_timeout() -> None:
+    d = _defaults()
+    service = _unit("vault-mirror.service.j2")["Service"]
+    assert service["SuccessExitStatus"] == "75"
+    budget = int(service["TimeoutStartSec"].removesuffix("min")) * 60
+    assert d["agent_stack_vault_mirror_fetch_timeout"] * 2 <= budget
+
+
+def test_the_quiet_window_is_bounded_by_the_sync_interval() -> None:
+    """Stale enough to matter, short enough that a dead remote is heard about the same day."""
+    stale = _defaults()["agent_stack_vault_mirror_stale_after"]
+    interval = int(SYNC["interval"].removesuffix("min")) * 60
+    assert 4 * interval <= stale <= 12 * 3600
