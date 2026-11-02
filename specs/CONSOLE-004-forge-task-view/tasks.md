@@ -77,7 +77,8 @@ created: "2026-10-21"
 
 - [ ] [P] [AC7] Declare the read model in the Postgres backup coverage and rehearse one restore
 - [ ] [AC7] Test that the read model rebuilds from the forges alone
-- [ ] [AC4] [AC7] Create the GitHub App for the read adapter, store its credential in SOPS with a catalog entry and a recorded expiry
+- [x] ✓ 2026-11-01 [AC4] [AC7] Create the GitHub App for the read adapter, store its credential in SOPS with a catalog entry (App `kubelab-console`, App ID 5573076, installed on `mlorentedev/kubelab` only as installation 177667607; Issues, Pull requests and Metadata read-only, webhooks off; private key at `apps.services.core.github_app.private_key` in `common.enc.yaml`; GitHub App keys carry no expiry, so the catalog entry is `Expiry.NEVER`)
+- [ ] [AC4] Deliver the App ID, installation ID and private key to the API (the two IDs are not secrets and go in `common.yaml`; the key goes in a K8s Secret via `k8s_secrets.py`, never a ConfigMap), then mint an installation token from them and read once to measure the grant
 - [ ] [AC7] Runbook: rebuild, restore, rotate tokens; token expiry dates in the SOPS catalog
 
 ### 6. End to end
