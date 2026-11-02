@@ -56,8 +56,22 @@ def test_every_resolver_variable_reads_the_ssot() -> None:
         for name, value in (yaml.safe_load(path.read_text(encoding="utf-8")) or {}).items()
         if name.endswith(("dns_servers", "acme_dns_resolvers"))
     }
+    tailnet_first = {
+        "agent_stack/defaults/main.yml: agent_stack_docker_dns_servers",
+        "rpi3_services/defaults/main.yml: docker_dns_servers",
+    }
     assert len(variables) == 7, variables
-    wrong = {name: value for name, value in variables.items() if "config.networking." not in str(value)}
+    assert tailnet_first <= variables.keys(), variables
+    wrong = {
+        name: value
+        for name, value in variables.items()
+        if (
+            "config.networking.tailnet_first_resolvers"
+            if name in tailnet_first
+            else "config.networking.public_resolvers"
+        )
+        not in str(value)
+    }
     assert not wrong
 
 
