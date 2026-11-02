@@ -8,7 +8,10 @@ from __future__ import annotations
 
 import pathlib
 
+import jinja2
 import yaml
+
+from tests.ansible_jinja import ansible_env
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
 ROLE = REPO / "infra/ansible/roles/k3s_server"
@@ -19,10 +22,13 @@ def _mebibytes(value: str) -> int:
     return int(value[:-2])
 
 
-def test_the_template_declares_request_and_limit() -> None:
-    template = (ROLE / "templates/traefik-helmconfig.yaml.j2").read_text(encoding="utf-8")
-    assert "memory: {{ k3s_traefik_memory_request }}" in template
-    assert "memory: {{ k3s_traefik_memory_limit }}" in template
+def test_the_rendered_chart_values_declare_request_and_limit() -> None:
+    defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text(encoding="utf-8"))
+    env = ansible_env(str(ROLE / "templates"), undefined=jinja2.StrictUndefined, keep_trailing_newline=True)
+    rendered = env.get_template("traefik-helmconfig.yaml.j2").render(**defaults, ansible_managed="Ansible managed")
+    values = yaml.safe_load(yaml.safe_load(rendered)["spec"]["valuesContent"])
+    assert values["resources"]["requests"]["memory"] == defaults["k3s_traefik_memory_request"]
+    assert values["resources"]["limits"]["memory"] == defaults["k3s_traefik_memory_limit"]
 
 
 def test_the_limit_is_above_the_namespace_default_that_killed_it() -> None:
