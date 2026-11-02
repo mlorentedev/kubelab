@@ -40,13 +40,20 @@ This runs:
 - **ssh_hardening** — hardened sshd_config
 - **dns_resilience** — /etc/hosts entry for vpn.kubelab.live (public IP)
 - **rpi3_services** — Docker Compose with Uptime Kuma + Glances
-- **monitoring bootstrap** — creates admin user from SOPS + imports monitors from seed
+- **monitoring bootstrap** — creates the admin user from SOPS; no monitors yet
 
 ### 3. Verify
 ```bash
 make monitoring-status     # Check RPi3 + containers + HTTP
-make monitoring-export     # Re-export to verify monitors match seed
+make monitoring-apply      # Create the monitors from the seed, one by one
 ```
+
+Do not run `make monitoring-export` until the notifications are back: on an instance with none it overwrites the tracked `notifications.json` with an empty list, the only reference for recreating them.
+
+### 3b. Restore notifications
+1. Recreate the channel in the Kuma UI from `infra/config/uptime-kuma/notifications.json` and mark it as the default. Its Slack webhook is not in that file.
+2. Run `make monitoring-apply` again. It attaches only a default channel, and only to monitors outside `muted_notification_tags`, so a channel created after the monitors reaches none of them until this runs.
+3. Send a test notification from the channel's edit dialog and confirm it arrives.
 
 ### 4. Validate dashboard
 - Access `https://status.kubelab.live` (VPS Traefik → RPi3)
@@ -86,4 +93,4 @@ make monitoring-export     # Re-export to verify monitors match seed
 - Docker volume `uptime-kuma_uptime_kuma_data` preserves data across compose recreates
 - Bootstrap is idempotent — safe to re-run on existing instance
 - Monitors are created one by one with `make monitoring-apply`; the seed is never uploaded as a backup, because that call times out against Kuma v2
-- **No command restores notifications** (#1042): `infra/config/uptime-kuma/notifications.json` is a reference. On a rebuild, recreate the channels in the Kuma UI from it before relying on any alert
+- **No command restores notifications** (#1042): `infra/config/uptime-kuma/notifications.json` is a reference. Step 3b is the procedure
