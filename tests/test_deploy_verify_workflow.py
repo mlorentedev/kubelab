@@ -22,7 +22,7 @@ from toolkit.features import delivery_health
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 WORKFLOW = REPO_ROOT / ".github/workflows/deploy-verify.yml"
 RUNBOOK = REPO_ROOT / "docs/runbooks/gitops-delivery-promotion.md"
-PROPOSAL = REPO_ROOT / "specs/GITOPS-003/proposal.md"
+PROPOSAL = REPO_ROOT / "specs/archive/GITOPS-003/proposal.md"
 
 
 @pytest.fixture(scope="module")
