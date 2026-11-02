@@ -60,3 +60,6 @@ service_domains:
   vpn: "{{ common.apps.services.core.headscale.domain }}"
   status: "{{ common.apps.services.observability.uptime_kuma.domain }}"
   jetson: "jetson.{{ common.global.base_domain }}"
+
+# Where the DNS gateway forwards what its zones do not answer.
+coredns_forwarders: "{{ common.networking.public_resolvers | join(' ') }}"
