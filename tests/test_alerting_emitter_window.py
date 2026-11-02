@@ -84,7 +84,7 @@ def _period_minutes(schedule: str) -> float:
     if step := re.fullmatch(r"\*/(\d+)", hour):
         return float(step.group(1)) * 60
     hours = sorted(int(h) for h in hour.split(","))
-    gaps = [b - a for a, b in zip(hours, hours[1:])] + [hours[0] + 24 - hours[-1]]
+    gaps = [b - a for a, b in zip(hours, hours[1:], strict=False)] + [hours[0] + 24 - hours[-1]]
     return float(max(gaps)) * 60
 
 
