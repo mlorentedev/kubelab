@@ -16,8 +16,8 @@ created: "2026-11-02"
 - [x] Branch created from master: `feature/vpn-acl-015-ssh-bootstrap` ✓ 2026-11-02
 - [x] `proposal.md` is complete and acceptance criteria are testable ✓ 2026-11-02
 - [x] [AC4] Live drift read and recorded in `verification.md` before any change ✓ 2026-11-02
-- [ ] [AC4] Read `sshd -T -C user=manu,host=x,addr=1.2.3.4` on the VPS too, to confirm
-  the forward is `deployer`'s alone and not a global default
+- [x] [AC4] Read `sshd -T -C user=manu,...` on the VPS too: same answer, so the forward
+  is a global default ✓ 2026-11-02
 
 ## Implementation
 
@@ -27,19 +27,21 @@ declaration is `networking.vps.ssh_bootstrap: {user: hs-bootstrap, permit_open:
 "vpn.kubelab.live:443"}` in `common.yaml`, handed to the VPS alone as host vars by
 `generator_ansible.py`, the same path as `lan_jump`.
 
-- [ ] [P] [AC1] In `tests/test_ssh_hardening_bootstrap_forward.py`, write
+- [x] [P] [AC1] In `tests/test_ssh_hardening_bootstrap_forward.py`, write
   `test_the_vps_renders_the_golden_file_plus_one_bootstrap_block`: render
   `sshd_config.j2` with `ssh_bootstrap_forward={user, permit_open}`, expect the
   golden file plus a trailing `Match User hs-bootstrap` block with
   `AllowTcpForwarding local`, `PermitOpen vpn.kubelab.live:443`, `PermitTTY no`,
   `X11Forwarding no`, `AllowAgentForwarding no`, `PermitTunnel no`,
-  `ForceCommand /usr/sbin/nologin`. Run
+  `ForceCommand /usr/sbin/nologin` (plus `AllowStreamLocalForwarding no`, which the
+  global section leaves at OpenSSH's `yes`). Run
   `poetry run pytest -o addopts= tests/test_ssh_hardening_bootstrap_forward.py -q`.
   Expected: FAIL (block absent).
-- [ ] [AC1] Add the block to `infra/ansible/roles/ssh_hardening/templates/sshd_config.j2`
+- [x] [AC1] Add the block to `infra/ansible/roles/ssh_hardening/templates/sshd_config.j2`
   behind `ssh_bootstrap_forward` (default `{}` in `defaults/main.yml`). Rerun.
-  Expected: PASS, and `tests/test_ssh_hardening_lan_jump.py` still PASS.
-- [ ] [AC1] Test `test_both_blocks_render_each_closed_and_the_global_default_stays_no`:
+  Expected: PASS, and `tests/test_ssh_hardening_lan_jump.py` still PASS. ✓ 2026-11-02,
+  15 passed; the two `sshd -T` tests skip on Windows and run in CI.
+- [x] [AC1] Test `test_both_blocks_render_each_closed_and_the_global_default_stays_no`:
   with jump targets and the bootstrap forward together, the global
   `AllowTcpForwarding no` is unchanged and each Match block carries its own complete
   set. Then a test that `sshd -t` accepts the render (skip where no `sshd`). Expected:
@@ -65,7 +67,7 @@ declaration is `networking.vps.ssh_bootstrap: {user: hs-bootstrap, permit_open:
   `SECRET_CATALOG` (`toolkit/features/secrets_manager.py`, `envs=("prod",)`, kind
   EXTERNAL, neutral keys), with a test that refuses a key line carrying options or
   more than one key. Expected: FAIL, then PASS.
-- [ ] [AC5] Test that `ssh_bootstrap_forward.transitional_users` (`[deployer]` in
+- [x] [AC5] Test that `ssh_bootstrap_forward.transitional_users` (`[deployer]` in
   `common.yaml` for now) renders a Match block per user with the same single
   `PermitOpen`, and that an empty list renders none. Expected: FAIL, then PASS. This
   narrows `deployer` from `permitopen any` to the control plane while clients move;
@@ -80,6 +82,9 @@ declaration is `networking.vps.ssh_bootstrap: {user: hs-bootstrap, permit_open:
 - [ ] [AC3] Write each enrolled machine's public key to SOPS, then
   `make deploy TARGET=vps ENV=prod`: creates `hs-bootstrap` and its keys. No sshd
   change yet.
+- [ ] [AC3] `make provision NODE=vps ENV=prod TAGS=ssh` in check mode with `--diff`
+  first: the live file is not the template's, so record every difference and settle
+  each before applying.
 - [ ] [AC3] `make provision NODE=vps ENV=prod TAGS=ssh`: renders the `hs-bootstrap`
   block and narrows `deployer` to `vpn.kubelab.live:443`, so existing clients keep
   working. Read `sshd -T` for both users.

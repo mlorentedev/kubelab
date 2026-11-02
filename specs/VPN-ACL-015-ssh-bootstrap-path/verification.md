@@ -12,8 +12,7 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 - [ ] AC1 -> test `<name>`
 - [ ] AC2 -> test `<name>`
 - [ ] AC3 -> live check `<date>`
-- [ ] AC4 -> drift read on 2026-11-02, before any change (below). Still to read: the
-  same command for a non-`deployer` user, to confirm the forward is per-user.
+- [x] AC4 -> drift read on 2026-11-02, before any change (below).
 - [ ] AC5 -> live check `<date>`
 
 ## Drift before the change (AC4)
@@ -24,12 +23,18 @@ Read by the operator on the VPS on 2026-11-02:
 $ sudo sshd -T -C user=deployer,host=x,addr=1.2.3.4 | grep -iE 'allowtcpforwarding|permitopen'
 allowtcpforwarding yes
 permitopen any
+$ sudo sshd -T -C user=manu,host=x,addr=1.2.3.4 | grep -iE 'allowtcpforwarding|permitopen'
+allowtcpforwarding yes
+permitopen any
 ```
 
-The template (`infra/ansible/roles/ssh_hardening/templates/sshd_config.j2`) renders
+Both users get the same answer, so the forward is the VPS's global setting (OpenSSH's
+default), not a per-user exception: the live `sshd_config` is not the one this
+template renders, which matches `deploy-harden-nodes.yml` noting the VPS was
+"already hardened by Hetzner". The template (`infra/ansible/roles/ssh_hardening/templates/sshd_config.j2`) renders
 `AllowTcpForwarding no` for every user on the VPS and no `PermitOpen`. So the live
-host allows `deployer`, the Ansible account with sudo, to forward to any
-destination, and the next provision of the VPS's `ssh` tags would remove the
+host allows every account, `deployer` (Ansible, with sudo) included, to forward to
+any destination, and the next provision of the VPS's `ssh` tags would remove the
 bootstrap path the filtered clients use.
 
 ## Test status

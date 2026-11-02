@@ -20,11 +20,12 @@ sinkholes or TLS-inspects `vpn.kubelab.live` reach Headscale (accepted live on
 2026-10-20 in ts-bridge CFG-005), and hosts enrolling through ts-bridge's host mode
 (mlorentedev/ts-bridge HOST-008) will depend on the same path. It needs an sshd TCP
 forward on the VPS. The `ssh_hardening` template renders `AllowTcpForwarding no` for
-every user there, while the live VPS lets `deployer` forward anywhere
-(`allowtcpforwarding yes`, `permitopen any`, read by the operator on 2026-11-02), so
+every user there, while the live VPS lets every account forward anywhere
+(`allowtcpforwarding yes`, `permitopen any` for `deployer` and `manu`, read by the
+operator on 2026-11-02), so
 the next `make provision NODE=vps` silently removes the only control path those
-clients have, and until then the Ansible account with sudo is also an open relay for
-any key it holds.
+clients have, and until then every account on the VPS, the Ansible one with sudo
+included, is an open relay for any key it holds.
 
 ## What
 
@@ -65,6 +66,10 @@ any key it holds.
   `vpn.kubelab.live:443` (a DERP or STUN endpoint). AC3 proves the path end to end
   from a filtered network; a refused channel shows in the VPS's auth log as
   `refused permitopen`.
+- [OPEN, before rollout] The live `sshd_config` is not the template's (the forward is
+  a global default, not a `deployer` exception), so the first `ssh` provision of the
+  VPS may change more than forwarding. Run it with `--check --diff` first and settle
+  every other difference before applying.
 - [ACCEPTED] `PermitOpen` matches the requested host string, not the resolved
   address: a client that asks for the IP is refused. ts-bridge's SOCKS dialer sends
   the name; AC3 is the proof.
