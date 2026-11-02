@@ -1,0 +1,108 @@
+---
+# The role owns the node's whole netplan. netplan merges `nameservers.addresses`
+# across every file, so a file left by the installer adds its servers to the ones
+# declared here without either file saying so (#2909, lesson-682).
+#
+# The only resolver is the LAN gateway, the same one DHCP hands every LAN client
+# (ADR-075). A public second entry is no fallback: the default route goes through
+# that gateway, and if only Pi-hole is down resolved moves to the public server and
+# stays there, which answers prod names differently (lesson-559, lesson-682).
+#
+# Applying is inline, not a handler: what follows depends on it, and a lost handler
+# would leave a run reporting changed=0 on a node that never applied (lesson-620).
+- name: Find the netplan files on the node
+  find:
+    paths: /etc/netplan
+    patterns: "*.yaml,*.yml"
+  register: _netplan_files
+  check_mode: false
+
+- name: Read the resolvers the link uses
+  command: resolvectl dns {{ netplan_interface }}
+  register: _netplan_live_dns
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Decide whether the netplan differs from what the role declares
+  copy:
+    content: "{{ lookup('template', 'netplan.yaml.j2') }}"
+    dest: "{{ base_system_netplan_path }}"
+    mode: "0600"
+  check_mode: true
+  register: _netplan_declared
+
+- name: Work out what has to change
+  set_fact:
+    _netplan_foreign: "{{ _netplan_files.files | map(attribute='path') | reject('eq', base_system_netplan_path) | list }}"
+    _netplan_live_servers: "{{ _netplan_live_dns.stdout.split(':', 1)[-1].split() }}"
+
+- name: Apply the netplan behind a timed revert
+  when:
+    - not ansible_check_mode
+    - _netplan_declared is changed or _netplan_foreign | length > 0 or _netplan_live_servers != [netplan_gateway]
+  block:
+    - name: Install the revert script
+      copy:
+        src: netplan-revert.sh
+        dest: "{{ base_system_netplan_revert_path }}"
+        mode: "0755"
+
+    - name: Back up the current netplan
+      command: "{{ base_system_netplan_revert_path }} backup"
+      changed_when: true
+
+    - name: Arm the revert, in case the node stops answering
+      command: >-
+        systemd-run --unit={{ base_system_netplan_revert_unit }}
+        --on-active={{ base_system_netplan_revert_after }}
+        {{ base_system_netplan_revert_path }} restore
+      changed_when: true
+
+    - name: Write the declared netplan
+      copy:
+        content: "{{ lookup('template', 'netplan.yaml.j2') }}"
+        dest: "{{ base_system_netplan_path }}"
+        mode: "0600"
+
+    - name: Remove the netplan files the role does not own
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop: "{{ _netplan_foreign }}"
+
+    - name: Check the netplan before applying it
+      command: netplan generate
+      changed_when: false
+
+    # Detached: the apply can drop the session it runs in.
+    - name: Apply the netplan
+      command: netplan apply
+      async: 60
+      poll: 0
+      changed_when: true
+
+    - name: Wait for the node after the apply
+      wait_for_connection:
+        delay: 5
+        timeout: 60
+
+    - name: Read the resolvers the link uses after the apply
+      command: resolvectl dns {{ netplan_interface }}
+      register: _netplan_applied_dns
+      changed_when: false
+      retries: 6
+      delay: 5
+      until: _netplan_applied_dns.stdout.split(':', 1)[-1].split() == [netplan_gateway]
+
+    - name: Prove a name resolves over the new resolvers
+      command: getent hosts {{ base_system_netplan_probe_host }}
+      changed_when: false
+      retries: 6
+      delay: 5
+      register: _netplan_probe
+      until: _netplan_probe.rc == 0
+
+    - name: Disarm the revert
+      command: systemctl stop {{ base_system_netplan_revert_unit }}.timer
+      changed_when: true
