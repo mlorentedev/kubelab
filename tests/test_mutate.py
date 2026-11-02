@@ -364,13 +364,34 @@ def _recipe(*variables: str) -> str:
     return subprocess.run(args, capture_output=True, text=True, check=True, env=env).stdout
 
 
-def test_an_empty_replacement_reaches_the_command_as_a_deletion() -> None:
+def test_an_empty_replacement_reaches_the_command_as_a_deletion(tmp_path: Path) -> None:
     """`TO=` deletes FROM (#2839). click reads an empty envvar as unset, so make has to pass it as an argument."""
     assert '--to "$TO"' in _recipe("TO=")
     assert '--to "$TO"' in _recipe("TO=x")
     assert "--to" not in _recipe()
     # A TO set in a makefile never reaches the recipe's shell, so `--to "$TO"` would be a deletion.
-    assert "--to" not in _recipe("--eval=TO := x")
+    # Through a second makefile, not --eval: the make macOS ships (3.81) has no such option.
+    makefile = tmp_path / "to.mk"
+    makefile.write_text("TO := x\n", encoding="utf-8")
+    assert "--to" not in _recipe("-f", str(makefile), "-f", "Makefile")
+
+
+def _exported(*variables: str) -> str:
+    """The FROM and TO a recipe of `make mutate` would hand the toolkit, read through make itself."""
+    outer = {"FROM", "TO", "MAKEFLAGS", "MFLAGS", "MAKELEVEL", "MAKEOVERRIDES"}
+    env = {k: v for k, v in os.environ.items() if k not in outer}
+    repo = Path(__file__).resolve().parent.parent
+    # The recipe's command, replaced by one that reports what its shell received.
+    show = """TOOLKIT=printf '%s\\n%s\\n' "$$FROM" "$$TO"; true"""
+    args = ["make", "-s", "-C", str(repo), show, "mutate", "FILE=f.py", "TEST=t.py", *variables]
+    return subprocess.run(args, capture_output=True, text=True, check=True, env=env, encoding="utf-8").stdout
+
+
+def test_a_dollar_reaches_the_toolkit_as_typed() -> None:
+    """make would expand FROM and TO: `$1` and a trailing `$` vanish, and FROM then matches nothing (#2847)."""
+    raw = r"rewrite ^/errors/(\d+)\.html$ /errors/$1.json last;"
+    assert _exported(f"FROM={raw}", "TO=c$2$") == f"{raw}\nc$2$\n"
+    assert _exported("FROM=a$1b", "TO=") == "a$1b\n\n"
 
 
 def test_an_empty_envvar_is_no_replacement_but_an_empty_argument_is(
