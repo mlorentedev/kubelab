@@ -79,6 +79,15 @@ A reviewer subagent that did not implement the spec read the contract and the PR
 - Minor: AC2's "never as a broken deploy" read as "never alerts", but the rule alerts on no data. **Applied:** AC2 text.
 - Speculative: `fetch_statuses` does not paginate past 100. **Declined:** a master commit carries a handful of contexts.
 
+## Signed review, 2026-11-02 (`review.md`, PASS-WITH-GAPS)
+
+- Major, THEORETICAL: the delivery watcher's CronJob was guarded by no test. **Applied:** `tests/test_delivery_watcher_manifest.py` renders both overlays and asserts `ARGO_ENV` per environment, `GRACE_SECONDS: "600"`, `backoffLimit: 0`, `concurrencyPolicy: Forbid`, no API token, and a rule window of at least two runs. `make mutate` setting prod's `ARGO_ENV` to `staging` turned it red.
+- Minor, THEORETICAL: `deploy-verify.yml` echoes Argo's message where a line can start a workflow command. **Ticketed:** GITOPS-010 (#2942).
+- Minor, SPECULATIVE: the route probe accepts a prefix of `400 text/plain`. **Ticketed:** GITOPS-010 (#2942).
+- Minor, SPECULATIVE: `wait-status` reads the list endpoint, capped at 100. **Declined:** as in the pre-review, a master commit carries a handful of contexts.
+- Minor, REAL: a doubled comma in `proposal.md` §4. **Declined:** cosmetic, and `proposal.md` is in the reviewed contract set.
+- Question: the review base spans 864 merged commits. **Tracked:** dotfiles#1727.
+
 ## Decisions made during implementation
 
 - Product-agnostic, decided with the operator 2026-10-20: host and image from the contract snapshot, `/version.json` a platform convention; no contract schema change (IDP-042 untouched).
