@@ -151,6 +151,14 @@ class TestEachConditionRefusesAlone:
         api = MergeApi(mergeable(), heads=[HEAD, HEAD, HEAD, "d" * 40])
         assert run(api, decl, products).action == SKIP
 
+    def test_a_verdict_about_another_sha_is_refused_before_contexts_are_read(self, decl, products) -> None:
+        """The judge read head d; evaluate() then judged HEAD. That verdict says nothing about d.
+
+        Defence in depth: the final re-read would also catch it, later and under another reason."""
+        api = MergeApi(mergeable(), heads=["d" * 40, HEAD, HEAD])
+        decision = run(api, decl, products)
+        assert decision.action == SKIP and decision.reason.startswith("mechanical:"), decision.reason
+
     def test_a_draft_is_never_touched(self, decl, products) -> None:
         assert run(MergeApi(mergeable(), draft=True), decl, products).action == SKIP
 
