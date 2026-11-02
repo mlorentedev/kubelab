@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"log"
 	"net/http"
 )
 
@@ -61,7 +62,9 @@ func (rc *Receiver) Handle(ctx context.Context, forgeName string, header http.He
 	}
 	stored := Event{Forge: forgeName, DeliveryID: delivery, Type: event, Payload: payload}
 	if err := rc.Store.StoreEvent(ctx, stored); err != nil {
-		// A 5xx makes the delivery show as failed, so it can be redelivered.
+		// A 5xx makes the delivery show as failed, so it can be redelivered. The log
+		// tells a missing table from a passing outage; the forge sees neither.
+		log.Printf("forge webhook: store %s delivery %s: %v", forgeName, delivery, err)
 		return http.StatusServiceUnavailable
 	}
 	return http.StatusAccepted

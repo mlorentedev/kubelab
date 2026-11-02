@@ -75,6 +75,11 @@ func TestReceiver(t *testing.T) {
 			if len(st.events) != c.stored {
 				t.Fatalf("stored %d, want %d", len(st.events), c.stored)
 			}
+			for _, e := range st.events {
+				if e.Forge != c.forge || e.DeliveryID == "" || e.Type != "issues" || string(e.Payload) != c.body {
+					t.Fatalf("stored %+v", e)
+				}
+			}
 		})
 	}
 }
