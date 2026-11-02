@@ -245,7 +245,10 @@ class Lab:
 
     def edge_state(self) -> tuple[str, int]:
         """The pod's identity with its count: a replaced pod starts counting from zero again."""
-        pod = self.pod(EDGE_WORKLOAD, EDGE_NAMESPACE)
+        try:
+            pod = self.pod(EDGE_WORKLOAD, EDGE_NAMESPACE)
+        except LoadTestRefused:
+            return "", 0  # an edge down right now is a restart to record, not a reason to lose the ramps
         return pod["metadata"]["uid"], sum(c["restartCount"] for c in pod["status"]["containerStatuses"])
 
     def edge_ready(self) -> bool:

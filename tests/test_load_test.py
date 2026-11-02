@@ -232,6 +232,11 @@ class TestEdgeReadings:
         with pytest.raises(lt.LoadTestRefused, match="no running pod"):
             lab.pod("traefik", "kube-system")
 
+    def test_an_edge_down_at_the_end_of_a_step_is_recorded_not_raised(self) -> None:
+        lab = lt.Lab.__new__(lt.Lab)
+        lab.kubectl = lambda *_args, **_kw: json.dumps({"items": []})
+        assert lt.edge_restarts_between(("a", 5), lab.edge_state()) == 1
+
 
 class TestCleanup:
     def test_the_image_goes_even_when_the_route_could_not(self) -> None:
