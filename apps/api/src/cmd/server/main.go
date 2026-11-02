@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"os"
 
 	"github.com/gin-gonic/gin"
@@ -12,7 +13,7 @@ import (
 func main() {
 	logger := logger.NewLogger()
 
-	_, err := config.GetConfig()
+	conf, err := config.GetConfig()
 	if err != nil {
 		logger.Fatal().Err(err).Msg("Error loading configuration")
 	}
@@ -28,6 +29,8 @@ func main() {
 	r.Use(api.CorsMiddleware())
 
 	api.SetupRoutes(r)
+
+	api.StartForgeReconcile(context.Background(), conf)
 
 	port := os.Getenv("PORT")
 	if port == "" {

@@ -542,6 +542,9 @@ infra:
     github:
       app_id: 5573076
       installation_id: 177667607
+    # What the view reads, as `forge:owner/repo` separated by commas. Read by the API as
+    # INFRA_FORGE_SOURCES; a source with no credential is reported unreachable, never empty.
+    sources: "github:mlorentedev/kubelab"
 resources:
   default_memory_limit: 512m
   default_memory_reservation: 256m
