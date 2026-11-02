@@ -10,6 +10,8 @@ owner: manu
 
 > **Status:** Accepted
 > **Date:** 2026-03-27
+
+> **Amended 2026-11-01 (SEC-022, #1852):** the CI age recipient is retired. No workflow read `SOPS_AGE_KEY`, while the key could decrypt every secret in a public repository, so CI validates what it can without decrypting and warns, and the 3/3 validation below no longer holds. Removing a recipient revokes nothing already readable: the key still opens every earlier commit of these files, so any surviving copy has to be destroyed, or the values rotated. The steps below are the historical record, not a procedure.
 > **Supersedes:** None
 > **Related:** ADR-020 (IaC Lifecycle), ADR-014 (Secrets Management), ADR-023 (Hub-Spoke GitOps)
 

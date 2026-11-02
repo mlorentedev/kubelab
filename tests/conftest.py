@@ -283,7 +283,7 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     deselected out of the count. The alternative — handing a test job the key
     that decrypts every production secret in a public repo — is a security
     decision, not a test-plumbing one, and is deliberately left to a human
-    (the `SOPS_AGE_KEY` repo secret exists but no workflow uses it).
+    (SEC-022 retired the CI recipient, so no such key exists).
     """
     if sops_can_decrypt():
         return
