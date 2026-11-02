@@ -6,5 +6,5 @@ beelink_runner_work_dir: /opt/runner/_work
 # blocked on #972 choosing a destination. Tracked as #1056.
 beelink_gitea_data_dir: /opt/gitea/data
 # Gitea's resolvers: public only, see the `dns:` comment in compose.yml.j2.
-gitea_dns_servers: ["1.1.1.1", "8.8.8.8"]
+gitea_dns_servers: "{{ config.networking.public_resolvers }}"
 glances_port: 61208

@@ -52,7 +52,6 @@ def _rendered() -> dict[str, Any]:
     """`docker-compose.yml.j2` as the VPS play renders it, the two moving values left as placeholders."""
     config = _prod_config()
     headscale = config["apps"]["services"]["core"]["headscale"]
-    traefik = config["edge"]["traefik"]
     # The role vars the headscale entry in deploy-vps.yml sets for this template.
     variables = {
         "headscale_image": IMAGE_PLACEHOLDER,
@@ -61,7 +60,7 @@ def _rendered() -> dict[str, Any]:
         "headscale_stun_port": headscale["stun_port"],
         "restart_policy": config["global"]["restart_policy"],
         "docker_network": config["networking"]["vps"]["docker_network"],
-        "docker_dns_servers": [traefik["dns_resolver_1"].split(":")[0], traefik["dns_resolver_2"].split(":")[0]],
+        "docker_dns_servers": config["networking"]["public_resolvers"],
     }
     env = ansible_env(str(TEMPLATES), trim_blocks=True)
     return yaml.safe_load(env.get_template("docker-compose.yml.j2").render(**variables))

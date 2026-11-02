@@ -28,6 +28,8 @@ COMMON = REPO / "infra/config/values/common.yaml"
 
 def _gitea_service() -> dict:
     defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text(encoding="utf-8"))
+    assert defaults["gitea_dns_servers"] == "{{ config.networking.public_resolvers }}"
+    defaults["gitea_dns_servers"] = yaml.safe_load(COMMON.read_text(encoding="utf-8"))["networking"]["public_resolvers"]
     env = jinja2.Environment(undefined=jinja2.ChainableUndefined)
     env.filters["bool"] = bool  # the one Ansible filter the template uses
     rendered = env.from_string((ROLE / "templates/compose.yml.j2").read_text(encoding="utf-8")).render(**defaults)
