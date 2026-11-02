@@ -48,6 +48,10 @@ set -u
 TARGETS="${WATCHER_TARGETS:-/etc/r2-backup-watcher/targets.txt}"
 STAGING="${STAGING_DIR:-/opt/node-backup/staging}"
 SENTINEL_NAME="${SENTINEL:-.capture-complete}"
+# Per restic call. Measured in staging 2026-11-02 on the hotel uplink: the
+# slowest call was beelink's `ls` at 57s, against the 60s this used to be, which
+# is why beelink read `listing failed: signal terminated` every run from
+# 2026-10-27. 180 is three times that on a degraded link, not a fit to it.
 TIMEOUT="${RESTIC_TIMEOUT:-180}"
 SIZES="${WATCHER_SIZES:-/var/run/r2-sizes/sizes.txt}"
 REACH_TIMEOUT="${REACH_TIMEOUT:-5}"
