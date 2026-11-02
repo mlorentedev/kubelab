@@ -4,6 +4,12 @@ from __future__ import annotations
 
 import re
 
+# Where each tenant's role password lives in SOPS. A tenant names both its role and its database.
+TENANT_PASSWORD_PATHS: dict[str, str] = {
+    "vikunja": "apps.services.core.vikunja.db_password",
+    "api": "apps.platform.api.db_password",
+}
+
 
 def _escape_sql_literal(value: str) -> str:
     """Escape single quotes for inclusion in a SQL string literal."""

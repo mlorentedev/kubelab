@@ -913,7 +913,7 @@ edge:
 
   cloudflared:
     name: cloudflared
-    image: cloudflare/cloudflared:latest
+    image: cloudflare/cloudflared:2026.10.7
     resources:
       cpu_limit: "0.25"
       memory_limit: 128M
@@ -1012,6 +1012,9 @@ apps:
       # Liveness stays on /health (constant 200); readiness probes /ready, which is 503
       # only when configuration does not load (kubelab#1736, #2386).
       readiness_path: /ready
+      # The API's tenant in infra.postgres (DATA-007): role and database, never the
+      # owner role. Password in SOPS at apps.platform.api.db_password.
+      postgres_tenant: api
       site_title: mlorentedev
       # SMTP config moved to `infra.smtp.*` (ADR-036, SSOT-012 PR #3).
       # API source code reads `INFRA_SMTP_USER`, `INFRA_SMTP_PASS`,
@@ -2164,7 +2167,7 @@ apps:
         location: always-on
         # Internal-only, no public DNS record — each env overrides its own domain.
         image: crowdsecurity/crowdsec:v1.7.6
-        bouncer_image: fbonalair/traefik-crowdsec-bouncer:latest
+        bouncer_image: fbonalair/traefik-crowdsec-bouncer:0.5.0
         bouncer_name: crowdsec-bouncer-traefik
         enable_bouncer_middleware: true  # Set false in dev — bouncer blocks localhost traffic
         enable_auth: true
@@ -2258,6 +2261,11 @@ apps:
           container_port: 8000
           memory_limit: 256m
           cpu_limit: "0.5"
+        # Memory review (spec AI-025): every this many user turns in a chat, the
+        # chat model reads it and saves what is worth remembering. Each review
+        # is one more NaN call; v0.12.5's default is 10.
+        memory:
+          review_interval_turns: 5
         # Web search (spec AI-025). v0.12.5 takes one engine and has no fallback,
         # so the engine is SearXNG, which aggregates others itself. It runs on
         # Open WebUI's network with no port, deployed by the agent_stack role.

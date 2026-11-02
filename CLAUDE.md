@@ -195,7 +195,6 @@ infra/k8s/                         — K8s manifests (base + overlays)
 infra/config/values/               — Environment config (dev/staging/prod)
 infra/stacks/                      — Docker Compose stacks (local dev)
 infra/ansible/roles/k3s_server/    — K3s server provisioning (ADR-020 Phase 3)
-infra/ansible/roles/k3s_agent/     — K3s agent provisioning
 infra/ansible/roles/errors/        — Error pages container (VPS)
 infra/helm/                        — Helm values for third-party services (currently Argo CD only; ADR-021 revised, H2 pending)
 edge/                              — Traefik, DNS gateway configs

@@ -1,8 +1,8 @@
 """Cloudflare R2 Backup Health & Snapshot Coverage Prober (OBS-015 / BACKUP-044).
 
-Runs verify_destination (R2 scope, reach, and write/read/delete round-trip) and
-coverage (cross-node snapshot verification) against production or staging R2,
-then dispatches a structured SRE notification to n8n /webhook/notify.
+Runs the isolation probe (each node's bucket refuses the other nodes' pairs and
+locks its own data) and coverage (cross-node snapshot verification), then dispatches
+a structured SRE notification to n8n /webhook/notify.
 """
 
 from __future__ import annotations
@@ -14,7 +14,8 @@ from pathlib import Path
 from typing import Optional
 
 from toolkit.core.logging import logger
-from toolkit.features.backup_destination import coverage, verify_destination
+from toolkit.features.backup_destination import coverage
+from toolkit.features.backup_isolation import probe_fleet
 from toolkit.features.configuration import ConfigurationManager
 
 _NOTIFY_SECRET_PATH = "apps.services.automation.notify.webhook_secret"
@@ -29,23 +30,21 @@ def run_r2_backup_health_check(
     """Execute full R2 backup verification and dispatch notification."""
     cm = ConfigurationManager(env, project_root)
 
-    logger.info(f"[{env.upper()}] Step 1/2: Verifying Cloudflare R2 destination round-trip...")
-    dest_ok = verify_destination(env=env, project_root=project_root)
+    logger.info(f"[{env.upper()}] Step 1/2: Probing the node buckets' isolation and lock...")
+    isolation_ok = probe_fleet(env, cm=cm)
 
     logger.info(f"[{env.upper()}] Step 2/2: Verifying fleet snapshot coverage...")
     cov_ok = coverage(env=env, project_root=project_root)
 
-    is_healthy = dest_ok and cov_ok
+    is_healthy = isolation_ok and cov_ok
 
     if is_healthy:
         logger.success(f"[{env.upper()}] Cloudflare R2 backup integrity and fleet coverage: HEALTHY")
     else:
-        logger.error(
-            f"[{env.upper()}] Cloudflare R2 backup integrity or coverage: FAILED (dest={dest_ok}, cov={cov_ok})"
-        )
+        logger.error(f"[{env.upper()}] Cloudflare R2 backup: FAILED (isolation={isolation_ok}, cov={cov_ok})")
 
     if notify:
-        _dispatch_notification(cm, env=env, is_healthy=is_healthy, dest_ok=dest_ok, cov_ok=cov_ok)
+        _dispatch_notification(cm, env=env, is_healthy=is_healthy, isolation_ok=isolation_ok, cov_ok=cov_ok)
 
     return is_healthy
 
@@ -54,7 +53,7 @@ def _dispatch_notification(
     cm: ConfigurationManager,
     env: str,
     is_healthy: bool,
-    dest_ok: bool,
+    isolation_ok: bool,
     cov_ok: bool,
 ) -> bool:
     """Send structured notification to n8n /webhook/notify."""
@@ -79,7 +78,7 @@ def _dispatch_notification(
             "domain": "ops",
             "severity": "log",
             "title": f"[{env.upper()}] Cloudflare R2 Backup Health: 100% HEALTHY",
-            "body": "R2 read/write/delete round-trip passed and all active fleet node snapshots verified.",
+            "body": "Node bucket isolation and lock held and all active fleet node snapshots verified.",
             "source": "k8s/r2-backup-health",
             "url": "https://argo.kubelab.live",
             "url_title": "Open in Argo CD",
@@ -90,7 +89,7 @@ def _dispatch_notification(
             "severity": "page",
             "title": f"[{env.upper()}] Cloudflare R2 Backup Health: FAILED",
             "body": (
-                f"Backup verification failure: destination_roundtrip={dest_ok}, "
+                f"Backup verification failure: isolation_and_lock={isolation_ok}, "
                 f"snapshot_coverage={cov_ok}. Check node logs in #ops-log."
             ),
             "source": "k8s/r2-backup-health",

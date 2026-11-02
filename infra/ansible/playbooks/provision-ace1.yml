@@ -57,6 +57,8 @@
   gather_facts: true
 
   vars:
+    # A large disk keeps the history a post-mortem needs (#2702).
+    journald_system_max_use: "{{ journald_large_disk_max_use }}"
     deploy_env: staging
 
     # ace1 is behind the lab edge, so its image pulls share the edge's shaped
