@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/mlorentedev/kubelab/apps/api/internal/store"
 	"github.com/mlorentedev/kubelab/apps/api/pkg/config"
 )
 
@@ -30,6 +31,7 @@ const (
 	beehiivBaseURL  = "https://api.beehiiv.com"
 	beehiivTimeout  = 3 * time.Second
 	beehiivCacheTTL = 30 * time.Second
+	postgresTimeout = 2 * time.Second
 )
 
 // Check is the outcome of one dependency probe. A check never gates readiness:
@@ -56,6 +58,8 @@ type Handler struct {
 	HTTPClient  *http.Client
 	BeehiivBase string
 	Now         func() time.Time
+	// PingPostgres makes a round trip to the API's tenant. Nil means no database is wired.
+	PingPostgres func(ctx context.Context, conf *config.Config) error
 
 	mu         sync.Mutex
 	cached     Check
@@ -71,6 +75,9 @@ func New() *Handler {
 		HTTPClient:  &http.Client{Timeout: beehiivTimeout},
 		BeehiivBase: beehiivBaseURL,
 		Now:         time.Now,
+		PingPostgres: func(ctx context.Context, conf *config.Config) error {
+			return store.Ping(ctx, conf.Postgres)
+		},
 	}
 }
 
@@ -112,6 +119,9 @@ func (h *Handler) Ready(c *gin.Context) {
 		h.beehiivCheck(c.Request.Context(), conf),
 		emailCheck(conf),
 	}
+	if ck, ok := h.postgresCheck(c.Request.Context(), conf); ok {
+		resp.Checks = append(resp.Checks, ck)
+	}
 	resp.Status = StatusReady
 	for _, ck := range resp.Checks {
 		if ck.Status != checkOK {
@@ -127,6 +137,22 @@ func emailCheck(conf *config.Config) Check {
 		return Check{Component: "email", Status: checkDegraded, Message: "incomplete email configuration"}
 	}
 	return Check{Component: "email", Status: checkOK}
+}
+
+// postgresCheck reports the database only where the API is configured to use one, so an
+// environment that has not received the tenant yet is not reported degraded. Like every check it
+// never gates readiness: the routes that serve without a database keep serving. The message says
+// nothing about the cause, because a driver error can carry the connection's details.
+func (h *Handler) postgresCheck(ctx context.Context, conf *config.Config) (Check, bool) {
+	if h.PingPostgres == nil || !conf.Postgres.Configured() {
+		return Check{}, false
+	}
+	ctx, cancel := context.WithTimeout(ctx, postgresTimeout)
+	defer cancel()
+	if err := h.PingPostgres(ctx, conf); err != nil {
+		return Check{Component: "postgres", Status: checkDegraded, Message: "postgres unreachable"}, true
+	}
+	return Check{Component: "postgres", Status: checkOK}, true
 }
 
 // beehiivCheck makes a real authenticated round trip, cached for
