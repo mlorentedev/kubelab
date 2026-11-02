@@ -2911,7 +2911,8 @@ backup:
           claim: authelia-data
         sqlite: db.sqlite3
       postgres:
-        # Every Vikunja user, project and task. A logical dump, never a file
+        # Every Vikunja user, project and task, and the API's forge read model
+        # (the `api` database). A logical dump, never a file
         # copy: a running Postgres's data directory is not consistent on disk,
         # the same reason SQLite sources use `.backup`. `pvc` names the claim
         # this protects (the coverage guards read it); `pg_dumpall` replaces the
