@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -158,11 +159,35 @@ def _get_muted_notification_tags(project_root: Path) -> frozenset[str]:
     return frozenset(svc.get("muted_notification_tags", []))
 
 
+class GreetedKumaApi(UptimeKumaApi):
+    """A client that returns only once the server can hear it.
+
+    Kuma's connection handler awaits `sendInfo` BEFORE it registers `login`, so
+    an event emitted in that gap is dropped with no ack and the caller hangs for
+    its whole timeout (#1985). `sendInfo` ends by emitting `info`, and the
+    handlers register in the continuation right after it, so seeing that first
+    `info` proves `login` will be heard. `_event_info` is the only hook early
+    enough: the constructor connects, and the library discards this version-less
+    `info`, so nothing can be asked after the fact.
+    """
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        self._greeted = threading.Event()
+        super().__init__(*args, **kwargs)
+        if not self._greeted.wait(self.timeout):
+            self.disconnect()
+            raise UptimeKumaException(f"no greeting from the server within {self.timeout}s")
+
+    def _event_info(self, data: dict[str, Any]) -> None:
+        self._greeted.set()
+        super()._event_info(data)
+
+
 def _connect(project_root: Path) -> tuple[UptimeKumaApi, dict[str, Any]]:
     """Connect to Uptime Kuma via API using SOPS credentials."""
     creds = _get_kuma_creds(project_root)
     logger.info(f"Connecting to Uptime Kuma at {creds['url']}...")
-    api = UptimeKumaApi(creds["url"], timeout=60)
+    api = GreetedKumaApi(creds["url"], timeout=60)
     api.login(creds["username"], creds["password"])
     logger.success("Connected to Uptime Kuma")
     return api, {"url": creds["url"], "host": creds["host"]}
@@ -233,42 +258,6 @@ def _reconcile_tags(api: Any, monitor: dict[str, Any], tag_id_map: dict[str, int
         api.add_monitor_tag(tag_id_map[name], monitor["id"], "")
     for tag in extra:
         api.delete_monitor_tag(tag["tag_id"], monitor["id"], tag.get("value") or "")
-
-
-def import_monitors(project_root: Path) -> None:
-    """Import monitors and notifications from JSON seed files."""
-    api, info = _connect(project_root)
-
-    try:
-        export_dir = project_root / EXPORT_DIR
-        monitors_path = export_dir / MONITORS_FILE
-        notifications_path = export_dir / NOTIFICATIONS_FILE
-
-        if not monitors_path.exists():
-            logger.error(f"No monitors file found at {monitors_path}. Run export first.")
-            raise SystemExit(1)
-
-        monitors_data = json.loads(monitors_path.read_text(encoding="utf-8"))
-        notifications_data = (
-            json.loads(notifications_path.read_text(encoding="utf-8")) if notifications_path.exists() else []
-        )
-
-        # Use Uptime Kuma's backup import format
-        backup_data = json.dumps(
-            {
-                "version": "1.23.0",
-                "notificationList": notifications_data,
-                "monitorList": monitors_data,
-                "proxyList": [],
-            }
-        )
-
-        api.upload_backup(json_data=backup_data, import_handle="skip")
-        logger.success(
-            f"Imported {len(monitors_data)} monitors + {len(notifications_data)} notifications (skipped existing)"
-        )
-    finally:
-        api.disconnect()
 
 
 # Kuma has no not-found answer: `getMonitor` reads a null row and replies ok:false

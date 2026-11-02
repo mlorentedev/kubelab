@@ -168,10 +168,8 @@ class TestKumaLogsInAsItsAccount:
             monitoring._get_kuma_creds(Path("."))
 
     def test_the_rotation_logs_in_as_kumas_account(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        import uptime_kuma_api
-
         api = MagicMock()
-        monkeypatch.setattr(uptime_kuma_api, "UptimeKumaApi", MagicMock(return_value=api))
+        monkeypatch.setattr(monitoring, "GreetedKumaApi", MagicMock(return_value=api))
         cm = MagicMock()
         cm.get_merged_config.return_value = self._merged()
         monkeypatch.setattr(credentials, "ConfigurationManager", MagicMock(return_value=cm))

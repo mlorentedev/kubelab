@@ -743,9 +743,8 @@ class CredentialsManager:
 
         # Uptime Kuma — update admin password via WebSocket API
         try:
-            from uptime_kuma_api import UptimeKumaApi
-
             from toolkit.features.configuration import ConfigurationManager
+            from toolkit.features.monitoring import GreetedKumaApi
 
             cm = ConfigurationManager("staging", self.project_root)
             merged = cm.get_merged_config()
@@ -759,7 +758,7 @@ class CredentialsManager:
             username = svc.get("admin_user", "")
 
             logger.info(f"Updating Uptime Kuma password at {url}...")
-            api = UptimeKumaApi(url)
+            api = GreetedKumaApi(url)
 
             # Try login with old password first (SOPS already has the new one)
             login_password = old_password or new_password
