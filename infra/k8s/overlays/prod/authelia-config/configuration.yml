@@ -1,7 +1,7 @@
 # ==========================================================================
 # Authelia — Production (ForwardAuth + OIDC)
 # ==========================================================================
-theme: dark
+theme: auto
 default_2fa_method: totp
 
 server:

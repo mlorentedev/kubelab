@@ -90,6 +90,12 @@ node_app = typer.Typer(
     no_args_is_help=True,
 )
 
+edge_app = typer.Typer(
+    name="edge",
+    help="The lab edge (rpi4): uplink status (NET-005)",
+    no_args_is_help=True,
+)
+
 app.add_typer(ansible_app, name="ansible")
 app.add_typer(terraform_app, name="terraform")
 app.add_typer(k8s_app, name="k8s")
@@ -98,6 +104,7 @@ app.add_typer(argo_app, name="argo")
 app.add_typer(headscale_app, name="headscale")
 app.add_typer(n8n_app, name="n8n")
 app.add_typer(node_app, name="node")
+app.add_typer(edge_app, name="edge")
 app.add_typer(vps_app, name="vps")
 
 
@@ -184,6 +191,294 @@ def vps_snapshot(
 def _snapshot_line(image: dict[str, Any]) -> str:
     size = f"{image['image_size']} GB" if image.get("image_size") else "size pending"
     return f"{image.get('description')} is {image.get('status')} (image {image.get('id')}, {size})"
+
+
+@edge_app.command("status")
+def edge_status() -> None:
+    """Say whether the edge's uplink is up, behind a portal, or dead.
+
+    Runs the gateway role's check on the edge over its LAN address and exits with
+    its code: 0 up, 2 portal, 3 dead, 4 unknown (255 when SSH itself fails).
+    """
+    from toolkit.features.configuration import ConfigurationManager
+    from toolkit.features.edge_status import EdgeNotDeclaredError, run_status
+
+    # Plaintext values only: the check needs addresses, not secrets.
+    net = ConfigurationManager("prod", settings.project_root).get_plaintext_values()["networking"]
+    try:
+        code = run_status(net)
+    except EdgeNotDeclaredError as e:
+        logger.error(str(e))
+        raise typer.Exit(1) from e
+    raise typer.Exit(code)
+
+
+def _say_the_path(net: dict[str, Any], via: str) -> None:
+    """Say which path the check takes: a pass over the tailnet says nothing of the LAN (#2801)."""
+    from toolkit.features.edge_status import path_to_edge
+
+    try:
+        path = path_to_edge(net, via)
+    except OSError as e:
+        logger.warning(f"Could not read the path to the edge: {e}")
+        return
+    if via == "lan" and path["tailnet"]:
+        logger.warning(
+            f"This machine reaches the edge's LAN address from {path['source']}, an address on the tailnet, "
+            "so this check does not show that the LAN path works (#2801). Over the LAN: `make edge-lan-link`."
+        )
+    else:
+        logger.info(f"Reaching the edge from {path['source']}, over the {'tailnet' if path['tailnet'] else 'LAN'}")
+
+
+@edge_app.command("boot-check")
+def edge_boot_check(
+    case: Annotated[
+        str | None, typer.Option("--case", help="What the hard-reset case took away: no-uplink or no-lan")
+    ] = None,
+    via: Annotated[str, typer.Option("--via", help="Reach the edge over its lan or tailnet address")] = "lan",
+) -> None:
+    """Say whether a boot brought back everything the edge serves (the hard-reset test).
+
+    Runs the gateway role's boot check on the edge, one line per check, and exits 0
+    when every check passed, 1 when one failed, 2 when none failed but one cannot be
+    judged yet (its WAIT line says when to run it again), and 255 when SSH itself fails.
+    """
+    from toolkit.features.configuration import ConfigurationManager
+    from toolkit.features.edge_status import BOOT_CASES, EdgeNotDeclaredError, run_boot_check
+
+    if case not in (None, *BOOT_CASES) or via not in ("lan", "tailnet"):
+        logger.error(f"--case takes {' or '.join(BOOT_CASES)}, and --via lan or tailnet")
+        raise typer.Exit(64)
+    net = ConfigurationManager("prod", settings.project_root).get_plaintext_values()["networking"]
+    try:
+        _say_the_path(net, via)
+        code = run_boot_check(net, case, via)
+    except EdgeNotDeclaredError as e:
+        logger.error(str(e))
+        raise typer.Exit(1) from e
+    raise typer.Exit(code)
+
+
+@edge_app.command("soak")
+def edge_soak() -> None:
+    """Say whether the uplink adapter has held 48 hours of this boot with no reset (B12).
+
+    Reads the edge's kern.log over its LAN address and exits 0 when the soak passed,
+    1 when the adapter reset, 2 when it holds so far but has not reached 48 hours,
+    3 when the log cannot tell, and 255 when SSH itself fails.
+    """
+    from toolkit.features.configuration import ConfigurationManager
+    from toolkit.features.edge_soak import run_soak
+    from toolkit.features.edge_status import EdgeNotDeclaredError
+
+    net = ConfigurationManager("prod", settings.project_root).get_plaintext_values()["networking"]
+    try:
+        code, lines = run_soak(net)
+    except EdgeNotDeclaredError as e:
+        logger.error(str(e))
+        raise typer.Exit(1) from e
+    for line in lines:
+        typer.echo(line)
+    raise typer.Exit(code)
+
+
+@edge_app.command("measure")
+def edge_measure(
+    seconds: Annotated[int, typer.Option("--seconds", help="Length of each direction's window")] = 60,
+) -> None:
+    """Measure the uplink's line rate on the edge, one window per direction (AC8).
+
+    Counts on the uplink adapter, before the shaper, and exits 0 with the rates, 2
+    when the shaper bound a window (the rate is then a lower bound), 3 when a server
+    refused the streams or nothing arrived, and 255 when SSH itself fails.
+    """
+    from datetime import datetime, timezone
+
+    from toolkit.features.configuration import ConfigurationManager
+    from toolkit.features.edge_measure import run_measure
+    from toolkit.features.edge_status import EdgeNotDeclaredError
+
+    net = ConfigurationManager("prod", settings.project_root).get_plaintext_values()["networking"]
+    when = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%MZ")
+    try:
+        code, lines = run_measure(net, when, seconds)
+    except EdgeNotDeclaredError as e:
+        logger.error(str(e))
+        raise typer.Exit(1) from e
+    for line in lines:
+        typer.echo(line)
+    raise typer.Exit(code)
+
+
+load_test_app = typer.Typer(help="Measure staging's capacity (OPS-054); never prod")
+app.add_typer(load_test_app, name="load-test")
+
+
+def _load_test_results_dir(output: str, root: Path) -> Path:
+    """A relative directory means the repo's, and it exists before a two-hour run needs it."""
+    directory = root / output
+    directory.mkdir(parents=True, exist_ok=True)
+    return directory
+
+
+def _load_test_lab(env: str) -> tuple[Any, dict[str, Any], dict[str, Any]]:
+    """Refuses any env but staging before it reads a value or opens a connection."""
+    from toolkit.features.configuration import ConfigurationManager
+    from toolkit.features.load_test import Lab, refuse_unless_staging, resolve_nodes
+
+    refuse_unless_staging(env)
+    staging = ConfigurationManager(env, settings.project_root).get_plaintext_values()
+    prod = ConfigurationManager("prod", settings.project_root).get_plaintext_values()
+    node, _, generator = resolve_nodes(staging, prod)
+    identity = _spoke_service_account()
+    return Lab(settings.project_root, str(output_path(env)), identity, node, generator), staging, prod
+
+
+@load_test_app.command("run")
+def load_test_run(
+    env: Annotated[str, typer.Option("--env", help="Must be staging; anything else is refused")] = "staging",
+    repeats: Annotated[int, typer.Option("--repeats", help="Ramps per target")] = 3,
+    seconds: Annotated[int, typer.Option("--seconds", help="Length of each step")] = 60,
+    max_rate: Annotated[int, typer.Option("--max-rate", help="Highest step, requests per second")] = 6400,
+    output: Annotated[str, typer.Option("--output", help="Results directory")] = "docs/load-test",
+) -> None:
+    """Measure staging: a baseline under the limiter, then ramps to the first degraded step.
+
+    Takes no URL. Writes <date>-<commit>.json and .md, and always removes the route
+    it applies. Exits 0 with results, 1 when refused or when a step could not run.
+    """
+    import json
+    import subprocess
+    from datetime import datetime, timezone
+
+    from toolkit.features.load_test import LoadTestRefused, build_targets, render, resolve_nodes, run
+
+    try:
+        lab, staging, prod = _load_test_lab(env)
+        _, address, _ = resolve_nodes(staging, prod)
+        targets = build_targets(staging, prod)
+        commit = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            check=True,
+        ).stdout.strip()
+        result = run(lab, staging["load_test"]["image"], targets, address, repeats, seconds, max_rate)
+    except (LoadTestRefused, subprocess.SubprocessError, OSError) as e:
+        logger.error(str(e))
+        raise typer.Exit(1) from e
+    now = datetime.now(timezone.utc)
+    result |= {"date": now.strftime("%Y-%m-%dT%H:%MZ"), "commit": commit}
+    base = _load_test_results_dir(output, settings.project_root) / f"{now:%Y-%m-%d}-{commit}"
+    base.with_suffix(".json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+    base.with_suffix(".md").write_text(render(result), encoding="utf-8")
+    typer.echo(f"{base}.json")
+
+
+@load_test_app.command("clear")
+def load_test_clear(env: Annotated[str, typer.Option("--env")] = "staging") -> None:
+    """Remove the route a run that died left behind. Idempotent."""
+    import subprocess
+
+    from toolkit.features.load_test import LoadTestRefused
+
+    try:
+        lab, _, _ = _load_test_lab(env)
+        lab.assert_cluster()
+        lab.disarm()
+    except (LoadTestRefused, subprocess.SubprocessError, OSError) as e:
+        logger.error(str(e))
+        raise typer.Exit(1) from e
+
+
+@edge_app.command("shape-check")
+def edge_shape_check(
+    bound_ms: Annotated[
+        float | None, typer.Option("--bound-ms", help="Fail when a shaped window's p95 connect exceeds this")
+    ] = None,
+) -> None:
+    """Check that the shaper keeps a lab Wi-Fi client usable under bulk load (B9, AC8).
+
+    bee loads the uplink, a download then an upload, while rpi3 on the lab Wi-Fi
+    times a TCP connect every second; then again with the shaper lifted, which is
+    always restored and read back. Exits 0 measured (and within --bound-ms when
+    given), 1 a shaped window lost a connect or is over the bound, 3 cannot tell
+    or the shaper not restored, and 255 when the edge does not answer.
+    """
+    from toolkit.features.configuration import ConfigurationManager
+    from toolkit.features.edge_shape_check import run_shape_check
+    from toolkit.features.edge_status import EdgeNotDeclaredError
+
+    net = ConfigurationManager("prod", settings.project_root).get_plaintext_values()["networking"]
+    try:
+        _say_the_path(net, "lan")
+        code, lines = run_shape_check(net, bound_ms)
+    except EdgeNotDeclaredError as e:
+        logger.error(str(e))
+        raise typer.Exit(1) from e
+    for line in lines:
+        typer.echo(line)
+    raise typer.Exit(code)
+
+
+@edge_app.command("ap-halt")
+def edge_ap_halt() -> None:
+    """Halt the lab Wi-Fi's radio on purpose and watch the edge bring it back (B10).
+
+    Unloads the AP's driver on the edge over its LAN address, as a firmware halt
+    would take the interface away, then reads the AP every 20 s until the liveness
+    ladder has it serving again. Exits 0 when it serves again, 1 when it does not
+    within 12 minutes, 3 when nothing was injected (the AP was not serving, or the
+    driver would not unload), and 255 when SSH fails before the fault.
+    """
+    from toolkit.features.configuration import ConfigurationManager
+    from toolkit.features.edge_ap_halt import run_ap_halt
+    from toolkit.features.edge_status import EdgeNotDeclaredError
+
+    net = ConfigurationManager("prod", settings.project_root).get_plaintext_values()["networking"]
+    try:
+        _say_the_path(net, "lan")
+        code, lines = run_ap_halt(net)
+    except EdgeNotDeclaredError as e:
+        logger.error(str(e))
+        raise typer.Exit(1) from e
+    for line in lines:
+        typer.echo(line)
+    raise typer.Exit(code)
+
+
+@edge_app.command("lan-link")
+def edge_lan_link(
+    route: Annotated[
+        bool, typer.Option("--route", help="Make the edge the default route, for the portal login")
+    ] = False,
+    remove: Annotated[bool, typer.Option("--remove", help="Delete the profile")] = False,
+    static: Annotated[bool, typer.Option("--static", help="A fixed address, for when the edge serves no DHCP")] = False,
+    interface: Annotated[
+        str | None, typer.Option("--interface", help="The adapter on the lab switch, if not the only one")
+    ] = None,
+) -> None:
+    """Join this laptop to the lab LAN with a NetworkManager profile (NET-005 AC11).
+
+    DHCP from the edge, or a fixed address when it serves none, the lab LAN routed
+    out the wire ahead of the tailnet, and by default neither the edge's default
+    route nor its DNS.
+    """
+    from toolkit.features.configuration import ConfigurationManager
+    from toolkit.features.edge_lan_link import LanLinkRefused, apply
+
+    if route + remove + static > 1:
+        logger.error("--route, --static and --remove contradict each other: pick one")
+        raise typer.Exit(1)
+    net = ConfigurationManager("prod", settings.project_root).get_plaintext_values()["networking"]
+    try:
+        code = apply(net["lan_cidr"], route=route, remove=remove, static=static, interface=interface)
+    except LanLinkRefused as e:
+        logger.error(str(e))
+        raise typer.Exit(1) from e
+    raise typer.Exit(code)
 
 
 @node_app.command("reclaim")
@@ -309,12 +604,17 @@ def node_reclaim(
 
 @headscale_app.command("policy-check")
 def headscale_policy_check() -> None:
-    """Render policy.hujson from the SSOT and validate it with `headscale policy check` (Docker)."""
-    from toolkit.scripts.render_headscale_policy import policy_check, render_policy
+    """Render policy.hujson from the SSOT and validate it with `headscale policy check` (Docker).
 
-    rc = policy_check(render_policy())
-    if rc != 0:
-        raise typer.Exit(rc)
+    Checks it twice: segment-free, as the repository renders it, and with a synthetic
+    tenant segment, so the segment syntax is proven on the pinned image too (VPN-ACL-014).
+    """
+    from toolkit.scripts.render_headscale_policy import EXAMPLE_SEGMENT, policy_check, render_policy
+
+    for segments in ([], [EXAMPLE_SEGMENT]):
+        rc = policy_check(render_policy(segments=segments))
+        if rc != 0:
+            raise typer.Exit(rc)
 
 
 @headscale_app.command("probe")
@@ -325,6 +625,48 @@ def headscale_probe() -> None:
     rc = run_probe()
     if rc != 0:
         raise typer.Exit(rc)
+
+
+@headscale_app.command("rejoin")
+def headscale_rejoin(
+    node: Annotated[str, typer.Option("--node", help="Node whose provision-<node> play to run, e.g. rpi4")],
+    env: Annotated[str, typer.Option("--env", "-e", help="Target environment")] = "prod",
+) -> None:
+    """Put a node back on the mesh with a single-use, one-hour key (NET-005 task 32).
+
+    Runs the node's play, tailscale role only, over its LAN address: a node off the
+    mesh answers on nothing else. The role mints the key on Headscale only when the
+    node is off the mesh, so a node that is on it is a no-op. The mesh inventory is
+    put back whatever the run did.
+    """
+    from toolkit.features.generator_ansible import ansible_generator
+    from toolkit.features.headscale_nodes import REJOIN_EXTRA_VARS, REJOIN_TAGS, RejoinRefused, rejoin_playbook
+
+    try:
+        playbook = rejoin_playbook(settings.ansible_dir / "playbooks", node)
+    except RejoinRefused as exc:
+        logger.error(str(exc))
+        raise typer.Exit(1) from exc
+
+    ran = False
+    try:
+        ansible_run(
+            playbook=playbook,
+            env=env,
+            tags=REJOIN_TAGS,
+            extra_vars=REJOIN_EXTRA_VARS,
+            bootstrap=True,
+            require_fresh=True,
+        )
+        ran = True
+    finally:
+        logger.info("Restoring: inventory with mesh Tailscale IPs")
+        restored = ansible_generator.generate(env)
+        if not restored.get("success"):
+            logger.error(f"The LAN inventory is still on disk: {restored.get('error')}")
+            # Raised in `finally`, an exit would replace a failed run's own: only a clean run takes it.
+            if ran:
+                raise typer.Exit(1)
 
 
 @headscale_app.command("recycle-stale")
@@ -452,7 +794,7 @@ def argo_spoke_url(
 
     common = settings.project_root / "infra" / "config" / "values" / "common.yaml"
     try:
-        url = argocd_spokes.apiserver_url(yaml.safe_load(common.read_text()), env)
+        url = argocd_spokes.apiserver_url(yaml.safe_load(common.read_text(encoding="utf-8")), env)
     except KeyError as exc:
         logger.error(str(exc))
         raise typer.Exit(1) from exc
@@ -626,6 +968,87 @@ def argo_hub_resume(
         for i, step in enumerate(steps, 1):
             logger.info(f"  {i}. would: {step.what}")
         logger.warning("dry-run — nothing was changed")
+
+
+@argo_app.command("verify-product")
+def argo_verify_product(
+    app: Annotated[str, typer.Option("--app", "-a", help="A contract-managed product in infra/config/products.yaml")],
+    env: Annotated[str, typer.Option("--env", "-e", help="staging or prod")],
+    timeout: Annotated[float, typer.Option("--timeout", help="Seconds to wait for both consequences")] = 600.0,
+    kubeconfig: Annotated[
+        str,
+        typer.Option("--kubeconfig", help="Hub kubeconfig path (env: KUBECONFIG_HUB)", envvar="KUBECONFIG_HUB"),
+    ] = str(output_path("hub")),
+) -> None:
+    """Verify a product is deployed at origin/master HEAD by consequence (GITOPS-003, #1478).
+
+    Waits until kubelab-<env> is Synced at HEAD with its last operation
+    Succeeded, then until https://<contract host>/version.json serves the tag
+    pinned at HEAD. Exit 0 = verified, 1 = failed (a failed operation at HEAD,
+    or no match by the deadline), 2 = the hub, the host or the expected state
+    could not be read, 3 = the host serves no `commit` (not verifiable yet,
+    never a pass), 4 = a later merge synced while waiting pins another tag
+    (superseded: verify that promotion instead).
+    """
+    import subprocess
+
+    from toolkit.features import product_verify as pv
+
+    if env not in ("staging", "prod"):
+        logger.error("--env must be staging or prod")
+        raise typer.Exit(int(pv.Verdict.CANNOT_CHECK))
+    logger.section(f"verify-product — {app} on kubelab-{env} at origin/master")
+    try:
+        head = pv.origin_head()
+        tag, url = pv.targets_at(head, app, env)
+    except (subprocess.CalledProcessError, KeyError, ValueError) as exc:
+        logger.error(f"CANNOT CHECK: the expected state at origin/master could not be read: {exc}")
+        raise typer.Exit(int(pv.Verdict.CANNOT_CHECK)) from exc
+    logger.info(f"HEAD {head[:7]}: expecting {url} to serve {tag}")
+
+    verdict, lines = pv.verify(
+        head=head,
+        tag=tag,
+        read_app=lambda: pv.read_application(f"kubelab-{env}", kubeconfig),
+        fetch_served=lambda: pv.fetch_version_json(url),
+        descends=lambda rev: pv.descends_from(head, rev, fetch=True),
+        tag_at=lambda rev: pv.targets_at(rev, app, env)[0],
+        timeout=timeout,
+    )
+    report = logger.success if verdict is pv.Verdict.VERIFIED else logger.error
+    for line in lines:
+        report(f"  {line}")
+    if verdict is pv.Verdict.VERIFIED:
+        logger.success(f"VERIFIED: {app} on kubelab-{env} serves {tag} at {head[:7]}")
+    elif verdict is pv.Verdict.SUPERSEDED:
+        logger.warning(f"SUPERSEDED: a later merge replaced {tag} on kubelab-{env}. This is not a pass; rerun.")
+    elif verdict is pv.Verdict.NOT_VERIFIABLE:
+        logger.warning(f"NOT VERIFIABLE YET: {app} serves no `commit` in {pv.VERSION_PATH}. This is not a pass.")
+    else:
+        logger.error(f"{verdict.name}: {app} on kubelab-{env} is not verified at {head[:7]}")
+    raise typer.Exit(int(verdict))
+
+
+@argo_app.command("wait-status")
+def argo_wait_status(
+    sha: Annotated[str, typer.Option("--sha", help="Commit whose Argo CD status to wait for")],
+    context: Annotated[str, typer.Option("--context", help="Status context, e.g. argocd/kubelab-staging")],
+    timeout: Annotated[float, typer.Option("--timeout", help="Seconds to wait for a settled status")] = 600.0,
+    repo: Annotated[str, typer.Option("--repo", help="owner/name the status is posted on")] = "mlorentedev/kubelab",
+) -> None:
+    """Wait for the commit status Argo CD posts per sync (GITOPS-003 AC2, #1478).
+
+    Reads `gh api repos/<repo>/commits/<sha>/statuses`, so it runs anywhere gh is
+    authenticated: no mesh, no hub kubeconfig. Exit 0 = success, 1 = failure or
+    error (with Argo's message), no status arrived, or still pending at the
+    deadline, 2 = the statuses could not be read.
+    """
+    from toolkit.features import argo_manager as am
+
+    logger.section(f"wait-status — {context} on {sha[:7]}")
+    verdict, line = am.wait_status(context=context, fetch=lambda: am.fetch_statuses(repo, sha), timeout=timeout)
+    (logger.success if verdict is am.WaitStatus.SUCCESS else logger.error)(f"{verdict.name}: {line}")
+    raise typer.Exit(int(verdict))
 
 
 @argo_app.command("check-spokes")
@@ -819,7 +1242,7 @@ def k8s_alert_smoke(
 # simply stops growing, indistinguishable from a healthy backup until someone
 # needs a restore.
 #
-# The replacement is `make backup-node` / `make backup-verify-restic`, and the
+# The replacement is `make backup-node` / `make backup-drill-node`, and the
 # restore procedure is docs/runbooks/offsite-backup-restore.md.
 #
 # `networking.vps.backup.*` in common.yaml is now read by nothing. Left in
@@ -920,7 +1343,7 @@ def _load_cluster_bootstrap() -> list[BootstrapEntry]:
     cannot create them (ADR-041). File order is preserved (stable apply order).
     """
     common_path = settings.project_root / "infra" / "config" / "values" / "common.yaml"
-    with open(common_path) as f:
+    with open(common_path, encoding="utf-8") as f:
         config = yaml.safe_load(f)
     return [BootstrapEntry.from_dict(entry) for entry in config.get("cluster_bootstrap", [])]
 
@@ -1037,52 +1460,59 @@ def k8s_apply_secrets(
 @k8s_app.command("provision-postgres-tenant")
 def k8s_provision_postgres_tenant(
     env: Annotated[str, typer.Option("--env", "-e", help="Target environment")] = "staging",
-    tenant: Annotated[str, typer.Option("--tenant", "-t", help="Tenant name (e.g. vikunja)")] = "vikunja",
-    dry_run: Annotated[bool, typer.Option("--dry-run", help="Render SQL only")] = False,
+    tenant: Annotated[str | None, typer.Option("--tenant", "-t", help="One tenant; omit for all of them")] = None,
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run", help="Check tenant and secret resolve; apply nothing, show no SQL")
+    ] = False,
 ) -> None:
-    """Idempotently provision a tenant role and database in PostgreSQL (infra.postgres)."""
+    """Idempotently provision tenant roles and databases in PostgreSQL (infra.postgres)."""
     import subprocess
 
     from toolkit.features.configuration import ConfigurationManager
-    from toolkit.features.postgres_provisioner import build_provision_sql
+    from toolkit.features.postgres_provisioner import TENANT_PASSWORD_PATHS, build_provision_sql
+
+    if tenant is not None and tenant not in TENANT_PASSWORD_PATHS:
+        logger.error(f"Unknown tenant {tenant}. Declared: {', '.join(sorted(TENANT_PASSWORD_PATHS))}")
+        raise typer.Exit(1)
 
     cfg = ConfigurationManager(env=env)
-    password = cfg.get_secret_by_path(f"apps.services.core.{tenant}.db_password")
-    if not password:
-        logger.error(
-            f"Missing secret apps.services.core.{tenant}.db_password in SOPS for {env} — cannot provision tenant"
-        )
-        raise typer.Exit(1)
+    for name in [tenant] if tenant else sorted(TENANT_PASSWORD_PATHS):
+        key_path = TENANT_PASSWORD_PATHS[name]
+        password = cfg.get_secret_by_path(key_path)
+        if not password:
+            logger.error(f"Missing secret {key_path} in SOPS for {env} — cannot provision tenant")
+            raise typer.Exit(1)
 
-    sql = build_provision_sql(username=tenant, password=password, database=tenant)
+        sql = build_provision_sql(username=name, password=password, database=name)
 
-    if dry_run:
-        logger.info(f"Generated SQL for tenant {tenant}:\n{sql}")
-        return
+        if dry_run:
+            logger.info(f"Generated SQL for tenant {name} (not shown: it holds the password)")
+            continue
 
-    logger.info(f"Applying tenant provisioning for {tenant} in postgres ({env})...")
-    kubeconfig = _get_kubeconfig(env)
-    cmd = [
-        "kubectl",
-        "--kubeconfig",
-        kubeconfig,
-        "-n",
-        "kubelab",
-        "exec",
-        "-i",
-        "deployment/postgres",
-        "--",
-        "psql",
-        "-U",
-        "kubelab",
-        "-d",
-        "kubelab",
-    ]
-    res = subprocess.run(cmd, input=sql, text=True, capture_output=True)
-    if res.returncode != 0:
-        logger.error(f"Provisioning failed for tenant {tenant} in postgres ({env}): {res.stderr}")
-        raise typer.Exit(1)
-    logger.success(f"PostgreSQL tenant {tenant} provisioned successfully.")
+        logger.info(f"Applying tenant provisioning for {name} in postgres ({env})...")
+        cmd = [
+            "kubectl",
+            "--kubeconfig",
+            _get_kubeconfig(env),
+            "-n",
+            "kubelab",
+            "exec",
+            "-i",
+            "deployment/postgres",
+            "--",
+            "psql",
+            "-U",
+            "kubelab",
+            "-d",
+            "kubelab",
+        ]
+        res = subprocess.run(cmd, input=sql, text=True, capture_output=True)
+        if res.returncode != 0:
+            # psql echoes a statement it cannot parse, and these statements hold the password.
+            detail = res.stderr.replace(password, "***")
+            logger.error(f"Provisioning failed for tenant {name} in postgres ({env}): {detail}")
+            raise typer.Exit(1)
+        logger.success(f"PostgreSQL tenant {name} provisioned successfully.")
 
 
 @k8s_app.command("apply-middleware-secrets")
@@ -1529,6 +1959,29 @@ def _refuse_if_behind_master(ansible_dir: Path, *, force: bool) -> None:
     raise typer.Exit(1) from None
 
 
+def _refuse_if_collections_off_declaration(ansible_dir: Path, *, force: bool) -> None:
+    """ANSIBLE-070: the roles run the controller's Galaxy collections, so a pin it never installed changes nothing."""
+    from toolkit.features import provision_freshness
+
+    try:
+        declared = provision_freshness.declared_collections(provision_freshness.repo_root(ansible_dir))
+        off = provision_freshness.collections_off_declaration(declared)
+    except provision_freshness.FreshnessError as exc:
+        if force:
+            logger.warning(f"Could not compare the Galaxy collections (FORCE=1, continuing): {exc}")
+            return
+        logger.error(f"Could not compare the Galaxy collections with {provision_freshness.REQUIREMENTS}: {exc}")
+        logger.info("Fix ansible-galaxy, or FORCE=1 to run without the check")
+        raise typer.Exit(1) from None
+    if not off:
+        return
+    if force:
+        logger.warning(f"FORCE=1: running with {len(off)} Galaxy collections off their pins")
+        return
+    logger.error(provision_freshness.collections_refusal_message(off))
+    raise typer.Exit(1) from None
+
+
 @ansible_app.command("run")
 def ansible_run(
     playbook: Annotated[str, typer.Option("--playbook", "-p", help="Playbook name (without .yml)")],
@@ -1584,6 +2037,7 @@ def ansible_run(
 
     if require_fresh and not check:
         _refuse_if_behind_master(ansible_dir, force=force)
+        _refuse_if_collections_off_declaration(ansible_dir, force=force)
 
     if not skip_generate:
         from toolkit.features.generator_ansible import ansible_generator
@@ -1620,13 +2074,38 @@ def ansible_run(
         cmd += f" --extra-vars '{extra_vars}'"
 
     logger.info(f"Running: {cmd}")
-    result = command.run(cmd, cwd=ansible_dir, check=False, capture_output=False)
+    restore = not skip_generate and (bootstrap or transport != "mesh")
+    try:
+        result = command.run(cmd, cwd=ansible_dir, check=False, capture_output=False)
+    finally:
+        restored = _restore_mesh_inventory(env) if restore else True
 
-    if result.returncode == 0:
-        logger.success(f"Playbook '{playbook}' completed successfully")
-    else:
+    # The run's failure is the one reported; a failed restore after a good run
+    # still fails, because the inventory on disk is then the bootstrap one.
+    if result.returncode != 0:
         logger.error(f"Playbook '{playbook}' failed")
         raise typer.Exit(1) from None
+    if not restored:
+        raise typer.Exit(1) from None
+    logger.success(f"Playbook '{playbook}' completed successfully")
+
+
+def _restore_mesh_inventory(env: str) -> bool:
+    """Put the mesh inventory back on disk after a bootstrap or bastion run.
+
+    Whatever reads the file without running (a raw ansible-playbook, `run
+    --skip-generate`) would otherwise address every node by its LAN IP or through
+    the bastion. This was a branch of `make provision` (TOOL-036); here every
+    target that passes `--bootstrap` or `--transport` gets it, failed run or not.
+    """
+    from toolkit.features.generator_ansible import ansible_generator
+
+    logger.info("Restoring the inventory with mesh Tailscale IPs")
+    restored = ansible_generator.generate(env)
+    if not restored.get("success"):
+        logger.error(f"Mesh inventory not restored, the one on disk is this run's: {restored.get('error')}")
+        return False
+    return True
 
 
 @ansible_app.command("syntax-check")

@@ -45,7 +45,7 @@ def _child_pytest(tmp_path: Path, *, ci: bool) -> subprocess.CompletedProcess:
     if ci:
         env["CI"] = "true"
     target = tmp_path / "test_kubectl_gate_probe.py"
-    target.write_text(textwrap.dedent(PROBE))
+    target.write_text(textwrap.dedent(PROBE), encoding="utf-8")
     return subprocess.run(
         [
             sys.executable,
@@ -83,7 +83,7 @@ def test_a_kubectl_skip_stays_a_skip_outside_ci(tmp_path: Path) -> None:
 
 
 def _workflow_env() -> dict[str, str]:
-    workflow = yaml.safe_load((REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text())
+    workflow = yaml.safe_load((REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8"))
     return workflow["jobs"]["tests"]["env"]
 
 
@@ -96,7 +96,7 @@ def test_ci_pins_kubectl_to_the_cluster_version() -> None:
     here, only its shape: a stale `KUBECTL_SHA256` fails the Install kubectl
     step's `sha256sum --check` in CI, which is the gate for it (#2020).
     """
-    common = yaml.safe_load((REPO_ROOT / "infra" / "config" / "values" / "common.yaml").read_text())
+    common = yaml.safe_load((REPO_ROOT / "infra" / "config" / "values" / "common.yaml").read_text(encoding="utf-8"))
     cluster = common["k3s"]["version"].split("+", 1)[0]
     env = _workflow_env()
     assert env["KUBECTL_VERSION"] == cluster, (
@@ -109,7 +109,7 @@ def test_ci_pins_kubectl_to_the_cluster_version() -> None:
 
 @pytest.mark.parametrize("step", ["Install kubectl", "kubectl is present"])
 def test_the_tests_job_installs_and_requires_kubectl_before_make_test(step: str) -> None:
-    workflow = yaml.safe_load((REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text())
+    workflow = yaml.safe_load((REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8"))
     names = [s.get("name") for s in workflow["jobs"]["tests"]["steps"]]
     assert step in names, names
     assert names.index(step) < names.index("Tests"), names

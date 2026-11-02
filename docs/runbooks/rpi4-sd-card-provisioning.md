@@ -1,12 +1,15 @@
 ---
 id: rpi4-sd-card-provisioning
 type: runbook
-status: active
+status: superseded
+superseded_by: rpi4-bootstrap
 created: "2026-03-15"
 owner: manu
 ---
 
 # RPi4 SD Card Provisioning
+
+> **Retired (2026-10-25):** the script this runbook runs, `infra/provisioning/rpi4/configure-sd.sh`, was deleted in March with the rest of `infra/provisioning/` (#115), and the topology it wrote (an `enx*` USB Ethernet uplink and a `wlan0` fallback) is not the edge's since ADR-075. Rebuild an SD card with [rpi4-bootstrap](rpi4-bootstrap.md), then provision as in [lab-edge](lab-edge.md). Kept for historical reference only.
 
 ## Purpose
 

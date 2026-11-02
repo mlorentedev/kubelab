@@ -23,7 +23,7 @@ GRAFANA_ENV = REPO_ROOT / "infra/k8s/base/services/grafana-config/grafana.env"
 
 
 def _load_docs() -> list[dict]:
-    with open(GRAFANA_MANIFEST) as f:
+    with open(GRAFANA_MANIFEST, encoding="utf-8") as f:
         return [d for d in yaml.safe_load_all(f) if d]
 
 
@@ -31,7 +31,7 @@ def _load_env() -> dict[str, str]:
     """Parse the generator's env file the way kustomize does: `KEY=value`, rest
     of the line verbatim, `#` lines and blanks skipped."""
     env: dict[str, str] = {}
-    for line in GRAFANA_ENV.read_text().splitlines():
+    for line in GRAFANA_ENV.read_text(encoding="utf-8").splitlines():
         stripped = line.strip()
         if not stripped or stripped.startswith("#") or "=" not in stripped:
             continue
@@ -80,7 +80,7 @@ class TestAuthProxyHeaderIsGatedByNetworkPolicy:
         names = [d.get("metadata", {}).get("name") for d in _load_docs() if d.get("kind") == "ConfigMap"]
         assert "grafana-config" not in names, "declaring it here bypasses the generator, and the hash with it"
 
-        kustomization = yaml.safe_load((REPO_ROOT / "infra/k8s/base/kustomization.yaml").read_text())
+        kustomization = yaml.safe_load((REPO_ROOT / "infra/k8s/base/kustomization.yaml").read_text(encoding="utf-8"))
         (generator,) = [g for g in kustomization["configMapGenerator"] if g["name"] == "grafana-config"]
         assert generator["envs"] == ["services/grafana-config/grafana.env"]
         assert not generator.get("options", {}).get("disableNameSuffixHash", False)

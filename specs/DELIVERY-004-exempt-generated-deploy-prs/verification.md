@@ -7,24 +7,43 @@ created: "2026-09-03"
 
 ## Evidence
 
-Map every acceptance criterion from `proposal.md` to concrete proof (commit hash, test name, or observed behavior).
+- AC1 (PR 1): `tests/test_deploy_shape.py` (38 tests). Live, 2026-10-21, `toolkit tools deploy-shape --pr N`:
+  - #2581 exit 0 `mechanical`: web sha-f55a8c0 -> sha-9d79e52, head `5f8dec3e`
+  - #2576 exit 0 `mechanical`: web sha-7ebd808 -> sha-f55a8c0, head `cfa843dd`
+  - #2579 (human PR) exit 1 `not-mechanical`: file set
+- AC2 (PR 1): `tests/test_review_attestation.py` (`test_the_staging_files_alone_no_longer_exempt`,
+  `test_a_mechanical_verdict_at_the_head_sha_exempts`, `test_any_other_verdict_does_not_exempt`,
+  `test_no_reviewer_is_named_in_the_module` extended to both modules).
+- Mutation proofs (`make mutate`, each RED): `len(values) != 1` -> `< 1`; exact file set -> subset;
+  attestation head-sha equality -> `True`; provenance compare -> `False`. The first one survived until
+  `test_a_change_after_the_version_ends_it_too` was added.
 
-- [ ] Criterion 1 -> commit `<hash>` / test `<name>`
-- [ ] Criterion 2 -> commit `<hash>` / test `<name>`
-- [ ] Criterion 3 -> commit `<hash>` / test `<name>`
+- AC4/AC5 (PR 2): `tests/test_deploy_shape_widening.py`. `make mutate`, each RED: `tag_pattern` -> `{7,}` unbounded;
+  `env` -> `prod`; an extra key in `mechanical`; a `gh pr merge` line in a workflow not declared in `MERGERS`.
+
+- AC6/AC7 (PR 3, #2656, switch off): `tests/test_deploy_merge.py` and the widening test. The follow-ups were
+  #2888 (scope the default-branch guard to dispatch), #2898 (correct the guard comment to the measured payload)
+  and #2910 (accept `unstable` when every required context is green, after #2883 was skipped as `unstable`).
+  #2910 is proven by `test_an_unstable_pr_with_every_required_context_green_merges` and
+  `test_unstable_does_not_excuse_a_red_required_context`. The widening test pins `MERGE_STATES_OK`.
+- Dry-run evidence (switch off, operator N = 3), logged on #1619: #2948 and #2949 were judged `merge` at their
+  heads, merged by hand at 05:50Z on 2026-11-02, and deploy-verify run 41396476626 passed on 3752be80. Third case
+  pending.
+- Review finding Major 1 (#2982): pins the merge and close feeds, the triggers and the token scope of
+  `deploy-merge.yml`. Each of these edits goes RED under `make mutate`: `select(.action == "merge")` ->
+  `!= "skip"`; `.head_sha` -> `.pr`; `contents: read` -> `write`; the cron changed. The review's two untested guards
+  are covered in the same PR, and each goes RED: `evaluate()`'s `base_ref != default_branch` -> `False`, and
+  dropping `or shape.head_sha != head` from `judge()`.
 
 ## Test status
 
-- Test suite: `<command> -> <output / coverage %>`
-- Manual smoke test: what was exercised, what was observed
-- No regressions in existing test suite: yes / no (if no, document)
+- `make test`: 6406 passed, 2 failed before fixes (pinned `gh pr view` field list, stale toolkit README); both fixed, targeted rerun green.
 
 ## Decisions made during implementation
 
-Brief log of non-obvious trade-offs or course corrections taken during the work. Routine choices belong in commit messages, not here.
-
--
--
+- Operator 2026-10-21: attestation adopts the content predicate in PR 1; every registry app is in the class (api proven against this repository); names `deploy-shape`.
+- Check-run, not commit status: only a check-run can answer `neutral` for a normal PR.
+- Consumers recompute from master's code; the check is visible, not authoritative.
 
 ## Promotion candidates
 

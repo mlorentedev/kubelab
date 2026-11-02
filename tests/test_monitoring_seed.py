@@ -20,7 +20,7 @@ SEED_PATH = REPO_ROOT / "infra/config/uptime-kuma/monitors.json"
 
 
 def _seed() -> list[dict]:
-    return json.loads(SEED_PATH.read_text())
+    return json.loads(SEED_PATH.read_text(encoding="utf-8"))
 
 
 class TestSeedKeys:
@@ -143,3 +143,9 @@ class TestPushTokenLookupKeys:
     def test_no_push_tokens_configured_is_an_empty_map_not_an_error(self, monkeypatch) -> None:
         monkeypatch.setattr(ConfigurationManager, "_decrypt_sops", lambda _self, _path: {})
         assert _get_push_tokens(REPO_ROOT) == {}
+
+
+def test_no_path_uploads_the_seed_as_a_backup() -> None:
+    """The v1 envelope times out against Kuma v2; monitors are created one by one (#1042)."""
+    source = (Path(__file__).resolve().parent.parent / "toolkit/features/monitoring.py").read_text(encoding="utf-8")
+    assert "api.upload_backup(" not in source

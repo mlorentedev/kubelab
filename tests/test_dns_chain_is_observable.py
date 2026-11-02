@@ -56,11 +56,11 @@ def _compose_text() -> str:
     reproducing the playbook's variable wiring here -- a second declaration free
     to drift from the first.
     """
-    return COMPOSE_TPL.read_text()
+    return COMPOSE_TPL.read_text(encoding="utf-8")
 
 
 def _seed() -> list[dict]:
-    data = json.loads(SEED.read_text())
+    data = json.loads(SEED.read_text(encoding="utf-8"))
     return data if isinstance(data, list) else data.get("monitors", data)
 
 
@@ -75,9 +75,9 @@ def test_no_published_port_binds_to_a_tailscale_address():
     container's ENTIRE port publication depend on winning that race on every
     boot -- and losing it is silent.
 
-    rpi4's LAN address is the right anchor: it is on a physical interface the
-    network stack configures before Docker starts, and it is still not a bare
-    world-facing publish, so #959's protection is kept rather than traded away.
+    rpi4's LAN address is no better anchor: networkd configures a static address
+    only once the link has a carrier, so with the switch cable out the same bind
+    failed the same way (#2732, lesson-648). Loopback exists before Docker starts.
     """
     text = _compose_text()
     offenders = [line.strip() for line in text.splitlines() if re.search(r'-\s*"\{\{\s*node_ips\.\w+\s*\}\}:', line)]
@@ -86,17 +86,18 @@ def test_no_published_port_binds_to_a_tailscale_address():
         + "\n  ".join(offenders)
         + "\nOn boot Docker restores containers before tailscaled has assigned the "
         "address; the bind fails and takes every other port on that container with "
-        "it. Use the node's LAN address, which exists before Docker starts."
+        "it. Bind loopback or publish bare: only loopback exists before Docker starts."
     )
 
 
-def test_the_lan_address_the_compose_relies_on_exists_in_the_ssot():
+def test_the_compose_hardcodes_no_lan_address():
     """Guard against fixing the race by inventing an address.
 
-    Hardcoding an IP here would satisfy the test above and violate the repo's
-    rule that every address lives in `networking.*`.
+    The stack binds no LAN address since #2732. Hardcoding one here would
+    satisfy the test above, bring back the bind that fails without a carrier,
+    and violate the repo's rule that every address lives in `networking.*`.
     """
-    common = yaml.safe_load(COMMON.read_text())
+    common = yaml.safe_load(COMMON.read_text(encoding="utf-8"))
     lan_ip = common["networking"]["nodes"]["rpi4"]["lan_ip"]
     assert lan_ip, "networking.nodes.rpi4.lan_ip is the SSOT this compose must read"
     assert not re.search(rf"\b{re.escape(lan_ip)}\b", _compose_text()), (
@@ -177,7 +178,7 @@ def test_the_sync_can_actually_write_a_dns_monitors_own_fields(field: str):
 
 def test_every_dns_monitor_resolves_against_our_own_resolver():
     """Pointing it at a public resolver would make it green for the wrong reason."""
-    common = yaml.safe_load(COMMON.read_text())
+    common = yaml.safe_load(COMMON.read_text(encoding="utf-8"))
     ours = {
         common["networking"]["nodes"]["rpi4"]["tailscale_ip"],
         common["networking"]["nodes"]["rpi4"]["lan_ip"],

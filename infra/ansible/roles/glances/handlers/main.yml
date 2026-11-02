@@ -1,4 +1,0 @@
----
-- name: Restart glances
-  command: docker compose -f {{ glances_deploy_dir }}/compose.yml up -d
-  changed_when: true

@@ -25,7 +25,7 @@ def fixture_registry(monkeypatch: pytest.MonkeyPatch) -> Path:
 
 def _write(tmp_path: Path, body: str) -> Path:
     path = tmp_path / "products.yaml"
-    path.write_text(body)
+    path.write_text(body, encoding="utf-8")
     return path
 
 
@@ -141,7 +141,7 @@ class TestAppForEvent:
         # GitHub runs both extensions; a `.yaml` listener missed here is the race itself.
         workflows = REPO / ".github" / "workflows"
         for path in sorted([*workflows.glob("*.yml"), *workflows.glob("*.yaml")]):
-            workflow = yaml.safe_load(path.read_text())
+            workflow = yaml.safe_load(path.read_text(encoding="utf-8"))
             dispatch = (workflow.get("on") or workflow.get(True) or {}).get("repository_dispatch") or {}
             for event in dispatch.get("types", []) if isinstance(dispatch, dict) else []:
                 listening.setdefault(event, []).append(path.name)
@@ -248,7 +248,7 @@ class TestDerivedImage:
 
     def test_each_real_product_derives_the_image_its_values_deploy(self) -> None:
         """The override and ``apps.platform.<app>.image_name`` must name one image."""
-        common = yaml.safe_load((REPO / "infra" / "config" / "values" / "common.yaml").read_text())
+        common = yaml.safe_load((REPO / "infra" / "config" / "values" / "common.yaml").read_text(encoding="utf-8"))
         checked = 0
         for app, product in product_registry.load_registry().products.items():
             if not product.contract_managed:
@@ -260,5 +260,5 @@ class TestDerivedImage:
 
 
 def _platform_blocks(env: str) -> dict[str, dict]:
-    values = yaml.safe_load((REPO / "infra" / "config" / "values" / f"{env}.yaml").read_text()) or {}
+    values = yaml.safe_load((REPO / "infra" / "config" / "values" / f"{env}.yaml").read_text(encoding="utf-8")) or {}
     return dict((values.get("apps") or {}).get("platform") or {})

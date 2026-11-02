@@ -291,7 +291,9 @@ def run_drill(
 
 
 def pvc_exists(kubeconfig: str, name: str, namespace: str) -> bool:
-    proc = subprocess.run(kubectl_get_argv(kubeconfig, name, namespace), capture_output=True, text=True)
+    proc = subprocess.run(
+        kubectl_get_argv(kubeconfig, name, namespace), capture_output=True, text=True, encoding="utf-8"
+    )
     return proc.returncode == 0
 
 
@@ -301,6 +303,7 @@ def apply_pvc(kubeconfig: str, manifest: dict[str, Any], namespace: str) -> None
         input=json.dumps(manifest),
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=True,
     )
 
@@ -310,5 +313,6 @@ def delete_pvc(kubeconfig: str, name: str, namespace: str) -> None:
         kubectl_delete_argv(kubeconfig, name, namespace),
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=True,
     )

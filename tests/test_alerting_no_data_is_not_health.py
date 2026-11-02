@@ -38,7 +38,7 @@ def _rules_over_cronjob_streams() -> list[tuple[str, str, dict]]:
     """(file, uid, rule) for every rule whose query reads a CronJob container."""
     found: list[tuple[str, str, dict]] = []
     for path in sorted(ALERTING_DIR.glob("*.yaml")):
-        doc = yaml.safe_load(path.read_text()) or {}
+        doc = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         for group in doc.get("groups") or []:
             for rule in group.get("rules") or []:
                 queries = "".join(str((item.get("model") or {}).get("expr", "")) for item in rule.get("data") or [])

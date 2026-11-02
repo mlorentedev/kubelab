@@ -77,7 +77,7 @@ Personal Internal Developer Platform (IDP) — a hybrid-cloud infrastructure pow
 
 | App | Stack | Description |
 |-----|-------|------------|
-| Web | Astro + TypeScript + Tailwind | Extracted to its own repository (ADR-053); images arrive via the `web-image-receiver` workflow |
+| Web | Astro + TypeScript + Tailwind | Extracted to its own repository (ADR-053); images arrive via the generic `product-image-receiver` workflow (ADR-067) |
 | [API](apps/api/) | Go + Gin | Backend services (newsletter, lead magnets) |
 | [Errors](edge/errors/) | HTML + Nginx | Custom Traefik error pages |
 

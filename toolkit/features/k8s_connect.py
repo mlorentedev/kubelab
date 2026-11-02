@@ -89,13 +89,13 @@ class TransportState:
 
     def save(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(asdict(self), indent=2))
+        path.write_text(json.dumps(asdict(self), indent=2), encoding="utf-8")
 
     @classmethod
     def load(cls, path: Path) -> "TransportState | None":
         if not path.is_file():
             return None
-        return cls(**json.loads(path.read_text()))
+        return cls(**json.loads(path.read_text(encoding="utf-8")))
 
 
 def _common_path() -> Path:
@@ -103,7 +103,7 @@ def _common_path() -> Path:
 
 
 def _load_config(common_path: Path | None = None) -> dict[str, Any]:
-    with open(common_path or _common_path()) as f:
+    with open(common_path or _common_path(), encoding="utf-8") as f:
         return yaml.safe_load(f) or {}
 
 

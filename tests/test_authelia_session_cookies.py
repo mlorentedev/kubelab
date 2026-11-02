@@ -31,7 +31,7 @@ def _cookies() -> list[tuple[str, str, str]]:
     """(config, cookie name, cookie domain) for every session cookie declared."""
     found = []
     for path in CONFIGS:
-        session = yaml.safe_load(path.read_text())["session"]
+        session = yaml.safe_load(path.read_text(encoding="utf-8"))["session"]
         for cookie in session.get("cookies") or []:
             found.append((str(path.relative_to(REPO)), cookie.get("name") or session["name"], cookie["domain"]))
     return found
@@ -77,7 +77,7 @@ def test_the_values_ssot_names_the_cookie_each_environment_serves() -> None:
 
     for env, config in K8S_CONFIG.items():
         declared = load_values(env, REPO)["apps"]["services"]["security"]["authelia"]["session_name"]
-        served = yaml.safe_load(config.read_text())["session"]["name"]
+        served = yaml.safe_load(config.read_text(encoding="utf-8"))["session"]["name"]
         assert declared == served, (
             f"{env}: values say session_name={declared!r} but Authelia serves {served!r}. "
             "Change both, or the next render from the SSOT brings the other name back."

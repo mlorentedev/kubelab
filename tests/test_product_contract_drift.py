@@ -27,6 +27,7 @@ from toolkit.features.product_render import (
     drift,
     snapshot_exempt,
     snapshot_gaps,
+    snapshot_path,
     write,
 )
 from toolkit.main import app
@@ -36,12 +37,22 @@ ENVS = ("staging", "prod")
 
 #: Pinned here, not read from CONTRACT_KEYS: a mapping that lost an entry would
 #: otherwise compare one key fewer and still report "all compared".
-OWNED_KEYS = {"default_port", "health_path", "domain", "enable_auth", "auth_level", "image_name"}
+OWNED_KEYS = {
+    "default_port",
+    "health_path",
+    "domain",
+    "site_domain",
+    "site_url",
+    "enable_auth",
+    "auth_level",
+    "image_name",
+}
 
 
 @pytest.mark.parametrize("env", ENVS)
 def test_the_web_snapshot_matches_the_values(env: str, capsys: pytest.CaptureFixture[str]) -> None:
-    differences, compared = drift(validate_contract(WEB), "web", env)
+    """Each env against its own snapshot: prod renders the contract of the release it runs."""
+    differences, compared = drift(validate_contract(snapshot_path("web", env)), "web", env)
     print(f"compared {compared} contract-owned keys for web/{env}")
 
     assert not differences, f"web/{env}: {differences}"
@@ -64,9 +75,9 @@ def values_copy(tmp_path: Path) -> Path:
 
 def _edit_web(values_dir: Path, env: str, key: str, value: object) -> None:
     path = values_dir / f"{env}.yaml"
-    data = yaml.safe_load(path.read_text())
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
     data["apps"]["platform"]["web"][key] = value
-    path.write_text(yaml.safe_dump(data))
+    path.write_text(yaml.safe_dump(data), encoding="utf-8")
 
 
 def test_a_derived_key_edited_by_hand_is_drift(values_copy: Path) -> None:
@@ -79,7 +90,7 @@ def test_a_derived_key_edited_by_hand_is_drift(values_copy: Path) -> None:
 
 def test_a_snapshot_that_no_longer_validates_is_refused(tmp_path: Path) -> None:
     broken = tmp_path / "web.yaml"
-    broken.write_text(WEB.read_text().replace("port: 8080", "port: '8080'"))
+    broken.write_text(WEB.read_text(encoding="utf-8").replace("port: 8080", "port: '8080'"), encoding="utf-8")
 
     with pytest.raises(ContractError):
         validate_contract(broken)
@@ -87,32 +98,58 @@ def test_a_snapshot_that_no_longer_validates_is_refused(tmp_path: Path) -> None:
 
 def test_write_restores_the_contract_keys_and_never_touches_version(values_copy: Path) -> None:
     _edit_web(values_copy, "prod", "default_port", 9090)
-    before = yaml.safe_load((values_copy / "prod.yaml").read_text())["apps"]["platform"]["web"]["version"]
+    before = yaml.safe_load((values_copy / "prod.yaml").read_text(encoding="utf-8"))["apps"]["platform"]["web"][
+        "version"
+    ]
 
     changed = write(validate_contract(WEB), "web", "prod", values_dir=values_copy)
 
     assert changed == ["default_port"]
-    after = yaml.safe_load((values_copy / "prod.yaml").read_text())["apps"]["platform"]["web"]
+    after = yaml.safe_load((values_copy / "prod.yaml").read_text(encoding="utf-8"))["apps"]["platform"]["web"]
     assert after["default_port"] == 8080
     assert after["version"] == before
     assert drift(validate_contract(WEB), "web", "prod", values_dir=values_copy)[0] == {}
 
 
+@pytest.mark.parametrize("env", ENVS)
+def test_a_hostname_change_moves_the_site_keys_with_the_domain(env: str, values_copy: Path, tmp_path: Path) -> None:
+    """#2610: `site_domain` and `site_url` are the hostname too, so a contract that moves it moves all three.
+
+    Detecting the mismatch instead would turn the force-pushed staging deploy PR
+    red with nothing to correct it.
+    """
+    old = getattr(validate_contract(WEB).hostnames, env)
+    moved = tmp_path / "web.yaml"
+    moved.write_text(
+        WEB.read_text(encoding="utf-8").replace(f"{env}: {old}\n", f"{env}: new.{old}\n"), encoding="utf-8"
+    )
+
+    changed = write(validate_contract(moved), "web", env, values_dir=values_copy)
+
+    assert sorted(changed) == ["domain", "site_domain", "site_url"]
+    after = yaml.safe_load((values_copy / f"{env}.yaml").read_text(encoding="utf-8"))["apps"]["platform"]["web"]
+    assert (after["domain"], after["site_domain"], after["site_url"]) == (
+        f"new.{old}",
+        f"new.{old}",
+        f"https://new.{old}",
+    )
+
+
 def test_write_on_a_clean_tree_changes_nothing(values_copy: Path) -> None:
-    original = (values_copy / "staging.yaml").read_text()
+    original = (values_copy / "staging.yaml").read_text(encoding="utf-8")
 
     assert write(validate_contract(WEB), "web", "staging", values_dir=values_copy) == []
-    assert (values_copy / "staging.yaml").read_text() == original
+    assert (values_copy / "staging.yaml").read_text(encoding="utf-8") == original
 
 
 def test_write_inserts_a_missing_key_before_version_and_changes_nothing_else(values_copy: Path) -> None:
     """A key right only in common.yaml is corrected in the env file, beside its siblings."""
     _edit_web(values_copy, "common", "health_path", "/elsewhere")
-    original = (values_copy / "prod.yaml").read_text().splitlines()
+    original = (values_copy / "prod.yaml").read_text(encoding="utf-8").splitlines()
 
     assert write(validate_contract(WEB), "web", "prod", values_dir=values_copy) == ["health_path"]
 
-    updated = (values_copy / "prod.yaml").read_text().splitlines()
+    updated = (values_copy / "prod.yaml").read_text(encoding="utf-8").splitlines()
     added = [line for line in updated if line not in original]
     assert [line.strip() for line in added] == ["health_path: /"]
     assert len(updated) == len(original) + 1
@@ -120,13 +157,14 @@ def test_write_inserts_a_missing_key_before_version_and_changes_nothing_else(val
     assert updated[position + 1].strip().startswith("version:")
 
 
-def _render(*args: str) -> Result:
-    return CliRunner().invoke(app, ["product", "render", "--contract", str(WEB), *args])
+def _render(*args: str, contract: Path = WEB) -> Result:
+    return CliRunner().invoke(app, ["product", "render", "--contract", str(contract), *args])
 
 
 @pytest.mark.parametrize("env", ENVS)
 def test_render_check_passes_on_the_committed_tree(env: str) -> None:
-    result = _render("--env", env, "--check")
+    """The prod snapshot lives one directory down; --app is still inferred from it."""
+    result = _render("--env", env, "--check", contract=snapshot_path("web", env))
 
     assert result.exit_code == 0, result.output
     assert f"compared {len(CONTRACT_KEYS)} contract-owned keys for web/{env}" in result.output
@@ -144,9 +182,11 @@ def test_render_check_exits_one_and_names_the_drifted_keys(values_copy: Path, mo
 
 def test_render_refuses_oidc(tmp_path: Path) -> None:
     contract = tmp_path / "web.yaml"
-    contract.write_text(WEB.read_text().replace("auth: public", "auth: oidc"))
+    contract.write_text(WEB.read_text(encoding="utf-8").replace("auth: public", "auth: oidc"), encoding="utf-8")
 
-    result = CliRunner().invoke(app, ["product", "render", "--contract", str(contract), "--env", "prod", "--app", "web"])
+    result = CliRunner().invoke(
+        app, ["product", "render", "--contract", str(contract), "--env", "prod", "--app", "web"]
+    )
 
     assert result.exit_code == 1
     assert "ERROR:" in result.output
@@ -166,8 +206,88 @@ def test_every_contract_managed_entry_has_a_snapshot_and_every_snapshot_an_entry
 
 def test_every_committed_snapshot_passes_the_registry_guards() -> None:
     """A registry edit (image override, an entry turned in-tree) that no snapshot follows is drift too."""
-    for snapshot in sorted(SNAPSHOT_DIR.glob("*.yaml")):
+    snapshots = sorted(SNAPSHOT_DIR.glob("*.yaml")) + sorted(snapshot_path("web", "prod").parent.glob("*.yaml"))
+    assert snapshot_path("web", "prod") in snapshots
+    for snapshot in snapshots:
         validate_registered(snapshot, snapshot.stem)
+
+
+def test_every_prod_pin_of_a_contract_managed_entry_has_a_prod_snapshot() -> None:
+    assert snapshot_gaps(env="prod") == ([], [])
+
+
+@pytest.fixture
+def snapshots_copy(tmp_path: Path) -> Path:
+    shutil.copytree(SNAPSHOT_DIR, tmp_path / "contracts")
+    return tmp_path / "contracts"
+
+
+def _drift_per_env(snapshot_dir: Path, values_dir: Path) -> dict[str, dict[str, tuple[object, object]]]:
+    return {
+        env: drift(validate_contract(snapshot_path("web", env, snapshot_dir)), "web", env, values_dir=values_dir)[0]
+        for env in ENVS
+    }
+
+
+def test_a_contract_change_to_a_prod_owned_key_leaves_the_tree_green(values_copy: Path, snapshots_copy: Path) -> None:
+    """The closeout review's Major: the receiver renders staging only, and prod must not go red for it.
+
+    A staging receive rewrites the staging snapshot and renders staging; prod keeps
+    the snapshot of the release it runs until a prod promotion copies the release's
+    contract and renders prod. Both envs are clean after each half.
+    """
+    staging = snapshot_path("web", "staging", snapshots_copy)
+    edited = (
+        staging.read_text(encoding="utf-8")
+        .replace("port: 8080", "port: 9090")
+        .replace("prod: mlorente.dev", "prod: new.dev")
+    )
+    assert edited != staging.read_text(encoding="utf-8")
+    staging.write_text(edited, encoding="utf-8")
+
+    assert write(validate_contract(staging), "web", "staging", values_dir=values_copy) == ["default_port"]
+    assert _drift_per_env(snapshots_copy, values_copy) == {"staging": {}, "prod": {}}
+
+    shutil.copy(staging, snapshot_path("web", "prod", snapshots_copy))
+    prod = validate_contract(snapshot_path("web", "prod", snapshots_copy))
+    assert sorted(write(prod, "web", "prod", values_dir=values_copy)) == [
+        "default_port",
+        "domain",
+        "site_domain",
+        "site_url",
+    ]
+    assert _drift_per_env(snapshots_copy, values_copy) == {"staging": {}, "prod": {}}
+
+
+def test_a_prod_snapshot_edited_without_a_render_is_drift(values_copy: Path, snapshots_copy: Path) -> None:
+    prod = snapshot_path("web", "prod", snapshots_copy)
+    prod.write_text(prod.read_text(encoding="utf-8").replace("port: 8080", "port: 9090"), encoding="utf-8")
+
+    assert _drift_per_env(snapshots_copy, values_copy)["prod"] == {"default_port": (9090, 8080)}
+
+
+def test_the_prod_snapshot_is_a_separate_file_from_the_staging_one() -> None:
+    assert snapshot_path("web", "staging") == WEB
+    assert snapshot_path("web", "prod") == SNAPSHOT_DIR / "prod" / "web.yaml"
+    with pytest.raises(ValueError, match="dev"):
+        snapshot_path("web", "dev")
+
+
+def test_a_prod_pin_without_a_prod_snapshot_is_drift(values_copy: Path, tmp_path: Path) -> None:
+    """Fixture registry: web and third are contract-managed; only web is pinned in prod."""
+    (tmp_path / "snaps" / "prod").mkdir(parents=True)
+
+    assert snapshot_gaps(FIXTURE_REGISTRY, tmp_path / "snaps", env="prod", values_dir=values_copy) == (["web"], [])
+
+
+def test_a_prod_snapshot_for_an_app_prod_does_not_pin_is_drift(values_copy: Path, tmp_path: Path) -> None:
+    """A product onboarded to staging only has no prod snapshot until its first prod promotion."""
+    prod_dir = tmp_path / "snaps" / "prod"
+    prod_dir.mkdir(parents=True)
+    for name in ("web", "third"):
+        shutil.copy(WEB, prod_dir / f"{name}.yaml")
+
+    assert snapshot_gaps(FIXTURE_REGISTRY, tmp_path / "snaps", env="prod", values_dir=values_copy) == ([], ["third"])
 
 
 def test_a_contract_managed_entry_without_a_snapshot_is_drift(tmp_path: Path) -> None:
@@ -197,9 +317,9 @@ def test_the_exempt_set_is_exactly_the_in_tree_entries() -> None:
 def test_write_refuses_an_app_with_no_values_block(values_copy: Path) -> None:
     """--check reports six drifts here; --write must refuse with ERROR / WHY / FIX, not raise KeyError."""
     path = values_copy / "prod.yaml"
-    data = yaml.safe_load(path.read_text())
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
     del data["apps"]["platform"]["web"]
-    path.write_text(yaml.safe_dump(data))
+    path.write_text(yaml.safe_dump(data), encoding="utf-8")
 
     assert drift(validate_contract(WEB), "web", "prod", values_dir=values_copy)[1] == len(OWNED_KEYS)
     with pytest.raises(ContractError) as excinfo:
@@ -233,7 +353,7 @@ def test_every_auth_level_in_the_values_is_one_the_contract_can_render() -> None
                 walk(child)
 
     for env_file in VALUES_DIR.glob("*.yaml"):
-        walk((yaml.safe_load(env_file.read_text()) or {}).get("apps"))
+        walk((yaml.safe_load(env_file.read_text(encoding="utf-8")) or {}).get("apps"))
 
     assert {"bypass", "one_factor"} <= found
     assert found <= renderable, f"auth levels the contract cannot express: {found - renderable}"

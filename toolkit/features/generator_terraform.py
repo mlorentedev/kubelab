@@ -35,7 +35,7 @@ class TerraformGenerator(BaseGenerator):
             return {"success": False, "error": "services.json not found"}
 
         try:
-            with open(services_file) as f:
+            with open(services_file, encoding="utf-8") as f:
                 services = json.load(f)
             if not isinstance(services, list) or len(services) == 0:
                 logger.error("services.json must be a non-empty JSON array")

@@ -53,7 +53,7 @@ _DIAGNOSING = ("hint", "why this failed", "how to fix")
 def _steps():
     for path in sorted(WORKFLOWS.glob("*.y*ml")):
         try:
-            workflow = yaml.safe_load(path.read_text())
+            workflow = yaml.safe_load(path.read_text(encoding="utf-8"))
         except yaml.YAMLError:
             continue
         if not isinstance(workflow, dict):

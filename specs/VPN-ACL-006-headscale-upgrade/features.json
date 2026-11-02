@@ -1,0 +1,51 @@
+[
+  {
+    "id": "VPN-ACL-006-headscale-upgrade-AC1",
+    "behavior": "Preflight refuses incompatible or unknown clients, unsafe pins/transitions, absent approval and required nodes the upgrade would disconnect or rename, before mutation.",
+    "verification": "python -m pytest -o addopts= tests/test_headscale_upgrade.py -k eligibility -q",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "VPN-ACL-006-headscale-upgrade-AC2",
+    "behavior": "Candidate image, rendered configuration and CLI/hostname consumers satisfy the reviewed compatibility contract.",
+    "verification": "python -m pytest -o addopts= tests/test_headscale_upgrade.py tests/test_headscale_role.py tests/test_headscale_nodes.py -q",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "VPN-ACL-006-headscale-upgrade-AC3",
+    "behavior": "Candidate-version traffic preserves required private and subnet flows without unintended broadening.",
+    "verification": "make headscale-upgrade-drill",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "VPN-ACL-006-headscale-upgrade-AC4",
+    "behavior": "Synthetic migration and complete old-version restore preserve identity and reject missing or corrupt snapshots.",
+    "verification": "make headscale-upgrade-drill",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "VPN-ACL-006-headscale-upgrade-AC5",
+    "behavior": "Populated-state native assertions execute and rejected policy writes/reloads cannot report success.",
+    "verification": "make headscale-upgrade-drill",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "VPN-ACL-006-headscale-upgrade-AC6",
+    "behavior": "Control-plane checks, reconnect and two disposable applies show no duplicate identity or second-run mutation.",
+    "verification": "make headscale-upgrade-drill",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "VPN-ACL-006-headscale-upgrade-AC7",
+    "behavior": "Safe-default approval, redaction, runbook prerequisites and success/failure cleanup are tested.",
+    "verification": "python -m pytest -o addopts= tests/test_headscale_upgrade.py -k safety -q",
+    "state": "pending",
+    "evidence": ""
+  }
+]

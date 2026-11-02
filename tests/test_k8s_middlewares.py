@@ -139,7 +139,7 @@ def fake_project(tmp_path: Path) -> Path:
     """A project_root with a fake template file in place."""
     tpl_dir = tmp_path / "infra" / "k8s" / "overlays" / "prod" / "middlewares"
     tpl_dir.mkdir(parents=True)
-    (tpl_dir / "api-key.yaml.tpl").write_text(TestRenderMiddleware._TEMPLATE)
+    (tpl_dir / "api-key.yaml.tpl").write_text(TestRenderMiddleware._TEMPLATE, encoding="utf-8")
     return tmp_path
 
 
@@ -262,7 +262,7 @@ class TestApplyMiddlewareSecrets:
 
         audit = fake_project / "infra/k8s/overlays/prod/middlewares/.rendered/api-key-testsvc.yaml"
         assert audit.exists(), "Audit copy must be written for forensic review"
-        content = audit.read_text()
+        content = audit.read_text(encoding="utf-8")
         assert "PROD_KEY_42" in content
         assert "kind: Middleware" in content
 

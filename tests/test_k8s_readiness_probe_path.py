@@ -35,15 +35,12 @@ class TestReadinessPathResolution:
         assert (live, ready) == ("/health", "/health")
 
     def test_a_declared_readiness_path_is_used_for_readiness_only(self) -> None:
-        live, ready = _find(
-            {"APPS_PLATFORM_API_HEALTH_PATH": "/health", "APPS_PLATFORM_API_READINESS_PATH": "/ready"}
-        )
+        live, ready = _find({"APPS_PLATFORM_API_HEALTH_PATH": "/health", "APPS_PLATFORM_API_READINESS_PATH": "/ready"})
 
         assert (live, ready) == ("/health", "/ready")
 
     def test_no_health_path_means_no_probes(self) -> None:
         assert _find({}) == (None, None)
-
 
     def test_the_path_is_probe_metadata_and_stays_out_of_the_configmap(self) -> None:
         """Like HEALTH_PATH, it would otherwise land in the pod env and change the ConfigMap hash."""
@@ -54,7 +51,7 @@ class TestReadinessPathResolution:
 
 def _api_probes(env: str) -> dict[str, str]:
     path = REPO / "infra" / "k8s" / "overlays" / env / "generated" / "deployments.yaml"
-    for doc in yaml.safe_load_all(path.read_text()):
+    for doc in yaml.safe_load_all(path.read_text(encoding="utf-8")):
         if doc and doc.get("kind") == "Deployment" and doc["metadata"]["name"] == "api":
             c = doc["spec"]["template"]["spec"]["containers"][0]
             return {

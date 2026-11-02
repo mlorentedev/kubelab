@@ -20,7 +20,9 @@ from toolkit.features.backup_node_credentials import access_key_path, secret_key
 from toolkit.features.k8s_secrets import SECRET_DEFINITIONS, _apply_single_secret, _resolve_config_keys
 from toolkit.features.secrets_manager import SECRET_CATALOG, SecretKind
 
-COMMON = yaml.safe_load((pathlib.Path(__file__).resolve().parents[1] / "infra/config/values/common.yaml").read_text())
+COMMON = yaml.safe_load(
+    (pathlib.Path(__file__).resolve().parents[1] / "infra/config/values/common.yaml").read_text(encoding="utf-8")
+)
 NODES = sorted(COMMON["backup"]["sources"])
 
 _ENV = {

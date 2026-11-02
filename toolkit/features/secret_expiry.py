@@ -136,6 +136,16 @@ def parse_headscale_apikeys(output: str) -> list[KeyExpiry]:
     return keys
 
 
+def is_unreferenced_expired(key: KeyExpiry, stored: Iterable[str]) -> bool:
+    """An expired key no stored credential is, so it is hygiene, not an incident (#1485).
+
+    An expired key authenticates nothing, and if nothing holds it nothing can fail.
+    Reporting it as an error kept `check-expiry` red, which hid the real ones.
+    """
+    stem = key.prefix.rstrip("*-")
+    return key.days_left < 0 and not any(value.startswith(stem) for value in stored)
+
+
 def headscale_apikeys(ssh_target: str, container: str = "headscale") -> list[KeyExpiry]:
     """Ask the VPS what it will still accept, and when it will stop.
 
@@ -426,7 +436,7 @@ def cloudflare_account_token_expiry(token: str, timeout: float = 15.0) -> dateti
 
     from toolkit.config.settings import PROJECT_ROOT
 
-    common = yaml.safe_load((PROJECT_ROOT / "infra" / "config" / "values" / "common.yaml").read_text())
+    common = yaml.safe_load((PROJECT_ROOT / "infra" / "config" / "values" / "common.yaml").read_text(encoding="utf-8"))
     account_id = common["backup"]["r2"]["account_id"]
     return _cloudflare_verify_expiry(f"/accounts/{account_id}/tokens/verify", token, timeout)
 
@@ -471,7 +481,8 @@ PROVIDER_CHECKS = {
     # 2026-08-28 against the live token rather than assumed from the docs, because
     # a checker that silently cannot read its own credential is the failure this
     # whole module exists to prevent.
-    "apps.services.core.gitea.github_migration_token": github_pat_expiry,
     # hermes-kubelab's vault token: fine-grained, Contents on the vault repository only.
     "apps.services.ai.hermes_kubelab.github_token": github_pat_expiry,
+    # Argo CD's commit-status token (GITOPS-003): fine-grained, Commit statuses on kubelab only.
+    "argocd.github_status_token": github_pat_expiry,
 }

@@ -1,0 +1,23 @@
+# Managed by Ansible (gateway role). The lab Wi-Fi AP (ADR-075 D2).
+#
+# WPA2-PSK with CCMP only. Management-frame protection and WPA3 stay off: the
+# BCM43455 firmware breaks the first in AP mode and crashes on the second.
+interface={{ gateway_ap_interface }}
+driver=nl80211
+# hostapd_cli reaches the daemon here, for reload_wpa_psk and the station keyid.
+ctrl_interface=/run/hostapd
+ctrl_interface_group=0
+ssid={{ gateway_ap_ssid }}
+country_code={{ gateway_uplink_regdomain }}
+ieee80211d=1
+hw_mode=g
+channel={{ gateway_ap_channel }}
+ieee80211n=1
+wmm_enabled=1
+auth_algs=1
+wpa=2
+wpa_key_mgmt=WPA-PSK
+rsn_pairwise=CCMP
+ieee80211w=0
+# One line per PSK, so a rotation can accept two for a while (D8).
+wpa_psk_file=/etc/hostapd/hostapd.wpa_psk

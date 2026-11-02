@@ -36,7 +36,7 @@ NODE = "vps"
 
 @pytest.fixture(scope="module")
 def backup() -> dict:
-    return yaml.safe_load(COMMON_YAML.read_text())["backup"]
+    return yaml.safe_load(COMMON_YAML.read_text(encoding="utf-8"))["backup"]
 
 
 @pytest.fixture(scope="module")

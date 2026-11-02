@@ -15,7 +15,8 @@
   ],
   "commitMessagePrefix": "fix(deps):",
   "enabledManagers": [
-    "custom.regex"
+    "custom.regex",
+    "ansible-galaxy"
   ],
   "customManagers": [
     {
@@ -25,9 +26,21 @@
         "/^infra/config/values/common\\.yaml$/"
       ],
       "matchStrings": [
-        "image:\\s+(?<depName>(?:[a-z0-9._\\-]+(?:\\.[a-z0-9._\\-]+)*/)*[a-z0-9._\\-]+):(?<currentValue>[A-Za-z0-9][A-Za-z0-9._\\-]*)\\s*$"
+        "(?m)image:\\s+(?<depName>(?:[a-z0-9._\\-]+(?:\\.[a-z0-9._\\-]+)*/)*[a-z0-9._\\-]+):(?<currentValue>[A-Za-z0-9][A-Za-z0-9._\\-]*)\\s*$"
       ],
       "datasourceTemplate": "docker"
+    },
+    {
+      "customType": "regex",
+      "description": "Vendored operators in cluster_bootstrap: `version` with its `source.repo`, the GitHub release `make sync-operators` fetches (#694). The version line and the source are adjacent by contract, and a CI step fails a bump that did not regenerate the manifest.",
+      "managerFilePatterns": [
+        "/^infra/config/values/common\\.yaml$/"
+      ],
+      "matchStrings": [
+        "(?m)^\\s+version:\\s+(?<currentValue>v?[0-9][A-Za-z0-9._\\-]*).*\\n\\s+source:.*\\n\\s+repo:\\s+(?<depName>\\S+)\\s*$"
+      ],
+      "datasourceTemplate": "github-releases",
+      "versioningTemplate": "loose"
     }
   ],
   "packageRules": [
@@ -41,6 +54,17 @@
         "patch"
       ],
       "groupName": "service images (minor+patch)"
+    },
+    {
+      "description": "Galaxy collections in infra/ansible/requirements.yml, pinned exactly (ANSIBLE-070). Patch+minor arrive as one weekly PR; majors stay individual. After a merge each controller runs `make setup-ansible`, and `make provision`/`make deploy` refuse one that has not.",
+      "matchManagers": [
+        "ansible-galaxy"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
+      "groupName": "ansible collections (minor+patch)"
     },
     {
       "description": "Headscale. Its clients are the Tailscale daemons on 8 nodes, pinned separately and NOT tracked here \u2014 so a server bump can outrun them. It is also the bootstrap dependency for the whole mesh: if the control plane rejects the clients, the VPN used to reach the VPS and fix it is the thing that broke. Never grouped, never silent.",
@@ -105,12 +129,24 @@
       "prBodyNotes": [
         "**Re-verify the identity model.** Deploy to staging, sign in as a `users` member, then run `make auth-review ENV=staging` and `poetry run pytest tests/test_oauth_tokens_not_logged.py`; read lessons 457, 461 and 463 before merging."
       ]
+    },
+    {
+      "description": "Vendored operators. A bump edits only `version`: run `make sync-operators` on the PR branch and commit the manifest, or CI stays red. Never grouped, because each operator's CRDs change on their own terms.",
+      "matchDatasources": [
+        "github-releases"
+      ],
+      "groupName": null,
+      "labels": [
+        "dependencies",
+        "renovate",
+        "needs-care"
+      ],
+      "prBodyNotes": [
+        "**Regenerate before merging.** Run `make sync-operators` on this branch and commit the manifest; the `Check vendored operator manifests` step stays red until you do. Read the CRD changes, then validate on staging with `make deploy-k8s ENV=staging`."
+      ]
     }
   ],
-  "ignoreDeps": [
-    "cloudflare/cloudflared",
-    "fbonalair/traefik-crowdsec-bouncer"
-  ],
+  "ignoreDeps": [],
   "dependencyDashboard": true,
   "dependencyDashboardTitle": "Renovate: service image updates"
 }

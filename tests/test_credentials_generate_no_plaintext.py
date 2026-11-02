@@ -144,9 +144,9 @@ def test_a_failed_write_raises_and_prints_nothing(
     assert targets == (["<env file>"] if names == "prod.enc.yaml" else ["<env file>", "common.enc.yaml"])
     if names == "common.enc.yaml":
         assert any("argocd" in key for key in generated), "the hub values were not in the checked set"
-    # Uptime Kuma's new password is in the env file once that write succeeds, so
-    # the service is reconciled then, whatever happens to the hub write after it.
-    assert bool(manager.reconciled) is (names == "common.enc.yaml"), manager.reconciled
+    # Uptime Kuma's password lives in common (#2599): a failed write of either file
+    # raises before Kuma is changed, so the service keeps the value common holds.
+    assert not manager.reconciled, manager.reconciled
 
     out = _flat("".join(capsys.readouterr()))
     assert not [v for v in _secret_values(generated) if _flat(v) in out], "a failed write printed a secret"

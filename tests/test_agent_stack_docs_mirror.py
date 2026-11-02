@@ -38,7 +38,8 @@ def mirror(tmp_path: Path):
             agent_stack_docs_mirror=str(mirror_dir),
             agent_stack_docs_sandbox=str(sandbox),
             agent_stack_hermes={**HERMES, "docs_mirror": {**DOCS, "remote": remote.bare.as_uri(), "branch": BRANCH}},
-        )
+        ),
+        encoding="utf-8",
     )
     script.chmod(0o755)
     return remote, mirror_dir / "tree", sandbox, script
@@ -52,7 +53,7 @@ def test_both_trees_hold_the_docs_and_nothing_else_of_the_repository(mirror) -> 
     _, tree, sandbox, script = mirror
     assert _run(script).returncode == 0
     for root in (tree, sandbox):
-        assert (root / "docs/guide.md").read_text() == "v1\n"
+        assert (root / "docs/guide.md").read_text(encoding="utf-8") == "v1\n"
         assert not (root / "apps").exists(), "sparse: the rest of the repository is not copied"
         assert not (root / ".git").exists(), "no history, no remote, no config in what is mounted"
 
@@ -63,21 +64,21 @@ def test_the_second_tree_is_written_too_and_a_run_follows_the_remote(mirror) -> 
     _run(script)
     remote.commit("docs/guide.md", "v2\n")
     assert _run(script).returncode == 0
-    assert (tree / "docs/guide.md").read_text() == "v2\n"
-    assert (sandbox / "docs/guide.md").read_text() == "v2\n"
+    assert (tree / "docs/guide.md").read_text(encoding="utf-8") == "v2\n"
+    assert (sandbox / "docs/guide.md").read_text(encoding="utf-8") == "v2\n"
 
 
 def test_anything_written_into_a_tree_is_discarded_and_a_deleted_file_leaves(mirror) -> None:
     remote, tree, sandbox, script = mirror
     remote.commit("docs/old.md", "x\n")
     _run(script)
-    (sandbox / "docs/guide.md").write_text("tampered\n")
-    (sandbox / "planted.md").write_text("not the docs\n")
+    (sandbox / "docs/guide.md").write_text("tampered\n", encoding="utf-8")
+    (sandbox / "planted.md").write_text("not the docs\n", encoding="utf-8")
     (remote.work / "docs/old.md").unlink()
     _git(remote.work, "commit", "-q", "-am", "drop")
     _git(remote.work, "push", "-q", "origin", f"HEAD:{BRANCH}")
     assert _run(script).returncode == 0
-    assert (sandbox / "docs/guide.md").read_text() == "v1\n"
+    assert (sandbox / "docs/guide.md").read_text(encoding="utf-8") == "v1\n"
     assert not (sandbox / "planted.md").exists()
     assert not (tree / "docs/old.md").exists() and not (sandbox / "docs/old.md").exists()
 

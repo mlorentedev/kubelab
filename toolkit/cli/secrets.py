@@ -383,6 +383,14 @@ def dig_across(configs: list[dict[str, object]], path: str) -> str:
     return ""
 
 
+def _lead_days(key_path: str, default: int) -> int:
+    """The catalog entry's own lead time (TOOL-126), else the report's window."""
+    from toolkit.features.secrets_manager import SECRET_CATALOG
+
+    own = next((s.warn_days for s in SECRET_CATALOG if s.key_path == key_path), None)
+    return default if own is None else own
+
+
 def _declared_expiry_lines(warn_days: int) -> tuple[list[str], list[str]]:
     """Report every DECLARED credential: its recorded expiry, or the absence of one.
 
@@ -411,7 +419,7 @@ def _declared_expiry_lines(warn_days: int) -> tuple[list[str], list[str]]:
             missing.append(label)
             continue
         line = f"  {label} — expires {item.expires_on:%Y-%m-%d} ({item.days_left}d, recorded, not asked)"
-        if (item.days_left or 0) < warn_days:
+        if (item.days_left or 0) < _lead_days(item.key_path, warn_days):
             logger.error(line)
             expiring.append(label)
         else:
@@ -453,7 +461,7 @@ def _report_expiry(warn_days: int) -> None:
             continue
         days = (expires - datetime.now(timezone.utc)).days
         line = f"  {spec.key_path} — expires {expires:%Y-%m-%d} ({days}d)"
-        logger.error(line) if days < warn_days else logger.info(line)
+        logger.error(line) if days < _lead_days(spec.key_path, warn_days) else logger.info(line)
 
     _declared_expiry_lines(warn_days)
 
@@ -563,6 +571,10 @@ def set_secret(
             help="Read the value from environment variable VAR (for `dotf secrets run -- toolkit ...`)",
         ),
     ] = None,
+    as_json: Annotated[
+        bool,
+        typer.Option("--json", help="Parse the value as JSON and store the structure (a list or a mapping)"),
+    ] = False,
 ) -> None:
     """Set a secret value in the SOPS vault.
 
@@ -582,6 +594,12 @@ def set_secret(
     Example:
       toolkit secrets set aws.access_key_id AKIA... --env common
       printf %s "$TOKEN" | toolkit secrets set apps.x.token --env staging --stdin
+
+    --json stores a structure instead of a string, for keys a role reads as a mapping.
+    sops cannot store a top-level list, so key list entries by name. Invalid JSON
+    writes nothing:
+
+      toolkit secrets set apps.services.core.headscale.segments.<name> --env prod --json '{"owner": "x", ...}'
     """
     valid_envs = ("common", "dev", "staging", "prod")
     if env not in valid_envs:
@@ -605,8 +623,25 @@ def set_secret(
         logger.error("Provide a VALUE argument or use --stdin")
         raise typer.Exit(1)
 
+    stored: object = value
+    if as_json:
+        import json
+
+        try:
+            stored = json.loads(value)
+        except json.JSONDecodeError as exc:
+            # The position only: the message must not echo a secret back.
+            logger.error(
+                f"--json: the value is not valid JSON (line {exc.lineno}, column {exc.colno}); nothing written"
+            )
+            raise typer.Exit(1) from None
+        if isinstance(stored, list):
+            # sops 3.13.1 refuses a top-level array in `sops set`, by argument and by stdin.
+            logger.error("--json: sops cannot store a top-level list; key the entries by name in a mapping instead")
+            raise typer.Exit(1)
+
     mgr = _get_manager()
-    if mgr.set_secret(env, key, value):
+    if mgr.set_secret(env, key, stored):
         logger.success(f"Secret '{key}' set in {env}")
     else:
         logger.error(f"Failed to set secret '{key}' in {env}")
@@ -788,9 +823,23 @@ def catalog(
     logger.console.print(table)
 
 
+def _headscale_key_paths() -> list[str]:
+    """Stored keys Headscale issued: PROVIDER expiry, and no check that asks by value."""
+    from toolkit.features.secret_expiry import PROVIDER_CHECKS, Expiry, resolve_expiry
+    from toolkit.features.secrets_manager import SECRET_CATALOG
+
+    return [
+        spec.key_path
+        for spec in SECRET_CATALOG
+        if resolve_expiry(spec) is Expiry.PROVIDER and spec.key_path not in PROVIDER_CHECKS
+    ]
+
+
 @app.command("check-expiry")
 def check_expiry(
-    warn_days: Annotated[int, typer.Option("--warn-days", help="Fail below this many days remaining")] = 90,
+    warn_days: Annotated[
+        int, typer.Option("--warn-days", help="Fail below this many days left, where the catalog sets no warn_days")
+    ] = 90,
     ssh_target: Annotated[
         str | None,
         typer.Option("--ssh", help="Where headscale runs; defaults to the VPS from the SSOT"),
@@ -818,6 +867,7 @@ def check_expiry(
         Expiry,
         ExpiryUnavailableError,
         headscale_apikeys,
+        is_unreferenced_expired,
         resolve_expiry,
     )
     from toolkit.features.secrets_manager import SECRET_CATALOG
@@ -865,7 +915,7 @@ def check_expiry(
             continue
         days = (expires - datetime.now(timezone.utc)).days
         line = f"{spec.key_path}  expires {expires:%Y-%m-%d}  ({days}d)"
-        if days < warn_days:
+        if days < _lead_days(spec.key_path, warn_days):
             logger.error(line)
             expiring.append(spec.key_path)
         else:
@@ -883,9 +933,12 @@ def check_expiry(
         logger.error(f"headscale  CANNOT CHECK: {exc}")
         raise typer.Exit(2) from exc
 
+    stored = [value for path in _headscale_key_paths() if (value := _dig(path))]
     for key in sorted(keys, key=lambda k: k.expires_at):
         line = f"{key.prefix}  expires {key.expires_at:%Y-%m-%d}  ({key.days_left}d)"
-        if key.days_left < warn_days:
+        if is_unreferenced_expired(key, stored):
+            logger.warning(f"{line}: expired and held by nothing, safe to delete on the server")
+        elif key.days_left < warn_days:
             logger.error(line)
             expiring.append(key.prefix)
         else:
@@ -897,7 +950,7 @@ def check_expiry(
 
     if expiring:
         logger.error(
-            f"{len(expiring)} credential(s) expire within {warn_days} days: {expiring}. "
+            f"{len(expiring)} credential(s) inside their lead time (default {warn_days} days): {expiring}. "
             "Each fails SILENTLY at the moment it is needed rather than when it expires: "
             "a Headscale key leaves the next hub recreate unable to clear its stale node, "
             "so it registers as <host>-<random> and breaks the inventory and kubeconfig; "
@@ -905,11 +958,16 @@ def check_expiry(
             "clone. Nothing raises an alarm on the expiry date itself."
         )
         raise typer.Exit(1)
-    logger.success(f"{len(keys)} provider-issued credentials, none expiring within {warn_days} days")
+    logger.success(f"{len(keys)} provider-issued credentials, none inside its lead time (default {warn_days} days)")
 
 
 @app.command("acme-token-scope")
-def acme_token_scope() -> None:
+def acme_token_scope(
+    live: Annotated[
+        bool,
+        typer.Option("--live", help="Also check that each cluster's Secret holds this same token (#2928)"),
+    ] = False,
+) -> None:
     """Ask Cloudflare what the ACME DNS-01 token may do on each issuing zone (#2459).
 
     Every request is a GET; the token is used, never printed. Expected per
@@ -922,8 +980,12 @@ def acme_token_scope() -> None:
 
     Exits 1 when a probe answers differently (a 200 on zone settings means the
     token is broader than DNS), 2 when Cloudflare cannot be asked.
+
+    These answers describe the SOPS value, and a Secret changes only at
+    provision. `--live` also compares each cluster's Secret with it, exiting 1 on
+    a difference and 2 when a cluster cannot be read.
     """
-    from toolkit.features.acme_token_scope import ScopeUncheckableError, probe_acme_token
+    from toolkit.features.acme_token_scope import ScopeUncheckableError, cluster_holds_token, probe_acme_token
     from toolkit.features.configuration import ConfigurationManager
 
     logger.section("ACME DNS-01 token scope")
@@ -955,6 +1017,26 @@ def acme_token_scope() -> None:
         logger.error(f"{len(wrong)} probe(s) answered differently than an ACME-only token should")
         raise typer.Exit(1)
     logger.success(f"{len(probes)} probes as expected: the token reaches DNS on its zones and nothing more")
+
+    if not live:
+        return
+    # Each cluster on its own: staging is on-demand, and a powered-off homelab must
+    # not stop the always-on cluster from being read.
+    differing: list[str] = []
+    unreadable = 0
+    for env in ("staging", "prod"):
+        try:
+            if not cluster_holds_token(env, token):
+                differing.append(env)
+        except ScopeUncheckableError as exc:
+            logger.error(f"CANNOT CHECK: {exc}")
+            unreadable += 1
+    if differing:
+        logger.error(f"Secret differs from cloudflare.acme_dns_token on: {', '.join(differing)}. Provision the node.")
+        raise typer.Exit(1)
+    if unreadable:
+        raise typer.Exit(2)
+    logger.success("both clusters' Secrets hold this token")
 
 
 @app.command("preauth-keys")

@@ -1,0 +1,15 @@
+# {{ ansible_managed }}
+# Runs the edge liveness check every minute (NET-005 AC13). The first run waits
+# until a boot or a re-provision has restarted hostapd and networkd and both have
+# settled; a run never overlaps the previous one.
+[Unit]
+Description=Check the lab Wi-Fi and the uplink every minute
+
+[Timer]
+OnActiveSec=5min
+OnUnitInactiveSec=1min
+AccuracySec=10s
+Unit=kubelab-edge-liveness.service
+
+[Install]
+WantedBy=timers.target

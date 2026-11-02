@@ -116,17 +116,17 @@ The size decides whether R = 30 fits the free tier. It is measured by the watche
 > **Split 2026-10-07.** PR 4b is `backup-migrate` only; the isolation probe below is PR 4c, under the 300-line cap. The sitting needs both: the probe passes only once every node has moved and shipped to its own bucket, so it runs after the last node's first ship.
 
 - [x] [AC1] [AC3] (✓ 2026-10-07, PR 4c. The cross delete names a key that does not exist, so a broken scope cannot remove a pack. The own delete is attempted only behind an enabled `data/` lock rule of at least R, read from the API, and on a pack more than a day inside R. Run live before the migration, it already shows R2 refusing all 24 cross requests with `AccessDenied`; see verification.md) `toolkit backup isolation-probe --env prod` / `make backup-isolation-probe ENV=prod`. For every ordered pair of nodes, node A's credential must be refused on list and delete in node B's bucket. A direct delete of the youngest `data/` object in each bucket, with that node's own credential, must be refused. It exits non-zero if any request is **accepted**, and also if any bucket has no object under `data/`: an empty prefix has nothing to refuse a delete of, so it would report immutability it never measured. It therefore passes only after every node has shipped to its own bucket. Unit tests mock the S3 client and assert that an accepted request fails the probe. This is what makes the check able to fail: today's shared bucket passes every other check.
-- [ ] [AC1] [AC3] (✓ 2026-10-08 first half: backup-node, the isolation probe rc 0, and `watcher-run` 5/5 healthy, since ace2 also counts; the seven-day window stays open) Measured in prod, in this order: `make backup-node NODE=all ENV=prod` rc 0, then `make backup-isolation-probe ENV=prod` rc 0, and `make watcher-run ENV=prod` reports every declared node healthy (5 since ace2 joined: `{"nodes":5,"unhealthy":0}`). Then, seven days after the last node migrates, `make backup-schedule NODE=all ENV=prod` reports no `node-backup-prune.service` failure on any node in that window, which is the half of AC3 that rc 0 cannot show (Q6). Record both in `verification.md`.
+- [ ] [AC1] [AC3] (✓ 2026-10-08 first half: backup-node, the isolation probe rc 0, and `watcher-run` 5/5 healthy, since ace2 also counts; the seven-day window stays open) Measured in prod, in this order: `make backup-node NODE=all ENV=prod` rc 0, then `make backup-isolation-probe ENV=prod` rc 0, and `make watcher-run ENV=prod` reports every declared node healthy (5 since ace2 joined: `{"nodes":5,"unhealthy":0}`). Then, seven days after the last node migrates, `make backup-schedule NODE=all ENV=prod` reports no `node-backup-prune.service` failure on any node in that window, which is the half of AC3 that rc 0 cannot show (Q6). Record both in `verification.md`. The first window failed on copied history (#1920, verification.md): the prune now waits for it, so the seven days are counted from 2026-11-07, when the wait clears on the migrated nodes.
 
 ## PR 5 — close out
 
-- [ ] [AC5] `offsite-backup-restore.md` and `runbook-disaster-recovery.md` state what was measured:
+- [x] [AC5] (✓ 2026-11-01. The restore steps themselves were stale as well: they read the shared bucket and pair, and the escrow step named a pair no node uses) `offsite-backup-restore.md` and `runbook-disaster-recovery.md` state what was measured:
   - per-node isolation;
   - the lock on four prefixes;
   - what it does not cover: the admin token (where it is held; no node has it), data older than R, and a SOPS recipient key (until #1852, every node's history is readable with it, and the Cloudflare token it decrypts can remove a lock rule).
 
   They also give the recovery procedure for a node whose index was deleted (`restic repair index`).
-- [ ] [AC5] `tests/test_offsite_runbook_claims.py`:
+- [x] [AC5] (✓ 2026-11-01. Red before the runbook edit, 12 of 14 failing) `tests/test_offsite_runbook_claims.py`:
   - the runbook names every node bucket derived from `backup.sources`;
   - it names the four locked prefixes and R read from `common.yaml`;
   - it names the three uncovered cases: the admin token, data older than R, and a SOPS recipient key, as both a read and a lock-removal path (the last only while `.sops.yaml` lists more than the operator's key);
@@ -140,11 +140,11 @@ The size decides whether R = 30 fits the free tier. It is measured by the watche
 - [x] [AC5] (✓ 2026-10-07, landed ahead of PR 5 on its own: it depends on nothing the migration changes. The Bitwarden side is `dotf secrets probe`, which already reports sha256[:12] without the value, so no value crosses into the toolkit) `make backup-escrow-check`. For every restic password in SOPS (`backup.restic_password` and each `backup.nodes.<n>.restic_password`), it compares that value's hash with the hash of its `dotf` Bitwarden entry (`KUBELAB_RESTIC_PASSWORD[_<NODE>]`). No value is printed. It exits non-zero on a missing or stale entry.
 
   On 2026-10-03 this comparison was made by hand. The runbook's "if the escrow is missing or stale, there is no recovery" is otherwise checked by no one. The R2 pairs are re-mintable and stay out of the escrow.
-- [ ] After AC4 has been verified on all four nodes **and** one weekly `check` has passed on every new bucket: delete `kubelab-backups` and its token, and remove `backup.r2.bucket` / `backup.r2.access_key_id` from `common.yaml` and SOPS. This is its own PR if the weekly check lands after PR 5.
+- [ ] (Needs `coverage()` off `backup.r2.bucket` first: it still reads it through `load_destination`) After AC4 has been verified on all four nodes **and** one weekly `check` has passed on every new bucket: delete `kubelab-backups` and its token, and remove `backup.r2.bucket` / `backup.r2.access_key_id` from `common.yaml` and SOPS. This is its own PR if the weekly check lands after PR 5.
 
 ## Closing
 
 - [ ] Every acceptance criterion is covered by a test and has a `features.json` entry with a non-vacuous verification
 - [ ] `make test` and lint green
-- [ ] #1852 is closed and `.sops.yaml` lists only the human recipient. Until then the lock is liftable through the CI key, so the spec does not archive
+- [ ] (Recipient retired by #2935; the Actions secret goes after merge) #1852 is closed and `.sops.yaml` lists only the human recipient. Until then the lock is liftable through the CI key, so the spec does not archive
 - [ ] `verification.md` filled; independent `dotf spec review` (a different model); archive PR closes #1920

@@ -37,6 +37,8 @@ from typing import Any
 import pytest
 import yaml
 
+from tests.repo_files import repo_files
+
 REPO = Path(__file__).resolve().parent.parent
 ANSIBLE = REPO / "infra/ansible"
 VALUES = REPO / "infra/config/values"
@@ -63,12 +65,16 @@ SEGMENT = re.compile(
 GUARDED = re.compile(r"\s*(\|\s*(default|d)\b|is\s+(not\s+)?defined\b)")
 
 # Guarded reads of keys no env declares, on purpose. Each is an override knob
-# whose default is the real value.
+# whose default is the real value, or a key only some site profiles need.
 ABSENT_BY_DESIGN = {
     # The toolkit's loader derives it from `apps.contact.email`
     # (`configuration.py`); a playbook reads the raw values, so it falls back
     # to the same key.
     "config.edge.traefik.acme_email",
+    # Only a `wifi_psk` uplink has one, and `SecretSpec` has no optional flag, so
+    # its catalog entry lands with the first such site (NET-005 task 4). The
+    # gateway role refuses a `wifi_psk` profile without it.
+    "secrets.networking.edge.uplink.psk",
 }
 
 
@@ -99,7 +105,7 @@ def _yaml_expressions(node: Any, key: str | None = None) -> Iterator[str]:
 
 
 def expressions(path: Path) -> Iterator[str]:
-    text = path.read_text()
+    text = path.read_text(encoding="utf-8")
     if path.suffix == ".j2":
         for m in JINJA.finditer(JINJA_COMMENT.sub("", text)):
             yield m.group(1) or m.group(2)
@@ -123,7 +129,7 @@ def reads_in(expression: str, path: str = "") -> Iterator[Read]:
 
 
 def _files() -> list[Path]:
-    return [p for p in sorted(ANSIBLE.rglob("*")) if p.suffix in {".yml", ".yaml", ".j2"} and p.is_file()]
+    return repo_files(ANSIBLE, "*.yml", "*.yaml", "*.j2")
 
 
 def _reads() -> list[Read]:
@@ -142,7 +148,7 @@ def _merge(base: Any, over: Any) -> Any:
 
 
 def _load(path: Path) -> dict:
-    return yaml.safe_load(path.read_text()) or {}
+    return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
 
 
 # `gitea_config` and `gitea_secrets` are the prod trees whatever env the play
@@ -226,9 +232,11 @@ def test_what_is_not_a_root_read_is_skipped() -> None:
 
 def test_a_jinja_comment_and_a_yaml_comment_are_not_read(tmp_path: Path) -> None:
     template = tmp_path / "t.j2"
-    template.write_text("{# config.gone.away #}{{ config.apps.x }}\n")
+    template.write_text("{# config.gone.away #}{{ config.apps.x }}\n", encoding="utf-8")
     playbook = tmp_path / "p.yml"
-    playbook.write_text("# {{ config.gone.away }}\n- when: config.global.y\n  debug: {msg: '{{ secrets.z }}'}\n")
+    playbook.write_text(
+        "# {{ config.gone.away }}\n- when: config.global.y\n  debug: {msg: '{{ secrets.z }}'}\n", encoding="utf-8"
+    )
     assert list(expressions(template)) == [" config.apps.x "]
     assert sorted(expressions(playbook)) == [" secrets.z ", "config.global.y"]
 

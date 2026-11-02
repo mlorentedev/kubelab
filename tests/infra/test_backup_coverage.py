@@ -48,7 +48,7 @@ from .fixtures import NodeInfo, node_ssh_run
 pytestmark = pytest.mark.infra
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_COMMON = yaml.safe_load((_REPO_ROOT / "infra" / "config" / "values" / "common.yaml").read_text())
+_COMMON = yaml.safe_load((_REPO_ROOT / "infra" / "config" / "values" / "common.yaml").read_text(encoding="utf-8"))
 
 # Paths that hold no state worth backing up. Every entry needs a reason; an entry
 # without one is someone silencing the test rather than answering it.

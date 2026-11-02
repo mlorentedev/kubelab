@@ -22,7 +22,7 @@ HOST = "grafana.kubelab.live"
 
 
 def _routes() -> list[dict]:
-    docs = [d for d in yaml.safe_load_all(PATCHES.read_text()) if d]
+    docs = [d for d in yaml.safe_load_all(PATCHES.read_text(encoding="utf-8")) if d]
     route = next(d for d in docs if d["kind"] == "IngressRoute" and d["metadata"]["name"] == "grafana")
     return route["spec"]["routes"]
 
@@ -40,7 +40,9 @@ def test_exactly_one_route_skips_authelia_and_it_needs_a_service_account_token()
     regexp = re.search(r"HeaderRegexp\(`Authorization`, `([^`]+)`\)", match)
     assert regexp, "the route must be selected by the Authorization header"
     assert re.fullmatch(regexp.group(1), "Bearer glsa_AbC123_def456")
-    assert not re.fullmatch(regexp.group(1), "Basic " + base64.b64encode(b"user:" + b"placeholder").decode()), "Basic credentials must stay behind Authelia"
+    assert not re.fullmatch(regexp.group(1), "Basic " + base64.b64encode(b"user:" + b"placeholder").decode()), (
+        "Basic credentials must stay behind Authelia"
+    )
     assert not re.fullmatch(regexp.group(1), "Bearer eyJhbGciOi"), "only a Grafana service-account token"
 
 
@@ -78,12 +80,12 @@ def test_no_route_uses_a_traefik_v2_matcher() -> None:
     offenders = {
         str(path.relative_to(ROOT))
         for path in (ROOT / "infra/k8s").rglob("*.y*ml")
-        if V2_MATCHERS.search(path.read_text(errors="ignore"))
+        if V2_MATCHERS.search(path.read_text(errors="ignore", encoding="utf-8"))
     }
     assert not offenders, "a v2 matcher disables its route; use HeaderRegexp / Header (see #2374)"
 
 
 def test_authelia_holds_no_bypass_for_grafana() -> None:
-    rules = yaml.safe_load(AUTHELIA.read_text())["access_control"]["rules"]
+    rules = yaml.safe_load(AUTHELIA.read_text(encoding="utf-8"))["access_control"]["rules"]
     grafana = [r for r in rules if r.get("domain") == HOST]
     assert [r["policy"] for r in grafana] == ["one_factor"]

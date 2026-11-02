@@ -48,7 +48,7 @@ SECRET_ROOTS = ("secrets.", "gitea_secrets.")
 def _identity_vars() -> dict[str, str]:
     """Every `*_user` role variable in the playbook, mapped to its expression."""
     found: dict[str, str] = {}
-    for doc in yaml.safe_load_all(BEELINK_PLAYBOOK.read_text()):
+    for doc in yaml.safe_load_all(BEELINK_PLAYBOOK.read_text(encoding="utf-8")):
         for play in doc if isinstance(doc, list) else [doc]:
             if not isinstance(play, dict):
                 continue
@@ -100,14 +100,14 @@ def test_the_gitea_admin_email_is_the_superadmins() -> None:
     import jinja2
 
     expr = None
-    for doc in yaml.safe_load_all(BEELINK_PLAYBOOK.read_text()):
+    for doc in yaml.safe_load_all(BEELINK_PLAYBOOK.read_text(encoding="utf-8")):
         for play in doc if isinstance(doc, list) else [doc]:
             for role in (play or {}).get("roles") or [] if isinstance(play, dict) else []:
                 if isinstance(role, dict) and "gitea_admin_email" in (role.get("vars") or {}):
                     expr = role["vars"]["gitea_admin_email"]
     assert expr, "provision-bee.yml no longer sets gitea_admin_email"
 
-    common = yaml.safe_load((REPO_ROOT / "infra/config/values/common.yaml").read_text())
+    common = yaml.safe_load((REPO_ROOT / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
     rendered = (
         jinja2.Environment(undefined=jinja2.StrictUndefined).from_string(expr).render(gitea_config=common).strip()
     )

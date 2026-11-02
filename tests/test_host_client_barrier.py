@@ -100,12 +100,12 @@ def _child_pytest(tmp_path: Path, body: str) -> subprocess.CompletedProcess:
     stubs = tmp_path / "bin"
     stubs.mkdir()
     for client in ("kubectl", "ssh"):
-        (stubs / client).write_text("#!/bin/sh\nexit 0\n")
+        (stubs / client).write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
         (stubs / client).chmod(0o755)
     env = {k: v for k, v in os.environ.items() if k != "KUBELAB_HOST_CLIENT_REPORT"}
     env["PATH"] = f"{stubs}{os.pathsep}{env.get('PATH', '')}"
     target = REPO_ROOT / "tests" / f"test_zz_barrier_probe_{tmp_path.name}.py"
-    target.write_text(textwrap.dedent(body))
+    target.write_text(textwrap.dedent(body), encoding="utf-8")
     try:
         return subprocess.run(
             [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "--no-cov", str(target)],

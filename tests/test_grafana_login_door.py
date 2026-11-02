@@ -17,12 +17,12 @@ import yaml
 
 REPO = Path(__file__).resolve().parent.parent
 ENV_FILE = REPO / "infra/k8s/base/services/grafana-config/grafana.env"
-COMMON = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text())
+COMMON = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
 
 
 def _env() -> dict[str, str]:
     env = {}
-    for line in ENV_FILE.read_text().splitlines():
+    for line in ENV_FILE.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if line and not line.startswith("#") and "=" in line:
             key, _, value = line.partition("=")
@@ -31,7 +31,7 @@ def _env() -> dict[str, str]:
 
 
 def _prod_overrides() -> dict[str, str]:
-    for doc in yaml.safe_load_all((REPO / "infra/k8s/overlays/prod/patches.yaml").read_text()):
+    for doc in yaml.safe_load_all((REPO / "infra/k8s/overlays/prod/patches.yaml").read_text(encoding="utf-8")):
         if doc and doc.get("kind") == "ConfigMap" and doc["metadata"]["name"] == "grafana-config":
             return doc.get("data") or {}
     return {}

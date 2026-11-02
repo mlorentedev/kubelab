@@ -8,7 +8,8 @@
 # The unit fails, and notifies, on restic's exit code alone. A refused pack
 # (unreferenced, left by an interrupted backup) exits 0: expected, harmless, and
 # bounded in storage by the r2-backup-size alert. A refused snapshot exits 3,
-# which cannot happen while --keep-within exceeds the lock's R, so it is a fault.
+# which cannot happen while --keep-within exceeds the lock's R, so it is a fault,
+# with one exception the script waits out: copied history (below, #1920).
 set -euo pipefail
 
 # The ship writes this once a snapshot exists. Without it the repository may
@@ -27,6 +28,69 @@ export AWS_SECRET_ACCESS_KEY="$(cat {{ node_backup_r2_secret_key_file }})"
 
 REPO="{{ node_backup_r2_repository }}"
 RESTIC="{{ node_backup_restic_install_path }} --repo $REPO --stuck-request-timeout {{ node_backup_stuck_request_timeout }}"
+
+# --- copied history (#1920) -------------------------------------------------
+# A snapshot `restic copy` brought in when this node moved to its own bucket
+# (toolkit/features/backup_migrate.py) keeps its own time, but every object it
+# brought was written here at the copy, and the lock ages objects. So `forget`
+# judges it weeks older than the lock does, asks to delete snapshots the lock
+# still refuses, and exits 3 every day for R days. restic marks a copy with
+# `original` (the field unmatched_snapshots() reads). The migration copies
+# before this node's first ship here, so once the oldest snapshot WITHOUT
+# `original` is older than R, everything copied is older than R too.
+#
+# That order is the assumption. A later `restic copy` or `restic rewrite` would
+# break it; the lock still refuses the delete, so the failure is a loud exit 3,
+# never a lost snapshot.
+#
+# Listed before `unlock` and without a lock, like the ship's probe, and bounded
+# the same way. A repository that cannot be listed fails the unit.
+LISTING="$(mktemp)"
+trap 'rm -f "$LISTING"' EXIT
+if timeout -k 10 {{ node_backup_probe_timeout }} $RESTIC snapshots -q --json --no-lock > "$LISTING"; then
+    :
+else
+    LISTING_RC=$?
+    echo "node-backup-prune: could not list the snapshots in $REPO (exit $LISTING_RC)" >&2
+    exit "$LISTING_RC"
+fi
+
+# restic writes nanoseconds and a local offset; `fromisoformat` takes both from
+# Python 3.11, and every node runs 3.12 or later (measured 2026-10-26).
+VERDICT="$(python3 - "$LISTING" {{ node_backup_r2_lock_retention_days }} <<'PY'
+import json, sys
+from datetime import datetime, timedelta, timezone
+
+snapshots = json.load(open(sys.argv[1]))
+lock = timedelta(days=int(sys.argv[2]))
+copied = [s for s in snapshots if s.get("original")]
+own = [
+    datetime.fromisoformat(s["time"])
+    for s in snapshots
+    if not s.get("original")
+]
+if not copied:
+    print("forget")
+elif not own:
+    print(f"wait: {len(copied)} copied snapshots and none written here yet")
+elif datetime.now(timezone.utc) - min(own) < lock:
+    clear = (min(own) + lock).astimezone(timezone.utc)
+    print(f"wait: {len(copied)} copied snapshots are under the lock until about {clear:%Y-%m-%d}")
+else:
+    print("forget")
+PY
+)"
+# The EXIT trap does not run past the `exec` below.
+rm -f "$LISTING"
+case "$VERDICT" in
+    forget) ;;
+    "wait: "*)
+        echo "node-backup-prune: ${VERDICT#wait: }; forget waits"
+        exit 0 ;;
+    *)
+        echo "node-backup-prune: unexpected verdict '$VERDICT'" >&2
+        exit 1 ;;
+esac
 
 # restic 0.19.1 never skips a stale lock when it takes a new one
 # (`checkForOtherLocks` does not test `Stale()`), so a prune killed mid-run

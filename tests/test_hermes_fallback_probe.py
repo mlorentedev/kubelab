@@ -27,7 +27,7 @@ def _flat(items: list[dict]) -> list[dict]:
 
 
 def _probe() -> list[dict]:
-    return _flat(yaml.safe_load((ROLE / "tasks/hermes_fallback_probe.yml").read_text()))
+    return _flat(yaml.safe_load((ROLE / "tasks/hermes_fallback_probe.yml").read_text(encoding="utf-8")))
 
 
 def _task(name: str) -> dict:
@@ -40,15 +40,15 @@ def _text(task: dict) -> str:
 
 
 def test_the_proof_is_off_unless_a_run_asks_for_it() -> None:
-    defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text())
+    defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text(encoding="utf-8"))
     assert defaults["agent_stack_fallback_probe"] is False
-    outer = yaml.safe_load((ROLE / "tasks/hermes_fallback_probe.yml").read_text())[0]
+    outer = yaml.safe_load((ROLE / "tasks/hermes_fallback_probe.yml").read_text(encoding="utf-8"))[0]
     assert "agent_stack_fallback_probe | bool" in outer["when"]
     assert "ansible_check_mode" in outer["when"], "a dry run starts no gateway"
 
 
 def test_the_proof_runs_after_the_gateway_is_reconciled() -> None:
-    hermes = yaml.safe_load((ROLE / "tasks/hermes.yml").read_text())
+    hermes = yaml.safe_load((ROLE / "tasks/hermes.yml").read_text(encoding="utf-8"))
     imports = [t["ansible.builtin.import_tasks"] for t in _flat(hermes) if "ansible.builtin.import_tasks" in t]
     assert imports[-1] == "hermes_fallback_probe.yml"
 
@@ -74,7 +74,7 @@ def test_the_credential_copy_never_reaches_the_nodes_disk_or_the_log() -> None:
 
 
 def test_the_probe_is_removed_however_the_run_ends() -> None:
-    outer = yaml.safe_load((ROLE / "tasks/hermes_fallback_probe.yml").read_text())[0]
+    outer = yaml.safe_load((ROLE / "tasks/hermes_fallback_probe.yml").read_text(encoding="utf-8"))[0]
     always = _flat(outer["always"])
     assert any("rm" in _text(t) and "agent_stack_fallback_probe_name" in _text(t) for t in always)
 

@@ -61,14 +61,14 @@ def _iter_sops_calls():
 class TestResolveAgeKeyFile:
     def test_honors_existing_override(self, tmp_path: Path) -> None:
         key = tmp_path / "explicit.txt"
-        key.write_text("k")
+        key.write_text("k", encoding="utf-8")
         assert sops.resolve_age_key_file({"SOPS_AGE_KEY_FILE": str(key)}) == str(key)
 
     def test_falls_through_when_override_points_nowhere(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         conv = tmp_path / ".config" / "age" / "key.txt"
         conv.parent.mkdir(parents=True)
-        conv.write_text("k")
+        conv.write_text("k", encoding="utf-8")
         env = {"SOPS_AGE_KEY_FILE": str(tmp_path / "nope.txt")}
         assert sops.resolve_age_key_file(env) == str(conv)
 
@@ -76,10 +76,10 @@ class TestResolveAgeKeyFile:
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         default = tmp_path / ".config" / "sops" / "age" / "keys.txt"
         default.parent.mkdir(parents=True)
-        default.write_text("k")
+        default.write_text("k", encoding="utf-8")
         conv = tmp_path / ".config" / "age" / "key.txt"
         conv.parent.mkdir(parents=True)
-        conv.write_text("k")
+        conv.write_text("k", encoding="utf-8")
         assert sops.resolve_age_key_file({}) == str(default)
 
     def test_returns_none_when_no_key_anywhere(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -94,7 +94,7 @@ class TestAgeKeyEnv:
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         conv = tmp_path / ".config" / "age" / "key.txt"
         conv.parent.mkdir(parents=True)
-        conv.write_text("k")
+        conv.write_text("k", encoding="utf-8")
         out = sops.age_key_env({"PATH": "/x"})
         assert out["SOPS_AGE_KEY_FILE"] == str(conv)
         assert out["PATH"] == "/x"

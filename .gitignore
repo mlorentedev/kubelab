@@ -24,7 +24,7 @@ __pycache__/
 
 # Dependencies
 node_modules/
-.venv/
+.venv
 .venv*/
 venv/
 vendor/
@@ -59,9 +59,6 @@ coverage.xml
 .mypy_cache/
 .ruff_cache/
 .tox/
-
-# Poetry
-poetry.lock
 
 # Ruby / Jekyll
 Gemfile.lock

@@ -41,7 +41,7 @@ REPOINT = "argocd-repoint"
 
 def _recipe(target: str) -> list[str]:
     """Return the tab-indented recipe lines that follow ``target:``."""
-    lines = MAKEFILE.read_text().splitlines()
+    lines = MAKEFILE.read_text(encoding="utf-8").splitlines()
     start = next(
         (i for i, ln in enumerate(lines) if re.match(rf"^{re.escape(target)}:", ln)),
         None,

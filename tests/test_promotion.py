@@ -24,7 +24,7 @@ def _write_values(root: Path, body: str = _VALUES) -> Path:
     values_dir = root / "infra" / "config" / "values"
     values_dir.mkdir(parents=True, exist_ok=True)
     path = values_dir / "staging.yaml"
-    path.write_text(body)
+    path.write_text(body, encoding="utf-8")
     return path
 
 
@@ -58,7 +58,7 @@ class TestPromote:
 
         promotion.promote("staging", "web", "1.2.0")
 
-        assert "version: 1.2.0" in values.read_text()
+        assert "version: 1.2.0" in values.read_text(encoding="utf-8")
         generator.return_value.generate.assert_called_once_with("staging")
 
     def test_preserves_comments(self, env_patched, monkeypatch) -> None:
@@ -68,7 +68,7 @@ class TestPromote:
 
         promotion.promote("staging", "web", "1.2.0")
 
-        text = values.read_text()
+        text = values.read_text(encoding="utf-8")
         assert "# top-of-file comment must survive a round-trip edit" in text
         assert "# inline comment must survive too" in text
 
@@ -99,7 +99,7 @@ class TestPromote:
 
         promotion.promote("staging", "web", "1.2.0")
 
-        lines = values.read_text().splitlines()
+        lines = values.read_text(encoding="utf-8").splitlines()
         version_at = next(i for i, line in enumerate(lines) if line.strip() == "version: 1.2.0")
         comment_at = next(i for i, line in enumerate(lines) if "Third-party services" in line)
 
@@ -149,7 +149,7 @@ class TestPromoteReadsTheRegistry:
 
         promotion.promote("staging", "third", "sha-abc1234")
 
-        third = yaml.safe_load(values.read_text())["apps"]["platform"]["third"]
+        third = yaml.safe_load(values.read_text(encoding="utf-8"))["apps"]["platform"]["third"]
         assert third["version"] == "sha-abc1234"
         generator.return_value.generate.assert_called_once_with("staging")
 
@@ -220,7 +220,7 @@ class TestPromoteErrors:
         d = root / "infra" / "config" / "values"
         d.mkdir(parents=True, exist_ok=True)
         path = d / "common.yaml"
-        path.write_text(body)
+        path.write_text(body, encoding="utf-8")
         return path
 
     def test_changes_only_the_version_line(self, env_patched, monkeypatch) -> None:
@@ -232,7 +232,7 @@ class TestPromoteErrors:
         promotion.promote("prod", "errors", "1.2.0")
 
         expected = _COMMON_MIXED.replace('version: "1.1.1"', 'version: "1.2.0"')
-        assert common.read_text() == expected
+        assert common.read_text(encoding="utf-8") == expected
 
     def test_regenerates_platform_manifest(self, env_patched, monkeypatch) -> None:
         # platform.json records common.yaml's blob hash, so any edit to it is drift
@@ -248,6 +248,33 @@ class TestPromoteErrors:
             output_path=root / "infra" / "config" / "platform.json", config_path=common
         )
 
+    def test_writes_exactly_the_files_it_declares(self, env_patched, monkeypatch) -> None:
+        # release.yml stages ERRORS_PROMOTION_FILES; a file promote writes outside
+        # that list reaches the runner's tree and never the PR (#2552).
+        # Observed on disk, not from the mocks' arguments, so a direct write in
+        # _promote_errors counts too (#2568 review).
+        root, _ = env_patched
+        self._write_common(root)
+        monkeypatch.setattr(promotion, "tag_exists", MagicMock(return_value=True))
+
+        def _writes(path: Path) -> int:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("synced\n", encoding="utf-8")
+            return 0
+
+        monkeypatch.setattr(promotion.sync_k8s_images, "sync", lambda _common, out: _writes(out))
+        self.manifest_sync.side_effect = lambda output_path, config_path: _writes(output_path)
+
+        def _tree() -> dict[str, bytes]:
+            return {p.relative_to(root).as_posix(): p.read_bytes() for p in root.rglob("*") if p.is_file()}
+
+        before = _tree()
+        promotion.promote("prod", "errors", "1.2.0")
+        after = _tree()
+
+        changed = {p for p in after if before.get(p) != after[p]}
+        assert changed == set(promotion.ERRORS_PROMOTION_FILES)
+
     def test_refuses_a_missing_version_key(self, env_patched, monkeypatch) -> None:
         root, _ = env_patched
         body = _COMMON.replace('    version: "1.1.1"  # SSOT for the errors image tag\n', "")
@@ -256,7 +283,7 @@ class TestPromoteErrors:
 
         with pytest.raises(ValueError, match="edge.errors.version"):
             promotion.promote("prod", "errors", "1.2.0")
-        assert common.read_text() == body
+        assert common.read_text(encoding="utf-8") == body
 
     @pytest.mark.parametrize("value", ['""', ""])
     def test_refuses_an_empty_version(self, env_patched, monkeypatch, value: str) -> None:
@@ -267,7 +294,7 @@ class TestPromoteErrors:
 
         with pytest.raises(ValueError, match="missing or empty"):
             promotion.promote("prod", "errors", "1.2.0")
-        assert common.read_text() == body
+        assert common.read_text(encoding="utf-8") == body
 
     def test_a_retry_at_the_same_version_still_resyncs(self, env_patched, monkeypatch) -> None:
         # A run whose sync failed already wrote the SSOT; the retry must repair the derived files.
@@ -279,7 +306,7 @@ class TestPromoteErrors:
 
         promotion.promote("prod", "errors", "1.1.1")
 
-        assert common.read_text() == _COMMON
+        assert common.read_text(encoding="utf-8") == _COMMON
         k8s_sync.assert_called_once()
         self.manifest_sync.assert_called_once()
 
@@ -305,7 +332,7 @@ class TestPromoteErrors:
 
         promotion.promote("prod", "errors", "1.2.0")
 
-        text = common.read_text()
+        text = common.read_text(encoding="utf-8")
         assert 'version: "1.2.0"' in text
         assert "# SSOT for the errors image tag" in text  # comment survives round-trip
         sync_mock.assert_called_once()
@@ -332,4 +359,4 @@ class TestPromoteErrors:
         monkeypatch.setattr(promotion.sync_k8s_images, "sync", MagicMock(return_value=0))
 
         promotion.promote("dev", "errors", "2.0.0")
-        assert 'version: "2.0.0"' in common.read_text()
+        assert 'version: "2.0.0"' in common.read_text(encoding="utf-8")

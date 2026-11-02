@@ -25,25 +25,94 @@
   failed_when: false
   check_mode: false
 
-- name: Build Tailscale up command
+- name: Hold whether the node is on the mesh
   set_fact:
-    tailscale_up_cmd: >-
-      tailscale up --reset
+    _tailscale_running: >-
+      {{ tailscale_status.rc == 0
+         and (tailscale_status.stdout | from_json).BackendState | default('') == 'Running' }}
+
+# A node on the mesh never reaches `tailscale up` below, so its flags drift from
+# the play unseen until a rejoin applies them all at once (rpi3 held
+# --accept-routes=true against a declared false, #2685). The prefs carry the
+# node's keys under Persist, so only these three fields leave the node.
+- name: Read the routing and DNS prefs of a node on the mesh
+  shell: >-
+    set -o pipefail;
+    tailscale debug prefs | python3 -I -c 'import json, sys;
+    p = json.load(sys.stdin);
+    print(json.dumps({"RouteAll": p.get("RouteAll"), "CorpDNS": p.get("CorpDNS"),
+    "AdvertiseRoutes": sorted(p.get("AdvertiseRoutes") or [])}))'
+  args:
+    executable: /bin/bash
+  register: _tailscale_prefs
+  changed_when: false
+  check_mode: false
+  when: _tailscale_running | bool
+
+# `tailscale set` changes prefs in place: no re-authentication, no --reset. An
+# empty --advertise-routes withdraws a route the play no longer declares.
+- name: Converge the flags of a node on the mesh on its play's
+  command: >-
+    tailscale set
+    --accept-dns={{ tailscale_accept_dns | lower }}
+    --accept-routes={{ tailscale_accept_routes | lower }}
+    --advertise-routes={{ _declared_routes | join(',') }}
+  vars:
+    _live: "{{ _tailscale_prefs.stdout | from_json }}"
+    _declared_routes: "{{ tailscale_advertise_routes.split(',') | map('trim') | select | sort }}"
+  when:
+    - _tailscale_running | bool
+    - >-
+      _live.RouteAll != (tailscale_accept_routes | bool)
+      or _live.CorpDNS != (tailscale_accept_dns | bool)
+      or _live.AdvertiseRoutes != _declared_routes
+
+# Single use and one hour, so a key that outlives the registration opens nothing
+# (the hermes sidecar's rule). Off by default: `make headscale-rejoin` turns it on,
+# because a provision before the uplink is up could not register with it.
+- name: Mint a single-use pre-auth key on Headscale
+  command: >-
+    docker exec headscale headscale preauthkeys create
+    --user {{ tailscale_headscale_user_id }} --expiration 1h
+  delegate_to: "{{ tailscale_headscale_host }}"
+  become: false
+  when: tailscale_mint_key | bool and tailscale_auth_key == '' and not (_tailscale_running | bool)
+  register: _tailscale_mint
+  no_log: true
+
+# A fact of its own: bee and ace pass tailscale_auth_key as a role var, which
+# outranks set_fact, so a minted key cannot be written over it.
+- name: Hold the key this run registers with
+  set_fact:
+    _tailscale_key: "{{ tailscale_auth_key or (_tailscale_mint.stdout | default('') | trim) }}"
+  no_log: true
+
+# --reset drops every flag it is not given (tailscale/tailscale#5597), so each
+# non-default flag the play declares has to be here. No key: the watchdog's unit
+# is rendered from these as well.
+- name: Build the Tailscale up flags
+  set_fact:
+    tailscale_up_flags: >-
+      --reset
       --login-server={{ tailscale_headscale_url }}
       --accept-dns={{ tailscale_accept_dns | lower }}
       --accept-routes={{ tailscale_accept_routes | lower }}
       {% if tailscale_advertise_routes %}--advertise-routes={{ tailscale_advertise_routes }}{% endif %}
-      {% if tailscale_auth_key %}--authkey={{ tailscale_auth_key }}{% endif %}
+
+- name: Build Tailscale up command
+  set_fact:
+    tailscale_up_cmd: >-
+      tailscale up {{ tailscale_up_flags }}
+      {% if _tailscale_key %}--authkey={{ _tailscale_key }}{% endif %}
+  no_log: "{{ _tailscale_key != '' }}"
 
 - name: Register with Headscale (async — tailscale may disrupt SSH briefly)
   command: "{{ tailscale_up_cmd }} --timeout=30s"
-  when: >
-    tailscale_auth_key != '' and
-    (tailscale_status.rc != 0 or
-     (tailscale_status.stdout | from_json).BackendState | default('') != 'Running')
+  when: _tailscale_key != '' and not (_tailscale_running | bool)
   async: 60
   poll: 0
   register: tailscale_register
+  no_log: "{{ _tailscale_key != '' }}"
 
 - name: Wait for Tailscale registration to complete
   async_status:
@@ -53,6 +122,7 @@
   retries: 12
   delay: 5
   when: tailscale_register is changed
+  no_log: "{{ _tailscale_key != '' }}"
 
 - name: Show manual auth instructions
   debug:
@@ -60,10 +130,7 @@
       Tailscale is installed but not registered. Run manually on this host:
       {{ tailscale_up_cmd }}
       Then approve the node in Headscale.
-  when: >
-    tailscale_auth_key == '' and
-    (tailscale_status.rc != 0 or
-     (tailscale_status.stdout | from_json).BackendState | default('') != 'Running')
+  when: _tailscale_key == '' and not (_tailscale_running | bool)
 
 - name: Verify Tailscale connectivity
   command: tailscale status
@@ -71,3 +138,59 @@
   changed_when: false
   failed_when: false
   check_mode: false
+
+# The watchdog runs `tailscale up` with this role's flags, so a flag the play
+# changes reaches it on the next provision. It was made by hand on the edge
+# before any role owned it; these paths replace those files in place.
+- name: Install the Tailscale watchdog
+  template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: [tailscale-watchdog.service, tailscale-watchdog.timer]
+  when: tailscale_watchdog | bool
+
+# Only the timer is started. Starting the service would run `tailscale up` inside
+# the provision, which on a node off the mesh waits out its whole timeout.
+- name: Enable and start the Tailscale watchdog timer
+  systemd:
+    name: tailscale-watchdog.timer
+    enabled: true
+    state: started
+    daemon_reload: true
+  # A dry run on a node without the unit wrote no file for systemd to find.
+  when:
+    - tailscale_watchdog | bool
+    - not ansible_check_mode
+
+# Off removes what on installed. Ansible is additive, so turning the var off
+# would otherwise leave the timer running `tailscale up --reset` every 5 minutes.
+- name: Look for a Tailscale watchdog on a node that has it off
+  stat:
+    path: /etc/systemd/system/tailscale-watchdog.timer
+  register: _tailscale_watchdog_timer
+  when: not (tailscale_watchdog | bool)
+
+- name: Stop the Tailscale watchdog timer where it is off
+  systemd:
+    name: tailscale-watchdog.timer
+    enabled: false
+    state: stopped
+  when:
+    - not (tailscale_watchdog | bool)
+    - _tailscale_watchdog_timer.stat.exists | default(false)
+
+- name: Remove the Tailscale watchdog where it is off
+  file:
+    path: "/etc/systemd/system/{{ item }}"
+    state: absent
+  loop: [tailscale-watchdog.service, tailscale-watchdog.timer]
+  register: _tailscale_watchdog_removed
+  when: not (tailscale_watchdog | bool)
+
+- name: Reload systemd after removing the Tailscale watchdog
+  systemd:
+    daemon_reload: true
+  when: _tailscale_watchdog_removed is changed

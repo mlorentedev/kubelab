@@ -11,6 +11,33 @@
 # the vault mounted, that list is the only command guard it applies.
 # =============================================================================
 
+# Before anything below is written, so a refused pull leaves every file as it was
+# and the rerun still sees the change that recreates the gateway (#2812). Sized
+# against the edge's downlink (#2742), on the agent's rootless daemon: the one
+# that holds the images, so a held one counts nothing.
+- name: Pull the hermes-kubelab images first
+  when: agent_stack_hermes_configured | bool
+  block:
+    - name: Pull the hermes-kubelab images
+      ansible.builtin.import_tasks: "{{ playbook_dir }}/_includes/image-pull.yml"
+      become_user: "{{ agent_stack_agent_user }}"
+      environment: "{{ agent_stack_agent_daemon_env }}"
+      vars:
+        image_pull_name: hermes-kubelab
+        image_pull_images:
+          - "{{ agent_stack_hermes.image }}"
+          - "{{ agent_stack_hermes.sidecar.image }}"
+
+    # Pulled now rather than at the first command, which would otherwise wait
+    # on a multi-hundred-megabyte download.
+    - name: Pull the hermes-kubelab sandbox image
+      ansible.builtin.import_tasks: "{{ playbook_dir }}/_includes/image-pull.yml"
+      become_user: "{{ agent_stack_agent_user }}"
+      environment: "{{ agent_stack_agent_daemon_env }}"
+      vars:
+        image_pull_name: the hermes-kubelab sandbox
+        image_pull_images: ["{{ agent_stack_hermes.sandbox.image }}"]
+
 # Before the gateway starts, so a first provision orders the next boot too.
 - name: Install the unit that waits for Open WebUI's bridge
   when: agent_stack_hermes_configured | bool and agent_stack_webui_configured | bool
@@ -411,21 +438,6 @@
         owner: "{{ agent_stack_agent_user }}"
         group: "{{ agent_stack_agent_user }}"
         mode: "0644"
-
-    - name: Pull the hermes-kubelab images
-      ansible.builtin.command: >-
-        docker {{ item }}
-      loop:
-        - compose -p {{ agent_stack_hermes_project }} -f {{ agent_stack_hermes_compose }} pull
-        # The sandbox image is pulled now rather than at the first command,
-        # which would otherwise wait on a multi-hundred-megabyte download.
-        - pull {{ agent_stack_hermes.sandbox.image }}
-      become_user: "{{ agent_stack_agent_user }}"
-      environment: "{{ agent_stack_agent_daemon_env }}"
-      register: _agent_stack_hermes_pull
-      changed_when: >-
-        'Pull complete' in _agent_stack_hermes_pull.stderr
-        or 'Downloaded newer image' in _agent_stack_hermes_pull.stdout
 
     # Same check as Open WebUI's: a binding is fixed at create time, so a gateway
     # created before the bridge had its address runs with no port, and an

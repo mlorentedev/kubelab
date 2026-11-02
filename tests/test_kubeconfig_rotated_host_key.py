@@ -72,7 +72,8 @@ def common(tmp_path: Path) -> Path:
                     "nodes": {"ace1": {"hostname": "ace1", "tailscale_ip": "100.64.0.11"}},
                 },
             }
-        )
+        ),
+        encoding="utf-8",
     )
     return path
 

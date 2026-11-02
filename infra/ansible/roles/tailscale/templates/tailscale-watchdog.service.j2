@@ -1,0 +1,20 @@
+# {{ ansible_managed }}
+# Brings tailscaled back up when it reports the node stopped or logged out, with
+# the tailscale role's own flags (#2675). Started by its timer, never by the
+# provision.
+#
+# Bounded, and not restarted. A oneshot holds a start job until its command
+# exits, and systemd records the boot as finished only once no job is left
+# (lesson-653). With no route out, `tailscale up` waits for the control server
+# forever: on the edge's hard-reset test it was still waiting 10 minutes after
+# boot (#2661). --timeout ends that wait, TimeoutStartSec ends anything else, and
+# the timer is the retry. A logged-out node cannot log in without a key, so on
+# NeedsLogin this fails after --timeout, and `systemctl --failed` shows it.
+[Unit]
+Description=Tailscale watchdog
+After=network-online.target tailscaled.service
+
+[Service]
+Type=oneshot
+TimeoutStartSec=90
+ExecStart=/bin/sh -c 'tailscale status --self 2>&1 | grep -qE "stopped|NeedsLogin|NoState" || exit 0; exec tailscale up {{ tailscale_up_flags }} --timeout=60s'

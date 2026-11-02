@@ -27,7 +27,9 @@ prints its answer through a logger the pod sets to `warn` (lesson-500).
 The restore holds encrypted secrets and the key that opens them. Both stay in a
 `0700` directory, the key reaches the container only as a `0600` file named by a
 `*_FILE` variable, only table names, row ids and counts are printed, and the
-container and the directory are removed on every exit path.
+container and the directory are removed on every exit path. Native Windows has
+no POSIX modes: there the directory's owner-only ACL comes from Python 3.12.4 or
+later (CVE-2024-4030), and the drill refuses to start on an older Python.
 """
 
 from __future__ import annotations
@@ -45,6 +47,7 @@ from typing import Any, Callable, Optional
 
 import yaml
 
+from toolkit.core.io import docker_user_args
 from toolkit.core.logging import logger
 from toolkit.features.headscale_drill import snapshot_time, sqlite_intact, ssh
 from toolkit.features.restore_drill import latest_snapshot, report, restore_source, scratch
@@ -201,7 +204,7 @@ def compare(*, live: Rows, restored: Rows, tables: tuple[Table, ...], taken: flo
 def _write_secret(path: Path, value: str) -> None:
     """A `0600` file from the first byte: never a moment where another user could read it."""
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    with os.fdopen(fd, "w") as handle:
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
         handle.write(value)
 
 
@@ -229,8 +232,7 @@ class _Scratch:
                 self.name,
                 "--network",
                 "none",
-                "--user",
-                f"{os.getuid()}:{os.getgid()}",
+                *docker_user_args(),
                 "-v",
                 f"{self.data}:{self.app.mount}",
                 "-v",
@@ -265,7 +267,7 @@ def _prove_authelia(box: _Scratch) -> bool:
     # password nobody ever sees. Its hash is made here, never committed.
     users = {"users": {"drill": {"displayname": "drill", "email": "drill@drill.invalid"}}}
     users["users"]["drill"]["password"] = PasswordHasher().hash(secrets.token_hex(16))
-    (box.secrets / "users.yml").write_text(yaml.safe_dump(users))
+    (box.secrets / "users.yml").write_text(yaml.safe_dump(users), encoding="utf-8")
     config = {
         "server": {"address": "tcp://127.0.0.1:9091/"},
         "authentication_backend": {"file": {"path": f"{SECRETS}/users.yml", "watch": False}},
@@ -275,7 +277,7 @@ def _prove_authelia(box: _Scratch) -> bool:
         "notifier": {"filesystem": {"filename": f"{box.app.mount}/drill-notification.txt"}},
         "ntp": {"disable_startup_check": True},
     }
-    (box.secrets / "config.yml").write_text(yaml.safe_dump(config))
+    (box.secrets / "config.yml").write_text(yaml.safe_dump(config), encoding="utf-8")
 
     # Idle first, so the key is checked by the CLI before the server can refuse it.
     if not box.start("--entrypoint", "sleep", box.image, "infinity"):

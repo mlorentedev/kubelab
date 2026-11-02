@@ -35,6 +35,9 @@ import json
 import re
 import subprocess
 from dataclasses import dataclass
+from pathlib import Path
+
+import yaml
 
 # A given name Headscale minted for a duplicate registration: the canonical name
 # plus its random suffix (`gcp1-mj5bsge9`). Anchored at both ends so a name that
@@ -224,3 +227,40 @@ def apply_recycle(ssh_target: str, plan: RecyclePlan, container: str = "headscal
     delete fails and leaves both records in place."""
     delete_node(ssh_target, plan.stale.id, container)
     rename_node(ssh_target, plan.live.id, plan.canonical, container)
+
+
+class RejoinRefused(RuntimeError):
+    """The node's play cannot put it back on the mesh."""
+
+
+# What `make headscale-rejoin` asks of the node's play: the tailscale role only,
+# with the role minting the key itself, so no key ever reaches this process.
+REJOIN_TAGS = "tailscale"
+REJOIN_EXTRA_VARS = "tailscale_mint_key=true"
+
+
+def rejoin_playbook(playbooks_dir: Path, node: str) -> str:
+    """The playbook that provisions `node`, if it runs the tailscale role (NET-005 task 32).
+
+    Refusing here matters because `--tags tailscale` on a play without the role
+    runs nothing and exits 0, which reads as a rejoin that happened.
+    """
+    path = playbooks_dir / f"provision-{node}.yml"
+    if not path.is_file():
+        raise RejoinRefused(
+            f"ERROR: no playbook provisions {node!r} ({path.name} does not exist). "
+            "WHY: the rejoin runs the node's own play, limited to its tailscale role. "
+            "FIX: pass a node that has an infra/ansible/playbooks/provision-<node>.yml."
+        )
+    roles = [
+        str(role.get("role", "")) if isinstance(role, dict) else str(role)
+        for play in yaml.safe_load(path.read_text(encoding="utf-8")) or []
+        for role in play.get("roles") or []
+    ]
+    if not any(Path(role).name == "tailscale" for role in roles):
+        raise RejoinRefused(
+            f"ERROR: {path.name} does not run the tailscale role. "
+            "WHY: with --tags tailscale it would run nothing and report success. "
+            f"FIX: add the tailscale role to {path.name}, or rejoin {node} by hand."
+        )
+    return path.stem

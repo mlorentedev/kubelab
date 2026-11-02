@@ -1,5 +1,6 @@
 """Kubernetes manifest generator using Jinja2 templates."""
 
+import hashlib
 from typing import Any
 
 from toolkit.config.constants import PATH_STRUCTURES, VALIDATION_RULES
@@ -68,7 +69,9 @@ class K8sGenerator(BaseGenerator):
         ("deployments.yaml.j2", "deployments.yaml"),
         ("services.yaml.j2", "services.yaml"),
         ("configmaps.yaml.j2", "configmaps.yaml"),
+        ("migrations.yaml.j2", "migrations.yaml"),
         ("ingress.yaml.j2", "ingress.yaml"),
+        ("hooks.yaml.j2", "hooks.yaml"),
     ]
 
     def generate(self, env: str) -> dict[str, Any]:
@@ -294,7 +297,33 @@ class K8sGenerator(BaseGenerator):
             "namespace": namespace,
             "apps": apps,
             "cert_resolver": cert_resolver,
+            "route_probe_image": env_vars.get("ARGOCD_ROUTE_PROBE_IMAGE", ""),
+            "migrations": self._build_migrations(env_vars),
         }
+
+    def _build_migrations(self, env_vars: dict[str, str]) -> dict[str, Any]:
+        """The API's Atlas migration directory, with a hash of everything the Job renders from.
+
+        A Job's spec is immutable, so anything that changes the rendered Job has to change its
+        name, or the sync that applies it is refused (DATA-007).
+        """
+        files = {
+            path.name: path.read_text(encoding="utf-8")
+            for path in sorted((self.project_root / "apps" / "api" / "migrations").iterdir())
+            if path.is_file()
+        }
+        job = {
+            "image": env_vars["INFRA_POSTGRES_ATLAS_IMAGE"],
+            "tenant": env_vars["APPS_PLATFORM_API_POSTGRES_TENANT"],
+            "host": env_vars["INFRA_POSTGRES_HOST"],
+            "port": env_vars["INFRA_POSTGRES_PORT"],
+        }
+        template = self.project_root / "infra" / "k8s" / "templates" / "migrations.yaml.j2"
+        digest = hashlib.sha256()
+        for name, content in [*files.items(), *job.items(), ("template", template.read_text(encoding="utf-8"))]:
+            digest.update(name.encode("utf-8"))
+            digest.update(content.encode("utf-8"))
+        return {"files": files, "hash": digest.hexdigest()[:10], **job}
 
     @classmethod
     def _placement_keys(cls, env_vars: dict[str, str]) -> frozenset[str]:
@@ -438,7 +467,31 @@ class K8sGenerator(BaseGenerator):
                     "priority": int(entry.get("priority", 100)),
                 }
             )
+            if "probe" in entry:
+                routes[-1]["probe"] = self._build_probe(entry["probe"], component, entry["path_prefix"])
         return routes
+
+    _PROBE_FIELDS = ("method", "path", "expect_status", "expect_content_type")
+
+    @classmethod
+    def _build_probe(cls, raw: dict[str, Any], component: str, path_prefix: str) -> dict[str, Any]:
+        """The request a route's `PostSync` hook sends, and the answer it requires (GITOPS-003 AC3).
+
+        Every expectation is required: a probe missing one would pass on any
+        answer, including the static site's, which is the failure it exists for.
+        """
+        missing = [f for f in cls._PROBE_FIELDS if f not in raw]
+        if missing:
+            raise ValueError(f"extra_route {path_prefix} on {component}: probe lacks {', '.join(missing)}")
+        slug = path_prefix.strip("/").replace("/", "-") or "root"
+        return {
+            "name": f"{component}-route-probe-{slug}",
+            "method": raw["method"],
+            "path": raw["path"],
+            "body": raw.get("body", ""),
+            "expect_status": int(raw["expect_status"]),
+            "expect_content_type": raw["expect_content_type"],
+        }
 
     def _has_secret_vars(self, component: str) -> bool:
         """Whether a K8s Secret is defined for this component (→ mount it via envFrom).

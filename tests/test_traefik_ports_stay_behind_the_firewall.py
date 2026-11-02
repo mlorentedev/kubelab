@@ -33,6 +33,8 @@ import jinja2
 import pytest
 import yaml
 
+from tests.ansible_jinja import ansible_env
+
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 ROLE = REPO_ROOT / "infra/ansible/roles/k3s_server"
 TEMPLATE = ROLE / "templates/traefik-helmconfig.yaml.j2"
@@ -55,13 +57,12 @@ def _render(acme_enabled: bool) -> dict:
     `additionalArguments` block lives inside that conditional, so checking only
     one branch would leave the other free to reintroduce `--api.insecure`.
     """
-    env = jinja2.Environment(undefined=jinja2.StrictUndefined, keep_trailing_newline=True)
-    # Ansible's `comment` filter, which the template's first line uses.
-    env.filters["comment"] = lambda text: "\n".join(f"# {line}" for line in str(text).splitlines())
+    # Ansible's filters (`comment` on the first line, `bool` on the ACME gates).
+    env = ansible_env(str(TEMPLATE.parent), undefined=jinja2.StrictUndefined, keep_trailing_newline=True)
 
     variables = _role_defaults()
     variables["k3s_traefik_acme_enabled"] = acme_enabled
-    rendered = env.from_string(TEMPLATE.read_text(encoding="utf-8")).render(**variables)
+    rendered = env.get_template(TEMPLATE.name).render(**variables)
 
     doc = yaml.safe_load(rendered)
     # `valuesContent` is a YAML document embedded as a string. The ports live in

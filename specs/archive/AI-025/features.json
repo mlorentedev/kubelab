@@ -1,0 +1,37 @@
+[
+  {
+    "id": "AI-025-f2",
+    "behavior": "AC2: SearXNG runs beside Open WebUI with no port, memory-bounded, read-only settings listing json, and Open WebUI searches through it",
+    "verification": "poetry run pytest -q --no-cov tests/test_open_webui_web_search.py",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "AI-025-f3",
+    "behavior": "AC3: the code interpreter runs in the browser with Pyodide and is on in every new chat",
+    "verification": "poetry run pytest -q --no-cov tests/test_open_webui_code_and_memory.py::test_every_chat_starts_with_the_code_interpreter_on tests/test_open_webui_code_and_memory.py::test_code_runs_in_the_browser_not_on_ace2",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "AI-025-f4",
+    "behavior": "AC4: memory is on and the background review saves memories every configured number of user turns",
+    "verification": "poetry run pytest -q --no-cov tests/test_open_webui_code_and_memory.py::test_memories_are_saved_without_being_asked",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "AI-025-f5",
+    "behavior": "AC5: a new chat starts with image, web search and code interpreter on",
+    "verification": "poetry run pytest -q --no-cov tests/test_open_webui_web_search.py::test_every_chat_starts_with_web_search_on tests/test_open_webui_models.py::test_every_chat_starts_with_the_image_tool_on tests/test_open_webui_code_and_memory.py::test_every_chat_starts_with_the_code_interpreter_on",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "AI-025-f6",
+    "behavior": "AC6: the role's templates and tests carry the whole change",
+    "verification": "poetry run pytest -q --no-cov tests/test_agent_stack_role.py tests/test_image_pull_budget.py tests/test_open_webui_models.py",
+    "state": "pending",
+    "evidence": ""
+  }
+]

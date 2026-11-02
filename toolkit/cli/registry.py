@@ -21,7 +21,7 @@ def prune(
         str | None,
         typer.Option(
             "--apps",
-            help="Comma-separated app names (repo = <prefix>-<app>); default: every product in "
+            help="Comma-separated app names, each pruned in the repository it deploys from; default: every product in "
             "infra/config/products.yaml, plus errors",
         ),
     ] = None,
@@ -29,10 +29,6 @@ def prune(
         int,
         typer.Option("--retention", "-n", help="Keep this many most-recent sha-* tags per app"),
     ] = 15,
-    registry_prefix: Annotated[
-        str,
-        typer.Option("--registry-prefix", help="Image repo prefix"),
-    ] = "kubelab",
     dry_run: Annotated[
         bool,
         typer.Option("--dry-run", help="List what would be deleted without deleting"),
@@ -65,7 +61,8 @@ def prune(
             protected[app_name] = pins
             logger.info(f"{app_name}: protecting overlay-pinned {sorted(pins)}")
     try:
-        registry.prune(app_list, registry_prefix, retention, dry_run, protected=protected)
+        repos = registry.image_repositories(app_list)
+        registry.prune(repos, retention, dry_run, protected=protected)
     except Exception as e:
         logger.error(f"Registry prune failed: {e}")
         raise typer.Exit(1) from None

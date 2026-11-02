@@ -156,6 +156,7 @@ DECLARED = {
     "admin": "read:admin,write:organization,read:repository,read:user",
     "reviewer": "write:issue,read:repository",
     "review_notice": "write:issue",
+    "issue_reader": "read:issue",
 }
 
 
@@ -178,6 +179,7 @@ def _all_converged() -> dict[tuple[str, str], FakeResponse]:
                     [
                         _token(ROTATABLE_TOKENS["reviewer"].token_name, DECLARED["reviewer"].split(",")),
                         _token(ROTATABLE_TOKENS["review_notice"].token_name, DECLARED["review_notice"].split(","), 2),
+                        _token(ROTATABLE_TOKENS["issue_reader"].token_name, DECLARED["issue_reader"].split(","), 3),
                     ],
                 ),
             ),

@@ -4,6 +4,17 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 691 | [A Renovate regex that ends in a dollar sign matches nothing and reports success](lesson-691-a-renovate-regex-that-ends-in-a-dollar-sign-matches-nothing-and-reports-success.md) | 2026-11-02 |
+| 686 | [A claim about a GitHub event payload is a prediction until a run of that event shows it](lesson-686-a-payload-shape-prediction-is-not-a-measurement.md) | 2026-11-01 |
+| 685 | [A model's speed on small diffs says nothing about whether it finishes a large one](lesson-685-a-models-speed-on-small-diffs-says-nothing-about-whether-it-finishes-a-large-one.md) | 2026-11-01 |
+| 681 | [A GitHub `schedule` in this repository is a few-times-a-day signal, not a cron](lesson-681-a-github-schedule-here-is-a-few-times-a-day-signal-not-a-cron.md) | 2026-10-31 |
+| 668 | [A `check=True` subprocess in a fixture hides the stderr that names the failure](lesson-668-a-subprocess-check-in-a-fixture-hides-the-stderr-that-names-the-cause.md) | 2026-10-30 |
+| 635 | [A reaper that selects by name stops reaping when the runner renames what it creates](lesson-635-a-reaper-that-selects-by-name-stops-reaping-when-the-runner-renames.md) | 2026-10-27 |
+| 634 | [A check-run posted with `GITHUB_TOKEN` joins another workflow's suite, and protection loses it when that workflow re-runs](lesson-634-a-check-run-posted-with-github-token-joins-another-workflows-suite.md) | 2026-10-27 |
+| 619 | [A reconciler run from a worktree reconciles that worktree's declaration, not master's](lesson-619-a-reconciler-run-from-a-worktree-reconciles-that-worktrees-declaration.md) | 2026-10-22 |
+| 613 | [An exemption keyed on which files changed exempts whatever those files say](lesson-613-an-exemption-keyed-on-which-files-changed-exempts-whatever-those-files-say.md) | 2026-10-21 |
+| 612 | [A skip that matches a word in the path also skips every checkout named after it](lesson-612-a-skip-that-matches-a-word-in-the-path-also-skips-every-checkout-named-after-it.md) | 2026-10-21 |
+| 608 | [A workflow that stages a tool's output by name misses the file the tool learns to write](lesson-608-a-workflow-that-stages-a-tools-output-by-name-misses-the-file-the-tool-learns-to-write.md) | 2026-10-20 |
 | 607 | [Two receivers on one dispatch event race one branch, so the flip and the demotion ship together](lesson-607-two-receivers-on-one-dispatch-event-race-one-branch-so-the-flip-and-the-demotion-ship-together.md) | 2026-10-20 |
 | 602 | [A spending weight is not an order, so a chain derived from it put the slowest model first](lesson-602-a-spending-weight-is-not-an-order-so-a-chain-derived-from-it-put-the-slowest-model-first.md) | 2026-10-18 |
 | 601 | [A reviewer that sends no max_tokens inherits the provider's completion cap, and loses the review to its own reasoning](lesson-601-a-reviewer-that-sends-no-max-tokens-inherits-the-providers-completion-cap-and-loses-the-review-to-its-own-reasoning.md) | 2026-10-18 |

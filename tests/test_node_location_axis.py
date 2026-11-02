@@ -78,7 +78,7 @@ ADR_028_TIERS = {
 
 @pytest.fixture(scope="module")
 def common() -> dict[str, Any]:
-    return yaml.safe_load(COMMON_YAML.read_text())
+    return yaml.safe_load(COMMON_YAML.read_text(encoding="utf-8"))
 
 
 @pytest.fixture(scope="module")

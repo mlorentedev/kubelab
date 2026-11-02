@@ -80,8 +80,9 @@ The web form is not relied on. For credential repair, see
 route's EndpointSlice. Open WebUI admits that origin, ace2's MagicDNS name and the public
 name; on any other the page loads but no model answers (#2202). Never at `chat.kubelab.live`: the public
 route refuses `/api/v1/auths/signin` (#2135). Open WebUI signs in by email, so that is the
-user. The form is always on and admits only this account: nobody can sign up through it,
-and SSO users never get a password. It is seeded on an empty database by
+user. The form is hidden, so the auth page redirects to Authelia (#2482); the printed URL
+ends in `/auth?form=signin`, which shows the form and stops the redirect. It admits only
+this account: nobody can sign up through it, and SSO users never get a password. It is seeded on an empty database by
 `WEBUI_ADMIN_EMAIL`, and each provision proves it still signs in as admin. ace2 is
 on-demand (ADR-028): with the node off, there is nothing to break into, and
 `--group break-glass` skips it instead of failing the other rotations.

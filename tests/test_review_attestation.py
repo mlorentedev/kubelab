@@ -225,33 +225,40 @@ class TestExempt:
             v = classify(pr(files=[{"path": p} for p in sorted(files)]), registry)
             assert v.state == "exempt", f"{sorted(files)} classified as {v.state}"
 
-    def test_the_delivery_shapes_actually_observed_are_all_covered(self, registry: dict) -> None:
-        """The deploy/promote shapes, measured rather than assumed (DELIVERY-004).
+    def test_the_prod_promote_shape_is_exempt_by_files(self, registry: dict) -> None:
+        """Prod keeps the file-only signature (#1618); tightening it is #1741's."""
+        files = {"infra/config/values/prod.yaml", "infra/k8s/overlays/prod/generated/deployments.yaml"}
+        v = classify(pr(files=[{"path": p} for p in sorted(files)]), registry)
+        assert v.state == "exempt", f"{sorted(files)} classified as {v.state}"
 
-        Same discipline as the release-please entries above and for the same
-        reason: matching is exact set equality, so a shape nobody measured is a
-        red PR asking for a signature, never a silent exemption. Five staging
-        deploys (#1560, #1582, #1590, #1601, #1617) and one prod promote (#1618)
-        were read from the API on 2026-09-04; all six carried exactly two paths.
+    def test_the_staging_files_alone_no_longer_exempt(self, registry: dict) -> None:
+        """DELIVERY-004 (#1619): the file-only staging signature exempted ANY change
+        confined to the two files. Staging now needs the deploy-shape verdict."""
+        files = [{"path": p} for p in [registry["mechanical"]["values_file"], *registry["mechanical"]["overlay_files"]]]
+        assert classify(pr(files=files), registry).state == "pending"
 
-        Both are SINGLE-APP shapes. A multi-app promotion would produce a
-        different set and must be declared when one is first observed — which is
-        the lesson `release-please (api only)` records, where one signature was
-        assumed sufficient and #804 refuted it.
-        """
-        observed = [
-            {
-                "infra/config/values/staging.yaml",
-                "infra/k8s/overlays/staging/generated/deployments.yaml",
-            },
-            {
-                "infra/config/values/prod.yaml",
-                "infra/k8s/overlays/prod/generated/deployments.yaml",
-            },
-        ]
-        for files in observed:
-            v = classify(pr(files=[{"path": p} for p in sorted(files)]), registry)
-            assert v.state == "exempt", f"{sorted(files)} classified as {v.state}"
+    def test_a_mechanical_verdict_at_the_head_sha_exempts(self, registry: dict) -> None:
+        files = [{"path": p} for p in [registry["mechanical"]["values_file"], *registry["mechanical"]["overlay_files"]]]
+        shape = {"verdict": "mechanical", "head_sha": "a" * 40, "reason": "web x -> y"}
+        v = classify(pr(files=files, headRefOid="a" * 40), registry, shape)
+        assert v.state == "exempt"
+
+    @pytest.mark.parametrize(
+        "shape",
+        [
+            {"verdict": "mechanical", "head_sha": "b" * 40},
+            {"verdict": "mechanical", "head_sha": ""},
+            {"verdict": "mechanical"},
+            {"verdict": "not-mechanical", "head_sha": "a" * 40},
+            {"verdict": "unknown", "head_sha": "a" * 40},
+            None,
+            "mechanical",
+        ],
+    )
+    def test_any_other_verdict_does_not_exempt(self, registry: dict, shape) -> None:
+        """A verdict about another commit says nothing about this one."""
+        files = [{"path": p} for p in [registry["mechanical"]["values_file"], *registry["mechanical"]["overlay_files"]]]
+        assert classify(pr(files=files, headRefOid="a" * 40), registry, shape).state == "pending"
 
     def test_a_proper_subset_of_a_signature_is_not_exempt(self, registry: dict) -> None:
         """Half a signature is not a signature.
@@ -433,6 +440,12 @@ def test_no_reviewer_is_named_in_the_module() -> None:
         assert login not in source, f"{reviewer['login']} is named in review_attestation.py; it belongs in the registry"
         for marker in reviewer["declined_markers"] + reviewer["review_markers"]:
             assert marker.casefold() not in source, f'the marker "{marker}" is hardcoded in the module'
+    # The mechanical class is policy too (DELIVERY-004): its paths live in the
+    # registry, never in either module that applies it.
+    for module in ("review_attestation.py", "deploy_shape.py"):
+        code = (REPO_ROOT / "toolkit/features" / module).read_text(encoding="utf-8").casefold()
+        for path in [registry["mechanical"]["values_file"], *registry["mechanical"]["overlay_files"]]:
+            assert path.casefold() not in code, f"{path} is hardcoded in {module}; it belongs in the registry"
 
 
 def test_the_committed_registry_is_the_shape_the_gate_requires() -> None:
@@ -514,7 +527,7 @@ def test_the_gate_reads_its_payload_from_gh_pr_view_only() -> None:
     workflow = (REPO_ROOT / ".github" / "workflows" / "review-attestation.yml").read_text(encoding="utf-8")
     assert re.search(
         r'gh pr view "\$NUMBER" \\\s*\n'
-        r"\s*--json number,state,labels,body,comments,reviews,author,files \\\s*\n"
+        r"\s*--json number,state,labels,body,comments,reviews,author,files,headRefOid \\\s*\n"
         r"\s*> pr-payload\.json",
         workflow,
     ), "the payload step no longer fetches the GraphQL shape classify() reads"

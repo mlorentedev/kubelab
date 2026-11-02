@@ -1,7 +1,10 @@
 package main
 
 import (
+	"context"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/gin-gonic/gin"
 	"github.com/mlorentedev/kubelab/apps/api/internal/api"
@@ -12,7 +15,7 @@ import (
 func main() {
 	logger := logger.NewLogger()
 
-	_, err := config.GetConfig()
+	conf, err := config.GetConfig()
 	if err != nil {
 		logger.Fatal().Err(err).Msg("Error loading configuration")
 	}
@@ -28,6 +31,10 @@ func main() {
 	r.Use(api.CorsMiddleware())
 
 	api.SetupRoutes(r)
+
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	api.StartForgeReconcile(ctx, conf)
 
 	port := os.Getenv("PORT")
 	if port == "" {

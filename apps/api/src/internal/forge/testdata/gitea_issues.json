@@ -1,0 +1,26 @@
+[
+  {
+    "id": 1001,
+    "number": 724,
+    "title": "Example open issue",
+    "state": "open",
+    "html_url": "https://gitea.example/org/repo/issues/724",
+    "updated_at": "2026-10-20T10:00:00Z",
+    "user": {"login": "alice"},
+    "assignees": null,
+    "labels": [{"id": 7, "name": "security", "color": "ee0701"}],
+    "pull_request": null
+  },
+  {
+    "id": 1002,
+    "number": 714,
+    "title": "Example closed issue",
+    "state": "closed",
+    "html_url": "https://gitea.example/org/repo/issues/714",
+    "updated_at": "2026-10-18T09:30:00Z",
+    "user": {"login": "alice"},
+    "assignees": [{"login": "bob"}],
+    "labels": [],
+    "pull_request": null
+  }
+]

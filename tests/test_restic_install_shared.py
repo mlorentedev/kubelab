@@ -23,7 +23,7 @@ SHARED = ROLES / "node_backup/tasks/restic.yml"
 def _tasks(path: Path) -> list[dict[str, Any]]:
     """Every task in a file, blocks flattened."""
     out: list[dict[str, Any]] = []
-    for task in yaml.safe_load(path.read_text()) or []:
+    for task in yaml.safe_load(path.read_text(encoding="utf-8")) or []:
         out.append(task)
         for key in ("block", "rescue", "always"):
             out.extend(task.get(key) or [])

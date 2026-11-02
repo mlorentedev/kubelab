@@ -54,7 +54,8 @@ while [ "$i" -lt "$attempts" ]; do
     sleep "$delay"
 done
 
-# Deliberately an error, not a silent give-up: a unit left hanging is invisible,
-# whereas a failed one shows up in `systemctl --failed`.
+# Deliberately an error, not a silent give-up. The units that run this retry it
+# (`Restart=on-failure`, #2500), so an address that never comes reads as
+# `activating (auto-restart)` with this line in the journal each time.
 echo "timed out after $((attempts * delay))s waiting for $addr on $iface" >&2
 exit 1

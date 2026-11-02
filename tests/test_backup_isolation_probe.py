@@ -277,7 +277,9 @@ def test_a_node_without_its_pair_in_sops_fails_it() -> None:
 
 
 def test_the_make_target_is_prod_only() -> None:
-    recipe = (REPO / "Makefile").read_text().split("\nbackup-isolation-probe:\n", 1)[1].split("\n\n", 1)[0]
+    recipe = (
+        (REPO / "Makefile").read_text(encoding="utf-8").split("\nbackup-isolation-probe:\n", 1)[1].split("\n\n", 1)[0]
+    )
     assert '"$(ENV)" = prod' in recipe
     assert "backup isolation-probe --env $(ENV)" in recipe
 

@@ -1,7 +1,7 @@
 # ==========================================================================
 # Authelia — Staging (ForwardAuth only, no OIDC)
 # ==========================================================================
-theme: dark
+theme: auto
 default_2fa_method: totp
 
 server:

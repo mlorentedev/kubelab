@@ -340,9 +340,10 @@
 # --- Docker cleanup (docker_hosts group) ---
 # Order: stopped containers first, so the reclaim sees their volumes as unheld
 # and the image prune can take the images they pinned; then the reclaim; then
-# images and build cache. Same order as kubelab-maintenance.sh.j2.
+# images and build cache. Same order as kubelab-maintenance.sh.j2. Containers
+# compose created stay even when stopped, so their stack keeps its image (#2703).
 - name: Remove stopped Docker containers
-  command: docker container prune -f
+  command: docker container prune -f --filter "label!=com.docker.compose.project"
   when: maintenance_run_cleanup | bool and 'docker_hosts' in group_names
   register: _docker_container_prune
   changed_when: "'Total reclaimed space' in _docker_container_prune.stdout"

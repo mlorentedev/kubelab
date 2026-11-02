@@ -109,7 +109,7 @@ def _collect():
             if SKIPPED_PATH_PARTS & set(manifest.parts):
                 continue
             try:
-                documents = list(yaml.safe_load_all(manifest.read_text()))
+                documents = list(yaml.safe_load_all(manifest.read_text(encoding="utf-8")))
             except yaml.YAMLError:
                 # Not this test's job — the YAML linters own malformed files,
                 # and failing here would report the wrong defect.

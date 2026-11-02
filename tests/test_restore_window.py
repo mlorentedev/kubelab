@@ -462,7 +462,7 @@ class TestClose:
 
 def test_declared_sync_policy_reads_the_manifest_deploy_apps_applies() -> None:
     for env in ("staging", "prod"):
-        docs = [d for d in yaml.safe_load_all((APPLICATIONS / f"{env}.yaml").read_text()) if d]
+        docs = [d for d in yaml.safe_load_all((APPLICATIONS / f"{env}.yaml").read_text(encoding="utf-8")) if d]
         app = next(d for d in docs if d.get("kind") == "Application")
         assert declared_sync_policy(APPLICATIONS, env) == app["spec"]["syncPolicy"]
 
@@ -498,7 +498,7 @@ class TestCheckWindow:
 
 
 def test_deploy_apps_checks_the_window_before_it_applies() -> None:
-    makefile = (REPO_ROOT / "Makefile").read_text()
+    makefile = (REPO_ROOT / "Makefile").read_text(encoding="utf-8")
     recipe = makefile.split("\ndeploy-apps:\n", 1)[1].split("\n\n", 1)[0]
     lines = [line.strip() for line in recipe.splitlines() if not line.strip().startswith("@#")]
     check = next(i for i, line in enumerate(lines) if "infra argo check-window" in line)

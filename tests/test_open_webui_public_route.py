@@ -14,7 +14,7 @@ from pathlib import Path
 import yaml
 
 REPO = Path(__file__).resolve().parent.parent
-COMMON = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text())
+COMMON = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
 WEBUI = COMMON["apps"]["services"]["ai"]["open_webui"]
 ACE2 = COMMON["networking"]["nodes"]["ace2"]
 
@@ -58,7 +58,7 @@ def test_the_password_endpoint_is_refused_on_the_public_name() -> None:
 def test_the_public_name_has_a_dns_record() -> None:
     import json
 
-    records = json.loads((REPO / "infra/terraform/dns/services.json").read_text())
+    records = json.loads((REPO / "infra/terraform/dns/services.json").read_text(encoding="utf-8"))
     [record] = [r for r in records if f"{r['name']}.kubelab.live" == WEBUI["domain"]]
     assert record["environments"] == ["prod"]
     assert "target" not in record, "the record is the VPS's, which reaches ace2 over the tailnet"

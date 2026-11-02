@@ -25,7 +25,9 @@ resources:
   - services/apprise.yaml
   - services/quota-watcher.yaml
   - services/r2-backup-watcher.yaml
+  - services/edge-watcher.yaml
   - services/disk-watcher.yaml
+  - services/delivery-watcher.yaml
 
 configMapGenerator:
   # Vector pipeline — hash suffix rolls the DaemonSet on a pipeline change: Vector runs
@@ -78,6 +80,20 @@ configMapGenerator:
       - services/r2-backup-watcher/probe.sh
       - services/r2-backup-watcher/size.sh
       - services/r2-backup-watcher/targets.txt
+
+  # The delivery watcher's script (GITOPS-003 AC2). Hashed for the same reason
+  # as the R2 probe: never wrong, and each run records which script it used.
+  - name: delivery-watcher-script
+    namespace: kubelab
+    files:
+      - services/delivery-watcher/watch.py
+  # The edge watcher's probe and targets (NET-005 AC12). Hash kept, as above.
+  # targets.txt is generated: `make sync-edge-watcher-targets`.
+  - name: edge-watcher-probe
+    namespace: kubelab
+    files:
+      - services/edge-watcher/probe.sh
+      - services/edge-watcher/targets.txt
 
   - name: authelia-assets
     namespace: kubelab
@@ -138,6 +154,8 @@ configMapGenerator:
       - services/grafana-alerting/sre-rules.yaml
       - services/grafana-alerting/disk-rules.yaml
       - services/grafana-alerting/slo-rules.yaml
+      - services/grafana-alerting/delivery-rules.yaml
+      - services/grafana-alerting/edge-rules.yaml
       # Rules that are retired and must be actively DELETED from Grafana's
       # database. Dropping a file from this list does not remove the rule --
       # measured on both clusters, #1583. Whatever leaves this list gets a uid
@@ -188,6 +206,8 @@ images:
     newTag: 0.19.1
   - name: rclone/rclone
     newTag: 1.75.1
+  - name: python
+    newTag: 3.13.16-alpine
   - name: docker.io/mlorentedev/kubelab-errors
     newTag: 1.3.0
   # Custom apps web/api: per-env tags via `toolkit deployment promote` (overlays).

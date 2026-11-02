@@ -41,7 +41,7 @@ jobs:
             exit 1
           fi
 
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7
         with:
           python-version: '3.12'
 
@@ -94,7 +94,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
 
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7
         with:
           python-version: '3.12'
 
@@ -180,6 +180,11 @@ jobs:
       # that matches no host fails (#1228).
       - name: Ansible fails a run that matches no host
         run: poetry run pytest -q --no-cov -p no:cacheprovider tests/test_ansible_zero_host_run_fails.py
+
+      # Same reason: the retry on the VPS pre-flight is only exercised by running the
+      # real include through ansible-playbook, which the Tests job does not have.
+      - name: The VPS pre-flight retries a slow first connection
+        run: poetry run pytest -q --no-cov -p no:cacheprovider tests/test_vps_preflight_retries.py
 
   detect-changes:
     name: Detect Changes

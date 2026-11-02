@@ -14,7 +14,7 @@ def test_r2_backup_rules_syntax_and_structure() -> None:
     rules_file = SERVICES_DIR / "grafana-alerting" / "r2-backup-rules.yaml"
     assert rules_file.exists(), "r2-backup-rules.yaml must exist"
 
-    data = yaml.safe_load(rules_file.read_text())
+    data = yaml.safe_load(rules_file.read_text(encoding="utf-8"))
     assert data["apiVersion"] == 1
     assert "groups" in data
     assert len(data["groups"]) > 0
@@ -33,7 +33,7 @@ def test_r2_backup_watcher_manifest() -> None:
     watcher_file = SERVICES_DIR / "r2-backup-watcher.yaml"
     assert watcher_file.exists(), "r2-backup-watcher.yaml must exist"
 
-    docs = list(yaml.safe_load_all(watcher_file.read_text()))
+    docs = list(yaml.safe_load_all(watcher_file.read_text(encoding="utf-8")))
     kinds = [d["kind"] for d in docs if d and "kind" in d]
     assert "ServiceAccount" in kinds
     assert "CronJob" in kinds
@@ -53,7 +53,7 @@ def test_r2_backup_watcher_manifest() -> None:
 
 def test_kustomization_includes_r2_backup_watcher_and_rules() -> None:
     kustomization_file = REPO_ROOT / "infra" / "k8s" / "base" / "kustomization.yaml"
-    content = kustomization_file.read_text()
+    content = kustomization_file.read_text(encoding="utf-8")
     assert "services/r2-backup-watcher.yaml" in content
     assert "services/grafana-alerting/r2-backup-rules.yaml" in content
 
@@ -62,7 +62,7 @@ def _emitter_period_hours() -> float:
     """How often the watcher CronJob actually produces a log line, in hours."""
     import re
 
-    docs = list(yaml.safe_load_all((SERVICES_DIR / "r2-backup-watcher.yaml").read_text()))
+    docs = list(yaml.safe_load_all((SERVICES_DIR / "r2-backup-watcher.yaml").read_text(encoding="utf-8")))
     cron = next(d for d in docs if d and d.get("kind") == "CronJob")
     schedule = cron["spec"]["schedule"]
 
@@ -84,7 +84,7 @@ def _rule_lookback_hours() -> float:
     """The window the alert's Loki query looks back over, in hours."""
     import re
 
-    data = yaml.safe_load((SERVICES_DIR / "grafana-alerting" / "r2-backup-rules.yaml").read_text())
+    data = yaml.safe_load((SERVICES_DIR / "grafana-alerting" / "r2-backup-rules.yaml").read_text(encoding="utf-8"))
     rule = data["groups"][0]["rules"][0]
     expr = next(d["model"]["expr"] for d in rule["data"] if d.get("datasourceUid") == "loki")
 
@@ -126,7 +126,7 @@ COMMON = REPO_ROOT / "infra" / "config" / "values" / "common.yaml"
 
 
 def _size_rule() -> dict:
-    data = yaml.safe_load((SERVICES_DIR / "grafana-alerting" / "r2-backup-rules.yaml").read_text())
+    data = yaml.safe_load((SERVICES_DIR / "grafana-alerting" / "r2-backup-rules.yaml").read_text(encoding="utf-8"))
     rules = [r for g in data["groups"] for r in g["rules"]]
     matches = [r for r in rules if r["uid"] == SIZE_RULE_UID]
     assert len(matches) == 1, f"expected one {SIZE_RULE_UID} rule, found {[r['uid'] for r in rules]}"
@@ -139,7 +139,7 @@ def test_the_size_rule_fires_at_eighty_percent_of_the_free_tier_declared_in_comm
     The rule mirrors `backup.r2.free_tier_bytes`; this reads the SSOT, so the
     two cannot drift apart without this going red.
     """
-    free_tier = yaml.safe_load(COMMON.read_text())["backup"]["r2"]["free_tier_bytes"]
+    free_tier = yaml.safe_load(COMMON.read_text(encoding="utf-8"))["backup"]["r2"]["free_tier_bytes"]
     assert isinstance(free_tier, int) and free_tier > 0
 
     rule = _size_rule()
@@ -180,4 +180,4 @@ def test_no_watcher_emitter_or_reader_still_says_raw_bytes(path: Path) -> None:
     Alerting` would page on a fleet that is fine; a runbook left on the old name
     sends the operator looking for a field no line carries.
     """
-    assert "raw_bytes" not in path.read_text()
+    assert "raw_bytes" not in path.read_text(encoding="utf-8")

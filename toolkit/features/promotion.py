@@ -32,8 +32,17 @@ from toolkit.features.registry import tag_exists
 from toolkit.scripts import sync_k8s_images
 
 # Immutable CI build tag: ``sha-${GITHUB_SHA::7}`` (see staging-deploy.yml). The
-# web-image-receiver rejects anything else, so staging only ever pins this shape.
+# product-image-receiver rejects anything else, so staging only ever pins this shape.
 _SHA_TAG = re.compile(r"^sha-[0-9a-f]{7,}$")
+
+# Every file ``promote --app errors`` writes, repo-relative. release.yml's
+# promote-errors job stages exactly these, so a file added here and not there
+# fails tests/test_release_promote_errors.py instead of opening a red PR (#2552).
+ERRORS_PROMOTION_FILES = (
+    "infra/config/values/common.yaml",
+    "infra/k8s/base/kustomization.yaml",
+    "infra/config/platform.json",
+)
 
 
 def _load_values_doc(env: str) -> tuple[YAML, Path, Any]:
@@ -47,7 +56,7 @@ def _load_values_doc(env: str) -> tuple[YAML, Path, Any]:
         raise FileNotFoundError(f"Values file not found: {path}")
     yaml = YAML()
     yaml.preserve_quotes = True
-    return yaml, path, yaml.load(path.read_text())
+    return yaml, path, yaml.load(path.read_text(encoding="utf-8"))
 
 
 def _require_platform_app(app: str, reason: str) -> None:
@@ -153,9 +162,10 @@ def _promote_errors(version: str) -> None:
     from toolkit.features import platform_manifest
 
     root = settings.project_root
-    if sync_k8s_images.sync(common_path, root / "infra" / "k8s" / "base" / "kustomization.yaml") != 0:
+    _, kustomization, manifest = (root / p for p in ERRORS_PROMOTION_FILES)
+    if sync_k8s_images.sync(common_path, kustomization) != 0:
         raise RuntimeError(f"errors set to {version}, but the kustomization failed to re-sync")
-    if platform_manifest.sync(output_path=root / "infra" / "config" / "platform.json", config_path=common_path) != 0:
+    if platform_manifest.sync(output_path=manifest, config_path=common_path) != 0:
         raise RuntimeError(f"errors set to {version}, but platform.json failed to regenerate")
     logger.success(f"Promoted errors to {version}; kustomization and platform.json re-synced")
 
@@ -169,13 +179,13 @@ def _replace_scalar_in_place(path: Path, mapping: Any, key: str, old: str, new: 
     the scalar's position; the write touches that position only.
     """
     line_no, col = mapping.lc.value(key)
-    lines = path.read_text().splitlines(keepends=True)
+    lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
     head, tail = lines[line_no][:col], lines[line_no][col:]
     match = re.match(rf"""(["']?)({re.escape(old)})\1(?=\s|#|$)""", tail)
     if not match:
         raise ValueError(f"{key} at {path.name}:{line_no + 1} is not a one-line scalar '{old}'; edit it by hand")
     lines[line_no] = head + tail[: match.start(2)] + new + tail[match.end(2) :]
-    path.write_text("".join(lines))
+    path.write_text("".join(lines), encoding="utf-8")
 
 
 def promote(env: str, app: str, version: str) -> None:
@@ -232,7 +242,7 @@ def promote(env: str, app: str, version: str) -> None:
         # which image runs where a reader looks first (GITOPS-004).
         app_cfg.insert(0, "version", version)
 
-    with values_path.open("w") as fh:
+    with values_path.open("w", encoding="utf-8", newline="\n") as fh:
         yaml.dump(data, fh)
     logger.info(f"{env}: {app} version {previous} -> {version}")
 

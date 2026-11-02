@@ -1,0 +1,933 @@
+{
+  "facts": {
+    "k6_image": "grafana/k6@sha256:2dd4756ec6e14e62778916e1eb850108e4b499304c02df56760fa0bdb0fba0b8",
+    "traefik_image": "rancher/mirrored-library-traefik:3.6.7",
+    "k3s": "v1.34.4+k3s1",
+    "kernel": "6.8.0-147-generic",
+    "node_capacity": {
+      "cpu": "4",
+      "memory": "12023380Ki"
+    },
+    "cpu_model": {
+      "ace1": "Intel(R) N95",
+      "ace2": "Intel(R) N95"
+    },
+    "workloads": {
+      "api": {
+        "image": "docker.io/mlorentedev/kubelab-api:sha-80171ff",
+        "resources": {
+          "limits": {
+            "cpu": "500m",
+            "memory": "512Mi"
+          },
+          "requests": {
+            "cpu": "250m",
+            "memory": "256Mi"
+          }
+        }
+      },
+      "web": {
+        "image": "docker.io/mlorentedev/kubelab-web:sha-4b395ac",
+        "resources": {
+          "limits": {
+            "cpu": "500m",
+            "memory": "512Mi"
+          },
+          "requests": {
+            "cpu": "250m",
+            "memory": "256Mi"
+          }
+        }
+      }
+    }
+  },
+  "criteria": {
+    "max_error_rate": 0.01,
+    "max_p95_ms": 250.0,
+    "min_achieved_ratio": 0.95,
+    "max_generator_cpu": 85.0,
+    "step_seconds": 60,
+    "settle_seconds": 15
+  },
+  "baseline": [
+    {
+      "rate": 25,
+      "target": "api-health",
+      "requests": 1500.0,
+      "achieved_rps": 24.999666961519978,
+      "error_rate": 0.0,
+      "status_429": 0.0,
+      "dropped": 0.0,
+      "vus_peak": 0.0,
+      "avg_ms": 2.8228334966666666,
+      "p50_ms": 2.854612,
+      "p90_ms": 3.2694785,
+      "p95_ms": 3.400108,
+      "p99_ms": 3.65355966,
+      "max_ms": 10.843503,
+      "node_cpu": 10.4,
+      "generator_cpu": 3.6,
+      "node_mem_available_mb": 9059,
+      "pods_top": {
+        "traefik": "61m 54Mi",
+        "api": "20m 7Mi"
+      },
+      "throttled_ms": 0.0,
+      "pod_replaced": false,
+      "reasons": []
+    },
+    {
+      "rate": 25,
+      "target": "web-static",
+      "requests": 1501.0,
+      "achieved_rps": 25.0146768362588,
+      "error_rate": 0.0,
+      "status_429": 0.0,
+      "dropped": 0.0,
+      "vus_peak": 0.0,
+      "avg_ms": 3.0445815436375727,
+      "p50_ms": 3.083846,
+      "p90_ms": 3.478207,
+      "p95_ms": 3.591486,
+      "p99_ms": 3.855159,
+      "max_ms": 12.61084,
+      "node_cpu": 10.2,
+      "generator_cpu": 4.8,
+      "node_mem_available_mb": 9075,
+      "pods_top": {
+        "traefik": "81m 59Mi",
+        "web": "12m 4Mi"
+      },
+      "throttled_ms": 0.0,
+      "pod_replaced": false,
+      "reasons": []
+    }
+  ],
+  "ramps": [
+    {
+      "target": "api-health",
+      "repeat": 1,
+      "steps": [
+        {
+          "rate": 50,
+          "target": "api-health",
+          "requests": 3001.0,
+          "achieved_rps": 50.013750457402935,
+          "error_rate": 0.0,
+          "status_429": 0.0,
+          "dropped": 0.0,
+          "vus_peak": 0.0,
+          "avg_ms": 2.817413464511828,
+          "p50_ms": 2.841307,
+          "p90_ms": 3.244439,
+          "p95_ms": 3.349791,
+          "p99_ms": 3.611881,
+          "max_ms": 7.453332,
+          "node_cpu": 12.1,
+          "generator_cpu": 3.9,
+          "node_mem_available_mb": 9063,
+          "pods_top": {
+            "traefik": "107m 59Mi",
+            "api": "36m 8Mi"
+          },
+          "throttled_ms": 0.0,
+          "pod_replaced": false,
+          "reasons": []
+        },
+        {
+          "rate": 100,
+          "target": "api-health",
+          "requests": 6001.0,
+          "achieved_rps": 100.0118282494343,
+          "error_rate": 0.0,
+          "status_429": 0.0,
+          "dropped": 0.0,
+          "vus_peak": 1.0,
+          "avg_ms": 2.005687894684219,
+          "p50_ms": 2.02838,
+          "p90_ms": 2.315626,
+          "p95_ms": 2.434884,
+          "p99_ms": 2.958376,
+          "max_ms": 7.944828,
+          "node_cpu": 18.5,
+          "generator_cpu": 4.0,
+          "node_mem_available_mb": 8945,
+          "pods_top": {
+            "traefik": "181m 60Mi",
+            "api": "61m 8Mi"
+          },
+          "throttled_ms": 0.0,
+          "pod_replaced": false,
+          "reasons": []
+        },
+        {
+          "rate": 200,
+          "target": "api-health",
+          "requests": 12001.0,
+          "achieved_rps": 200.01008172807894,
+          "error_rate": 0.0,
+          "status_429": 0.0,
+          "dropped": 0.0,
+          "vus_peak": 1.0,
+          "avg_ms": 1.625543614032162,
+          "p50_ms": 1.559549,
+          "p90_ms": 1.871837,
+          "p95_ms": 1.95621,
+          "p99_ms": 2.340944,
+          "max_ms": 65.741937,
+          "node_cpu": 20.0,
+          "generator_cpu": 4.0,
+          "node_mem_available_mb": 9010,
+          "pods_top": {
+            "traefik": "292m 61Mi",
+            "api": "99m 8Mi"
+          },
+          "throttled_ms": 0.0,
+          "pod_replaced": false,
+          "reasons": []
+        },
+        {
+          "rate": 400,
+          "target": "api-health",
+          "requests": 23984.0,
+          "achieved_rps": 399.72096582008646,
+          "error_rate": 0.0,
+          "status_429": 0.0,
+          "dropped": 17.0,
+          "vus_peak": 2.0,
+          "avg_ms": 1.4774599400016617,
+          "p50_ms": 1.2584875,
+          "p90_ms": 1.5518589,
+          "p95_ms": 1.6548812,
+          "p99_ms": 2.47727446,
+          "max_ms": 189.796196,
+          "node_cpu": 27.8,
+          "generator_cpu": 6.4,
+          "node_mem_available_mb": 9054,
+          "pods_top": {
+            "traefik": "468m 67Mi",
+            "api": "164m 8Mi"
+          },
+          "throttled_ms": 0.0,
+          "pod_replaced": false,
+          "reasons": []
+        },
+        {
+          "rate": 800,
+          "target": "api-health",
+          "requests": 47826.0,
+          "achieved_rps": 797.0661226041329,
+          "error_rate": 0.0,
+          "status_429": 0.0,
+          "dropped": 175.0,
+          "vus_peak": 30.0,
+          "avg_ms": 1.7052906676703188,
+          "p50_ms": 1.0590925,
+          "p90_ms": 1.2809409999999999,
+          "p95_ms": 1.5622765,
+          "p99_ms": 6.30347375,
+          "max_ms": 416.728905,
+          "node_cpu": 40.0,
+          "generator_cpu": 12.0,
+          "node_mem_available_mb": 9007,
+          "pods_top": {
+            "traefik": "765m 91Mi",
+            "api": "268m 9Mi"
+          },
+          "throttled_ms": 0.0,
+          "pod_replaced": false,
+          "reasons": []
+        },
+        {
+          "rate": 1600,
+          "target": "api-health",
+          "requests": 95731.0,
+          "achieved_rps": 1595.4808272212967,
+          "error_rate": 0.0,
+          "status_429": 0.0,
+          "dropped": 270.0,
+          "vus_peak": 106.0,
+          "avg_ms": 1.3747484776927064,
+          "p50_ms": 0.773851,
+          "p90_ms": 1.706348,
+          "p95_ms": 3.0255644999999998,
+          "p99_ms": 12.477097299999954,
+          "max_ms": 205.491369,
+          "node_cpu": 49.0,
+          "generator_cpu": 16.6,
+          "node_mem_available_mb": 9000,
+          "pods_top": {
+            "traefik": "1021m 95Mi",
+            "api": "313m 9Mi"
+          },
+          "throttled_ms": 0.0,
+          "pod_replaced": false,
+          "reasons": []
+        },
+        {
+          "rate": 3200,
+          "target": "api-health",
+          "requests": 102134.0,
+          "achieved_rps": 1611.3503470992982,
+          "error_rate": 0.791509193804218,
+          "status_429": 0.0,
+          "dropped": 89835.0,
+          "vus_peak": 6400.0,
+          "avg_ms": 291.6817674708016,
+          "p50_ms": 0,
+          "p90_ms": 808.2260672999997,
+          "p95_ms": 2426.510245049997,
+          "p99_ms": 5000.106723729999,
+          "max_ms": 5474.052525,
+          "node_cpu": 65.5,
+          "generator_cpu": 49.9,
+          "node_mem_available_mb": 8991,
+          "pods_top": {
+            "api": "167m 44Mi"
+          },
+          "throttled_ms": 235.584,
+          "pod_replaced": false,
+          "reasons": [
+            "errors",
+            "latency",
+            "throughput"
+          ]
+        }
+      ],
+      "knee": {
+        "last_healthy_rps": 1600,
+        "first_degraded_rps": 3200,
+        "reasons": [
+          "errors",
+          "latency",
+          "throughput"
+        ],
+        "lower_bound_only": false,
+        "vus_at_last_healthy": 106.0
+      }
+    },
+    {
+      "target": "web-static",
+      "repeat": 1,
+      "steps": [
+        {
+          "rate": 50,
+          "target": "web-static",
+          "requests": 3001.0,
+          "achieved_rps": 50.01314838171483,
+          "error_rate": 0.0,
+          "status_429": 0.0,
+          "dropped": 0.0,
+          "vus_peak": 1.0,
+          "avg_ms": 3.1725140313228932,
+          "p50_ms": 3.216422,
+          "p90_ms": 3.53485,
+          "p95_ms": 3.655464,
+          "p99_ms": 3.899141,
+          "max_ms": 10.751147,
+          "node_cpu": 12.8,
+          "generator_cpu": 4.2,
+          "node_mem_available_mb": 8949,
+          "pods_top": {
+            "traefik": "146m 47Mi",
+            "web": "22m 4Mi"
+          },
+          "throttled_ms": 0.0,
+          "pod_replaced": false,
+          "reasons": []
+        },
+        {
+          "rate": 100,
+          "target": "web-static",
+          "requests": 6001.0,
+          "achieved_rps": 100.01243497385553,
+          "error_rate": 0.0,
+          "status_429": 0.0,
+          "dropped": 0.0,
+          "vus_peak": 0.0,
+          "avg_ms": 2.1009464605899066,
+          "p50_ms": 2.117239,
+          "p90_ms": 2.357557,
+          "p95_ms": 2.464818,
+          "p99_ms": 2.897436,
+          "max_ms": 10.734582,
+          "node_cpu": 18.2,
+          "generator_cpu": 4.4,
+          "node_mem_available_mb": 8983,
+          "pods_top": {
+            "traefik": "244m 54Mi",
+            "web": "37m 4Mi"
+          },
+          "throttled_ms": 0.0,
+          "pod_replaced": false,
+          "reasons": []
+        },
+        {
+          "rate": 200,
+          "target": "web-static",
+          "requests": 12001.0,
+          "achieved_rps": 200.00833712612564,
+          "error_rate": 0.0,
+          "status_429": 0.0,
+          "dropped": 0.0,
+          "vus_peak": 1.0,
+          "avg_ms": 1.7011040869094163,
+          "p50_ms": 1.618971,
+          "p90_ms": 1.945315,
+          "p95_ms": 2.032384,
+          "p99_ms": 2.356048,
+          "max_ms": 63.643896,
+          "node_cpu": 20.1,
+          "generator_cpu": 6.7,
+          "node_mem_available_mb": 9014,
+          "pods_top": {
+            "traefik": "373m 56Mi",
+            "web": "56m 4Mi"
+          },
+          "throttled_ms": 0.0,
+          "pod_replaced": false,
+          "reasons": []
+        },
+        {
+          "rate": 400,
+          "target": "web-static",
+          "requests": 23970.0,
+          "achieved_rps": 399.49133374794053,
+          "error_rate": 0.0,
+          "status_429": 0.0,
+          "dropped": 30.0,
+          "vus_peak": 1.0,
+          "avg_ms": 1.7320800372549041,
+          "p50_ms": 1.391418,
+          "p90_ms": 1.5913584,
+          "p95_ms": 1.6989099499999998,
+          "p99_ms": 2.5705895400000074,
+          "max_ms": 195.213551,
+          "node_cpu": 31.0,
+          "generator_cpu": 10.8,
+          "node_mem_available_mb": 9022,
+          "pods_top": {
+            "traefik": "620m 69Mi",
+            "web": "94m 4Mi"
+          },
+          "throttled_ms": 0.0,
+          "pod_replaced": false,
+          "reasons": []
+        },
+        {
+          "rate": 800,
+          "target": "web-static",
+          "requests": 47687.0,
+          "achieved_rps": 794.7587875923119,
+          "error_rate": 0.0,
+          "status_429": 0.0,
+          "dropped": 313.0,
+          "vus_peak": 263.0,
+          "avg_ms": 3.9083926104808056,
+          "p50_ms": 1.113998,
+          "p90_ms": 1.477409,
+          "p95_ms": 1.8043732999999995,
+          "p99_ms": 66.56123915999999,
+          "max_ms": 752.021778,
+          "node_cpu": 37.7,
+          "generator_cpu": 17.5,
+          "node_mem_available_mb": 8955,
+          "pods_top": {
+            "traefik": "820m 118Mi",
+            "web": "126m 4Mi"
+          },
+          "throttled_ms": 0.0,
+          "pod_replaced": false,
+          "reasons": []
+        },
+        {
+          "rate": 1600,
+          "target": "web-static",
+          "requests": 40404.0,
+          "achieved_rps": 629.6895826889877,
+          "error_rate": 0.9518859518859519,
+          "status_429": 0.0,
+          "dropped": 55597.0,
+          "vus_peak": 3200.0,
+          "avg_ms": 262.33093536491447,
+          "p50_ms": 0,
+          "p90_ms": 317.7187501000176,
+          "p95_ms": 2577.334838649998,
+          "p99_ms": 4607.887656810017,
+          "max_ms": 5066.915571,
+          "node_cpu": 32.2,
+          "generator_cpu": 20.6,
+          "node_mem_available_mb": 9058,
+          "pods_top": {
+            "web": "9m 4Mi"
+          },
+          "throttled_ms": 0.0,
+          "pod_replaced": false,
+          "reasons": [
+            "errors",
+            "latency",
+            "throughput"
+          ]
+        }
+      ],
+      "knee": {
+        "last_healthy_rps": 800,
+        "first_degraded_rps": 1600,
+        "reasons": [
+          "errors",
+          "latency",
+          "throughput"
+        ],
+        "lower_bound_only": false,
+        "vus_at_last_healthy": 263.0
+      }
+    },
+    {
+      "target": "api-health",
+      "repeat": 2,
+      "steps": [
+        {
+          "rate": 50,
+          "target": "api-health",
+          "requests": 3001.0,
+          "achieved_rps": 50.014063783078065,
+          "error_rate": 0.0,
+          "status_429": 0.0,
+          "dropped": 0.0,
+          "vus_peak": 0.0,
+          "avg_ms": 2.6937600749750086,
+          "p50_ms": 2.71792,
+          "p90_ms": 3.040347,
+          "p95_ms": 3.163459,
+          "p99_ms": 3.467005,
+          "max_ms": 7.263063,
+          "node_cpu": 11.9,
+          "generator_cpu": 3.6,
+          "node_mem_available_mb": 8981,
+          "pods_top": {
+            "traefik": "111m 62Mi",
+            "api": "36m 12Mi"
+          },
+          "throttled_ms": 0.0,
+          "pod_replaced": false,
+          "reasons": []
+        },
+        {
+          "rate": 100,
+          "target": "api-health",
+          "requests": 6001.0,
+          "achieved_rps": 100.01199581976083,
+          "error_rate": 0.0,
+          "status_429": 0.0,
+          "dropped": 0.0,
+          "vus_peak": 1.0,
+          "avg_ms": 2.0615712366272256,
+          "p50_ms": 2.057251,
+          "p90_ms": 2.333307,
+          "p95_ms": 2.432861,
+          "p99_ms": 2.716985,
+          "max_ms": 9.262746,
+          "node_cpu": 14.9,
+          "generator_cpu": 3.3,
+          "node_mem_available_mb": 9008,
+          "pods_top": {
+            "traefik": "178m 58Mi",
+            "api": "62m 11Mi"
+          },
+          "throttled_ms": 0.0,
+          "pod_replaced": false,
+          "reasons": []
+        },
+        {
+          "rate": 200,
+          "target": "api-health",
+          "requests": 12001.0,
+          "achieved_rps": 200.00671488588586,
+          "error_rate": 0.0,
+          "status_429": 0.0,
+          "dropped": 0.0,
+          "vus_peak": 1.0,
+          "avg_ms": 1.6360212479793363,
+          "p50_ms": 1.557381,
+          "p90_ms": 1.877269,
+          "p95_ms": 1.977509,
+          "p99_ms": 2.722147,
+          "max_ms": 43.588733,
+          "node_cpu": 21.3,
+          "generator_cpu": 4.9,
+          "node_mem_available_mb": 9022,
+          "pods_top": {
+            "traefik": "292m 60Mi",
+            "api": "100m 11Mi"
+          },
+          "throttled_ms": 0.0,
+          "pod_replaced": false,
+          "reasons": []
+        },
+        {
+          "rate": 400,
+          "target": "api-health",
+          "requests": 23979.0,
+          "achieved_rps": 399.6340489466252,
+          "error_rate": 0.0,
+          "status_429": 0.0,
+          "dropped": 22.0,
+          "vus_peak": 2.0,
+          "avg_ms": 1.4937012254889617,
+          "p50_ms": 1.251981,
+          "p90_ms": 1.5194606000000002,
+          "p95_ms": 1.6116643999999998,
+          "p99_ms": 2.364451140000012,
+          "max_ms": 153.576135,
+          "node_cpu": 25.9,
+          "generator_cpu": 6.9,
+          "node_mem_available_mb": 8999,
+          "pods_top": {
+            "traefik": "461m 66Mi",
+            "api": "162m 12Mi"
+          },
+          "throttled_ms": 0.0,
+          "pod_replaced": false,
+          "reasons": []
+        },
+        {
+          "rate": 800,
+          "target": "api-health",
+          "requests": 47748.0,
+          "achieved_rps": 795.7683029834811,
+          "error_rate": 0.0,
+          "status_429": 0.0,
+          "dropped": 253.0,
+          "vus_peak": 124.0,
+          "avg_ms": 2.7450960722543467,
+          "p50_ms": 1.0636575000000001,
+          "p90_ms": 1.2865385000000003,
+          "p95_ms": 1.5773032500000006,
+          "p99_ms": 25.875473029999707,
+          "max_ms": 832.012329,
+          "node_cpu": 41.9,
+          "generator_cpu": 10.6,
+          "node_mem_available_mb": 8935,
+          "pods_top": {
+            "traefik": "769m 115Mi",
+            "api": "267m 15Mi"
+          },
+          "throttled_ms": 0.0,
+          "pod_replaced": false,
+          "reasons": []
+        },
+        {
+          "rate": 1600,
+          "target": "api-health",
+          "requests": 42296.0,
+          "achieved_rps": 657.9282784850176,
+          "error_rate": 0.8952383204085492,
+          "status_429": 0.0,
+          "dropped": 53704.0,
+          "vus_peak": 3200.0,
+          "avg_ms": 252.4617118427749,
+          "p50_ms": 0,
+          "p90_ms": 677.5880525,
+          "p95_ms": 2384.66444975,
+          "p99_ms": 3726.7258183000004,
+          "max_ms": 5000.988817,
+          "node_cpu": 25.5,
+          "generator_cpu": 20.0,
+          "node_mem_available_mb": 9014,
+          "pods_top": {
+            "api": "1m 34Mi"
+          },
+          "throttled_ms": 15.655,
+          "pod_replaced": false,
+          "reasons": [
+            "errors",
+            "latency",
+            "throughput"
+          ]
+        }
+      ],
+      "knee": {
+        "last_healthy_rps": 800,
+        "first_degraded_rps": 1600,
+        "reasons": [
+          "errors",
+          "latency",
+          "throughput"
+        ],
+        "lower_bound_only": false,
+        "vus_at_last_healthy": 124.0
+      }
+    },
+    {
+      "target": "web-static",
+      "repeat": 2,
+      "steps": [
+        {
+          "rate": 50,
+          "target": "web-static",
+          "requests": 2732.0,
+          "achieved_rps": 45.52946531766014,
+          "error_rate": 0.23133235724743778,
+          "status_429": 0.0,
+          "dropped": 269.0,
+          "vus_peak": 200.0,
+          "avg_ms": 18.81643660688136,
+          "p50_ms": 3.051208,
+          "p90_ms": 26.096075200000033,
+          "p95_ms": 141.50559919999995,
+          "p99_ms": 311.6226340800004,
+          "max_ms": 757.084307,
+          "node_cpu": 18.9,
+          "generator_cpu": 5.8,
+          "node_mem_available_mb": 8940,
+          "pods_top": {
+            "traefik": "598m 80Mi",
+            "web": "18m 4Mi"
+          },
+          "throttled_ms": 0.0,
+          "pod_replaced": false,
+          "reasons": [
+            "errors",
+            "throughput"
+          ]
+        }
+      ],
+      "knee": {
+        "last_healthy_rps": null,
+        "first_degraded_rps": 50,
+        "reasons": [
+          "errors",
+          "throughput"
+        ],
+        "lower_bound_only": false,
+        "vus_at_last_healthy": null
+      }
+    },
+    {
+      "target": "api-health",
+      "repeat": 3,
+      "steps": [
+        {
+          "rate": 50,
+          "target": "api-health",
+          "requests": 3000.0,
+          "achieved_rps": 49.99915372265728,
+          "error_rate": 0.0,
+          "status_429": 0.0,
+          "dropped": 0.0,
+          "vus_peak": 0.0,
+          "avg_ms": 2.5183832499999963,
+          "p50_ms": 2.5473369999999997,
+          "p90_ms": 2.8725807999999997,
+          "p95_ms": 3.0025877999999993,
+          "p99_ms": 3.297690329999999,
+          "max_ms": 14.238332,
+          "node_cpu": 12.1,
+          "generator_cpu": 4.6,
+          "node_mem_available_mb": 8974,
+          "pods_top": {
+            "traefik": "108m 76Mi",
+            "api": "36m 24Mi"
+          },
+          "throttled_ms": 0.0,
+          "pod_replaced": false,
+          "reasons": []
+        },
+        {
+          "rate": 100,
+          "target": "api-health",
+          "requests": 6001.0,
+          "achieved_rps": 100.01325487116416,
+          "error_rate": 0.0,
+          "status_429": 0.0,
+          "dropped": 0.0,
+          "vus_peak": 1.0,
+          "avg_ms": 2.027875387435434,
+          "p50_ms": 2.023183,
+          "p90_ms": 2.281237,
+          "p95_ms": 2.385269,
+          "p99_ms": 2.680263,
+          "max_ms": 6.359433,
+          "node_cpu": 15.3,
+          "generator_cpu": 4.7,
+          "node_mem_available_mb": 9009,
+          "pods_top": {
+            "traefik": "180m 59Mi",
+            "api": "62m 11Mi"
+          },
+          "throttled_ms": 0.0,
+          "pod_replaced": false,
+          "reasons": []
+        },
+        {
+          "rate": 200,
+          "target": "api-health",
+          "requests": 12000.0,
+          "achieved_rps": 199.99715556712124,
+          "error_rate": 0.0,
+          "status_429": 0.0,
+          "dropped": 0.0,
+          "vus_peak": 1.0,
+          "avg_ms": 1.585029177083335,
+          "p50_ms": 1.5678565,
+          "p90_ms": 1.8321246,
+          "p95_ms": 1.91698945,
+          "p99_ms": 2.2883265500000007,
+          "max_ms": 30.981338,
+          "node_cpu": 18.0,
+          "generator_cpu": 4.5,
+          "node_mem_available_mb": 9030,
+          "pods_top": {
+            "traefik": "299m 59Mi",
+            "api": "99m 11Mi"
+          },
+          "throttled_ms": 0.0,
+          "pod_replaced": false,
+          "reasons": []
+        },
+        {
+          "rate": 400,
+          "target": "api-health",
+          "requests": 24001.0,
+          "achieved_rps": 400.00352500418995,
+          "error_rate": 0.0,
+          "status_429": 0.0,
+          "dropped": 0.0,
+          "vus_peak": 2.0,
+          "avg_ms": 1.3684903601933183,
+          "p50_ms": 1.258282,
+          "p90_ms": 1.553418,
+          "p95_ms": 1.658595,
+          "p99_ms": 2.304809,
+          "max_ms": 55.167329,
+          "node_cpu": 29.2,
+          "generator_cpu": 6.6,
+          "node_mem_available_mb": 8958,
+          "pods_top": {
+            "traefik": "471m 63Mi",
+            "api": "165m 12Mi"
+          },
+          "throttled_ms": 0.0,
+          "pod_replaced": false,
+          "reasons": []
+        },
+        {
+          "rate": 800,
+          "target": "api-health",
+          "requests": 47703.0,
+          "achieved_rps": 795.0292155909683,
+          "error_rate": 0.0,
+          "status_429": 0.0,
+          "dropped": 297.0,
+          "vus_peak": 268.0,
+          "avg_ms": 3.5772660106073713,
+          "p50_ms": 1.06451,
+          "p90_ms": 1.2846376,
+          "p95_ms": 1.6008184000000005,
+          "p99_ms": 72.89666274000018,
+          "max_ms": 773.377239,
+          "node_cpu": 40.7,
+          "generator_cpu": 10.9,
+          "node_mem_available_mb": 8913,
+          "pods_top": {
+            "traefik": "765m 112Mi",
+            "api": "267m 15Mi"
+          },
+          "throttled_ms": 0.0,
+          "pod_replaced": false,
+          "reasons": []
+        },
+        {
+          "rate": 1600,
+          "target": "api-health",
+          "requests": 41288.0,
+          "achieved_rps": 636.4212493946764,
+          "error_rate": 0.9569124200736291,
+          "status_429": 0.0,
+          "dropped": 54712.0,
+          "vus_peak": 3200.0,
+          "avg_ms": 240.73562877552715,
+          "p50_ms": 0,
+          "p90_ms": 525.2405264000037,
+          "p95_ms": 2152.8957186000007,
+          "p99_ms": 4385.031246089996,
+          "max_ms": 5003.170767,
+          "node_cpu": 24.8,
+          "generator_cpu": 19.7,
+          "node_mem_available_mb": 8972,
+          "pods_top": {
+            "api": "1m 35Mi"
+          },
+          "throttled_ms": 44.168,
+          "pod_replaced": false,
+          "reasons": [
+            "errors",
+            "latency",
+            "throughput"
+          ]
+        }
+      ],
+      "knee": {
+        "last_healthy_rps": 800,
+        "first_degraded_rps": 1600,
+        "reasons": [
+          "errors",
+          "latency",
+          "throughput"
+        ],
+        "lower_bound_only": false,
+        "vus_at_last_healthy": 268.0
+      }
+    },
+    {
+      "target": "web-static",
+      "repeat": 3,
+      "steps": [
+        {
+          "rate": 50,
+          "target": "web-static",
+          "requests": 2469.0,
+          "achieved_rps": 41.146164536956526,
+          "error_rate": 0.7136492507087889,
+          "status_429": 0.0,
+          "dropped": 532.0,
+          "vus_peak": 200.0,
+          "avg_ms": 8.821315186310256,
+          "p50_ms": 0,
+          "p90_ms": 22.1337788,
+          "p95_ms": 62.0145464,
+          "p99_ms": 162.17211960000074,
+          "max_ms": 338.086282,
+          "node_cpu": 17.0,
+          "generator_cpu": 6.1,
+          "node_mem_available_mb": 8984,
+          "pods_top": {
+            "web": "1m 4Mi"
+          },
+          "throttled_ms": 0.0,
+          "pod_replaced": false,
+          "reasons": [
+            "errors",
+            "throughput"
+          ]
+        }
+      ],
+      "knee": {
+        "last_healthy_rps": null,
+        "first_degraded_rps": 50,
+        "reasons": [
+          "errors",
+          "throughput"
+        ],
+        "lower_bound_only": false,
+        "vus_at_last_healthy": null
+      }
+    }
+  ],
+  "restarts_during_run": {
+    "api": 0,
+    "web": 0
+  },
+  "date": "2026-11-02T06:35Z",
+  "commit": "0ee1a384"
+}

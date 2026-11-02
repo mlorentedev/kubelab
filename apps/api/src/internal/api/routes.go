@@ -22,5 +22,7 @@ func SetupRoutes(r *gin.Engine) {
 		// Lead magnet
 		api.POST("/lead-magnet", LeadMagnetHandler)
 
+		// Forge webhooks: signed by the forge, so no session in front of them
+		api.POST("/forge/webhooks/:forge", ForgeWebhookHandler)
 	}
 }

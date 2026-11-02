@@ -198,7 +198,7 @@ def _refusal(path: Path, exc: ValidationError) -> ContractError:
 def load_document(path: Path) -> dict[str, Any]:
     """Read ``path`` as one YAML mapping, refusing unreadable, malformed or duplicate-key input."""
     try:
-        text = path.read_text()
+        text = path.read_text(encoding="utf-8")
     except OSError as e:
         raise ContractError(
             f"{path}: cannot be read ({e.strerror})",
@@ -263,7 +263,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     path = schema_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(schema_text())
+    path.write_text(schema_text(), encoding="utf-8")
     print(path)
     return 0
 

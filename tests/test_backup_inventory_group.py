@@ -37,7 +37,7 @@ _DERIVED = {BACKUP_GROUP, *LOCATION_GROUPS.values()}
 
 
 def _common() -> dict[str, Any]:
-    return yaml.safe_load(_COMMON.read_text())
+    return yaml.safe_load(_COMMON.read_text(encoding="utf-8"))
 
 
 def _inventory(networking: dict[str, Any] | None = None, sources: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -123,7 +123,7 @@ class TestPlaybooksNameNoHost:
 
     @pytest.mark.parametrize("playbook", _backup_playbooks(), ids=lambda p: p.name)
     def test_every_play_targets_node_backup_through_derived_groups_only(self, playbook: Path) -> None:
-        plays = [p for p in yaml.safe_load(playbook.read_text()) if "hosts" in p]
+        plays = [p for p in yaml.safe_load(playbook.read_text(encoding="utf-8")) if "hosts" in p]
         assert plays, playbook.name
         for play in plays:
             pattern = str(play["hosts"])

@@ -53,11 +53,23 @@
 # ---------------------------------------------------------------------------
 - name: Provision Beelink — On-demand platform node
   hosts: beelink
+  # A later failure must not drop the handlers earlier tasks notified (#2824).
+  force_handlers: true
   become: true
   gather_facts: true
 
   vars:
+    # A large disk keeps the history a post-mortem needs (#2702).
+    journald_system_max_use: "{{ journald_large_disk_max_use }}"
     deploy_env: staging
+
+    # Beelink is behind the lab edge, so its image pulls share the edge's shaped
+    # downlink and are sized against it first (_includes/image-pull.yml, #2742).
+    image_pull_down_kbit: "{{ config.networking.edge.uplink.bandwidth.down_kbit }}"
+    image_pull_goodput: "{{ config.networking.edge.uplink.bandwidth.pull_goodput }}"
+    # dockerd's attempts at a layer, for the node's daemons and the pull's bound (#2834).
+    docker_max_download_attempts: "{{ config.networking.edge.uplink.max_download_attempts }}"
+
     # Gitea is a singleton whose identity is PROD's, even though this node is
     # provisioned under staging (ADR-061: the axes are independent — "prod is an
     # environment, not a location"). It keeps prod's domain, so prod Authelia
@@ -124,6 +136,9 @@
       no_log: true
       tags: [always]   # secrets must load for any tag selection (e.g. --tags runner)
 
+    - import_tasks: _includes/require-secrets.yml
+      tags: [always]
+
     # Separate vault AND values tree for the one service on this node whose
     # environment identity is not deploy_env. Built into their own facts rather
     # than merged over `config`/`secrets`, so they cannot silently change what
@@ -179,6 +194,12 @@
         netplan_interface: "{{ config.networking.nodes.beelink.lan_interface }}"
         netplan_address: "{{ config.networking.nodes.beelink.lan_ip }}/24"
         netplan_gateway: "{{ config.networking.nodes.rpi4.lan_ip }}"
+        # The CI engine: Gitea's jobs build on it, so it moves only in a run
+        # that releases it (#2722, `base_system_release_holds` in the role defaults).
+        base_system_held_packages:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
         firewall_tailnet_ports:
           - "{{ config.apps.services.observability.glances.default_port }}"
           - "{{ config.apps.services.core.gitea.default_port }}"
@@ -189,6 +210,9 @@
 
     - role: ../roles/docker
       tags: [docker]
+      vars:
+        # The run that releases the CI engine proves it can still build (#2722).
+        docker_smoke_build: "{{ base_system_release_holds | default(false) | bool }}"
 
     - role: ../roles/dns_resilience
       tags: [dns, tailscale]
@@ -290,6 +314,10 @@
         # comment. Narrower than the one above, minted and gated the same way.
         gitea_review_notice_scopes: "{{ gitea_config.apps.services.core.gitea.token_scopes.review_notice }}"
         gitea_review_notice_token: "{{ gitea_secrets.apps.services.core.gitea.review_notice_token | default('') }}"
+        # CONSOLE-004 -- a third token on the reviewer's account, read-only, for the
+        # forge task view's API. Minted and gated the same way.
+        gitea_issue_reader_scopes: "{{ gitea_config.apps.services.core.gitea.token_scopes.issue_reader }}"
+        gitea_issue_reader_token: "{{ gitea_secrets.apps.services.core.gitea.issue_reader_token | default('') }}"
         # The superadmin's API token (TOOL-035). Minted by the same mechanism and
         # gated the same way. Two reasons it exists, and only the first is obvious:
         # Gitea puts the creating account in a new organization's `Owners` team, so

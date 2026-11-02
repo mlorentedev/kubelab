@@ -133,7 +133,7 @@ class TestTheChartVersionIsPinned:
     def test_the_ssot_declares_a_concrete_chart_version(self) -> None:
         import yaml
 
-        argocd = yaml.safe_load(self.COMMON.read_text())["argocd"]
+        argocd = yaml.safe_load(self.COMMON.read_text(encoding="utf-8"))["argocd"]
         version = str(argocd.get("chart_version", ""))
         assert version, "argocd.chart_version is missing from common.yaml"
         # A moving target defeats the point: "latest"/"" resolve to whatever the
@@ -144,7 +144,7 @@ class TestTheChartVersionIsPinned:
         )
 
     def test_the_deploy_target_passes_the_pin_to_helm(self) -> None:
-        body = self.MAKEFILE.read_text()
+        body = self.MAKEFILE.read_text(encoding="utf-8")
         assert "--version" in body and "argo/argo-cd" in body, (
             "`helm upgrade --install argo/argo-cd` runs without --version; helm "
             "resolves that to the newest chart in the repo."

@@ -47,6 +47,36 @@ Pre-merge preview (optional): a feature-branch CI build also produces `sha-<pr-s
 - **Pod not picking up a new mutable tag** → only relevant for legacy mutable tags; `sha-*`/semver are immutable so a tag change always forces a pull. The generator sets `imagePullPolicy: Always` only for `dev`/`latest`/`*-rc.*`.
 - **Staging drifted from `master`** → expected within ≤1 sync cycle for out-of-band `make deploy-k8s` applies (selfHeal:false). The next `staging-deploy.yml` PR merge re-aligns it.
 
+## deploy-verify is red
+
+`deploy-verify.yml` (GITOPS-003, #1478) reads the commit status Argo CD posts as `argocd/kubelab-<env>`. A merge is not a deploy: Argo makes one automated attempt per revision and does not retry a failed one ([lesson-407](../lessons/gitops-delivery/lesson-407-a-failed-auto-sync-is-not-retried-and-a-merge-is-not-a-deploy.md)).
+
+The Grafana alert **"Argo CD has not applied master HEAD"** (`gitops003-argo-delivery`) is the same question asked from inside the cluster. The `delivery-watcher` CronJob checks master HEAD's status every 10 minutes, because GitHub starts `deploy-verify`'s scheduled sweep only every few hours ([lesson-681](../lessons/ci-automation/lesson-681-a-github-schedule-here-is-a-few-times-a-day-signal-not-a-cron.md)). Read its last line with `toolkit obs logs --env <env> --service delivery-watcher`:
+
+- `state: failure` or `error`: the sync at that commit failed.
+- `state: null` with `healthy: 0`: no status arrived.
+- A `reason` and no `healthy`: GitHub could not be asked (rate limit, network, or the run's deadline). Neither the alert nor this line says anything about the deploy then. Fresh lines resolve it; the next run is at most 10 minutes away.
+
+For the first two, follow the steps below.
+
+First read which red it is, from the run's error annotation:
+
+- **A failure description** (the `Argo CD status` job, or `wait-status` printing `failure`/`error`): the sync at that commit failed, and the text is Argo's `operationState.message`.
+- **A failure naming `web-route-probe-api`** (or any `<app>-route-probe-*`): the sync applied, then the `PostSync` route probe (GITOPS-003 AC3) got the wrong answer. Its log line reads `route-probe: POST <host>/api/subscribe answered '<code> <type>', expected '400 text/plain'`. `200`/`404 text/html` means the `/api` route reaches the static site; `502` means the API is down; `000` means nothing answered. Read it with `toolkit obs logs --env <env> --service route-probe`. The failed Job is kept until the next sync replaces it, or for a day at most.
+- **`no status arrived`** (the prod sweep, or a replay): master HEAD has been merged for over 10 minutes and Argo posted nothing for it. This is also what follows a failed sync: Argo withholds success while the last operation did not succeed, and a later commit that changes no manifest starts no new operation. So read the last operation first (step 1): a failure there, at an older commit, is the cause.
+
+Then:
+
+1. Read the message on the hub: `make verify-product APP=web ENV=<env>` (a product with a contract; any other app is refused with exit 2) prints the Application's last operation with its `operationState.message`.
+2. Fix the cause the message names, then start the sync Argo will not retry by itself: `make sync-app APP=kubelab-<env>`.
+3. Only if the same controller panic repeats after a sync: `make restart-argocd`.
+
+Not a deploy failure, so check these before step 1:
+
+- **Staging repointed**: `make argo-set-revision` points `kubelab-staging` at a branch, so master commits get no staging status until it is pointed back at `master`.
+- **ace1 off**: staging is on-demand. While its node is off nothing syncs, so a staging replay reports `no status arrived`. The scheduled sweep checks prod only for this reason.
+- **The token expired**: Argo posts with `argocd.github_status_token`. With it expired, no env gets any status, and `make secrets-audit` / the expiry check names it.
+
 ## References
 
 - [ADR-046](../adr/adr-046-gitops-delivery-promotion-strategy.md) — the decision + the PR-per-update amendment.

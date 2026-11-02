@@ -16,14 +16,14 @@ TASKS = Path(__file__).resolve().parent.parent / "infra/ansible/roles/rpi3_servi
 
 
 def _task(name: str) -> dict:
-    for task in yaml.safe_load(TASKS.read_text()):
+    for task in yaml.safe_load(TASKS.read_text(encoding="utf-8")):
         if task.get("name") == name:
             return task
     raise AssertionError(f"no task named {name!r}")
 
 
 def test_the_unit_file_is_read_before_the_template() -> None:
-    names = [task.get("name") for task in yaml.safe_load(TASKS.read_text())]
+    names = [task.get("name") for task in yaml.safe_load(TASKS.read_text(encoding="utf-8"))]
     probe = names.index("Check whether the Compose stack unit is already installed")
     assert probe < names.index("Install the Compose stack systemd unit")
     assert _task(names[probe]).get("register") == "_rpi3_unit_file"

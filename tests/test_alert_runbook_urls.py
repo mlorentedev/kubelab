@@ -33,7 +33,7 @@ def _github_anchor(heading: str) -> str:
 def _runbook_urls() -> list:
     found = []
     for path in sorted(RULES_DIR.glob("*.yaml")):
-        data = yaml.safe_load(path.read_text()) or {}
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         for group in data.get("groups", []):
             for rule in group.get("rules", []):
                 url = rule.get("annotations", {}).get("runbook_url")
@@ -54,7 +54,7 @@ def test_runbook_url_names_a_committed_file(uid: str, url: str) -> None:
     path = REPO / relative
     assert path.is_file(), f"{uid}: runbook_url names a missing file: {relative}"
     if anchor:
-        headings = re.findall(r"^#+ (.+)$", path.read_text(), flags=re.MULTILINE)
+        headings = re.findall(r"^#+ (.+)$", path.read_text(encoding="utf-8"), flags=re.MULTILINE)
         anchors = {_github_anchor(h) for h in headings}
         assert anchor in anchors, f"{uid}: {relative} has no heading for #{anchor}"
 
@@ -82,5 +82,5 @@ def test_every_repo_link_resolves(source: str, target: str) -> None:
     path = REPO / relative.rstrip("/")
     assert path.exists(), f"{source}: links a path this tree does not have: {relative}"
     if anchor:
-        headings = re.findall(r"^#+ (.+)$", path.read_text(), flags=re.MULTILINE)
+        headings = re.findall(r"^#+ (.+)$", path.read_text(encoding="utf-8"), flags=re.MULTILINE)
         assert anchor in {_github_anchor(h) for h in headings}, f"{source}: {relative} has no heading for #{anchor}"

@@ -48,6 +48,72 @@ branding:
 networking:
   lan_cidr: "172.16.1.0/24"
   tailscale_cidr: "100.64.0.0/10"
+  # Resolvers a process is pinned to, read by the role defaults (#2901). Two shapes
+  # on purpose, see the Docker-DNS gotcha in CLAUDE.md. public_resolvers cannot see
+  # VPN-only split-DNS zones and suits a container that needs public answers (Gitea,
+  # Headscale, the agent, ACME). tailnet_first_resolvers leads with MagicDNS for a
+  # container that must also resolve those zones; its public entry is only for a
+  # Tailscale outage. tests/test_public_resolvers_ssot.py keeps the two consistent.
+  public_resolvers: ["1.1.1.1", "8.8.8.8"]
+  tailnet_first_resolvers: ["100.100.100.100", "1.1.1.1"]
+  # The lab's edge (ADR-075, NET-005): the RPi4 does NAT, DHCP, DNS and the lab
+  # Wi-Fi, and only `uplink` changes from one site to the next. What would locate
+  # a site or let a stranger on it claim the lab's paid access (SSIDs, PSKs, the
+  # uplink adapter's MAC, portal domains) is in SOPS (prod) under this same
+  # path, never here; tests/test_edge_ssot.py fails if one lands in a values file.
+  edge:
+    uplink:
+      kind: "wifi_open"          # wifi_open | wifi_psk | ethernet
+      # Stable name the gateway role's .link file gives the adapter, matched by
+      # its permanent MAC, so no profile depends on the kernel's wlx<mac> name.
+      interface: "uplink0"
+      regdomain: "US"
+      # The AP's fixed 2.4 GHz channel, per site: picked at bring-up from a scan
+      # of the site's spectrum. Must be one the regdomain allows.
+      channel: 6
+      # The band the uplink associates on, per site: "5GHz", "2.4GHz", or "" for
+      # either. At the hotel site 2.4 GHz received at MCS 1 (13 Mbit/s) at -57 dBm,
+      # beside the lab AP's own 2.4 GHz channel, while its APs also serve 5 GHz.
+      band: "5GHz"
+      # Shaped at 90% of the lower of two measured rates (AC8), so the queue forms
+      # here. Measured 2026-10-31 03:20Z on the site's paid plan, 5 GHz, with the
+      # shaper lifted: the uplink adapter's own rx/tx counters over two 60 s runs of
+      # six parallel streams each way, 27070/26700 kbit/s down and 4041/4026 up. A
+      # second server read 14 Mbit/s down from the edge and the laptop alike, so that
+      # bound is the server's path, not the line. On 2.4 GHz the same plan read
+      # 4730/4939 down; the free plan read 3.3 and 1.5 Mbps.
+      bandwidth:
+        down_kbit: 24000
+        up_kbit: 3600
+        # The share of down_kbit an image pull gets, against which a pull is sized
+        # (_includes/image-pull.yml). Open WebUI's 1.62 GB took 133.7 min on ace2,
+        # against 72.7 at down_kbit, with the shaper binding (#2703, 2026-10-30).
+        # Measured on the free plan; not yet re-measured on the paid one.
+        pull_goodput: 0.54
+      # dockerd's attempts at each layer of a pull, for every daemon behind the edge
+      # and for the bound on a pull's attempt (#2834). A pull's connections end in
+      # `unexpected EOF` about every 10 minutes here. dockerd resumes the layer on each
+      # of its own attempts, but after the last it fails the pull and drops every
+      # layer the pull fetched. Docker's default of 5 lost a 1.6 GB pull three times
+      # running (ace2, 2026-10-30). The pause after attempt k is 5k seconds, uncapped:
+      # 40 attempts sleep at most 65 minutes in all, which is also how long a blob
+      # that never downloads takes to fail. tests/test_image_pull_budget.py holds it
+      # between those two bounds.
+      max_download_attempts: 40
+    # The lab's own Wi-Fi, the same at every site. It reuses the old home network
+    # so rpi3 (no screen) and saved devices rejoin unchanged; the AP takes the
+    # old home router's address. A future uplink may land in this common ISP
+    # default; the edge reports that collision (AC7).
+    lab_wifi:
+      interface: "wlan0"
+      cidr: "10.0.0.0/24"
+      gateway: "10.0.0.1"
+      dhcp_range:
+        start: "10.0.0.50"
+        end: "10.0.0.199"
+      # Nodes with a fixed lease: address from networking.nodes.<node>.lan_ip,
+      # MAC from networking.nodes.<node>.mac.
+      reservations: ["rpi3"]
   # Trusted CIDRs — consumed by Authelia access_control as "internal" networks.
   # Single source for all services that need a trusted-network definition.
   trusted_cidrs:
@@ -85,8 +151,8 @@ networking:
   #
   # ufw is kept in step for defence in depth, but do NOT mistake it for the
   # control: a ufw rule CANNOT restrict a published port (#959 — Docker's DNAT
-  # runs in PREROUTING, before ufw's filter chains, and DOCKER-USER is empty on
-  # every node in the fleet). That gap is precisely why SEC-005 happened.
+  # runs in PREROUTING, before ufw's filter chains, and DOCKER-USER holds
+  # no rule for it). That gap is precisely why SEC-005 happened.
   #
   # Editing this list changes what prod accepts from the internet. Removing an
   # entry is enforced at the cloud edge and WILL drop live traffic — unlike the
@@ -150,6 +216,14 @@ networking:
   ssh_users:
     homelab: "manu"
     cloud: "deployer"
+
+  # The operator's own machines on the tailnet. Not nodes: nothing provisions
+  # them and no inventory names them. Declared so a service that admits the
+  # operator by address derives it from here (#2482: Uptime Kuma's direct port,
+  # reached by `make monitoring-apply` and break-glass).
+  operator_workstations:
+    - name: mac
+      tailscale_ip: "100.64.0.15"
 
   vps:
     # ADR-028 tier. Machine-readable projection of the topology the ADR
@@ -306,6 +380,7 @@ networking:
       hostname: "ace1"
       tailscale_ip: "100.64.0.11"
       lan_ip: "172.16.1.2"
+      mac: "68:1d:ef:38:c5:6f"       # DHCP reservation on the RPi4's LAN
       lan_interface: "enp1s0"
       ansible_groups: ["k3s_servers", "docker_hosts", "minipc"]
     ace2:
@@ -315,6 +390,7 @@ networking:
       hostname: "ace2"
       tailscale_ip: "100.64.0.5"
       lan_ip: "172.16.1.5"
+      mac: "68:1d:ef:38:c5:8b"       # DHCP reservation on the RPi4's LAN
       lan_interface: "enp1s0"
       ansible_groups: ["compute_nodes", "docker_hosts", "minipc"]  # ADR-058 D1: dev-node
       # Open WebUI's compose network on the system daemon (spec AI-009 AC4).
@@ -332,14 +408,13 @@ networking:
       location: "on-demand"
       hostname: "rpi4"
       tailscale_ip: "100.64.0.10"
-      # Dual-segment gateway: inner LAN (172.16.1.0/24, eth0) advertised to
-      # Tailscale, AND WiFi outer (10.0.0.0/24, wlan0) used by ProxyJump for
-      # ace1/ace2/bee/jet1 access from outside the inner segment. lan_ip is
-      # the inner side (matches networking.lan_cidr); wifi_lan_ip is the
-      # outer side, reachable via the rpi4-lan SSH alias when Tailscale is
-      # down. Both DHCP-reserved on the home router.
+      # The lab's edge (ADR-075): lan_ip is the homelab LAN side (eth0, inside
+      # networking.lan_cidr, advertised on the tailnet); wifi_lan_ip is its
+      # address on the lab Wi-Fi it serves (wlan0, the AP), so it equals
+      # networking.edge.lab_wifi.gateway. The rpi4-lan SSH alias reaches it there
+      # when Tailscale is down.
       lan_ip: "172.16.1.1"
-      wifi_lan_ip: "10.0.0.131"
+      wifi_lan_ip: "10.0.0.1"
       # The LAN jump host: the one node whose sshd forwards a TCP connection on
       # to the inner-LAN nodes, so the `*-lan` SSH aliases (ProxyJump rpi4) work.
       # Every other node keeps `AllowTcpForwarding no`. The forwards are limited
@@ -357,11 +432,12 @@ networking:
       location: "always-on"
       hostname: "rpi3"
       tailscale_ip: "100.64.0.6"
-      # WiFi outer segment (10.0.0.0/24), reachable via rpi3-lan SSH alias.
-      # NOT on the inner lan_cidr (172.16.1.0/24, behind rpi4 gateway/NAT) —
-      # rpi3 lives on the WiFi side, no rpi4 ProxyJump needed. Static DHCP
-      # reservation on home router for MAC b8:27:eb:3d:8e:54 (SSOT-003).
+      # On the lab Wi-Fi (networking.edge.lab_wifi), reachable via the rpi3-lan
+      # SSH alias. NOT on the inner lan_cidr (172.16.1.0/24): rpi3 lives on the
+      # Wi-Fi side, no rpi4 ProxyJump needed. Its lease is reserved by the RPi4's
+      # lab Wi-Fi DHCP from this lan_ip and mac (SSOT-003).
       lan_ip: "10.0.0.157"
+      mac: "b8:27:eb:3d:8e:54"
       lan_interface: "wlan0"
       ansible_groups: ["monitoring", "docker_hosts"]
       dashboard:
@@ -373,17 +449,26 @@ networking:
       hostname: "beelink"
       tailscale_ip: "100.64.0.3"
       lan_ip: "172.16.1.3"
+      mac: "78:55:36:06:18:14"       # DHCP reservation on the RPi4's LAN
       lan_interface: "enp1s0"
       ansible_groups: ["platform_nodes", "docker_hosts"]  # ADR-028: Gitea + CI runners + Glances
       dashboard:
         display_name: "Beelink"
     jetson:
+      # Out of the lab for some weeks (October 2026) and coming back. `retired`
+      # means what it means on `networking.aws`: this block is how the node is
+      # rebuilt, not a machine that answers today. The generated inventory and
+      # the infra suite skip it. Its DHCP reservation, its DNS entry and rpi4's
+      # `PermitOpen` stay, so its return is this one flag: remove it, regenerate
+      # the inventory, run `make test-infra ENV=prod`.
+      retired: true
       # ADR-028 tier. Machine-readable projection of the topology the ADR
       # narrates; consumed by the backup trigger model (BACKUP-044).
       location: "on-demand"
       hostname: "jetson"
       tailscale_ip: "100.64.0.8"
       lan_ip: "172.16.1.4"
+      mac: "00:04:4b:e5:5f:28"       # DHCP reservation on the RPi4's LAN
       ansible_groups: ["compute"]
       legacy_python: true
       dashboard:
@@ -444,6 +529,22 @@ infra:
     database: kubelab
     username: kubelab
     image: postgres:16-alpine
+    # Runs the API's migrations (ADR-051 D3), rendered into generated/migrations.yaml.
+    atlas_image: arigaio/atlas:1.3.0
+  forge:
+    # The forge task view (CONSOLE-004) and the label set it shares with CONSOLE-006
+    # (#2588) read this block, hence `infra.*` (ADR-036) and not a per-app namespace.
+    # `github` names the `kubelab-console` GitHub App: two public identifiers, not
+    # credentials. Its private key lives in SOPS at `apps.services.core.github_app.private_key`
+    # and the API's Gitea token at `apps.services.core.gitea.issue_reader_token`; both reach
+    # the API through `api-secrets`, never a ConfigMap (`tests/test_forge_credentials_delivery.py`).
+    # The generator emits these as INFRA_FORGE_GITHUB_APP_ID and INFRA_FORGE_GITHUB_INSTALLATION_ID.
+    github:
+      app_id: 5573076
+      installation_id: 177667607
+    # What the view reads, as `forge:owner/repo` separated by commas. Read by the API as
+    # INFRA_FORGE_SOURCES; a source with no credential is reported unreachable, never empty.
+    sources: "github:mlorentedev/kubelab"
 resources:
   default_memory_limit: 512m
   default_memory_reservation: 256m
@@ -494,16 +595,25 @@ ci:
         strict: false
         # Exact check-run / commit-status names, verified against a real head sha
         # rather than transcribed from the workflow: a required context that never
-        # reports blocks every merge forever. `review-attestation` is a commit
-        # STATUS, the rest are check-runs; both kinds are matched by name here.
+        # reports blocks every merge forever. `review-attestation` and
+        # `deploy-shape` are commit STATUSES, the rest are check-runs; both kinds
+        # are matched by name here.
         # `Tests` runs unconditionally on every pull request (ci.yml has no `if:`
         # and no paths filter on it), so requiring it costs no extra CI minutes —
         # only the latency of waiting for a job that was already running.
+        # `deploy-shape` is the status that deploy-shape.yml publishes, NOT its
+        # job ("Judge the diff shape"), which fails only when nothing could be judged.
+        # The status is success for a mechanical staging deploy and for any other
+        # PR (the verdict is in its description), and failure when unknown (fail
+        # closed). DELIVERY-004 AC3, #1619. It was a check-run until DELIVERY-011
+        # (#2714): GitHub filed it under another workflow's suite, and once that
+        # workflow ran again on the sha the context read "Expected" for good.
         required_contexts:
           - Validate
           - Detect Changes
           - review-attestation
           - Tests
+          - deploy-shape
     # web (mlorentedev/web) is a product repository (ADR-053) whose protection
     # was hand-set and recorded only in its own ADR-057. The values are that
     # ADR's, verified against the live object on 2026-09-23:
@@ -610,6 +720,15 @@ argocd:
   # Pinned for the same reason one layer down: the GCP hub installs its own helm
   # at boot, and an unattended recreate must not pick up whatever is current.
   helm_version: "v3.18.4"
+  # The in-cluster delivery watcher (GITOPS-003 AC2, #2645): reads master HEAD's
+  # `argocd/kubelab-<env>` status from GitHub. Runs a stdlib-only script, so any
+  # interpreter release works; pinned so the CronJob never upgrades itself.
+  delivery_watcher:
+    image: python:3.13.16-alpine
+  # The route probe (GITOPS-003 AC3): a PostSync Job per `extra_routes` probe.
+  # Rendered into the generated overlay files, so the generator reads it here.
+  route_probe:
+    image: curlimages/curl:8.11.1
   # Hub: clusters.hub -> networking.<provider>.tailscale_dns — MagicDNS (ADR-025).
   # Named via clusters.hub rather than a provider literal: this comment said
   # networking.aws until prod moved to gcp1, and a comment restating one side of
@@ -621,6 +740,16 @@ argocd:
       node: ace1   # → networking.nodes.ace1.tailscale_ip
     prod:
       node: vps    # → networking.vps.tailscale_ip
+
+# ===========================================================================
+# LOAD TEST (OPS-054, docs/runbooks/load-test.md)
+# ===========================================================================
+# k6 runs on generator_node, on the LAN next to target_node. The image tag is
+# the pin Renovate tracks; the run records the digest it actually used.
+load_test:
+  target_node: ace1
+  generator_node: ace2
+  image: grafana/k6:2.3.0
 
 # ===========================================================================
 # CLUSTER ACCESS (operator transport — ADR-052)
@@ -745,8 +874,6 @@ edge:
     # tests/test_ansible_config_keys_resolve.py -- do not rely on this comment.
     # DNS
     dns_provider: cloudflare
-    dns_resolver_1: 1.1.1.1:53
-    dns_resolver_2: 8.8.8.8:53
     dns_delay_before_check: 30
     # Logging
     access_log_format: json
@@ -801,7 +928,7 @@ edge:
 
   cloudflared:
     name: cloudflared
-    image: cloudflare/cloudflared:latest
+    image: cloudflare/cloudflared:2026.10.7
     resources:
       cpu_limit: "0.25"
       memory_limit: 128M
@@ -900,6 +1027,9 @@ apps:
       # Liveness stays on /health (constant 200); readiness probes /ready, which is 503
       # only when configuration does not load (kubelab#1736, #2386).
       readiness_path: /ready
+      # The API's tenant in infra.postgres (DATA-007): role and database, never the
+      # owner role. Password in SOPS at apps.platform.api.db_password.
+      postgres_tenant: api
       site_title: mlorentedev
       # SMTP config moved to `infra.smtp.*` (ADR-036, SSOT-012 PR #3).
       # API source code reads `INFRA_SMTP_USER`, `INFRA_SMTP_PASS`,
@@ -940,6 +1070,15 @@ apps:
       extra_routes:
       - path_prefix: /api
         service: api
+        # A PostSync hook sends this after every sync and fails it unless the API
+        # answers (GITOPS-003 AC3). A malformed body changes nothing: Gin rejects
+        # it with 400 text/plain, the static site would answer 200/404 text/html.
+        probe:
+          method: POST
+          path: /api/subscribe
+          body: "{"
+          expect_status: 400
+          expect_content_type: text/plain
       # Site Info
       site_title: "Manu Lorente"
       site_description: "Cloud Native Automation in Spanish"
@@ -1097,6 +1236,17 @@ apps:
           # about. It is a second token on the reviewer's account; `tests/
           # test_gitea_review_notice_token.py` ties it to `REVIEW_NOTICE_SCOPES`.
           review_notice: "write:issue"
+          # What the forge task view's API (CONSOLE-004) reads issues and pull
+          # requests with, pinned by EQUALITY: it is read-only by design, and
+          # writes go through a narrower identity of their own (AC3), never this
+          # token. Gitea serves `GET /repos/{o}/{r}/issues` (pull requests too,
+          # with `type=pulls`) to the issue scope, so no repository scope is
+          # asked for. That is read from Gitea's routing, not yet measured: the
+          # first live read is the measurement, and a 403 widens this on purpose.
+          # A third token on the reviewer's account, which already sits in each
+          # organization's read team; `tests/test_gitea_issue_reader_token.py`
+          # ties it to `ISSUE_READER_SCOPES`.
+          issue_reader: "read:issue"
         # Repository organization (ADR-065, TOOL-035 #1076). Reconciled by
         # `toolkit.features.gitea_repos`: declared-and-missing is created,
         # existing-and-undeclared is REPORTED and never removed.
@@ -1498,6 +1648,16 @@ apps:
         default_port: 8080
         stun_port: 3478
         health_path: /health
+        # SEC-037 (#2734): restricted read-only SSH identities on the VPS deploy user.
+        # Each key is authorized with `restrict` and the forced command
+        # /usr/local/bin/headscale-audit (role `headscale`), never exclusively.
+        # `name` becomes the key's comment; `key` is the bare public key. An optional
+        # source address lives in SOPS at `audit_sources.<name>` (network inventory,
+        # public repo). Revoke by deleting the entry and deploying: the role removes
+        # every key carrying its forced command that is no longer declared here.
+        audit_identities:
+          - name: audit_automation
+            key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILevHjcCW1uOUGcyMnWTFqixFPv4RcEue2nx29crqND0"
 
     # Automation & CI/CD
     automation:
@@ -1983,9 +2143,9 @@ apps:
             cluster: hub
           open-webui:
             # A local account of nobody, the Grafana shape (#951). The login form
-            # stays on for it: `ENABLE_LOGIN_FORM=false` only hides the form, and
-            # `/api/v1/auths/signin` keeps taking passwords either way (v0.12.0,
-            # lesson-520). `WEBUI_ADMIN_EMAIL` seeds it on an empty database, before
+            # is hidden so the page redirects to Authelia (#2482); `path` shows it
+            # and stops the redirect. `/api/v1/auths/signin` takes passwords either
+            # way (v0.12.5, lesson-520). `WEBUI_ADMIN_EMAIL` seeds it on an empty database, before
             # the first request, so no visitor can sign up as the first admin. Open
             # WebUI signs in by email, which is why rotation uses it. The public
             # route refuses that endpoint (#2135), so the password works only on
@@ -1993,6 +2153,7 @@ apps:
             login: breakglass
             email: breakglass@kubelab.live
             secret: apps.services.ai.open_webui.admin_password
+            path: /auth?form=signin
           loki: {}
           uptime-kuma:
             # The private path only (#2483): the EndpointSlice address over the tailnet
@@ -2021,7 +2182,7 @@ apps:
         location: always-on
         # Internal-only, no public DNS record — each env overrides its own domain.
         image: crowdsecurity/crowdsec:v1.7.6
-        bouncer_image: fbonalair/traefik-crowdsec-bouncer:latest
+        bouncer_image: fbonalair/traefik-crowdsec-bouncer:0.5.0
         bouncer_name: crowdsec-bouncer-traefik
         enable_bouncer_middleware: true  # Set false in dev — bouncer blocks localhost traffic
         enable_auth: true
@@ -2052,7 +2213,7 @@ apps:
         # because ace2 is (ADR-068 D1): while ace2 is off, the chat does not answer.
         state_promotion: singleton
         location: on-demand
-        image: ghcr.io/open-webui/open-webui:v0.12.0
+        image: ghcr.io/open-webui/open-webui:v0.12.5
         # The public name people use (#2135, ADR-068 D5 amended): prod Traefik
         # terminates TLS and forwards to ace2 over the tailnet. While ace2 is
         # off, it answers the error page.
@@ -2115,6 +2276,21 @@ apps:
           container_port: 8000
           memory_limit: 256m
           cpu_limit: "0.5"
+        # Memory review (spec AI-025): every this many user turns in a chat, the
+        # chat model reads it and saves what is worth remembering. Each review
+        # is one more NaN call; v0.12.5's default is 10.
+        memory:
+          review_interval_turns: 5
+        # Web search (spec AI-025). v0.12.5 takes one engine and has no fallback,
+        # so the engine is SearXNG, which aggregates others itself. It runs on
+        # Open WebUI's network with no port, deployed by the agent_stack role.
+        web_search:
+          result_count: 5
+          searxng:
+            image: docker.io/searxng/searxng:2026.10.30-ffa88e3ba
+            container_port: 8080
+            memory_limit: 256m
+            cpu_limit: "0.5"
       hermes_kubelab:
         # The agent (ADR-068 D2). Its sessions, memory and vault clone live only
         # on ace2, and a second instance would fork them.
@@ -2745,7 +2921,8 @@ backup:
           claim: authelia-data
         sqlite: db.sqlite3
       postgres:
-        # Every Vikunja user, project and task. A logical dump, never a file
+        # Every Vikunja user, project and task, and the API's forge read model
+        # (the `api` database). A logical dump, never a file
         # copy: a running Postgres's data directory is not consistent on disk,
         # the same reason SQLite sources use `.backup`. `pvc` names the claim
         # this protects (the coverage guards read it); `pg_dumpall` replaces the

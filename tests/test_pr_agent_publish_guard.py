@@ -108,11 +108,11 @@ class Guard:
     def __init__(self, tmp_path: Path) -> None:
         self.tmp_path = tmp_path
         self.calls = tmp_path / "calls"
-        self.calls.write_text("")
+        self.calls.write_text("", encoding="utf-8")
         bindir = tmp_path / "bin"
         bindir.mkdir()
         gh = bindir / "gh"
-        gh.write_text(FAKE_GH)
+        gh.write_text(FAKE_GH, encoding="utf-8")
         gh.chmod(0o755)
         self.env = {k: v for k, v in os.environ.items() if k not in LEAKY and not k.startswith("STUB_")}
         self.env.update(
@@ -146,12 +146,12 @@ class Guard:
     def probe(self) -> tuple[subprocess.CompletedProcess[str], str]:
         """Runs `--probe` and returns the process with the file it appended to."""
         out = self.tmp_path / "probe.out"
-        out.write_text("")
+        out.write_text("", encoding="utf-8")
         proc = self.run("--probe", "--output", str(out))
-        return proc, out.read_text().strip()
+        return proc, out.read_text(encoding="utf-8").strip()
 
     def calls_to(self, key: str) -> int:
-        return self.calls.read_text().splitlines().count(key)
+        return self.calls.read_text(encoding="utf-8").splitlines().count(key)
 
 
 @pytest.fixture

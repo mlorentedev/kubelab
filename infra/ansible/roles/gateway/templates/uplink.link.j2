@@ -1,0 +1,10 @@
+# Managed by Ansible (gateway role). Pins the uplink adapter by its permanent MAC,
+# which the site's portal entitlement is bound to, and names it, so no committed
+# file carries the kernel's MAC-derived name (ADR-075 D2, C7). Sorts before
+# 73-usb-net-by-mac.link, and the first matching .link file wins.
+[Match]
+PermanentMACAddress={{ gateway_uplink_mac }}
+
+[Link]
+Name={{ gateway_uplink_interface }}
+MACAddressPolicy=none

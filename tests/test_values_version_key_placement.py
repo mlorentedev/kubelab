@@ -82,7 +82,7 @@ def _platform_version_keys(text: str) -> list[tuple[int, str]]:
 @pytest.mark.parametrize("filename", ENVIRONMENTS)
 def test_every_platform_app_pins_a_version(filename: str) -> None:
     """The premise of the placement test: there is something to place."""
-    text = (VALUES_DIR / filename).read_text()
+    text = (VALUES_DIR / filename).read_text(encoding="utf-8")
     apps = [app for _, app in _platform_version_keys(text)]
     assert apps, f"{filename} pins no apps.platform.<app>.version at all"
     assert len(apps) == len(set(apps)), f"{filename} pins a version twice for {apps}"
@@ -182,7 +182,7 @@ def test_version_key_is_adjacent_to_its_siblings(filename: str) -> None:
     per-app note; a rule phrased as "previous *non-blank* line" would accept the
     stranded form that `prod.yaml`'s api entry had. This is the rule between them.
     """
-    offenders = _stranded_version_keys(filename, (VALUES_DIR / filename).read_text())
+    offenders = _stranded_version_keys(filename, (VALUES_DIR / filename).read_text(encoding="utf-8"))
 
     assert not offenders, (
         "A version key is separated from the block it belongs to:\n"

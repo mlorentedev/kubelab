@@ -39,7 +39,7 @@ def _recipe(target: str) -> list[str]:
     `_aws1-cancel-spot-request` running as a prerequisite rather than as a
     recipe line is a real structural property worth pinning.
     """
-    lines = MAKEFILE.read_text().splitlines()
+    lines = MAKEFILE.read_text(encoding="utf-8").splitlines()
     start = next(
         (i for i, ln in enumerate(lines) if re.match(rf"^{re.escape(target)}:", ln)),
         None,

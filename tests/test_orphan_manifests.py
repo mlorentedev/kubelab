@@ -239,7 +239,7 @@ class TestRenderKeysMatchTheirManifests:
         """(manifest_path, placeholder) for each render-apply in the Makefile."""
         import re
 
-        text = (REPO_ROOT / "Makefile").read_text()
+        text = (REPO_ROOT / "Makefile").read_text(encoding="utf-8")
         # A recipe may wrap across escaped newlines; join them before matching.
         joined = text.replace("\\\n", " ")
         out = []
@@ -258,7 +258,7 @@ class TestRenderKeysMatchTheirManifests:
         for manifest, placeholder in invocations:
             path = REPO_ROOT / manifest
             assert path.exists(), f"--manifest {manifest} does not exist"
-            assert placeholder in path.read_text(), (
+            assert placeholder in path.read_text(encoding="utf-8"), (
                 f"Makefile renders {placeholder} into {manifest}, which does not contain it. "
                 "The substitution would not happen, and the manifest would keep whatever "
                 "address it was last applied with -- reported as success if the entry is "
@@ -273,7 +273,7 @@ class TestRenderKeysMatchTheirManifests:
         for manifest, placeholder in self._render_invocations():
             by_manifest.setdefault(manifest, set()).add(placeholder)
         for manifest, rendered in by_manifest.items():
-            present = set(re.findall(r"RESOLVE_[A-Z0-9_]+", (REPO_ROOT / manifest).read_text()))
+            present = set(re.findall(r"RESOLVE_[A-Z0-9_]+", (REPO_ROOT / manifest).read_text(encoding="utf-8")))
             missing = present - rendered
             assert not missing, (
                 f"{manifest} contains {sorted(missing)} which no --render maps. "

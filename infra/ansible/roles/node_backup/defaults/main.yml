@@ -232,7 +232,9 @@ node_backup_heartbeat_token_file: /opt/node-backup-heartbeat-token
 # --keep-within (BACKUP-057): no snapshot younger than it is ever forgotten. It
 # must stay above backup.r2.lock_retention_days (R + 1d); tests/test_r2_terraform.py
 # enforces it. It keeps every daily snapshot for the window, which the R2 size
-# gate in specs/BACKUP-057/verification.md already counted.
+# gate in specs/BACKUP-057/verification.md already counted. That holds for
+# history written here; history `restic copy` brought in is aged by the lock
+# from the copy, and node-backup-prune.sh.j2 waits it out (#1920).
 #
 # --max-repack-size 0 (BACKUP-057): `prune` never rewrites a pack. The lock ages
 # objects, not snapshots, and a repacked pack is new while the snapshots it serves

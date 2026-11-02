@@ -1,0 +1,87 @@
+# =============================================================================
+# edge-watcher — prod's view of the lab edge (NET-005 AC12, ADR-075 D6)
+#
+# Every 5 minutes, one TCP connect per target over the tailnet: the edge (the
+# RPi4) and the always-on nodes behind it (rpi3). Each run prints one
+# `edge_probe` line per target, `up` 1 or 0, which Vector ships to Loki and
+# `grafana-alerting/edge-rules.yaml` judges. The edge can page about itself only
+# while its uplink works; this watcher runs where the edge's failure cannot
+# reach it.
+#
+# Targets are generated: `make sync-edge-watcher-targets` (from `networking`).
+#
+# The image is the R2 watcher's restic image (`backup.watcher.image`), for its
+# busybox `sh`, `nc` and `timeout`: that `nc -z -w` from this cluster to the
+# same nodes over the tailnet is already exercised by the R2 probe. A separate
+# busybox pin would be a kustomize `images:` entry, which matches by name and
+# would retag the `busybox` init containers of crowdsec and vikunja.
+# =============================================================================
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: edge-watcher
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: edge-watcher
+    app.kubernetes.io/component: observability
+    app.kubernetes.io/part-of: kubelab
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: edge-watcher
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: edge-watcher
+    app.kubernetes.io/component: observability
+    app.kubernetes.io/part-of: kubelab
+spec:
+  # grafana-alerting/edge-rules.yaml reads this cadence: the target rule's
+  # window holds two runs and the silent rule's three, so one lost Job never
+  # decides either. tests/test_edge_alerting_rules.py derives both from here.
+  schedule: "*/5 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      ttlSecondsAfterFinished: 3600
+      backoffLimit: 0
+      # Per target the probe is bounded at REACH_TIMEOUT + 2 seconds.
+      activeDeadlineSeconds: 120
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: edge-watcher
+            app.kubernetes.io/component: observability
+        spec:
+          restartPolicy: Never
+          serviceAccountName: edge-watcher
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            runAsGroup: 65534
+          containers:
+            - name: edge-watcher
+              image: restic/restic
+              command: ["/bin/sh", "/etc/edge-watcher/probe.sh"]
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+              volumeMounts:
+                - name: probe
+                  mountPath: /etc/edge-watcher
+                  readOnly: true
+              resources:
+                requests:
+                  memory: 8Mi
+                limits:
+                  memory: 32Mi
+          volumes:
+            - name: probe
+              configMap:
+                name: edge-watcher-probe

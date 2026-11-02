@@ -52,7 +52,9 @@ def _seconds(duration: str) -> int:
 def _probe_interval() -> int:
     """Seconds between watcher runs, read from the CronJob `schedule:`, never retyped:
     the rule's `for:` and windows mean "two probes" only relative to it."""
-    cron = next(d for d in yaml.safe_load_all(WATCHER_MANIFEST.read_text()) if d and d.get("kind") == "CronJob")
+    cron = next(
+        d for d in yaml.safe_load_all(WATCHER_MANIFEST.read_text(encoding="utf-8")) if d and d.get("kind") == "CronJob"
+    )
     schedule = cron["spec"]["schedule"]
     minute, hour, *rest = schedule.split()
     every = re.fullmatch(r"\*/(\d+)", hour)
@@ -62,7 +64,7 @@ def _probe_interval() -> int:
 
 def _ship_interval(defaults: pathlib.Path = NODE_BACKUP_DEFAULTS) -> int:
     """Seconds between ships on an on-demand node, from the role default that sets them."""
-    return _seconds(yaml.safe_load(defaults.read_text())["node_backup_interval"])
+    return _seconds(yaml.safe_load(defaults.read_text(encoding="utf-8"))["node_backup_interval"])
 
 
 THREE_HOURS = 3 * 3600
@@ -91,29 +93,30 @@ def _probe(tmp_path: pathlib.Path, nodes: list[Node], now: int) -> list[dict]:
     fake.mkdir(parents=True)
     bin_dir.mkdir()
     for name, body in (("restic", FAKE_RESTIC), ("nc", FAKE_NC)):
-        (bin_dir / name).write_text(body)
+        (bin_dir / name).write_text(body, encoding="utf-8")
         (bin_dir / name).chmod(0o755)
     rows = []
     sizes = []
     for index, node in enumerate(nodes, start=1):
         address, repository_id = f"192.0.2.{index}", f"{index}" * 64
         rows.append(f"{node.name} {PREFIX}/{node.name} {repository_id} {address} 22 {node.cls} app")
-        (fake / f"{node.name}.id").write_text(repository_id)
-        (fake / f"{node.name}.ls").write_text(_listing("app"))
+        (fake / f"{node.name}.id").write_text(repository_id, encoding="utf-8")
+        (fake / f"{node.name}.ls").write_text(_listing("app"), encoding="utf-8")
         if node.age is None:
-            (fake / f"{node.name}.fail").write_text("Fatal: unable to open config file\n")
+            (fake / f"{node.name}.fail").write_text("Fatal: unable to open config file\n", encoding="utf-8")
         else:
             stamp = datetime.datetime.fromtimestamp(now - node.age, datetime.timezone.utc)
             (fake / f"{node.name}.snaps").write_text(
-                json.dumps([{"time": stamp.strftime("%Y-%m-%dT%H:%M:%SZ"), "id": "x", "short_id": "s"}])
+                json.dumps([{"time": stamp.strftime("%Y-%m-%dT%H:%M:%SZ"), "id": "x", "short_id": "s"}]),
+                encoding="utf-8",
             )
         sizes.append(f"node {node.name} {'null' if node.size is None else node.size} 1\n")
         if not node.up:
-            (fake / f"{address}.down").write_text("")
+            (fake / f"{address}.down").write_text("", encoding="utf-8")
     targets = run / "targets.txt"
-    targets.write_text("\n".join(rows) + "\n")
+    targets.write_text("\n".join(rows) + "\n", encoding="utf-8")
     bucket = sum(node.size or 0 for node in nodes)
-    (run / "sizes.txt").write_text("".join(sizes) + f"bucket {PREFIX.rsplit('/', 1)[1]} {bucket} 1\n")
+    (run / "sizes.txt").write_text("".join(sizes) + f"bucket {PREFIX.rsplit('/', 1)[1]} {bucket} 1\n", encoding="utf-8")
     env = {
         "PATH": f"{bin_dir}:{os.environ['PATH']}",
         "FAKE_DIR": str(fake),
@@ -296,7 +299,7 @@ def test_a_single_probe_never_reads_as_a_shrink(case: Case) -> None:
 
 def _rule(uid: str) -> dict:
     for path in sorted(ALERTING_DIR.glob("*.yaml")):
-        for group in (yaml.safe_load(path.read_text()) or {}).get("groups") or []:
+        for group in (yaml.safe_load(path.read_text(encoding="utf-8")) or {}).get("groups") or []:
             for rule in group.get("rules") or []:
                 if rule.get("uid") == uid:
                     return rule
@@ -344,7 +347,7 @@ def test_a_ship_interval_in_days_fails_the_cadence_guard(tmp_path: pathlib.Path)
     """The same failure through the path the guard reads, so a refactor of
     `_ship_interval` that swallows the error turns this red (#2045)."""
     defaults = tmp_path / "main.yml"
-    defaults.write_text('node_backup_interval: "1d"\n')
+    defaults.write_text('node_backup_interval: "1d"\n', encoding="utf-8")
     with pytest.raises(ValueError):
         _ship_interval(defaults)
 

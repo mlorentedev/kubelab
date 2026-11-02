@@ -18,7 +18,7 @@ import yaml
 from tests.test_agent_stack_role import COMMON, ROLE, _environment, _resolved
 
 SCRIPT = ROLE / "files/hermes-scripts/alert-activity.py"
-HERMES = yaml.safe_load(COMMON.read_text())["apps"]["services"]["ai"]["hermes_kubelab"]
+HERMES = yaml.safe_load(COMMON.read_text(encoding="utf-8"))["apps"]["services"]["ai"]["hermes_kubelab"]
 SLACK = HERMES["slack"]
 TOKENS = {"agent_stack_slack_bot_token": "xoxb-sentinel", "agent_stack_slack_app_token": "xapp-sentinel"}
 # Hermes v0.22.1 builds a job script's environment with `build_subprocess_env`, which drops these two
@@ -32,7 +32,7 @@ def _script() -> types.ModuleType:
     """Compiled from source, never imported: an import writes a .pyc into the role's files/."""
     module = types.ModuleType("alert_activity")
     module.__dict__["__file__"] = str(SCRIPT)
-    exec(compile(SCRIPT.read_text(), str(SCRIPT), "exec"), module.__dict__)  # noqa: S102
+    exec(compile(SCRIPT.read_text(encoding="utf-8"), str(SCRIPT), "exec"), module.__dict__)  # noqa: S102
     return module
 
 
@@ -77,7 +77,7 @@ def test_the_gateway_gets_the_channels_only_with_slack() -> None:
 def test_the_script_reads_its_token_under_a_name_hermes_hands_to_a_job_script() -> None:
     """The gateway holds SLACK_BOT_TOKEN, and Hermes strips it from every child it spawns, so a script
     that reads that name sees an empty string and the hourly triage reports a config gap forever."""
-    source = SCRIPT.read_text()
+    source = SCRIPT.read_text(encoding="utf-8")
     for name in STRIPPED_FROM_JOB_SCRIPTS:
         assert f'"{name}"' not in source, f"{name} never reaches a job script"
     env = _env(**TOKENS)
@@ -205,7 +205,9 @@ def test_main_without_a_token_fails_loudly(monkeypatch: pytest.MonkeyPatch, caps
 
 
 def test_the_triage_job_reads_the_script_hourly_and_only_proposes() -> None:
-    job = yaml.safe_load(COMMON.read_text())["apps"]["services"]["ai"]["hermes_kubelab"]["cron"]["jobs"]["alert-triage"]
+    job = yaml.safe_load(COMMON.read_text(encoding="utf-8"))["apps"]["services"]["ai"]["hermes_kubelab"]["cron"][
+        "jobs"
+    ]["alert-triage"]
     assert job["mode"] == "agent"
     assert job["script"] == "alert-activity.py"
     assert job["schedule"].split()[1:] == ["*", "*", "*", "*"], "hourly: the script reads one hour"
@@ -289,7 +291,7 @@ def test_the_memory_keeps_hashes_not_alert_text(tmp_path) -> None:
     seen: dict[str, float] = {}
     script.report("t", PAIRS, NOW, read=_reader({"C1": [_alert(559, "04:21")], "C2": []}), seen=seen)
     script.save_seen(path, seen)
-    assert "pulls" not in path.read_text() and "reviewer" not in path.read_text()
+    assert "pulls" not in path.read_text(encoding="utf-8") and "reviewer" not in path.read_text(encoding="utf-8")
     assert script.load_seen(path, NOW + 60) == seen
     assert script.load_seen(path, NOW + script.REPEAT + 1) == {}, "an old entry outlived the window"
 
@@ -297,10 +299,10 @@ def test_the_memory_keeps_hashes_not_alert_text(tmp_path) -> None:
 def test_a_corrupt_or_unwritable_memory_never_stops_the_report(tmp_path) -> None:
     script = _script()
     bad = tmp_path / "state.json"
-    bad.write_text("{not json")
+    bad.write_text("{not json", encoding="utf-8")
     assert script.load_seen(bad, NOW) == {}
     blocker = tmp_path / "file"
-    blocker.write_text("x")
+    blocker.write_text("x", encoding="utf-8")
     script.save_seen(blocker / "state" / "x.json", {"a": NOW})  # parent is a file: must not raise
 
 
@@ -317,7 +319,9 @@ def test_a_persistent_misconfiguration_is_reported_once(
 
 
 def test_the_triage_prompt_forbids_guessing_and_merging_distinct_problems() -> None:
-    job = yaml.safe_load(COMMON.read_text())["apps"]["services"]["ai"]["hermes_kubelab"]["cron"]["jobs"]["alert-triage"]
+    job = yaml.safe_load(COMMON.read_text(encoding="utf-8"))["apps"]["services"]["ai"]["hermes_kubelab"]["cron"][
+        "jobs"
+    ]["alert-triage"]
     prompt = " ".join(job["prompt"].split())
     assert "different problems" in prompt and "duplicates only when the identifier matches" in prompt
     assert "do not guess its cause" in prompt and "you have no Slack tool" in prompt
@@ -331,7 +335,7 @@ def test_the_memory_lives_next_to_the_scripts_directory_when_hermes_home_is_scru
     scripts.mkdir()
     module = types.ModuleType("alert_activity_mounted")
     module.__dict__["__file__"] = str(scripts / "alert-activity.py")
-    exec(compile(SCRIPT.read_text(), str(scripts / "alert-activity.py"), "exec"), module.__dict__)  # noqa: S102
+    exec(compile(SCRIPT.read_text(encoding="utf-8"), str(scripts / "alert-activity.py"), "exec"), module.__dict__)  # noqa: S102
     assert module._state_path() == tmp_path / "state" / "alert-activity.json"
     assert _script()._state_path() is None, "run from the repo, the memory must not land in the role's files/"
 
@@ -357,5 +361,5 @@ def test_two_alerts_that_differ_only_after_the_displayed_text_are_two_alerts() -
 
 def test_a_null_timestamp_in_the_memory_is_unreadable_state(tmp_path) -> None:
     path = tmp_path / "state.json"
-    path.write_text('{"hash": null}')
+    path.write_text('{"hash": null}', encoding="utf-8")
     assert _script().load_seen(path, NOW) == {}

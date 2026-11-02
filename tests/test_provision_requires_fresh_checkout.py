@@ -38,7 +38,7 @@ def _git(cwd: Path, *args: str) -> str:
 def _commit(repo: Path, relpath: str, text: str) -> None:
     path = repo / relpath
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text)
+    path.write_text(text, encoding="utf-8")
     _git(repo, "add", relpath)
     _git(repo, "commit", "-q", "-m", f"change {relpath}")
 
@@ -110,9 +110,9 @@ def test_the_refusal_names_the_files_the_cause_and_the_way_out() -> None:
 def calls(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> list[tuple[str, Any]]:
     """Records generate and ansible-playbook; the guard's git answer is set per test."""
     (tmp_path / "playbooks").mkdir()
-    (tmp_path / "playbooks" / "provision-bee.yml").write_text("---\n")
+    (tmp_path / "playbooks" / "provision-bee.yml").write_text("---\n", encoding="utf-8")
     (tmp_path / "generated" / "prod").mkdir(parents=True)
-    (tmp_path / "generated" / "prod" / "hosts.yml").write_text("---\n")
+    (tmp_path / "generated" / "prod" / "hosts.yml").write_text("---\n", encoding="utf-8")
     monkeypatch.setattr(infra, "settings", SimpleNamespace(ansible_dir=tmp_path))
     log: list[tuple[str, Any]] = []
 
@@ -126,7 +126,14 @@ def calls(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> list[tuple[str, An
 
     monkeypatch.setattr(generator_ansible.ansible_generator, "generate", fake_generate)
     monkeypatch.setattr(infra.command, "run", fake_run)
+    # The controller's Galaxy collections are a second guard on the same flag (ANSIBLE-070); in sync by default.
+    monkeypatch.setattr(provision_freshness, "repo_root", lambda start: _ROOT)
+    _collections_off(monkeypatch, [])
     return log
+
+
+def _collections_off(monkeypatch: pytest.MonkeyPatch, off: list[str]) -> None:
+    monkeypatch.setattr(provision_freshness, "collections_off_declaration", lambda declared: off)
 
 
 def _behind(monkeypatch: pytest.MonkeyPatch, files: list[str]) -> None:
@@ -265,3 +272,43 @@ def test_deploy_force_one_overrides() -> None:
     commands = _deploy_commands("FORCE=1")
     assert "--require-fresh" in commands
     assert "--force" in commands
+
+
+STALE_POSIX = ["ansible.posix 2.1.0 (declared 2.2.2)"]
+
+
+def test_a_controller_off_its_collection_pins_stops_before_the_inventory(
+    calls: list, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _behind(monkeypatch, [])
+    _collections_off(monkeypatch, STALE_POSIX)
+    with pytest.raises(typer.Exit) as exited:
+        _run()
+    assert exited.value.exit_code == 1
+    assert calls == []
+
+
+def test_force_runs_a_controller_off_its_collection_pins(calls: list, monkeypatch: pytest.MonkeyPatch) -> None:
+    _behind(monkeypatch, [])
+    _collections_off(monkeypatch, STALE_POSIX)
+    _run(force=True)
+    assert [name for name, _ in calls] == ["generate", "ansible-playbook"]
+
+
+def test_a_collection_listing_that_fails_refuses(calls: list, monkeypatch: pytest.MonkeyPatch) -> None:
+    _behind(monkeypatch, [])
+
+    def broken(_declared: dict) -> list[str]:
+        raise provision_freshness.FreshnessError("ansible-galaxy: command not found")
+
+    monkeypatch.setattr(provision_freshness, "collections_off_declaration", broken)
+    with pytest.raises(typer.Exit):
+        _run()
+    assert calls == []
+
+
+def test_a_dry_run_is_not_refused_for_its_collections(calls: list, monkeypatch: pytest.MonkeyPatch) -> None:
+    _behind(monkeypatch, [])
+    _collections_off(monkeypatch, STALE_POSIX)
+    _run(check=True)
+    assert [name for name, _ in calls] == ["generate", "ansible-playbook"]

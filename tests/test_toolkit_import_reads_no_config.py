@@ -65,6 +65,39 @@ def test_settings_still_resolve_on_first_use(monkeypatch: pytest.MonkeyPatch) ->
     assert settings.environment == get_settings().environment
 
 
+def test_undoing_a_patch_restores_the_field_rather_than_deleting_it(tmp_path: Path) -> None:
+    """pytest 9.2 takes the old value from the target's `__dict__` and, finding none, undoes with `delattr`.
+
+    The proxy forwards `delattr` to the real object, so with the proxy's own
+    `__dict__` the undo deleted `project_root` from every later test's settings
+    (97 failures on 2026-10-28, all ordering).
+    """
+    from toolkit.config.settings import PROJECT_ROOT, settings
+
+    # The contract itself, which holds whatever the installed pytest does on undo.
+    assert vars(settings)["project_root"] == PROJECT_ROOT
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(settings, "project_root", tmp_path)
+        assert settings.project_root == tmp_path
+    assert settings.project_root == PROJECT_ROOT
+
+
+def test_a_copy_of_the_proxy_resolves_the_same_settings() -> None:
+    """With `__dict__` forwarded, a copy built empty and filled through it had no environment."""
+    import copy
+    import pickle
+
+    from toolkit.config.settings import _LazySettings, settings
+
+    for clone in (copy.copy(settings), copy.deepcopy(settings), pickle.loads(pickle.dumps(settings))):
+        assert clone.project_root == settings.project_root
+    # `project_root` is the same in every environment, so read the environment the copy carries,
+    # on a proxy never resolved: building settings for it would decrypt SOPS.
+    proxy = _LazySettings("drill")
+    for clone in (copy.copy(proxy), pickle.loads(pickle.dumps(proxy))):
+        assert object.__getattribute__(clone, "_env") == "drill"
+
+
 @pytest.fixture
 def logger_state():
     """The process-wide logger, restored after the test reconfigures it."""

@@ -18,15 +18,16 @@ owner: manu
 
 | Piece | Where |
 |---|---|
-| Destination | Cloudflare R2, bucket `kubelab-backups` |
+| Destination | Cloudflare R2, one bucket per node: `kubelab-backup-ace2`, `kubelab-backup-beelink`, `kubelab-backup-rpi3`, `kubelab-backup-rpi4`, `kubelab-backup-vps` |
 | Non-secret config | `backup.r2` in `infra/config/values/common.yaml` |
-| S3 credentials | SOPS `backup.r2.access_key_id` / `backup.r2.secret_access_key` |
-| Repository password | SOPS `backup.restic_password` |
-| **Offsite escrow** | **A Bitwarden Secure Note holding all of the above** |
-| Repository layout | One restic repository per node: `<bucket>/<node>` |
+| S3 credentials | Each node's own pair, SOPS `prod.enc.yaml`, `backup.r2.nodes.<node>.access_key_id` / `.secret_access_key`, scoped to that node's bucket |
+| Repository password | Each node's own, SOPS `common.enc.yaml`, `backup.nodes.<node>.restic_password` |
+| **Offsite escrow** | **Bitwarden, one `KUBELAB_RESTIC_PASSWORD_<NODE>` entry per node.** The R2 pairs can be minted again, so they stay out of it |
+| Repository layout | One restic repository per node, at the root of its bucket |
 
-**One repository per node** so a compromised node cannot rewrite another node's
-history, and so a restore only needs the material for the node being restored.
+**One bucket, one credential and one password per node**, so a credential stolen
+from a node opens that node's repository and no other, and a restore only needs
+the material for the node being restored.
 
 restic encrypts **client-side**. Cloudflare stores ciphertext and nothing else —
 not the data, not the filenames, not the source directory structure. Nobody at
@@ -36,13 +37,12 @@ that exists.
 ## Before you trust any of it
 
 ```bash
-make backup-verify-destination ENV=prod   # the bucket works
-make backup-verify-restic ENV=prod        # restic works in the bucket
+make backup-isolation-probe ENV=prod          # each bucket refuses the others' pairs and locks its data
+make backup-drill-node NODE=<node> ENV=prod   # that node's data restores
 ```
 
-These are two different claims and the second is the one backups depend on. Both
-are safe against the live destination — they write a throwaway object under
-`_smoketest/` and remove it.
+These are two different claims, and the second is the one a restore depends on.
+The probe's deletes are meant to be refused, and it fails if one is accepted.
 
 ## Is everything actually backed up?
 
@@ -100,6 +100,28 @@ The delete can still be **accepted** if the rule reads correctly and R2 does not
 3. Ship again: `make backup-node NODE=<node> ENV=prod`.
 4. Re-run the probe.
 
+## What the lock does and does not cover
+
+**Measured in prod on 2026-10-08**, after the last node's first ship: `40 of 40 cross-node requests refused with AccessDenied`, and all 5 own deletes of a node's youngest pack refused by the lock.
+
+Each `kubelab-backup-<node>` bucket has a lock rule of R = 30 days (`backup.r2.lock_retention_days`) on `data/`, `snapshots/`, `keys/` and `config`, declared in `infra/terraform/r2/`. No node token can change it.
+
+`locks/` and `index/` stay outside the rule, because `backup` deletes its lock file on every run and `prune` rewrites the index. A node's credential can therefore delete both. That costs availability, never data: `restic repair index` rebuilds the index from the packs. For a node whose index was deleted, with that node's own pair and password:
+
+```bash
+restic -r "$REPO" repair index
+restic -r "$REPO" check
+```
+
+The lock does not cover:
+
+- **The admin token.** `cloudflare.r2_admin_token` can remove a lock rule. It is held in SOPS, decrypted on the operator workstation for `make tf-r2-apply`, and no node receives it. The lock bounds a compromised node, not a compromised Cloudflare account.
+- **Data older than R.** The rule ages an object from when it was written. Once an object is older than R days, a node's own credential can delete it, so a compromised node can destroy everything it wrote more than R days ago. That half was measured on a scratch bucket, not in prod: DELETEs of objects past R were accepted.
+
+The watcher's secret holds every node's restic password and an Object Read pair, so it can read every history and delete none.
+
+**Scheduled pruning under the lock is not yet measured in prod.** `restic copy` writes old snapshots as new objects, so the prune on a migrated node logs `forget waits` and exits 0 until about 2026-11-07 (lesson-628). Until then `failures in the last 7 days: 0` from `make backup-schedule` proves nothing. Read it after 2026-11-14, with a `forget` logged on each migrated node.
+
 ## R2 backup alert
 
 `obs015-r2-backup-health` reads the in-cluster watcher (BACKUP-055): a CronJob in
@@ -135,7 +157,7 @@ toolkit obs logs --env prod -q '{namespace="kubelab"} |= "r2_backup_"' --since 2
 | `no snapshots` | The repository exists and is empty | The node has never shipped: `make backup-node NODE=<node> ENV=prod` |
 | `missing sources` (`missing:[...]`) | The newest snapshot lacks a declared service | The capture on that node skipped it; read `node-backup-capture.service` there |
 | `no capture sentinel` | A snapshot shipped without the capture finishing | The ship guard regressed; treat the snapshot as incomplete |
-| `listing failed: ...` | The snapshot opened but its listing did not | Usually transient; the next run is in 6h |
+| `listing failed: ...` | The snapshot opened but its listing did not | `timed out after Ns` means the call outlived `RESTIC_TIMEOUT`: read the durations of earlier runs (`toolkit obs logs --env <env> -q '{container="r2-backup-watcher"} |= "took"' --since 24h`; the `r2_backup_` query above returns only the JSON lines), and raise the timeout (and the Job's deadline with it) if they approach it. Anything else is usually transient; the next run is in 6h |
 | `repository id changed` | The repository at the node's path is not the history declared in `backup.r2.repository_ids`: it was deleted and re-created, or replaced. `repository_id` on the line is the id R2 holds now | [Repository missing or replaced](#repository-missing-or-replaced) |
 | `repository id not declared` | The node has no entry in `backup.r2.repository_ids` | A new node, or one after `backup-repo-reinit`: declare the `repository_id` from this line in a PR, after checking it is the history you mean to accept |
 | `config unreadable: ...` / `repository id unreadable` | `restic cat config` failed after `snapshots` succeeded | Usually transient; if it persists, read the repository with the node's credentials |
@@ -174,7 +196,7 @@ make watcher-run NAME=r2-backup-watcher ENV=prod
 
 The mint verifies the new token by consequence before storing it. The token must
 list every backup bucket and be refused on `kubelab-vikunja-staging`. Only then does
-the mint revoke the old token. Four `"healthy":1` node lines and a fleet
+the mint revoke the old token. A `"healthy":1` line per node and a fleet
 `"healthy":1` mean the cluster has it. The token can be re-minted, so it has no
 Bitwarden escrow: losing it loses no data.
 
@@ -248,7 +270,7 @@ repository with one snapshot, the watcher called it healthy, and every earlier
 restore point was lost without a page (lesson-485).
 
 **1. Find out what happened before touching anything.** A missing repository
-means something with write access to `kubelab-backups` deleted objects:
+means something with write access to `kubelab-backup-<node>` deleted objects:
 
 ```bash
 make backup-coverage ENV=prod    # which nodes are affected, and each one's newest snapshot
@@ -374,7 +396,7 @@ orders it first — the same path the timer takes, so it also posts the coverage
 heartbeat. That is how you make a heartbeat arrive without waiting for a window:
 
 ```
-ship complete: s3:.../kubelab-backups/rpi3
+ship complete: s3:.../kubelab-backup-rpi3
 coverage heartbeat posted
 ```
 
@@ -387,14 +409,15 @@ landing in Uptime Kuma.
 You have the repo checked out and the SOPS age key works.
 
 ```bash
-# 1. Load credentials into this shell only.
-export AWS_ACCESS_KEY_ID=$(make -s secrets-show KEY=backup.r2.access_key_id SECRETS_ENV=common)
-export AWS_SECRET_ACCESS_KEY=$(make -s secrets-show KEY=backup.r2.secret_access_key SECRETS_ENV=common)
-export RESTIC_PASSWORD=$(make -s secrets-show KEY=backup.restic_password SECRETS_ENV=common)
+# 1. Load that node's credentials into this shell only.
+NODE=rpi3
+export AWS_ACCESS_KEY_ID=$(make -s secrets-show KEY=backup.r2.nodes.$NODE.access_key_id SECRETS_ENV=prod)
+export AWS_SECRET_ACCESS_KEY=$(make -s secrets-show KEY=backup.r2.nodes.$NODE.secret_access_key SECRETS_ENV=prod)
+export RESTIC_PASSWORD=$(make -s secrets-show KEY=backup.nodes.$NODE.restic_password SECRETS_ENV=common)
 export AWS_DEFAULT_REGION=auto
 
 # 2. Point at the node's repository (endpoint from backup.r2).
-REPO="s3:https://<account_id>.r2.cloudflarestorage.com/kubelab-backups/<node>"
+REPO="s3:https://<account_id>.r2.cloudflarestorage.com/kubelab-backup-$NODE"
 
 # 3. See what you have BEFORE restoring anything.
 restic -r "$REPO" snapshots
@@ -752,10 +775,26 @@ anything. The repository is intact and, without the escrow, permanently
 unreadable.
 
 1. Log in to Bitwarden from any machine with the master password.
-2. Open the Secure Note holding the R2 credentials and `restic_password`.
-3. Export them by hand into the environment as above.
-4. Install restic (`aarch64` / any platform — it is a single static binary).
-5. Restore as in the normal case.
+2. Read the node's restic password from `KUBELAB_RESTIC_PASSWORD_<NODE>`. The
+   entry with no node suffix is the password from before the migration, and it
+   opens none of these buckets.
+3. Log in to the Cloudflare dashboard, open R2, *Manage API tokens*, and create an
+   Object Read token scoped to `kubelab-backup-<node>`. The node's R2 pair is not
+   in the escrow, so this login has to survive the disaster too.
+4. Export the pair and the password by hand into the environment as above.
+5. Install restic (`aarch64` / any platform — it is a single static binary).
+6. Restore into a scratch directory, with `--no-lock` on every call:
+
+   ```bash
+   # The S3 endpoint is on the bucket's page in the Cloudflare dashboard.
+   REPO="s3:https://<account_id>.r2.cloudflarestorage.com/kubelab-backup-<node>"
+   restic -r "$REPO" snapshots --no-lock
+   restic -r "$REPO" restore <snapshot-id> --target /tmp/restore-check --no-lock
+   ```
+
+   An Object Read token cannot write under `locks/`, so without the flag restic
+   stops at `unable to create lock in backend` (lesson-538). Measured on
+   2026-11-02 with a read-only pair on `snapshots`; the whole restore was not run.
 
 You need nothing from this repository to do that: no checkout, no toolkit, no
 `bw serve`, no age key. That independence is the entire design and is why the
@@ -793,19 +832,24 @@ but replacing the stored value first locks you out of every snapshot already
 taken, permanently.
 
 ```bash
-# 1. Add the new password to EVERY repository, using the current one.
+# 1. Add the new password to that node's repository, using the current one.
 restic -r "$REPO" key add
 
 # 2. Only then update SOPS.
-toolkit secrets set backup.restic_password --env common --stdin
+toolkit secrets set backup.nodes.<node>.restic_password --env common --stdin
 
 # 3. Update the Bitwarden escrow in the same sitting, or recovery
 #    silently regresses to the old password while operation uses the new one.
+
+# 4. Deliver it: the node, then the watcher, which opens every repository.
+make backup NODE=<node> ENV=prod
+make apply-secrets ENV=staging
+make apply-secrets ENV=prod
 ```
 
-For the R2 credentials: issue the new Account API token first and keep the old
-one valid until every node has the new one. A node still holding the revoked
-credential stops backing up and says nothing.
+For a node's R2 pair: `make backup-mint-node-tokens ENV=prod NODE=<node> ROTATE=1`,
+then `make backup NODE=<node> ENV=prod` straight away. The mint revokes the old
+token, and a node still holding it stops backing up.
 
 ## Cost and quota
 

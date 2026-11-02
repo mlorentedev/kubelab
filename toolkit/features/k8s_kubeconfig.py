@@ -75,7 +75,7 @@ def _common_path() -> Path:
 def load_clusters(common_path: Path | None = None) -> dict[str, ClusterAccess]:
     """Load every ``clusters.<name>`` entry from the common.yaml SSOT."""
     path = common_path or _common_path()
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         config = yaml.safe_load(f) or {}
     raw = config.get("clusters") or {}
     return {name: ClusterAccess.from_dict(name, data) for name, data in raw.items()}
@@ -417,7 +417,7 @@ def fetch_kubeconfig(env: str, direct: bool = False) -> Path:
 
     dest = output_path(env)
     dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_text(rewritten)
+    dest.write_text(rewritten, encoding="utf-8")
     dest.chmod(stat.S_IRUSR | stat.S_IWUSR)  # 0600 — kubeconfig holds admin certs
 
     logger.success(f"Saved {dest} (server {endpoint}). {follow_up}")

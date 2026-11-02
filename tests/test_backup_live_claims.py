@@ -66,7 +66,7 @@ class _Run:
 
 def _kubeconfig(tmp_path: Path) -> Path:
     path = tmp_path / "kubeconfig"
-    path.write_text("apiVersion: v1\n")
+    path.write_text("apiVersion: v1\n", encoding="utf-8")
     return path
 
 

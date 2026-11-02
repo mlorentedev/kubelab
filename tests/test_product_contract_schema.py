@@ -18,11 +18,13 @@ SCHEMA = files("toolkit") / "schemas" / "kubelab-product.schema.json"
 def test_committed_schema_equals_the_model() -> None:
     expected = json.dumps(Contract.model_json_schema(), indent=2, sort_keys=True) + "\n"
 
-    assert SCHEMA.read_text() == expected, "regenerate: python -m toolkit.features.product_contract --write-schema"
+    assert SCHEMA.read_text(encoding="utf-8") == expected, (
+        "regenerate: python -m toolkit.features.product_contract --write-schema"
+    )
 
 
 def test_schema_carries_its_public_id() -> None:
-    schema = json.loads(SCHEMA.read_text())
+    schema = json.loads(SCHEMA.read_text(encoding="utf-8"))
 
     assert schema["$id"] == SCHEMA_ID
     assert schema["$schema"] == "https://json-schema.org/draft/2020-12/schema"
@@ -30,7 +32,7 @@ def test_schema_carries_its_public_id() -> None:
 
 def test_schema_is_closed_at_every_level() -> None:
     """``additionalProperties: false`` is what refuses a contract naming its own repository."""
-    schema = json.loads(SCHEMA.read_text())
+    schema = json.loads(SCHEMA.read_text(encoding="utf-8"))
 
     assert schema["additionalProperties"] is False
     assert all(d["additionalProperties"] is False for d in schema["$defs"].values())

@@ -40,7 +40,9 @@ def script() -> str:
     matching the prose that documents the thing, and failing a file that is
     correct for describing itself.
     """
-    return "\n".join(line for line in CLOUD_INIT.read_text().splitlines() if not line.lstrip().startswith("#"))
+    return "\n".join(
+        line for line in CLOUD_INIT.read_text(encoding="utf-8").splitlines() if not line.lstrip().startswith("#")
+    )
 
 
 def test_kubeconfig_is_exported(script: str) -> None:

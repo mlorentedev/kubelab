@@ -1,0 +1,12 @@
+# {{ ansible_managed }}
+[Unit]
+Description=KubeLab delivery of the kept failure notices, every {{ node_notify_spool_interval_seconds }}s (#2787)
+
+[Timer]
+# After boot too: an on-demand node can come up with notices kept from before
+# it was powered off.
+OnBootSec={{ node_notify_spool_interval_seconds }}
+OnUnitActiveSec={{ node_notify_spool_interval_seconds }}
+
+[Install]
+WantedBy=timers.target

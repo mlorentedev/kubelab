@@ -4,6 +4,11 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 683 | [A commit that changes only an Argo CD hook starts no sync, so the hook never runs](lesson-683-a-commit-that-changes-only-a-hook-starts-no-sync-so-the-hook-never-runs.md) | 2026-11-01 |
+| 616 | [One snapshot for two environments that advance separately makes the slower one drift](lesson-616-one-snapshot-for-two-envs-that-advance-separately-makes-the-slower-one-drift.md) | 2026-10-21 |
+| 615 | [A commit status keyed on the sync operation misses every revision whose render does not change](lesson-615-a-status-keyed-on-the-sync-operation-misses-every-no-op-revision.md) | 2026-10-21 |
+| 611 | [An Application on `appTree` cannot name its Degraded resource, and a retained failed Job never degrades it](lesson-611-an-application-on-apptree-cannot-name-its-degraded-resource.md) | 2026-10-21 |
+| 609 | ["Synced at HEAD" is read from `sync.revision`, not from the last operation's revision](lesson-609-synced-at-head-is-read-from-sync-revision-not-from-the-last-operation.md) | 2026-10-20 |
 | 606 | [A publish job gated on `release_created` has no retry, and it failed silently for five releases](lesson-606-a-publish-gated-on-release-created-has-no-retry-and-failed-silently-for-five-releases.md) | 2026-10-20 |
 | 554 | [A staging Secret applied from a branch outlives its merge, because Argo CD reverts the branch's manifests but never its Secrets](lesson-554-a-staging-secret-applied-from-a-branch-outlives-its-merge.md) | 2026-10-10 |
 | 501 | [Re-enabling Argo CD auto-sync starts a sync by itself, and an explicit one sent after it can overwrite it](lesson-501-re-enabling-argo-cd-auto-sync-starts-a-sync-an-explicit-one-can-overwrite.md) | 2026-10-01 |

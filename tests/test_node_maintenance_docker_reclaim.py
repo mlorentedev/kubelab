@@ -143,7 +143,7 @@ def _run_docker_section(tmp_path: Path, group_names: list[str], reclaim_rc: int)
     log = tmp_path / "calls.log"
     for tool, rc in (("docker", 0), ("python3", reclaim_rc)):
         stub = tmp_path / tool
-        stub.write_text(f'#!/bin/sh\necho "{tool} $*" >> {log}\nexit {rc}\n')
+        stub.write_text(f'#!/bin/sh\necho "{tool} $*" >> {log}\nexit {rc}\n', encoding="utf-8")
         stub.chmod(0o755)
     result = subprocess.run(
         ["bash", "-c", f'set -euo pipefail\nFAILURES=""\n{section}\necho "FAILURES=$FAILURES"'],
@@ -153,14 +153,16 @@ def _run_docker_section(tmp_path: Path, group_names: list[str], reclaim_rc: int)
         timeout=30,
     )
     assert result.returncode == 0, result.stdout + result.stderr
-    return (log.read_text().splitlines() if log.exists() else []), result.stdout
+    return (log.read_text(encoding="utf-8").splitlines() if log.exists() else []), result.stdout
 
 
 def test_the_timer_actually_calls_the_reclaim_in_order(tmp_path: Path) -> None:
     calls, out = _run_docker_section(tmp_path, CI_HOST, reclaim_rc=0)
     reclaim = [i for i, c in enumerate(calls) if c.startswith("python3 /opt/kubelab-docker-reclaim.py --apply")]
     assert len(reclaim) == 1, calls
-    assert calls.index("docker container prune -f") < reclaim[0] < calls.index("docker image prune -af")
+    # The stub logs the arguments the shell passed, so the filter's quotes are gone.
+    prune = "docker container prune -f --filter label!=com.docker.compose.project"
+    assert calls.index(prune) < reclaim[0] < calls.index("docker image prune -af")
     assert "FAILURES=\n" in out or out.rstrip().endswith("FAILURES=")
 
 
@@ -322,11 +324,11 @@ def test_the_shipped_module_reclaims_residue_and_spares_every_declared_volume(tm
     }
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
-    (bin_dir / "docker").write_text(FAKE_DOCKER)
+    (bin_dir / "docker").write_text(FAKE_DOCKER, encoding="utf-8")
     (bin_dir / "docker").chmod(0o755)
-    (tmp_path / "state.json").write_text(json.dumps(state))
+    (tmp_path / "state.json").write_text(json.dumps(state), encoding="utf-8")
     declaration = tmp_path / "declaration.json"
-    declaration.write_text(json.dumps(_shipped_declaration()))
+    declaration.write_text(json.dumps(_shipped_declaration()), encoding="utf-8")
     log = tmp_path / "docker.log"
 
     result = subprocess.run(
@@ -342,7 +344,7 @@ def test_the_shipped_module_reclaims_residue_and_spares_every_declared_volume(tm
         timeout=60,
     )
     assert result.returncode == 0, result.stderr
-    calls = log.read_text().splitlines()
+    calls = log.read_text(encoding="utf-8").splitlines()
     removed = {c.split()[-1] for c in calls}
 
     assert not DECLARED & removed
@@ -384,7 +386,7 @@ def test_the_run_exits_non_zero_on_disk_pressure_or_a_failed_step(
     """Executes the rendered tail of the timer script against a fake `df`. A
     non-zero exit is what fires `OnFailure=kubelab-notify@`."""
     fake_df = tmp_path / "df"
-    fake_df.write_text(f"#!/bin/sh\necho 'Use%'\necho ' {pcent}%'\n")
+    fake_df.write_text(f"#!/bin/sh\necho 'Use%'\necho ' {pcent}%'\n", encoding="utf-8")
     fake_df.chmod(0o755)
     result = subprocess.run(
         ["bash", "-c", _script_tail(render_script(CI_HOST))],
@@ -411,7 +413,9 @@ def test_make_maintain_fails_on_disk_pressure_too() -> None:
 
 
 def test_the_timer_unit_notifies_on_failure() -> None:
-    unit = (REPO / "infra/ansible/roles/node_maintenance/templates/kubelab-maintenance.service.j2").read_text()
+    unit = (REPO / "infra/ansible/roles/node_maintenance/templates/kubelab-maintenance.service.j2").read_text(
+        encoding="utf-8"
+    )
     assert "OnFailure=kubelab-notify@%n.service" in unit
 
 

@@ -87,7 +87,7 @@ def _vault() -> dict[str, Any]:
                     "n8n": {
                         "sale_digest": {"analytics_token": TOKEN, "recipient": RECIPIENT},
                     },
-                }
+                },
             }
         },
     }
@@ -205,7 +205,7 @@ def _smtp() -> Any:
 
 
 def _sale_doc() -> dict[str, Any]:
-    return json.loads((REPO_ROOT / SALE_JSON).read_text())
+    return json.loads((REPO_ROOT / SALE_JSON).read_text(encoding="utf-8"))
 
 
 def _mailer(tmp_path: Path, name: str, workflow_id: str, ref: dict[str, str] | None = None) -> N8nImportSpec:
@@ -217,7 +217,7 @@ def _mailer(tmp_path: Path, name: str, workflow_id: str, ref: dict[str, str] | N
         "nodes": [{"name": "Mail", "type": "n8n-nodes-base.emailSend", "credentials": {"smtp": ref}}],
         "connections": {},
     }
-    (tmp_path / f"{name}.json").write_text(json.dumps(doc))
+    (tmp_path / f"{name}.json").write_text(json.dumps(doc), encoding="utf-8")
     return N8nImportSpec(workflow_path=Path(f"{name}.json"), envs=frozenset({"prod"}))
 
 
@@ -280,7 +280,7 @@ class TestSaleDigestWorkflow:
         """n8n 2 blocks `$env` in nodes, and a value read from env at start goes
         stale silently. The workflow takes its values from placeholders filled at
         import, which is the only way they reach a node here."""
-        assert "$env" not in (REPO_ROOT / SALE_JSON).read_text()
+        assert "$env" not in (REPO_ROOT / SALE_JSON).read_text(encoding="utf-8")
 
     def test_its_two_header_auth_nodes_share_one_credential_id(self) -> None:
         """The two Analytics Engine queries: the last 24 hours and the whole sale."""
@@ -296,7 +296,7 @@ class TestSaleDigestWorkflow:
     def test_every_placeholder_it_carries_is_mapped_to_a_path_with_an_owner(self) -> None:
         """A mapped path must be shipped config OR a registered secret. Otherwise it
         is a value nothing declares, the shape of every 'absent in production'."""
-        tokens = set(re.findall(r"RESOLVE_[A-Z0-9_]+", (REPO_ROOT / SALE_JSON).read_text()))
+        tokens = set(re.findall(r"RESOLVE_[A-Z0-9_]+", (REPO_ROOT / SALE_JSON).read_text(encoding="utf-8")))
         assert tokens, "the digest carries no placeholder: its values are hardcoded or read from env"
         assert tokens <= set(PLACEHOLDER_SSOT)
         plaintext = ConfigurationManager(env="prod").get_plaintext_values()
@@ -580,7 +580,7 @@ class TestRegistries:
 
 
 class TestReadme:
-    README = (REPO_ROOT / "infra/n8n/workflows/README.md").read_text()
+    README = (REPO_ROOT / "infra/n8n/workflows/README.md").read_text(encoding="utf-8")
 
     def test_it_says_how_a_workflow_sends_email(self) -> None:
         for needed in ("kubelab-smtp", "infra.smtp.user", "RESOLVE_KUBELAB_SMTP_FROM"):

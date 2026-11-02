@@ -46,8 +46,9 @@
     "`forge_rank`, the order in which the forge's own reviewer (deploy/pr-agent) tries its models.",
     "That server cannot draw per review as CI does, so it needs an order, and `weight` is not one:",
     "it is a spending share, and it put mimo-v2.6-flash first, the model whose long reasoning is",
-    "most often cut at about 600 s (lesson-601). `forge_rank` puts the fast model first (deepseek,",
-    "then glm, then mimo). CI never reads it and no weight moved for it. dotfiles' copy has no such",
+    "most often cut at about 600 s (lesson-601). `forge_rank` puts glm first, then deepseek, then",
+    "mimo (owner, 2026-11-01: deepseek ran out of its output cap on large diffs, lesson-685).",
+    "CI never reads it and no weight moved for it. dotfiles' copy has no such",
     "key: when re-porting this file, keep it, and tests/test_pr_agent_config_render.py will say so",
     "if it is lost. The consumers ignore unknown keys (dotf's reader is a plain json decode,",
     "scripts/pr-agent-route.sh selects fields with jq).",
@@ -91,9 +92,9 @@
       "pr_agent": {
         "model": "openai/deepseek-v4-flash",
         "weight": 19,
-        "forge_rank": 1
+        "forge_rank": 2
       },
-      "why": "1M context and a mandatory reasoning chain — roughly 4x slower than qwen3.6 on trivial prompts, which is the correct trade for a gate that runs once per spec. Exercised: BUG-074 round 3 re-ran the mutation battery itself rather than trusting the spec's table. kubelab, 2026-08-21 (#1205): under PR-Agent this model returned a 200 with an EMPTY body, spending its output on reasoning (4m15s of silence on #1202, run 32440498259), the same shape as the 32768-token completion cap NaN applies when no max_tokens is sent (#1957, lesson-601). The forge reviewer now sends max_tokens 65536 (#2479) and tries this model first (forge_rank 1); CI's draw is unchanged."
+      "why": "1M context and a mandatory reasoning chain — roughly 4x slower than qwen3.6 on trivial prompts, which is the correct trade for a gate that runs once per spec. Exercised: BUG-074 round 3 re-ran the mutation battery itself rather than trusting the spec's table. kubelab, 2026-08-21 (#1205): under PR-Agent this model returned a 200 with an EMPTY body, spending its output on reasoning (4m15s of silence on #1202, run 32440498259), the same shape as the 32768-token completion cap NaN applies when no max_tokens is sent (#1957, lesson-601). The forge reviewer now sends max_tokens 65536 (#2479) and tried this model first until 2026-11-01, when it ran out of that cap mid-reasoning on 3 of 7 forge reviews and moved to forge_rank 2 behind glm (lesson-685); CI's draw is unchanged."
     },
     {
       "id": "agy/gemini-3.8-flash-high",
@@ -131,7 +132,7 @@
       "pr_agent": {
         "model": "openai/glm5.3-flash",
         "weight": 19,
-        "forge_rank": 2,
+        "forge_rank": 1,
         "reasoning_effort": "low"
       },
       "why": "Admitted 2026-08-29 by owner decision (HARNESS-093, mlorentedev/dotfiles#1370) to spread reviews across NaN's PER-MODEL concurrency buckets and exercise more than one model on the gate. What IS established: reasoning-class by profile — pi-nan-provider's snapshot marks glm5.3-flash reasoning: true with a 1M context, the line this pool draws (dotfiles tests/pi-nan-package.bats holds it). What is NOT established: a calibration against a review of known outcome (e.g. CLI-050 round 1's real Major); recorded here so nobody reads this entry as measured equivalence to deepseek. Drawn at random like every member; --reviewer names it deliberately."

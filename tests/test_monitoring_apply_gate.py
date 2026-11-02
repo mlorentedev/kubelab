@@ -14,11 +14,17 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from uptime_kuma_api import Timeout, UptimeKumaException
 
 from toolkit.features import monitoring
 from toolkit.features.monitoring_diff import embed_key
 
-READS = {"get_monitors", "get_tags", "get_notifications", "disconnect", "timeout"}
+READS = {"get_monitors", "get_monitor", "get_tags", "get_notifications", "disconnect", "timeout"}
+
+
+def _gone() -> UptimeKumaException:
+    """What Kuma 2.2.1 answers `getMonitor` for an id it no longer has: it reads a null row."""
+    return UptimeKumaException("Cannot read properties of null (reading 'id')")
 
 
 class FakeKuma:
@@ -33,6 +39,11 @@ class FakeKuma:
 
     def get_monitors(self) -> list[dict[str, Any]]:
         return [m for m in self.live if m["id"] not in self._deleted()]
+
+    def get_monitor(self, monitor_id: int) -> dict[str, Any]:
+        if monitor_id in self._deleted():
+            raise _gone()
+        return next(m for m in self.live if m["id"] == monitor_id)
 
     def get_tags(self) -> list[dict[str, Any]]:
         return []
@@ -85,10 +96,10 @@ def _monitor(key: str, monitor_id: int | None = None) -> dict[str, Any]:
 def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     seed_dir = tmp_path / monitoring.EXPORT_DIR
     seed_dir.mkdir(parents=True)
-    (seed_dir / monitoring.TAGS_FILE).write_text(json.dumps([{"name": "on-demand", "color": "#000"}]))
+    (seed_dir / monitoring.TAGS_FILE).write_text(json.dumps([{"name": "on-demand", "color": "#000"}]), encoding="utf-8")
 
     def run(seed: list[dict[str, Any]], live: list[dict[str, Any]], **flags: bool) -> FakeKuma:
-        (seed_dir / monitoring.MONITORS_FILE).write_text(json.dumps(seed))
+        (seed_dir / monitoring.MONITORS_FILE).write_text(json.dumps(seed), encoding="utf-8")
         kuma = FakeKuma(live)
         run.last = kuma  # type: ignore[attr-defined]
         monkeypatch.setattr(monitoring, "_connect", lambda _root: (kuma, {}))
@@ -173,3 +184,52 @@ def test_a_monitor_that_fails_to_converge_fails_the_apply(project, live) -> None
     assert failed.value.code == 1
     # The failure does not stop the monitors after it.
     assert "edit_monitor:2" in project.last.writes, project.last.writes
+
+
+class Lingering:
+    """An instance whose read of a deleted monitor finds it, or fails with `error`."""
+
+    def __init__(self, error: Exception | None = None) -> None:
+        self.error = error
+        self.reads = 0
+
+    def get_monitor(self, monitor_id: int) -> dict[str, Any]:
+        self.reads += 1
+        if self.error is not None:
+            raise self.error
+        return {"id": monitor_id}
+
+
+def test_a_monitor_still_present_past_the_deadline_refuses_the_creates(monkeypatch) -> None:
+    """The guard behind #925: creating while a deleted monitor is still there duplicates it (#2506)."""
+    monkeypatch.setattr(monitoring.time, "sleep", lambda _seconds: None)
+    kuma = Lingering()
+    with pytest.raises(RuntimeError, match="still present"):
+        monitoring._assert_deleted(kuma, [503], timeout=0.05)
+    assert kuma.reads > 1, "refused without polling"
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        Timeout("Timed out while waiting for event getMonitor"),
+        UptimeKumaException("You are not logged in."),
+        ConnectionError("socket closed"),
+    ],
+    ids=["timeout", "logged-out", "socket"],
+)
+def test_only_kumas_not_found_answer_counts_as_deleted(error: Exception) -> None:
+    """A read that failed says nothing about the delete, so it must not confirm one (#2506)."""
+    with pytest.raises(type(error)):
+        monitoring._assert_deleted(Lingering(error), [503], timeout=5)
+
+
+def test_a_delete_confirmed_at_the_first_read_waits_for_nothing(project, monkeypatch) -> None:
+    """No fixed sleep on the apply path (OPS-016 f3): the bounded poll replaced a `time.sleep(3)` (#925)."""
+
+    def refuse(seconds: float) -> None:
+        raise AssertionError(f"slept {seconds}s on an apply whose delete was already confirmed")
+
+    monkeypatch.setattr(monitoring.time, "sleep", refuse)
+    kuma = project([_monitor("keep")], [_monitor("keep", 1), _monitor("hand-made", 503)], prune=True)
+    assert "delete_monitor:503" in kuma.writes

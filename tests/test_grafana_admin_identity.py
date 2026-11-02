@@ -39,7 +39,8 @@ def project_root(tmp_path: Path) -> Path:
                     "services": {"security": {"authelia": {"break_glass": {"grafana": BREAK_GLASS}}}},
                 }
             }
-        )
+        ),
+        encoding="utf-8",
     )
     return tmp_path
 

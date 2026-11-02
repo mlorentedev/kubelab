@@ -17,7 +17,7 @@ import yaml
 
 from tests.test_agent_stack_role import COMMON, ROLE, _context, _environment, _resolved, _tasks
 
-BRIDGE = yaml.safe_load(COMMON.read_text())["networking"]["nodes"]["ace2"]["webui_bridge"]
+BRIDGE = yaml.safe_load(COMMON.read_text(encoding="utf-8"))["networking"]["nodes"]["ace2"]["webui_bridge"]
 API_PORT = _context()["agent_stack_hermes"]["api_port"]
 
 
@@ -47,7 +47,7 @@ def _named(name: str) -> dict:
 def _docker0_cidr() -> str:
     """docker0's range, read from the daemon.json the docker role writes: that file,
     not a copy, is what the system daemon uses (moving it to `networking.*` is #2136)."""
-    tasks = yaml.safe_load((ROLE.parent / "docker/tasks/main.yml").read_text())
+    tasks = yaml.safe_load((ROLE.parent / "docker/tasks/main.yml").read_text(encoding="utf-8"))
     [daemon] = [t for t in tasks if t.get("name") == "Configure Docker daemon"]
     [cidr] = re.findall(r'"fixed-cidr": "([^"]+)"', daemon["copy"]["content"])
     return cidr
@@ -55,7 +55,7 @@ def _docker0_cidr() -> str:
 
 def test_the_bridge_is_private_and_clear_of_every_declared_range() -> None:
     subnet = ipaddress.ip_network(BRIDGE["subnet"])
-    common = yaml.safe_load(COMMON.read_text())["networking"]
+    common = yaml.safe_load(COMMON.read_text(encoding="utf-8"))["networking"]
     assert subnet.is_private
     assert ipaddress.ip_address(BRIDGE["gateway"]) in subnet
     # The system daemon's own bridge, the LAN, and the tailnet the agent is refused:
@@ -105,7 +105,7 @@ def test_open_webui_lists_nan_then_hermes_with_their_keys_in_the_same_order() ->
 def test_the_hermes_key_exists_before_open_webuis_env_is_rendered() -> None:
     """Open WebUI is deployed first, and its env file carries the key: generated
     after it, the key would render empty on a first provision."""
-    main = [t.get("name") for t in yaml.safe_load((ROLE / "tasks/main.yml").read_text())]
+    main = [t.get("name") for t in yaml.safe_load((ROLE / "tasks/main.yml").read_text(encoding="utf-8"))]
     assert main.index("Generate the Hermes API key once") < main.index("Deploy Open WebUI")
     _named("Generate the Hermes API key once")  # one key, generated in one place
 

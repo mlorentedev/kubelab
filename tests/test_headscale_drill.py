@@ -21,14 +21,15 @@ from typing import Optional
 import pytest
 import yaml
 
+from toolkit.core.io import docker_user_args
 from toolkit.features.headscale_drill import LiveState, compare, parse_entries, read_live, run_drill
 
 STAGING = "/opt/node-backup/staging"
 IMAGE = "headscale/headscale:v0.28.0"
 #: From the SSOT, never a literal (CLAUDE.md, networking.*).
-CIDR = yaml.safe_load((Path(__file__).resolve().parents[1] / "infra/config/values/common.yaml").read_text())[
-    "networking"
-]["tailscale_cidr"]
+CIDR = yaml.safe_load(
+    (Path(__file__).resolve().parents[1] / "infra/config/values/common.yaml").read_text(encoding="utf-8")
+)["networking"]["tailscale_cidr"]
 TAKEN = "2026-10-01T12:04:45.886043275Z"
 BEFORE = 1_790_000_000  # 2026-09-21, before the snapshot
 AFTER = 1_790_000_000 + 30 * 86400  # after it
@@ -209,7 +210,7 @@ class _Fake:
             data.mkdir(parents=True)
             for name, value in self.restored.items():
                 if name != self.missing:
-                    (data / name).write_text(value)
+                    (data / name).write_text(value, encoding="utf-8")
             if self.missing != "db.sqlite":
                 _db(data / "db.sqlite", corrupt=self.corrupt_db)
             return 0, "", ""
@@ -283,8 +284,21 @@ def test_the_restored_server_has_no_network_runs_as_the_caller_and_the_image_it_
     drill(fake)
     start = next(c for c in fake.calls if c[:2] == ["docker", "run"])
     assert start[start.index("--network") + 1] == "none"
-    assert start[start.index("--user") + 1] == f"{os.getuid()}:{os.getgid()}"
+    # The caller's uid:gid where the host has uids; native Windows has none to pass.
+    user = start[start.index("--user") : start.index("--user") + 2] if "--user" in start else []
+    assert user == docker_user_args()
     assert IMAGE in start and start[-1] == "serve"
+
+
+def test_a_host_without_uids_still_runs_the_drill(drill, monkeypatch) -> None:
+    """Native Windows has no `os.getuid`. Removing it here makes a uid call creeping back fail on Linux CI too."""
+    monkeypatch.delattr(os, "getuid", raising=False)
+    monkeypatch.delattr(os, "getgid", raising=False)
+    fake = _Fake()
+
+    assert drill(fake) is True
+    start = next(c for c in fake.calls if c[:2] == ["docker", "run"])
+    assert "--user" not in start
 
 
 @pytest.mark.parametrize("missing", ["db.sqlite", "noise_private.key", "derp_server_private.key"])
@@ -407,7 +421,7 @@ def test_the_drill_runs_the_image_volume_and_pool_the_ssot_declares(monkeypatch)
     from toolkit.features import backup_destination, headscale_drill
 
     repo = Path(__file__).resolve().parents[1]
-    common = yaml.safe_load((repo / "infra/config/values/common.yaml").read_text())
+    common = yaml.safe_load((repo / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
     seen: dict = {}
     from toolkit.features.configuration import ConfigurationManager
 

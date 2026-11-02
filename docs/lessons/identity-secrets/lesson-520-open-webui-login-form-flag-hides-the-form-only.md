@@ -44,6 +44,13 @@ answer says `role: admin`. `OAUTH_USERNAME_CLAIM=preferred_username` names a
 claim Authelia keeps out of the ID token, so UserInfo is always read.
 `ENABLE_PERSISTENT_CONFIG=false` makes the env file the configuration of record.
 
+Amended 2026-10-22 (#2482): the form is now hidden, because v0.12.0's
+`OAUTH_AUTO_REDIRECT` sends a visitor to Authelia only while it is
+(`auth/+page.svelte:213`). The door is unchanged: `/auth?form=signin` shows the
+form and stops the redirect (`+page.svelte:208`, `:339`), and the break-glass
+declaration opens that path. Everything above still holds; hiding the form
+closes nothing.
+
 **Rule**: Before using an app flag as a security boundary, find the code path it
 actually gates. "Disable the login form" and "disable password authentication"
 are different switches in more than one app. And for an app that copies its env

@@ -154,7 +154,7 @@ def test_every_registered_product_is_dispatched(app: str) -> None:
 
 def test_the_allowed_apps_are_read_from_the_registry() -> None:
     """No product name is spelled in the recipe: admitting one is a registry entry (#1815)."""
-    recipe = (REPO_ROOT / "Makefile").read_text().split("\npromote-prod:", 1)[1].split("\n\n", 1)[0]
+    recipe = (REPO_ROOT / "Makefile").read_text(encoding="utf-8").split("\npromote-prod:", 1)[1].split("\n\n", 1)[0]
     assert "$(PRODUCT_LIST)" in recipe
     for app in product_registry.platform_apps():
         assert app not in recipe.replace("$(APP)", ""), f"the promote-prod recipe still names {app!r}"
@@ -163,7 +163,14 @@ def test_the_allowed_apps_are_read_from_the_registry() -> None:
 def test_an_unreadable_registry_is_refused_as_such() -> None:
     """A failed query must not read as "Unknown APP", which would send the operator after a typo."""
     proc = subprocess.run(  # noqa: S603
-        ["make", "promote-prod", "APP=web", "VERSION=1.12.0", *(f"{var}={STUB}" for var in STUBBED), "PRODUCT_LIST=false"],
+        [
+            "make",
+            "promote-prod",
+            "APP=web",
+            "VERSION=1.12.0",
+            *(f"{var}={STUB}" for var in STUBBED),
+            "PRODUCT_LIST=false",
+        ],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,

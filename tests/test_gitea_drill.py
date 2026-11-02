@@ -124,7 +124,7 @@ class _Fake:
             for repo in self.heads:  # Gitea stores owner and name in lower case on disk
                 (data / "git/repositories" / f"{repo.lower()}.git").mkdir(parents=True)
             (data / "gitea/conf").mkdir(parents=True)
-            (data / "gitea/conf/app.ini").write_text("SECRET_KEY = do-not-print\n")
+            (data / "gitea/conf/app.ini").write_text("SECRET_KEY = do-not-print\n", encoding="utf-8")
             return 0, "", ""
         if argv[:1] == ["git"]:
             return (1 if self.fsck_bad and self.fsck_bad in argv[2] else 0), "", ""

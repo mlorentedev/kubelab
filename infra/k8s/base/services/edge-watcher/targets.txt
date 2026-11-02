@@ -1,0 +1,4 @@
+# Generated from networking in common.yaml by `make sync-edge-watcher-targets`. Do not edit.
+# One line per target: <node> <tailscale ip> <probe port>
+rpi3 100.64.0.6 22
+rpi4 100.64.0.10 22

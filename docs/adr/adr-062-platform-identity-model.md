@@ -23,6 +23,8 @@ Accepted — 2026-08-14. Tracks [#1013](https://github.com/mlorentedev/kubelab/i
 Amended 2026-09-24: D1's machine class. See the amendment below.
 Amended 2026-10-17: session policy (S1–S3). See the amendment below.
 Amended 2026-10-18: edge perimeter for Uptime Kuma (P1). See the amendment below.
+Amended 2026-10-22: Uptime Kuma keeps its own login (P2). See the amendment below.
+Amended 2026-11-02: sign-in starts at Authelia for every app reached by people (P3). See the amendment below.
 
 Complements [ADR-016](adr-016-oidc-centralized-auth.md), which decides *how* authentication is delivered (OIDC / forward-auth / bypass tiers) but never decides *who* the identities are or what privilege each one carries. This ADR fills that gap and does not supersede it.
 
@@ -36,6 +38,24 @@ Tracks [#2483](https://github.com/mlorentedev/kubelab/issues/2483), under [#2482
 - **Kuma's own login stays on for now.** Turning it off (operator option B, 2026-10-17) waits until the perimeter has been seen working in a browser and `make monitoring-apply` is proven with it off. That is phase 2 of #2482.
 
 Whether every other app reached by people gets the same perimeter is AUTH-020's open question, not this amendment's.
+
+## Amendment — 2026-10-22 (P2: Uptime Kuma keeps its own login)
+
+Tracks phase 2 of [#2482](https://github.com/mlorentedev/kubelab/issues/2482). Supersedes P1's "for now": Kuma's own login stays on permanently. The operator's earlier choice (B, 2026-10-17) was to turn it off once only Traefik could reach Kuma. Re-decided as C on 2026-10-22, recorded on the issue.
+
+- **P2. An app with no SSO keeps its own credential behind the perimeter.** The perimeter is the first factor. The app's login is the only thing between the tailnet and its admin surface, because the direct port is not behind the perimeter. The port is limited to the spoke nodes and the operator workstations (#2582), and a pod on a spoke leaves with its node's address. Closing that path for pods needs an egress deny to rpi3 in every namespace of both spokes. Even then, `hostNetwork` pods bypass it. It would also reverse NET-002's "egress stays open" (#378). Making rpi3 a K3s node, which would allow a plain ingress policy, breaks the rule above that the external monitor shares no failure domain with what it watches (ADR-028). The cost is two logins on the one app without SSO.
+- **Its password is one value, in `common.enc.yaml`** (#2599): Kuma is one instance, so the catalog marks the key `HUB_MANAGED` and `credentials generate` changes Kuma only after the common write.
+
+## Amendment — 2026-11-02 (P3: sign-in starts at Authelia)
+
+Tracks [#2482](https://github.com/mlorentedev/kubelab/issues/2482) (AUTH-020), whose acceptance asks for this doctrine. P1 left open whether apps other than Uptime Kuma get the perimeter; this answers it.
+
+- **P3. Every app reached by people starts its sign-in at Authelia.** The default is the edge perimeter: a Traefik ForwardAuth, so an anonymous browser's first response is a 302 to `auth.kubelab.live` and never reaches the app. Machine paths (push heartbeats, git over HTTPS, webhooks, CLI and API tokens) are split out at the edge as in P1, and each split needs a test on the rendered routes before it ships. Two exist today: `tests/test_uptime_kuma_perimeter.py` (P1) and `tests/test_grafana_api_token_route.py` (the token-bearing Grafana API route, AI-024).
+- **Where the perimeter cannot be the first hop, the app redirects to Authelia itself, and the ticket records why.** Open WebUI is the case today. It is reached through prod Traefik with no ForwardAuth, because a perimeter on top would break the API calls the page makes after login (`infra/k8s/overlays/prod/open-webui.yaml`). It sets `ENABLE_LOGIN_FORM=false` and `OAUTH_AUTO_REDIRECT=true`. The public route refuses the password sign-in API (`/api/v1/auths/signin`, the call the `/auth?form=signin` page makes), so break-glass works only on ace2's own address. Its redirect is client-side, so the first response is the SPA rather than a 302 (#2655).
+- **Status on 2026-11-02:**
+  - Behind the perimeter: Grafana, n8n, the Traefik dashboard and Uptime Kuma.
+  - In-app redirect: Open WebUI.
+  - Parked on #2482 with their reasons: Argo CD (the hub changes only through `make deploy-argocd`), Gitea (its machine paths need a bypass list proven first) and Vikunja.
 
 ## Amendment — 2026-10-17 (session policy: no app outlives the IdP)
 

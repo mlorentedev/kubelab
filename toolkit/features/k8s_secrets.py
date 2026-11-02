@@ -122,8 +122,8 @@ SECRET_DEFINITIONS: list[SecretMapping] = [
         name="postgres-secrets",
         keys={
             # Shared data-service (ADR-051). The server reads POSTGRES_PASSWORD;
-            # POSTGRES_USER/DB are non-secret literals in the manifest. The api
-            # gets INFRA_POSTGRES_PASSWORD added to api-secrets in PR-1b.
+            # POSTGRES_USER/DB are non-secret literals in the manifest. The owner
+            # password stays here: the api connects as its own tenant.
             "POSTGRES_PASSWORD": "INFRA_POSTGRES_PASSWORD",
         },
     ),
@@ -136,6 +136,18 @@ SECRET_DEFINITIONS: list[SecretMapping] = [
             "BEEHIIV_API_KEY": "APPS_PLATFORM_API_BEEHIIV_API_KEY",
             "ZOHO_CLIENT_ID": "APPS_PLATFORM_API_ZOHO_CLIENT_ID",
             "ZOHO_CLIENT_SECRET": "APPS_PLATFORM_API_ZOHO_CLIENT_SECRET",
+        },
+        optional_keys={
+            # The forge task view's credentials (CONSOLE-004). Optional on purpose, and unlike
+            # the Vikunja keys that once took prod down: the API starts without them and reports
+            # the source unreachable (`config.Forge`, pinned by `TestPopulateConfigForge`), because
+            # staging holds no Gitea token. The generated Deployment mounts only `<app>-secrets`,
+            # so a separate Secret would never reach the pod.
+            "FORGE_GITEA_TOKEN": "APPS_SERVICES_CORE_GITEA_ISSUE_READER_TOKEN",
+            "FORGE_GITHUB_PRIVATE_KEY": "APPS_SERVICES_CORE_GITHUB_APP_PRIVATE_KEY",
+            # The API's Postgres tenant (DATA-007). Optional for the same reason: without it the
+            # API omits the check and starts.
+            "POSTGRES_TENANT_PASSWORD": "APPS_PLATFORM_API_DB_PASSWORD",
         },
     ),
     SecretMapping(
@@ -252,6 +264,7 @@ def delete_retired_secrets(env: str, dry_run: bool = False, run: Callable[..., A
                 [*_kubectl_base(env, namespace), "delete", "secret", name, "--ignore-not-found"],
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
                 check=True,
             )
             # `--ignore-not-found` prints nothing when there was nothing to delete.
@@ -271,6 +284,7 @@ def _preview_retired_secret(env: str, namespace: str, name: str, run: Callable[.
         [*_kubectl_base(env, namespace), "get", "secret", name, "--ignore-not-found", "-o", "name"],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
     )
     if found.returncode != 0:
@@ -707,6 +721,7 @@ def _apply_single_secret(
             input=manifest,
             capture_output=True,
             text=True,
+            encoding="utf-8",
             check=True,
         )
         verdict = _report_apply(mapping.name, list(data), apply_result, dry_run)

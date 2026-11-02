@@ -220,7 +220,7 @@ def test_the_command_prints_the_url_and_never_the_password(monkeypatch: pytest.M
     import toolkit.cli.services as cli
 
     body = tmp_path / "body.md"
-    body.write_text("## Summary\nwhy\n")
+    body.write_text("## Summary\nwhy\n", encoding="utf-8")
     seen: dict[str, Any] = {}
 
     def fake_open_pull(client: Any, repo: str, **kw: Any) -> Opened:

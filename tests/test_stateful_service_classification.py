@@ -82,7 +82,7 @@ def _patch_files(roots: list[pathlib.Path]) -> set[pathlib.Path]:
     found: set[pathlib.Path] = set()
     for root in roots:
         for kustomization in root.rglob("kustomization.yaml"):
-            spec = yaml.safe_load(kustomization.read_text()) or {}
+            spec = yaml.safe_load(kustomization.read_text(encoding="utf-8")) or {}
             for patch in spec.get("patches") or []:
                 if isinstance(patch, dict) and patch.get("path"):
                     found.add((kustomization.parent / patch["path"]).resolve())
@@ -137,7 +137,7 @@ def _stateful_services(manifests: list[pathlib.Path] | None = None) -> dict[str,
     owned: dict[str, list[str]] = {}
     for path in _iter_manifests() if manifests is None else manifests:
         try:
-            docs = list(yaml.safe_load_all(path.read_text()))
+            docs = list(yaml.safe_load_all(path.read_text(encoding="utf-8")))
         except yaml.YAMLError as exc:  # pragma: no cover - malformed manifest
             pytest.fail(f"{path.relative_to(REPO_ROOT)} is not parseable YAML: {exc}")
         for doc in docs:
@@ -217,7 +217,7 @@ def classification_problems(services: dict[str, list[str]], config: dict[str, An
 
 @pytest.fixture(scope="module")
 def common_config() -> dict[str, Any]:
-    return yaml.safe_load(COMMON_VALUES.read_text())
+    return yaml.safe_load(COMMON_VALUES.read_text(encoding="utf-8"))
 
 
 def test_manifests_actually_yield_stateful_services() -> None:
@@ -447,7 +447,7 @@ spec:
 
 def test_an_unclassified_statefulset_fails_the_classification_check(tmp_path: pathlib.Path) -> None:
     manifest = tmp_path / "widget.yaml"
-    manifest.write_text(_STATEFULSET)
+    manifest.write_text(_STATEFULSET, encoding="utf-8")
     services = _stateful_services([manifest])
     assert services == {"widget": ["data-widget"]}
     assert any("no config block found" in p for p in classification_problems(services, {})), services
@@ -455,16 +455,18 @@ def test_an_unclassified_statefulset_fails_the_classification_check(tmp_path: pa
 
 def test_a_singleton_statefulset_in_both_overlays_fails_the_duplication_clause(tmp_path: pathlib.Path) -> None:
     manifest = tmp_path / "widget.yaml"
-    manifest.write_text(_STATEFULSET)
+    manifest.write_text(_STATEFULSET, encoding="utf-8")
     _require_kubectl()
-    (tmp_path / "kustomization.yaml").write_text("resources: [widget.yaml]\n")
+    (tmp_path / "kustomization.yaml").write_text("resources: [widget.yaml]\n", encoding="utf-8")
     both = {env: _render_claims(tmp_path) for env in OVERLAYS}
     problems = duplication_problems(_stateful_services([manifest]), _fixture_config(state_promotion="singleton"), both)
     assert [p.split(" is ", 1)[0] for p in problems] == ["widget"], problems
 
 
 def test_a_statefulset_in_a_patch_file_is_not_a_service(tmp_path: pathlib.Path) -> None:
-    (tmp_path / "widget.yaml").write_text(_STATEFULSET)
-    (tmp_path / "patches.yaml").write_text(_STATEFULSET)
-    (tmp_path / "kustomization.yaml").write_text("resources: [widget.yaml]\npatches:\n  - path: patches.yaml\n")
+    (tmp_path / "widget.yaml").write_text(_STATEFULSET, encoding="utf-8")
+    (tmp_path / "patches.yaml").write_text(_STATEFULSET, encoding="utf-8")
+    (tmp_path / "kustomization.yaml").write_text(
+        "resources: [widget.yaml]\npatches:\n  - path: patches.yaml\n", encoding="utf-8"
+    )
     assert _stateful_services(_iter_manifests([tmp_path])) == {"widget": ["data-widget"]}

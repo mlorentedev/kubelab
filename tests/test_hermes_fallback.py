@@ -15,7 +15,7 @@ import yaml
 from tests.test_agent_stack_role import COMMON, REPO, ROLE, _environment, _resolved
 from toolkit.features.secrets_manager import SECRET_CATALOG
 
-HERMES = yaml.safe_load(COMMON.read_text())["apps"]["services"]["ai"]["hermes_kubelab"]
+HERMES = yaml.safe_load(COMMON.read_text(encoding="utf-8"))["apps"]["services"]["ai"]["hermes_kubelab"]
 KEY = {"agent_stack_anthropic_api_key": "sk-ant-sentinel"}
 
 
@@ -64,7 +64,7 @@ def test_the_ported_keys_cannot_set_the_chain(ported: dict) -> None:
 
 
 def test_the_playbook_reads_the_key_from_prods_vault() -> None:
-    playbook = (ROLE.parents[1] / "playbooks/provision-ace2.yml").read_text()
+    playbook = (ROLE.parents[1] / "playbooks/provision-ace2.yml").read_text(encoding="utf-8")
     assert (
         'agent_stack_anthropic_api_key: "{{ gitea_secrets.apps.services.ai.hermes_kubelab.anthropic_api_key'
         " | default('') }}\"" in playbook
@@ -82,5 +82,5 @@ def test_prods_vault_carries_the_key_the_playbook_reads() -> None:
     with the value missing from storage, and the first provision after merge would
     render no fallback while reporting `changed=0`. SOPS encrypts values, not key
     names, so this reads the committed file without decrypting it."""
-    vault = yaml.safe_load((REPO / "infra/config/secrets/prod.enc.yaml").read_text())
+    vault = yaml.safe_load((REPO / "infra/config/secrets/prod.enc.yaml").read_text(encoding="utf-8"))
     assert "anthropic_api_key" in vault["apps"]["services"]["ai"]["hermes_kubelab"]

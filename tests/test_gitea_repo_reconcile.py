@@ -82,14 +82,18 @@ GITEA_MIGRATION_DEFAULTS: dict[str, object] = {
 #: The declaration under test. Read from common.yaml rather than restated, so these
 #: tests measure what the forge will actually be given -- a literal here would let
 #: the SSOT and the suite drift, which is the whole failure mode this file is about.
-DECLARED_SETTINGS = load_settings(yaml.safe_load((REPO_ROOT / "infra/config/values/common.yaml").read_text()))
+DECLARED_SETTINGS = load_settings(
+    yaml.safe_load((REPO_ROOT / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
+)
 
 #: Read from common.yaml for the same reason `DECLARED_SETTINGS` is: a literal here
 #: would let the SSOT and the suite drift apart, and the suite would keep passing.
 #: The real, multi-hook declaration (TOOL-080) -- n8n first and pinned to prod, see
 #: `test_the_declared_webhook_targets_the_prod_n8n_domain` -- used only by the tests
 #: below that are actually about the list.
-DECLARED_WEBHOOKS = load_webhooks(yaml.safe_load((REPO_ROOT / "infra/config/values/common.yaml").read_text()))
+DECLARED_WEBHOOKS = load_webhooks(
+    yaml.safe_load((REPO_ROOT / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
+)
 
 #: n8n's spec alone, unpacked from the list above. Every test that predates the list
 #: and is not about it keeps reading this name.
@@ -527,7 +531,7 @@ def test_the_real_declaration_matches_adr_065():
     import yaml
 
     common_yaml = REPO_ROOT / "infra/config/values/common.yaml"
-    declared = load_declaration(yaml.safe_load(common_yaml.read_text()))
+    declared = load_declaration(yaml.safe_load(common_yaml.read_text(encoding="utf-8")))
 
     assert {org: [s.name for s in specs] for org, specs in declared.items()} == {
         "teledyne": ["fae-brain", "openkm-brain", "projects-toolkit"],
@@ -567,7 +571,7 @@ def test_the_vault_is_not_declared():
     import yaml
 
     common_yaml = REPO_ROOT / "infra/config/values/common.yaml"
-    declared = load_declaration(yaml.safe_load(common_yaml.read_text()))
+    declared = load_declaration(yaml.safe_load(common_yaml.read_text(encoding="utf-8")))
     all_repos = {spec.name for specs in declared.values() for spec in specs}
 
     assert "knowledge" not in all_repos, (
@@ -1511,7 +1515,7 @@ def test_the_declared_webhook_targets_the_prod_n8n_domain() -> None:
     `n8n.staging` on `--env staging`. That choice is only safe with this test: it is
     what stops the duplicate drifting away from the service it names.
     """
-    prod = yaml.safe_load((REPO_ROOT / "infra/config/values/prod.yaml").read_text())
+    prod = yaml.safe_load((REPO_ROOT / "infra/config/values/prod.yaml").read_text(encoding="utf-8"))
     domain = prod["apps"]["services"]["automation"]["n8n"]["domain"]
 
     assert DECLARED_WEBHOOK.url.startswith(f"https://{domain}/"), (

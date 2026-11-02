@@ -168,7 +168,7 @@ def test_there_is_no_dry_run_mode() -> None:
     """
     import ast
 
-    tree = ast.parse((FUNCTION_DIR / "main.py").read_text())
+    tree = ast.parse((FUNCTION_DIR / "main.py").read_text(encoding="utf-8"))
 
     docstrings = {
         id(node.body[0].value)

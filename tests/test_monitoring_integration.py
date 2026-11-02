@@ -57,7 +57,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 def _pinned_image() -> str:
     """Read the Uptime Kuma image from the config SSOT (common.yaml)."""
-    values = yaml.safe_load((REPO_ROOT / "infra/config/values/common.yaml").read_text())
+    values = yaml.safe_load((REPO_ROOT / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
     return values["apps"]["services"]["observability"]["uptime_kuma"]["image"]
 
 
@@ -99,11 +99,13 @@ def _wait_until_socket_reachable(url: str, timeout: float = 30.0) -> None:
     pytest.fail(f"Uptime Kuma socket never became reachable at {url}: {last_error!r}")
 
 
-def _start_kuma_container(name: str) -> str:
+def _start_kuma_container(name: str, command: tuple[str, ...] = ()) -> str:
     """Start a throwaway Kuma v2 container and block until it is actually reachable.
 
     Returns the URL. Caller owns teardown (`docker rm -f name`) — shared by
     every fixture in this file so the readiness-wait logic has one definition.
+    `command` replaces the image's default command, for a test that has to change
+    how the server behaves.
     """
     port = _free_port()
     url = f"http://127.0.0.1:{port}"
@@ -120,6 +122,7 @@ def _start_kuma_container(name: str) -> str:
             "-p",
             f"127.0.0.1:{port}:3001",
             _pinned_image(),
+            *command,
         ],
         check=True,
         capture_output=True,
@@ -194,7 +197,7 @@ def fresh_kuma_url():
 
 
 def _client(url: str):
-    api = UptimeKumaApi(url, timeout=60)
+    api = monitoring.GreetedKumaApi(url, timeout=60)
     api.login(ADMIN_USER, ADMIN_PASS)
     return api
 
@@ -231,7 +234,7 @@ def apply_seed(kuma_url, monkeypatch, tmp_path):
     def _apply(seed: list[dict], *, prune: bool = False) -> None:
         export_dir = tmp_path / monitoring.EXPORT_DIR
         export_dir.mkdir(parents=True, exist_ok=True)
-        (export_dir / monitoring.MONITORS_FILE).write_text(json.dumps(seed))
+        (export_dir / monitoring.MONITORS_FILE).write_text(json.dumps(seed), encoding="utf-8")
         # The seed directory is both files: tags are converged like any field
         # (#1974), so a seed without its tag declarations cannot converge.
         shutil.copyfile(REPO_ROOT / monitoring.EXPORT_DIR / monitoring.TAGS_FILE, export_dir / monitoring.TAGS_FILE)
@@ -305,7 +308,7 @@ SELF_URL = f"http://{SELF_HOST}:3001"
 
 
 def _real_seed() -> list[dict]:
-    seed = json.loads((REPO_ROOT / "infra/config/uptime-kuma/monitors.json").read_text())
+    seed = json.loads((REPO_ROOT / "infra/config/uptime-kuma/monitors.json").read_text(encoding="utf-8"))
     for monitor in seed:
         if monitor.get("url"):
             monitor["url"] = SELF_URL
@@ -456,7 +459,7 @@ class TestBootstrapAgainstAFreshInstance:
         )
         export_dir = tmp_path / monitoring.EXPORT_DIR
         export_dir.mkdir(parents=True, exist_ok=True)
-        (export_dir / monitoring.MONITORS_FILE).write_text(json.dumps(self._seed()))
+        (export_dir / monitoring.MONITORS_FILE).write_text(json.dumps(self._seed()), encoding="utf-8")
 
         monitoring.bootstrap(tmp_path)
 
@@ -479,7 +482,7 @@ class TestBootstrapAgainstAFreshInstance:
         )
         export_dir = tmp_path / monitoring.EXPORT_DIR
         export_dir.mkdir(parents=True, exist_ok=True)
-        (export_dir / monitoring.MONITORS_FILE).write_text(json.dumps(self._seed()))
+        (export_dir / monitoring.MONITORS_FILE).write_text(json.dumps(self._seed()), encoding="utf-8")
         monitoring.bootstrap(tmp_path)
 
         monitoring.bootstrap(tmp_path)  # must not raise, must not duplicate
@@ -500,10 +503,8 @@ class TestPushMonitorRoundTrip:
     raw-socket create path bypasses. Both facts are invisible from a fixture and
     produce a monitor Kuma accepts and no sender can reach.
 
-    Deliberately proven through export -> **apply**, not export -> import:
-    `import_monitors` sends Kuma v1's backup envelope, confirmed to time out
-    against v2 (#1042), so a round-trip routed that way would be exercising a
-    known-broken path and proving nothing about this one.
+    Proven through export -> apply, the only path: the v1 backup envelope timed
+    out against v2 and its import command was retired (#1042).
     """
 
     KEY = "ops-backup-pvc-prod"
@@ -542,7 +543,7 @@ class TestPushMonitorRoundTrip:
         apply_seed(self._seed())
 
         monkeypatch.setattr(monitoring, "_connect", lambda _root: (_client(kuma_url), {"url": kuma_url}))
-        exported = json.loads(monitoring.export_monitors(tmp_path).read_text())
+        exported = json.loads(monitoring.export_monitors(tmp_path).read_text(encoding="utf-8"))
 
         [entry] = exported
         assert "pushToken" not in entry, "export would have committed a live credential to a public repo"
@@ -564,7 +565,7 @@ class TestPushMonitorRoundTrip:
         before = {m["name"]: (m["id"], m["pushToken"]) for m in live()}
 
         monkeypatch.setattr(monitoring, "_connect", lambda _root: (_client(kuma_url), {"url": kuma_url}))
-        exported = json.loads(monitoring.export_monitors(tmp_path).read_text())
+        exported = json.loads(monitoring.export_monitors(tmp_path).read_text(encoding="utf-8"))
         assert all("pushToken" not in e for e in exported)
 
         create, edit, delete = diff_monitors(
@@ -590,3 +591,34 @@ class TestPushMonitorRoundTrip:
             apply_seed(self._seed())
 
         assert live() == []
+
+
+class TestLoginIsHeard:
+    """A login sent before Kuma registers its handler is dropped with no ack (#1985).
+
+    The gap is normally milliseconds, so the bug showed as one hang in dozens of
+    runs. Stretching it on the real server makes the failure certain.
+    """
+
+    @pytest.fixture
+    def slow_greeting_url(self):
+        name = f"{CONTAINER_NAME}-slow-greeting"
+        delay = "await new Promise(r => setTimeout(r, 500)); await sendInfo(socket, true);"
+        # `sed` exits 0 on no match, and an unpatched server would pass this test whatever the client does.
+        patched = (
+            f"sed -i 's/await sendInfo(socket, true);/{delay}/' server/server.js"
+            " && grep -q 'setTimeout(r, 500)' server/server.js && exec node server/server.js"
+        )
+        url = _start_kuma_container(name, ("sh", "-c", patched))
+        try:
+            _run_setup(url)
+            yield url
+        finally:
+            subprocess.run(["docker", "rm", "-f", name], capture_output=True)
+
+    def test_login_is_answered_while_the_server_is_still_greeting(self, slow_greeting_url):
+        api = monitoring.GreetedKumaApi(slow_greeting_url, timeout=10)
+        try:
+            api.login(ADMIN_USER, ADMIN_PASS)
+        finally:
+            api.disconnect()

@@ -138,8 +138,10 @@ snap list --all 2>/dev/null | awk '/disabled/{system("snap remove " $1 " --revis
 # Docker cleanup (skip if not installed)
 if command -v docker &>/dev/null; then
     # Stopped containers first: the reclaim then sees their volumes as unheld,
-    # and the image prune can take the images they pinned.
-    docker container prune -f || echo "WARN: docker container prune failed"
+    # and the image prune can take the images they pinned. Not a container
+    # compose created: a stopped stack is still one the node declares, and
+    # removing it would let the image prune take its image (#2703).
+    docker container prune -f --filter "label!=com.docker.compose.project" || echo "WARN: docker container prune failed"
 {% if maintenance_docker_reclaim | bool %}
     # Orphaned buildx builders (by `Created`, never uptime) and CI job volumes
     # act_runner skipped removing, never a volume common.yaml's `backup` block

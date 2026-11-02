@@ -98,7 +98,7 @@ return [{ json: {
 
 
 def pinned_image() -> str:
-    text = KUSTOMIZATION.read_text()
+    text = KUSTOMIZATION.read_text(encoding="utf-8")
     tag = re.search(r"name: n8nio/n8n\s*\n\s*newTag: (\S+)", text)
     assert tag, f"no n8nio/n8n newTag in {KUSTOMIZATION}"
     return f"n8nio/n8n:{tag.group(1)}"
@@ -143,7 +143,7 @@ def main() -> None:
     image = pinned_image()
     with tempfile.TemporaryDirectory() as tmp:
         probe = pathlib.Path(tmp) / "probe.json"
-        probe.write_text(json.dumps(probe_workflow()))
+        probe.write_text(json.dumps(probe_workflow()), encoding="utf-8")
         probe.chmod(0o644)
         pathlib.Path(tmp).chmod(0o755)
         wf_id = probe_workflow()["id"]
@@ -197,7 +197,7 @@ def main() -> None:
         "sent_form_body_base64": base64.b64encode(FORM_BODY).decode(),
         "code_node_saw_form": form_response,
     }
-    OUTPUT.write_text(json.dumps(fixture, indent=2, ensure_ascii=False) + "\n")
+    OUTPUT.write_text(json.dumps(fixture, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     print(f"wrote {OUTPUT.relative_to(REPO_ROOT)} from {image}")
 
 

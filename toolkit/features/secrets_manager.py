@@ -74,6 +74,10 @@ class SecretSpec:
     # and powerless. A floor, not proof: consequence checks (e.g. `make n8n-probe`)
     # show the value works. Empty means "any non-empty value".
     value_pattern: str = ""
+    # True for a value whose absence is a decision, not a gap: `audit` does not call
+    # it missing, and still holds it to `value_pattern` once it is set. Not for a
+    # credential something reads, where "absent" has to stay loud.
+    optional: bool = False
     rotate_note: str = ""  # What breaks or needs restarting on rotation
     envs: tuple[str, ...] = ("dev", "staging", "prod")  # Which envs need this
     # Declares that this secret is DELIVERED to Google Secret Manager for the GCP
@@ -118,6 +122,27 @@ class SecretSpec:
     # Defaults to UNKNOWN so a new entry surfaces as unclassified rather than
     # being quietly assumed immortal.
     expiry: Expiry = Expiry.UNKNOWN
+    # How many days before expiry the reports turn this credential red (TOOL-126,
+    # #2744). None takes the report's window, 90 days by default. A credential
+    # whose whole life is 90 days or less needs its own, or it is red from the day
+    # it is issued and the column stops being read.
+    warn_days: int | None = None
+
+    def __post_init__(self) -> None:
+        if self.warn_days is not None and self.warn_days <= 0:
+            raise ValueError(f"{self.key_path}: warn_days must be a positive number of days, got {self.warn_days}")
+        # A username is not a secret, and an entry the toolkit mints is one
+        # `credentials generate` and `rotate` may rewrite: on 2026-08-23 rotating
+        # `basic_auth.user` renamed Gitea's only admin. Identities live in
+        # `apps.auth.identities` (#1356). EXTERNAL is exempt: a third-party account
+        # name (Docker Hub, a registry) is typed in by the operator and delivered,
+        # never minted, so no rotation can rename it.
+        leaf = self.key_path.rsplit(".", 1)[-1]
+        named_as_identity = leaf in ("user", "username") or leaf.endswith(("_user", "_username"))
+        if named_as_identity and self.kind != SecretKind.EXTERNAL:
+            raise ValueError(
+                f"{self.key_path} names an identity, not a secret: declare it in apps.auth.identities (#1356)"
+            )
 
 
 # -- Authelia base path shortcut --
@@ -196,9 +221,14 @@ SECRET_CATALOG: list[SecretSpec] = [
     SecretSpec(
         key_path="apps.services.observability.uptime_kuma.admin_password",
         description="Uptime Kuma admin password",
-        kind=SecretKind.PASSWORD,
+        # HUB_MANAGED for its contract, not its host: the name predates this entry, and the
+        # contract is "one instance, so one value, in common.enc.yaml, written as a set by
+        # `credentials generate`". Kuma is one instance on rpi3. As a per-env PASSWORD every
+        # rotation left it on a value `monitoring-apply` (common only) did not have, and
+        # `secrets rotate` wrote SOPS without changing Kuma at all (#2599).
+        kind=SecretKind.HUB_MANAGED,
         services=("uptime_kuma",),
-        rotate_note="Reconciled by `credentials generate` via _reconcile_external_credentials.",
+        rotate_note="Regenerate via `toolkit credentials generate` (→ common.enc.yaml), which then changes Kuma's.",
     ),
     SecretSpec(
         key_path="apps.services.observability.uptime_kuma.api_key",
@@ -244,14 +274,6 @@ SECRET_CATALOG: list[SecretSpec] = [
     # Basic Auth (Traefik)
     # =========================================================================
     SecretSpec(
-        key_path="basic_auth.user",
-        description="Username for Traefik basic auth",
-        kind=SecretKind.PASSWORD,
-        services=("traefik",),
-        format_hint="Plain text username",
-        rotate_note="Regenerate Traefik config, restart traefik",
-    ),
-    SecretSpec(
         key_path="basic_auth.password",
         description="Password for Traefik basic auth",
         kind=SecretKind.PASSWORD,
@@ -266,7 +288,7 @@ SECRET_CATALOG: list[SecretSpec] = [
         services=("traefik",),
         derived_from="basic_auth.password",
         format_hint="user:$2y$... (htpasswd bcrypt)",
-        rotate_note="Auto-derived from basic_auth.user + basic_auth.password",
+        rotate_note="Auto-derived from the prompted username + basic_auth.password",
     ),
     # =========================================================================
     # Authelia — Session & Storage
@@ -446,13 +468,6 @@ SECRET_CATALOG: list[SecretSpec] = [
     # =========================================================================
     # Grafana
     # =========================================================================
-    SecretSpec(
-        key_path="apps.services.observability.grafana.admin_user",
-        description="Grafana admin username",
-        kind=SecretKind.PASSWORD,
-        services=("grafana",),
-        rotate_note="Login with new username after restart.",
-    ),
     SecretSpec(
         key_path="apps.services.observability.grafana.admin_password",
         description="Grafana admin password",
@@ -677,7 +692,9 @@ SECRET_CATALOG: list[SecretSpec] = [
         key_path="apps.services.core.gitea.admin_token",
         description=(
             "Gitea API token for the superadmin (apps.auth.identities.superadmin); "
-            "creates organizations and reads whole-forge state for the reconciler"
+            "creates organizations and reads whole-forge state for the reconciler. "
+            "Scopes: read:admin, write:organization, read:repository, read:user. "
+            "It cannot read issues (no read:issue): the forge task view needs its own token"
         ),
         # EXTERNAL for the same reason as `bot_token`: Gitea mints it, only Gitea
         # honours it, and a generated string would pass every audit while
@@ -753,36 +770,41 @@ SECRET_CATALOG: list[SecretSpec] = [
         envs=("prod",),
     ),
     SecretSpec(
-        key_path="apps.services.core.gitea.github_migration_token",
+        key_path="apps.services.core.gitea.issue_reader_token",
         description=(
-            "Fine-grained GitHub PAT that Gitea's migration endpoint uses to READ "
-            "issues, pull requests and contents from the repositories ADR-065 moves"
+            "Read-only Gitea API token on the reviewer's account (apps.auth.identities.reviewer); "
+            "read:issue, used by the forge task view's API to list issues and pull requests (CONSOLE-004)"
         ),
-        # EXTERNAL for the same reason as `bot_token`: GitHub issues it, only
-        # GitHub honours it, and a locally generated string would pass every audit
-        # while authenticating nothing. Unlike `bot_token` it is used by the
-        # RECONCILER calling Gitea, not by Gitea calling us — it is passed per
-        # migration request and (with `mirror: false`, which is what ADR-065's
-        # "move" means) Gitea has nothing to re-sync and so nothing to store.
+        # EXTERNAL for the reason `bot_token` gives: only Gitea honours what it mints.
         kind=SecretKind.EXTERNAL,
-        services=("gitea",),
+        services=("gitea", "api"),
         rotate_note=(
-            "Read-only by construction — Contents/Metadata/Issues/Pull requests, no write "
-            "anywhere, because the migration only reads from GitHub and Gitea writes on its "
-            "own side. Regenerate at github.com/settings/personal-access-tokens, then "
-            "`toolkit secrets set <key> --env prod --stdin`. Verify by consequence before "
-            "trusting it: a granted private repo answers 200 and one outside the grant "
-            "answers 404 (NOT 403 — GitHub does not confirm existence to an unauthorised "
-            "caller, and reading that 404 as 'the repo is gone' is the wrong lesson)."
+            "`make gitea-rotate-token TOKEN=issue_reader ENV=prod APPLY=1` (revoke, then unset), then "
+            "`make provision NODE=bee ENV=prod TAGS=gitea` to re-mint, then `make apply-secrets ENV=prod` "
+            "so the API's Secret carries the new value. The mint task is gated on this key being "
+            "absent; never mint a second token by hand."
         ),
-        # PROVIDER, and it genuinely resolves: `github_pat_expiry` reads the
-        # `github-authentication-token-expiration` header GitHub returns on any
-        # authenticated call. Measured 2026-08-28 against this very token —
-        # 2026-10-27, 59 days left. This is the module's "asked, not remembered"
-        # rule paying off: no date is recorded here to drift.
-        expiry=Expiry.PROVIDER,
-        # prod, matching `bot_token` above: the forge's identity environment is
-        # prod, and `envs` is the audit dimension rather than the file (ANSIBLE-033).
+        # NEVER, for the reason measured on `bot_token`: Gitea's token API has no expiry field.
+        expiry=Expiry.NEVER,
+        envs=("prod",),
+    ),
+    SecretSpec(
+        key_path="apps.services.core.github_app.private_key",
+        description=(
+            "Private key (PEM) of the `kubelab-console` GitHub App, read-only on Issues and Pull requests; "
+            "the forge task view's API signs its installation tokens with it (CONSOLE-004)"
+        ),
+        kind=SecretKind.EXTERNAL,
+        services=("api",),
+        format_hint="PEM-encoded RSA private key, as downloaded from the App settings",
+        rotate_note=(
+            "App settings > Private keys > Generate a private key (a second key can coexist), "
+            "`toolkit secrets set apps.services.core.github_app.private_key --env common --stdin < key.pem`, "
+            "then `make apply-secrets ENV=prod`, then delete the old key in the App settings."
+        ),
+        # GitHub App private keys carry no expiry; they live until someone deletes them.
+        expiry=Expiry.NEVER,
+        # Stored in common.enc.yaml (one App for every environment); `envs` is the audit dimension.
         envs=("prod",),
     ),
     # --- Actions secrets delivered to forge repositories (TOOL-062) ---------
@@ -1212,6 +1234,26 @@ SECRET_CATALOG: list[SecretSpec] = [
         envs=("prod",),
         sync_to_secret_manager=True,
     ),
+    # GITOPS-003 AC1: Argo CD posts `argocd/<app>` commit statuses with it, which
+    # `toolkit infra argo wait-status` reads. Delivered by `make deploy-argocd`
+    # only: it is not in Secret Manager, so a hub rebuilt from cloud-init posts no
+    # statuses until that path is added (GITOPS-003 tasks.md, PR1).
+    SecretSpec(
+        key_path="argocd.github_status_token",
+        expiry=Expiry.PROVIDER,
+        description="Fine-grained GitHub PAT, Commit statuses write on kubelab only (Argo CD notifications)",
+        kind=SecretKind.EXTERNAL,
+        services=("argocd",),
+        format_hint="fine-grained PAT (github_pat_…), statuses:write on kubelab, 90d expiry",
+        rotate_note=(
+            "Mint a new fine-grained token (Settings > Developer settings > Fine-grained tokens), "
+            "repository access `mlorentedev/kubelab` only, Commit statuses: Read and write. "
+            "`toolkit secrets set argocd.github_status_token --env common --stdin`, "
+            "then `make deploy-argocd`, then revoke the old one."
+        ),
+        envs=("prod",),
+        warn_days=14,
+    ),
     SecretSpec(
         key_path="argocd.github_webhook_secret",
         expiry=Expiry.NEVER,
@@ -1222,6 +1264,50 @@ SECRET_CATALOG: list[SecretSpec] = [
         rotate_note="Rotate on the GitHub webhook + common.enc.yaml, then `make deploy-argocd`.",
         envs=("prod",),
         sync_to_secret_manager=True,
+    ),
+    # =========================================================================
+    # Headscale host (VPS) — SEC-037
+    # =========================================================================
+    SecretSpec(
+        key_path="apps.services.core.headscale.audit_sources.audit_automation",
+        expiry=Expiry.NEVER,
+        description=(
+            "Source address the `audit_automation` audit key may connect from, rendered as "
+            "`from=` on its authorized_keys entry. Not a credential: network inventory, kept "
+            "out of the public tree. The key itself is declared in common.yaml (audit_identities)."
+        ),
+        kind=SecretKind.EXTERNAL,
+        services=("headscale",),
+        format_hint="an IPv4/IPv6 address or CIDR, or a comma-separated list of them",
+        value_pattern=r"[0-9A-Fa-f:./]+(,[0-9A-Fa-f:./]+)*",
+        # SEC-037 leaves it unset on purpose: the client's egress may rotate, and a
+        # stale pin would lock the audit out. Drop this flag once a pin exists, so that
+        # losing it reads as Missing.
+        optional=True,
+        rotate_note=(
+            "Update common.enc.yaml, then `make deploy TARGET=vps ENV=prod` "
+            "(or deploy-vps with `--tags headscale`). Removing it drops the `from=` pin."
+        ),
+        # The VPS is prod-only. The value lives in common.enc.yaml, which deploy-vps
+        # merges under the env file (`envs` is the audit dimension, ANSIBLE-033).
+        envs=("prod",),
+    ),
+    SecretSpec(
+        # The whole subtree. Key names are plaintext in SOPS, so each segment sits
+        # under a neutral key (`tenant-1`) and its tenant's name stays in the value
+        # (VPN-ACL-014). This entry must never name one.
+        key_path="apps.services.core.headscale.segments",
+        expiry=Expiry.NEVER,
+        description=(
+            "Tenant segments of the shared Headscale, rendered into its ACL policy. Not a "
+            "credential: tenant inventory, kept out of the public tree."
+        ),
+        kind=SecretKind.EXTERNAL,
+        services=("headscale",),
+        format_hint="mapping of neutral key -> {owner, hosts_tag, clients_tag, ports}",
+        rotate_note="Not rotated. Edit the segment, then `make deploy TARGET=vps ENV=prod`.",
+        # Same reasoning as `audit_sources`: the VPS is prod-only.
+        envs=("prod",),
     ),
     # =========================================================================
     # GCP hub (ADR-063) — read by cloud-init from Secret Manager, not by a human
@@ -1376,10 +1462,14 @@ SECRET_CATALOG: list[SecretSpec] = [
         description="Cloudflare account API token, Account API Tokens: Edit (mints the backup R2 tokens)",
         kind=SecretKind.EXTERNAL,
         services=("toolkit",),
+        format_hint="Cloudflare account API token with a TTL, 90d expiry",
         envs=("prod",),
+        warn_days=14,
         rotate_note=(
-            "Create a new account token (Account API Tokens: Edit, with a TTL) in the Cloudflare "
-            "dashboard, `toolkit secrets set` it in common, revoke the old one. Nothing deployed reads it."
+            "To extend it, edit the token in the Cloudflare dashboard and move its TTL (Edit, not "
+            "Roll): the value is kept, so SOPS does not change. To replace it (suspected exposure), "
+            "create a new account token (Account API Tokens: Edit, with a TTL), `toolkit secrets set` "
+            "it in common, revoke the old one. Nothing deployed reads it."
         ),
     ),
     # Offsite backup destination (BACKUP-044 / #1056, ADR-049 D3). Stored in
@@ -1580,13 +1670,15 @@ SECRET_CATALOG: list[SecretSpec] = [
         description="Fine-grained GitHub PAT giving the ace2 dev node its own machine identity (gh + git over HTTPS)",
         kind=SecretKind.EXTERNAL,
         services=("dev-node",),
-        format_hint="fine-grained PAT (github_pat_…), contents+pull-requests write, checks+statuses read, 90d expiry",
+        format_hint="fine-grained PAT (github_pat_…), contents+pull-requests write, checks+statuses read, ≤90d expiry",
         rotate_note=(
-            "EXPIRES — see docs/runbooks/dev-node-token-rotation.md. Mint a replacement, "
-            "`toolkit secrets set` it in common.enc.yaml, `make provision NODE=ace2 ENV=staging "
-            "TAGS=dev_node`, then revoke the old one."
+            "EXPIRES — see docs/runbooks/dev-node-token-rotation.md. Regenerate it on GitHub "
+            "(same name, new value), `toolkit secrets set` it in common.enc.yaml, then "
+            "`make provision NODE=ace2 ENV=staging TAGS=dev_node`. A token minted new instead "
+            "leaves the old one live: revoke it."
         ),
         envs=("staging",),
+        warn_days=14,
     ),
     # Apprise notification gateway (NOTIFY-001, ADR-044). Promoted to staging+prod.
     # bot-token is shared (common SOPS); chat IDs are per-env (dedicated Telegram
@@ -1755,6 +1847,14 @@ SECRET_CATALOG: list[SecretSpec] = [
         envs=("staging", "prod"),
     ),
     SecretSpec(
+        key_path="apps.platform.api.db_password",
+        description="PostgreSQL password for the api tenant role (DATA-007)",
+        kind=SecretKind.RANDOM_TOKEN,
+        services=("api", "postgres"),
+        rotate_note="provision-postgres-tenant and apply-secrets for api-secrets, restart api.",
+        envs=("staging", "prod"),
+    ),
+    SecretSpec(
         key_path="apps.platform.api.beehiiv_api_key",
         expiry=Expiry.NEVER,
         description="Beehiiv newsletter API key",
@@ -1786,6 +1886,59 @@ SECRET_CATALOG: list[SecretSpec] = [
     # AI services (ADR-035 Stage 1 — X-API-Key via Traefik plugin)
     # =========================================================================
     # (empty since AI-007 — Ollama was Stage 1's only registered API key)
+    # =========================================================================
+    # Lab edge (NET-005, ADR-075 D1): what would locate a site or let a stranger
+    # on it claim the lab's access. The plaintext rest is networking.edge in
+    # common.yaml. All EXTERNAL: a PSK the toolkit minted unasked would reach the
+    # AP at the next provision and lock out rpi3, whose only network it is. Only
+    # the keys the current uplink kind needs are here (tests/test_secrets_catalog_edge.py).
+    # =========================================================================
+    SecretSpec(
+        key_path="networking.edge.lab_wifi.ssid",
+        expiry=Expiry.NEVER,
+        description="The lab Wi-Fi's SSID, served by the RPi4's AP",
+        kind=SecretKind.EXTERNAL,
+        services=("gateway",),
+        format_hint="1 to 32 characters",
+        value_pattern=r".{1,32}",
+        rotate_note="Saved client devices must re-join by hand; rpi3 is re-keyed by the gateway rotation.",
+        envs=("prod",),
+    ),
+    SecretSpec(
+        key_path="networking.edge.lab_wifi.psk",
+        expiry=Expiry.NEVER,
+        description="The lab Wi-Fi's WPA2 passphrase, rendered for the AP and rpi3",
+        kind=SecretKind.EXTERNAL,
+        services=("gateway", "rpi3"),
+        format_hint="WPA2 passphrase, 8 to 63 printable ASCII characters",
+        value_pattern=r"[ -~]{8,63}",
+        rotate_note=(
+            "Only through the edge PSK rotation (NET-005 AC10): it re-keys rpi3 before the AP drops the old one."
+        ),
+        envs=("prod",),
+    ),
+    SecretSpec(
+        key_path="networking.edge.uplink.mac",
+        expiry=Expiry.NEVER,
+        description="Permanent MAC of the uplink adapter; the captive portal authorizes it",
+        kind=SecretKind.EXTERNAL,
+        services=("gateway",),
+        format_hint="lower-case aa:bb:cc:dd:ee:ff",
+        value_pattern=r"[0-9a-f]{2}(:[0-9a-f]{2}){5}",
+        rotate_note="Changes only with the adapter. A new MAC needs a new portal login and payment at the site.",
+        envs=("prod",),
+    ),
+    SecretSpec(
+        key_path="networking.edge.uplink.ssid",
+        expiry=Expiry.NEVER,
+        description="SSID of the current site's uplink Wi-Fi (kind wifi_open or wifi_psk)",
+        kind=SecretKind.EXTERNAL,
+        services=("gateway",),
+        format_hint="1 to 32 characters",
+        value_pattern=r".{1,32}",
+        rotate_note="Changes with the site: set it, then provision the RPi4.",
+        envs=("prod",),
+    ),
 ]
 
 # Build lookup by key_path for quick access
@@ -2123,7 +2276,7 @@ class SecretsManager:
                     result.malformed.append(spec.key_path)
                 else:
                     result.present.append(spec.key_path)
-            else:
+            elif not spec.optional:
                 result.missing.append(spec.key_path)
 
         # The reverse direction, which `AuditResult.unexpected` has declared
@@ -2368,6 +2521,7 @@ class SecretsManager:
             ["sops", "-d", str(sops_file)],
             capture_output=True,
             text=True,
+            encoding="utf-8",
             env=age_key_env(),  # auto-discover SOPS_AGE_KEY_FILE (toolkit/core/sops.py)
         )
         if result.returncode != 0:
@@ -2377,13 +2531,22 @@ class SecretsManager:
 
         decrypted = yaml.safe_load(result.stdout) or {}
         value = self._resolve_key(decrypted, key_path)
-        return str(value) if value is not None else None
+        if value is None:
+            return None
+        if isinstance(value, (list, dict)):
+            # JSON, not str(): a repr is neither readable as JSON nor writable back
+            # with `secrets set --json`, so a structured value could not round-trip.
+            import json
 
-    def set_secret(self, env: str, key_path: str, value: str) -> bool:
+            return json.dumps(value)
+        return str(value)
+
+    def set_secret(self, env: str, key_path: str, value: object) -> bool:
         """Set a single secret value in the SOPS vault.
 
         Uses `sops set` to write the value directly into the encrypted file.
-        The key_path is dot-separated (e.g., 'aws.access_key_id').
+        The key_path is dot-separated (e.g., 'aws.access_key_id'). A string is
+        stored as a string; a list or a mapping is stored as that structure.
         """
         cm = self._cm(env)
         sops_file = cm.secrets_path / f"{env}.enc.yaml"
@@ -2404,6 +2567,7 @@ class SecretsManager:
             ["sops", "set", str(sops_file), sops_path, json.dumps(value)],
             capture_output=True,
             text=True,
+            encoding="utf-8",
             env=age_key_env(),  # auto-discover SOPS_AGE_KEY_FILE (toolkit/core/sops.py)
         )
 
@@ -2434,6 +2598,7 @@ class SecretsManager:
             ["sops", "unset", str(sops_file), sops_path],
             capture_output=True,
             text=True,
+            encoding="utf-8",
             env=age_key_env(),  # auto-discover SOPS_AGE_KEY_FILE (toolkit/core/sops.py)
         )
 
@@ -2460,8 +2625,8 @@ class SecretsManager:
 
         The module docstring has promised `rotate (regenerate + propagate)` since
         it was written and nothing implemented it, so the only way to change one
-        credential was `credentials generate`, which rewrites 24 prod secrets and
-        2 hub secrets at once. That is why `rotate_note` entries describe
+        credential was `credentials generate`, which rewrites 16 prod secrets and
+        5 common secrets at once (counted 2026-10-22, #1454, #2599). That is why `rotate_note` entries describe
         procedures in prose: with no verb to carry them, a note is all there is,
         and `aws.headscale_preauth_key` sat unrotated from March to August.
 

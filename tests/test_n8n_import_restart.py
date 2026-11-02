@@ -116,7 +116,7 @@ def test_a_failed_workflow_fails_the_run_and_the_others_still_go_live(capsys: py
 def test_the_pod_selector_mirrors_the_deployment() -> None:
     """The selector is declared on the spec because an exec needs a pod, not a
     Deployment. It must equal what the Deployment itself selects."""
-    docs = list(yaml.safe_load_all((REPO_ROOT / "infra/k8s/base/services/n8n.yaml").read_text()))
+    docs = list(yaml.safe_load_all((REPO_ROOT / "infra/k8s/base/services/n8n.yaml").read_text(encoding="utf-8")))
     deployment = next(d for d in docs if d and d.get("kind") == "Deployment")
     labels = deployment["spec"]["selector"]["matchLabels"]
     expected = ",".join(f"{k}={v}" for k, v in labels.items())

@@ -121,11 +121,11 @@ def node(tmp_path: Path, request: pytest.FixtureRequest):
     fake_dir = tmp_path / "fake"
     fake_dir.mkdir()
     restic = tmp_path / "restic"
-    restic.write_text(FAKE_RESTIC)
+    restic.write_text(FAKE_RESTIC, encoding="utf-8")
     restic.chmod(0o755)
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
-    (bin_dir / "date").write_text(FAKE_DATE)
+    (bin_dir / "date").write_text(FAKE_DATE, encoding="utf-8")
     (bin_dir / "date").chmod(0o755)
 
     staging = tmp_path / "staging"
@@ -137,7 +137,7 @@ def node(tmp_path: Path, request: pytest.FixtureRequest):
     creds = {}
     for name in ("password", "access", "secret"):
         creds[name] = tmp_path / f"cred-{name}"
-        creds[name].write_text("dummy\n")
+        creds[name].write_text("dummy\n", encoding="utf-8")
 
     state = tmp_path / "state"
     state.mkdir()
@@ -163,7 +163,8 @@ def node(tmp_path: Path, request: pytest.FixtureRequest):
             # Seconds, not the role's 120: the refusal tests wait it out.
             node_backup_probe_timeout=2,
             **group_override,
-        )
+        ),
+        encoding="utf-8",
     )
 
     def run(
@@ -179,20 +180,20 @@ def node(tmp_path: Path, request: pytest.FixtureRequest):
     ):
         if stale_lock:
             (fake_dir / "stale-lock").touch()
-        (fake_dir / "snapshots.rc").write_text(f"{snapshots_rc}\n")
-        (fake_dir / "forget.rc").write_text(f"{forget_rc}\n")
-        (fake_dir / "check.rc").write_text(f"{check_rc}\n")
-        (fake_dir / "id").write_text(f"{repo_id}\n")
+        (fake_dir / "snapshots.rc").write_text(f"{snapshots_rc}\n", encoding="utf-8")
+        (fake_dir / "forget.rc").write_text(f"{forget_rc}\n", encoding="utf-8")
+        (fake_dir / "check.rc").write_text(f"{check_rc}\n", encoding="utf-8")
+        (fake_dir / "id").write_text(f"{repo_id}\n", encoding="utf-8")
         calls_file = fake_dir / "calls"
-        earlier = len(calls_file.read_text().splitlines()) if calls_file.exists() else 0
+        earlier = len(calls_file.read_text(encoding="utf-8").splitlines()) if calls_file.exists() else 0
         if recorded is not None:
-            marker.write_text(f"{recorded}\n")
+            marker.write_text(f"{recorded}\n", encoding="utf-8")
         env = {"PATH": f"{bin_dir}:{os.environ['PATH']}", "FAKE_DIR": str(fake_dir), "NEW_ID": NEW_ID}
         if now is not None:
             env["FAKE_NOW"] = str(now)
         argv = ["bash", str(script)] + (["--check"] if check else [])
         proc = subprocess.run(argv, env=env, capture_output=True, text=True, timeout=30)
-        calls = (fake_dir / "calls").read_text().splitlines() if (fake_dir / "calls").exists() else []
+        calls = (fake_dir / "calls").read_text(encoding="utf-8").splitlines() if (fake_dir / "calls").exists() else []
         # `verbs` accumulates across runs (a test may assert on a sequence);
         # `run.calls` holds this run's calls only.
         run.calls = calls[earlier:]
@@ -203,7 +204,7 @@ def node(tmp_path: Path, request: pytest.FixtureRequest):
 
 
 def _marker_value(marker: Path) -> str | None:
-    return marker.read_text().strip() if marker.exists() else None
+    return marker.read_text(encoding="utf-8").strip() if marker.exists() else None
 
 
 def test_first_ship_initialises_and_records_the_new_repository(node) -> None:
@@ -400,10 +401,14 @@ def test_the_probe_timeout_sits_between_one_stuck_request_and_the_unit() -> None
     import yaml
 
     role = Path(__file__).resolve().parents[1] / "infra" / "ansible" / "roles" / "node_backup"
-    defaults = yaml.safe_load((role / "defaults" / "main.yml").read_text())
+    defaults = yaml.safe_load((role / "defaults" / "main.yml").read_text(encoding="utf-8"))
     stuck = int(str(defaults["node_backup_stuck_request_timeout"]).rstrip("s"))
     probe = int(defaults["node_backup_probe_timeout"])
-    unit = re.search(r"^TimeoutStartSec=(\d+)$", (role / "templates" / "node-backup-ship.service.j2").read_text(), re.M)
+    unit = re.search(
+        r"^TimeoutStartSec=(\d+)$",
+        (role / "templates" / "node-backup-ship.service.j2").read_text(encoding="utf-8"),
+        re.M,
+    )
     assert unit, "the ship unit declares no TimeoutStartSec"
     assert stuck < probe <= int(unit.group(1)) // 4
 

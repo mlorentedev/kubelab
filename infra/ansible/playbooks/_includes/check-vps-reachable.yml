@@ -14,10 +14,21 @@
 
 - name: "Pre-flight: verify VPS reachable (needed for Headscale pre-auth key)"
   ansible.builtin.command: >-
-    ssh -o ConnectTimeout=5 -o BatchMode=yes
+    ssh -o ConnectTimeout=5 -o ServerAliveInterval=1 -o ServerAliveCountMax=3 -o BatchMode=yes
     {{ _ssot_common.networking.vps.ssh_user | default(_ssot_common.networking.ssh_users.cloud, true) }}@{{ _ssot_common.networking.vps.tailscale_ip }}
     echo ok
   delegate_to: localhost
   changed_when: false
   register: _vps_check
   failed_when: _vps_check.rc != 0
+  # The first connection over a cold tailnet path can outlast ConnectTimeout while the
+  # next one answers in milliseconds (a provision of bee was refused that way on
+  # 2026-10-26; the retry seconds later took 431 ms). ConnectTimeout bounds only the
+  # connection: a path that stalls after it would hold the attempt, and the `until` with
+  # it, so ServerAlive drops an unanswering session after 1 * 3 s. `retries` counts attempts
+  # AFTER the first, so this is 4 attempts: a VPS that really is down still fails the run in
+  # 4 * (5 + 3) + 3 * 3 = 41 s, and the last ssh error is what the failure reports.
+  # tests/test_vps_preflight_retries.py holds both the count and the bound.
+  until: _vps_check.rc == 0
+  retries: 3
+  delay: 3

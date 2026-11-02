@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-POOL = json.loads((REPO_ROOT / "harness" / "reviewer-pool.json").read_text())
+POOL = json.loads((REPO_ROOT / "harness" / "reviewer-pool.json").read_text(encoding="utf-8"))
 MEMBERS = POOL["pool"]
 PR_AGENT_MEMBERS = [m for m in MEMBERS if "pr_agent" in m]
 SIGNS = {"first", "second", "fallback"}

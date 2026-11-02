@@ -120,7 +120,7 @@ class TestItDoesNotStillPointAtTheNodeItReplaces:
         )
 
     def test_the_play_targets_the_host_the_ssot_names(self) -> None:
-        common = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text())
+        common = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
         hostname = common["networking"]["gcp"]["hostname"]
         targets = {play["hosts"] for play in _plays(GCP_PLAYBOOK)}
         assert targets == {hostname}, (

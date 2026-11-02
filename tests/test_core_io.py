@@ -9,9 +9,12 @@ and the encoding so every generated file is byte-identical across hosts.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
-from toolkit.core.io import write_text_lf
+import pytest
+
+from toolkit.core.io import docker_user_args, write_text_lf
 
 
 class TestWriteTextLf:
@@ -36,3 +39,18 @@ class TestWriteTextLf:
         write_text_lf(target, "new content\n")
 
         assert target.read_bytes() == b"new content\n"
+
+
+class TestDockerUserArgs:
+    def test_runs_the_container_as_the_caller_where_uids_exist(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(os, "getuid", lambda: 1000, raising=False)
+        monkeypatch.setattr(os, "getgid", lambda: 1001, raising=False)
+
+        assert docker_user_args() == ["--user", "1000:1001"]
+
+    def test_passes_no_user_where_the_host_has_no_uids(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Native Windows has no os.getuid; Docker Desktop bind mounts carry no uid ownership to match."""
+        monkeypatch.delattr(os, "getuid", raising=False)
+        monkeypatch.delattr(os, "getgid", raising=False)
+
+        assert docker_user_args() == []

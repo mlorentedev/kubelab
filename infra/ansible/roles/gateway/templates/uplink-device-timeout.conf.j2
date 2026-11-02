@@ -1,0 +1,8 @@
+# {{ ansible_managed }}
+# Bounds the boot's wait for the uplink adapter (#2794). netplan's supplicant
+# requires the adapter and is ordered before network.target, so with the adapter
+# missing everything after network.target waited systemd's 90 s device timeout.
+# Set the way systemd-fstab-generator bounds a mount's device. An adapter that
+# appears later is still served: 90-kubelab-uplink.rules starts the supplicant.
+[Unit]
+JobRunningTimeoutSec={{ gateway_uplink_device_timeout_seconds }}s

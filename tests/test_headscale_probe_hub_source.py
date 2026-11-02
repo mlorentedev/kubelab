@@ -27,7 +27,7 @@ COMMON = Path(__file__).resolve().parent.parent / "infra/config/values/common.ya
 
 @pytest.fixture
 def net() -> dict[str, Any]:
-    return yaml.safe_load(COMMON.read_text())["networking"]
+    return yaml.safe_load(COMMON.read_text(encoding="utf-8"))["networking"]
 
 
 def _flow(flows: list, needle: str):
@@ -87,7 +87,7 @@ def test_no_hub_hostname_is_written_as_a_literal() -> None:
     """Over the AST, so the docstring explaining the change cannot fail it."""
     import ast
 
-    src = (Path(__file__).resolve().parent.parent / "toolkit/scripts/headscale_probe.py").read_text()
+    src = (Path(__file__).resolve().parent.parent / "toolkit/scripts/headscale_probe.py").read_text(encoding="utf-8")
     tree = ast.parse(src)
     docstrings = {
         id(n.body[0].value)

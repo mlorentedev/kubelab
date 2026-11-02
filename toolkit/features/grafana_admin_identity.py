@@ -73,7 +73,7 @@ def _resolve_declared_account(project_root: Path) -> tuple[str, str]:
     """
     from toolkit.features import break_glass as bg
 
-    with open(project_root / "infra/config/values/common.yaml") as f:
+    with open(project_root / "infra/config/values/common.yaml", encoding="utf-8") as f:
         common = yaml.safe_load(f) or {}
     decl = bg.declarations(common).get("grafana") or {}
     if "secret" not in decl:
@@ -89,7 +89,7 @@ def _previous_logins(project_root: Path, declared_login: str) -> list[str]:
     Every login that does not authenticate is a failed attempt, and Grafana blocks a
     login for 5 minutes after 5 consecutive ones (`brute_force_login_protection_max_attempts`).
     The likeliest candidate goes first so that a run costs the fewest failures."""
-    with open(project_root / "infra/config/values/common.yaml") as f:
+    with open(project_root / "infra/config/values/common.yaml", encoding="utf-8") as f:
         common = yaml.safe_load(f) or {}
     identities = (common.get("apps", {}).get("auth", {}) or {}).get("identities", {}) or {}
     candidates = [str(identities.get("superadmin") or ""), *(str(v) for v in identities.values()), _BOOTSTRAP_LOGIN]

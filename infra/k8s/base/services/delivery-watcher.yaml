@@ -1,0 +1,101 @@
+# delivery-watcher — did Argo CD apply master HEAD here (GITOPS-003 AC2, #2645).
+#
+# Every 10 minutes a Job runs `delivery-watcher/watch.py`, which reads master
+# HEAD and its `argocd/kubelab-<ARGO_ENV>` commit status from the GitHub API,
+# anonymously, and prints one `argo_delivery` line. Vector ships stdout to Loki
+# (ADR-028), and grafana-alerting/delivery-rules.yaml pages on healthy < 1.
+#
+# Why here and not in `deploy-verify.yml`'s sweep: GitHub starts this
+# repository's scheduled runs 3 to 6 hours apart, so a sweep there finds a
+# missing status hours late. `deploy-verify` keeps the `status` path (red at
+# once on a failed sync) and the replay; the clock lives in the cluster.
+#
+# Base, so it runs in both environments and is validated in staging first.
+# Staging is on-demand and its Application can be repointed to a feature
+# branch, so a red staging line can mean the slot is held or the homelab was
+# off; the root policy archives staging, it does not page.
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: delivery-watcher
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: delivery-watcher
+    app.kubernetes.io/component: observability
+    app.kubernetes.io/part-of: kubelab
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: delivery-watcher
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: delivery-watcher
+    app.kubernetes.io/component: observability
+    app.kubernetes.io/part-of: kubelab
+spec:
+  # Two anonymous GitHub reads per run: 12 an hour against the 60 per egress IP.
+  # The rule's window holds three runs, and its `for` needs two in a row.
+  schedule: "*/10 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      # A day, then gone: the history limits bound the count, not the age (OPS-043).
+      ttlSecondsAfterFinished: 86400
+      # One run, one verdict. The rule keeps `last_over_time`, so a retried
+      # pod's line would replace the first. The next run is 10 minutes away.
+      backoffLimit: 0
+      # Two reads with a 20s timeout each, plus interpreter start-up.
+      activeDeadlineSeconds: 120
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: delivery-watcher
+            app.kubernetes.io/component: observability
+        spec:
+          restartPolicy: Never
+          serviceAccountName: delivery-watcher
+          # It never talks to the API server: GitHub is its only peer.
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            runAsGroup: 65534
+          containers:
+            - name: delivery-watcher
+              image: python
+              command: ["python", "-I", "/etc/delivery-watcher/watch.py"]
+              env:
+                - name: REPOSITORY
+                  value: mlorentedev/kubelab
+                - name: BRANCH
+                  value: master
+                # Base is staging; the prod overlay patches this to `prod`.
+                - name: ARGO_ENV
+                  value: staging
+                # N in the spec (Risk 3): merge-to-sync lag measured 0 to 6 minutes.
+                - name: GRACE_SECONDS
+                  value: "600"
+                - name: PYTHONDONTWRITEBYTECODE
+                  value: "1"
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+              volumeMounts:
+                - name: script
+                  mountPath: /etc/delivery-watcher
+                  readOnly: true
+              resources:
+                requests:
+                  memory: 32Mi
+                limits:
+                  memory: 64Mi
+          volumes:
+            - name: script
+              configMap:
+                name: delivery-watcher-script

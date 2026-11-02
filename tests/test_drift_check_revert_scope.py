@@ -47,7 +47,7 @@ GENERATED_MARKER = "generated"
 
 def _declared_revert_paths() -> list[str]:
     """Parse `DRIFT_REVERT_PATHS` from the Makefile, honouring `\\` continuations."""
-    text = MAKEFILE.read_text()
+    text = MAKEFILE.read_text(encoding="utf-8")
     match = re.search(
         rf"^{VARIABLE}\s*:?=\s*((?:.*\\\n)*.*)$",
         text,
@@ -98,7 +98,7 @@ def test_recipe_reverts_through_the_variable() -> None:
     Without this, `DRIFT_REVERT_PATHS` could stay correct while the recipe
     quietly reverted something else, and the two tests above would still pass.
     """
-    text = MAKEFILE.read_text()
+    text = MAKEFILE.read_text(encoding="utf-8")
     recipe = text[text.index("config-check-drift:") :]
     recipe = recipe[: recipe.index("\n.PHONY")] if "\n.PHONY" in recipe else recipe
 
@@ -115,7 +115,7 @@ def test_recipe_reverts_through_the_variable() -> None:
 
 def _declared_drift_envs() -> list[str]:
     """Parse `DRIFT_ENVS` from the Makefile."""
-    text = MAKEFILE.read_text()
+    text = MAKEFILE.read_text(encoding="utf-8")
     match = re.search(rf"^{ENV_VARIABLE}\s*:?=\s*(.*)$", text, re.MULTILINE)
     if match is None:
         pytest.fail(
@@ -136,7 +136,7 @@ def test_recipe_guards_env_through_the_variable() -> None:
     generator did. Widening the guard back would look reasonable in review — the
     two that shipped did.
     """
-    text = MAKEFILE.read_text()
+    text = MAKEFILE.read_text(encoding="utf-8")
     recipe = text[text.index("config-check-drift:") :]
     recipe = recipe[: recipe.index("\n.PHONY")] if "\n.PHONY" in recipe else recipe
 

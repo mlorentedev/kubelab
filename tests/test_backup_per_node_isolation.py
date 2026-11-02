@@ -48,7 +48,7 @@ from toolkit.features.backup_node_credentials import (
 from toolkit.features.r2_tfvars import NODE_BUCKET_PREFIX, node_bucket
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
-COMMON = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text())
+COMMON = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
 NODES = sorted(COMMON["backup"]["sources"])
 R2 = COMMON["backup"]["r2"]
 LEGACY = R2["bucket"]
@@ -238,7 +238,7 @@ def _put(tree: dict[str, Any], dotted: str, value: str) -> None:
 
 def _role_vars(config: dict[str, Any], inventory_hostname: str) -> dict[str, str]:
     """Render backup.yml's credential vars for one host, the way Ansible would."""
-    play = yaml.safe_load((REPO / "infra/ansible/playbooks/backup.yml").read_text())[0]
+    play = yaml.safe_load((REPO / "infra/ansible/playbooks/backup.yml").read_text(encoding="utf-8"))[0]
     (role,) = [r for r in play["roles"] if str(r.get("role", "")).endswith("node_backup")]
     env = jinja2.Environment(undefined=jinja2.StrictUndefined)
     env.filters["regex_replace"] = _regex_replace

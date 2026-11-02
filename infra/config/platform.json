@@ -1,11 +1,11 @@
 {
-  "generated_at": "2026-10-21T01:51:19Z",
-  "source_commit": "ee8ed54b58b941b6560e3b6ac6bb3785c54bf0fc",
+  "generated_at": "2026-11-02T16:11:41Z",
+  "source_commit": "7229600abecd25ab46b79b94f7a7ac6e170ae4c5",
   "cluster": {
     "name": "KubeLab Hybrid Cloud & Edge Platform",
     "version": "K3s v1.34.4+k3s1",
     "gitops": "Argo CD v3.4.1 · 2 applications synced",
-    "activeNodes": 8,
+    "activeNodes": 7,
     "totalServices": 34,
     "kubernetesClusters": 3,
     "kubernetesNodes": 3
@@ -107,8 +107,8 @@
       "storage": "230 GB",
       "os": "Linux4Tegra (Ubuntu 18.04)",
       "location": "Edge Hardware (USA)",
-      "status": "healthy",
-      "runtime": "systemd",
+      "status": "standby",
+      "runtime": "standby",
       "runtimeRole": "Edge inference host: Ollama, no Kubernetes"
     },
     {

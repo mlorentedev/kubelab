@@ -4,6 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 696 | [A load test's limit can be one nobody declared, and the crash loop it starts reads as low capacity](lesson-696-a-load-tests-limit-can-be-a-limit-nobody-declared.md) | 2026-11-02 |
 | 494 | [An app that discovers its IdP once must start after it, and only the discovery document proves the IdP is up](lesson-494-an-app-that-discovers-its-idp-once-must-start-after-it.md) | 2026-09-30 |
 | 482 | [A failed `kubectl exec` into a Ready pod is explained by the pod's record, not by the command's error](lesson-482-a-failed-exec-into-a-ready-pod-is-read-from-the-pod-not-the-command.md) | 2026-09-28 |
 | 470 | [A Job created from a CronJob is pruned by that CronJob's history limit, pod and log included](lesson-470-a-job-created-from-a-cronjob-is-pruned-by-its-history-limit.md) | 2026-09-27 |

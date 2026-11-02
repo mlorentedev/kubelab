@@ -19,13 +19,13 @@ FIXTURE = Path(__file__).parent / "fixtures" / "product" / "web.kubelab.yaml"
 
 
 def _web() -> dict[str, Any]:
-    data: dict[str, Any] = yaml.safe_load(FIXTURE.read_text())
+    data: dict[str, Any] = yaml.safe_load(FIXTURE.read_text(encoding="utf-8"))
     return data
 
 
 def _write(tmp_path: Path, data: dict[str, Any]) -> Path:
     path = tmp_path / "kubelab.yaml"
-    path.write_text(yaml.safe_dump(data))
+    path.write_text(yaml.safe_dump(data), encoding="utf-8")
     return path
 
 
@@ -128,7 +128,7 @@ def test_a_missing_file_is_a_contract_error(tmp_path: Path) -> None:
 )
 def test_a_malformed_document_is_a_contract_error(tmp_path: Path, body: str) -> None:
     path = tmp_path / "kubelab.yaml"
-    path.write_text(body)
+    path.write_text(body, encoding="utf-8")
 
     with pytest.raises(ContractError) as excinfo:
         validate_contract(path)
@@ -139,7 +139,7 @@ def test_a_malformed_document_is_a_contract_error(tmp_path: Path, body: str) -> 
 def test_a_duplicate_key_is_refused(tmp_path: Path) -> None:
     """``yaml.safe_load`` keeps the last of two equal keys; a reviewer reading the first would be misled."""
     path = tmp_path / "kubelab.yaml"
-    path.write_text(FIXTURE.read_text() + "port: 9090\n")
+    path.write_text(FIXTURE.read_text(encoding="utf-8") + "port: 9090\n", encoding="utf-8")
 
     with pytest.raises(ContractError) as excinfo:
         validate_contract(path)
@@ -165,7 +165,7 @@ def test_a_refusal_renders_error_why_and_fix(tmp_path: Path) -> None:
 def test_a_python_object_tag_is_refused_not_constructed(tmp_path: Path) -> None:
     """The duplicate-key loader extends SafeLoader; it must not gain any unsafe constructor."""
     path = tmp_path / "kubelab.yaml"
-    path.write_text("schema_version: !!python/object/apply:os.getcwd []\n")
+    path.write_text("schema_version: !!python/object/apply:os.getcwd []\n", encoding="utf-8")
 
     with pytest.raises(ContractError) as excinfo:
         validate_contract(path)
@@ -176,7 +176,7 @@ def test_a_python_object_tag_is_refused_not_constructed(tmp_path: Path) -> None:
 def test_a_merge_key_is_refused(tmp_path: Path) -> None:
     """``<<`` lets an explicit key silently override a merged one; refused by name, not by accident."""
     path = tmp_path / "kubelab.yaml"
-    path.write_text("defaults: &d\n  port: 8080\n<<: *d\n" + FIXTURE.read_text())
+    path.write_text("defaults: &d\n  port: 8080\n<<: *d\n" + FIXTURE.read_text(encoding="utf-8"), encoding="utf-8")
 
     with pytest.raises(ContractError) as excinfo:
         validate_contract(path)

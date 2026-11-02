@@ -22,14 +22,14 @@ MAKEFILE = REPO / "Makefile"
 
 
 def _play() -> dict:
-    [play] = yaml.safe_load(PLAYBOOK.read_text())
+    [play] = yaml.safe_load(PLAYBOOK.read_text(encoding="utf-8"))
     return play
 
 
 def _unit(**extra_vars: object) -> str:
     play = _play()
     assert play["vars_files"] == ["../roles/node_backup/defaults/main.yml"], "unit names must come from the role"
-    context = {**yaml.safe_load(DEFAULTS.read_text()), **extra_vars}
+    context = {**yaml.safe_load(DEFAULTS.read_text(encoding="utf-8")), **extra_vars}
     env = Environment()
     # Ansible's `bool` filter, which plain Jinja lacks: "true"/"yes"/"1" are true.
     env.filters["bool"] = lambda v: str(v).strip().lower() in {"true", "yes", "1", "on"}
@@ -37,22 +37,25 @@ def _unit(**extra_vars: object) -> str:
 
 
 def test_the_frequent_ship_unit_is_the_default() -> None:
-    assert _unit() == yaml.safe_load(DEFAULTS.read_text())["node_backup_ship_service_name"]
+    assert _unit() == yaml.safe_load(DEFAULTS.read_text(encoding="utf-8"))["node_backup_ship_service_name"]
 
 
 def test_integrity_selects_the_weekly_check_unit() -> None:
-    assert _unit(integrity="true") == yaml.safe_load(DEFAULTS.read_text())["node_backup_ship_check_service_name"]
+    assert (
+        _unit(integrity="true")
+        == yaml.safe_load(DEFAULTS.read_text(encoding="utf-8"))["node_backup_ship_check_service_name"]
+    )
 
 
 def test_every_task_acts_on_the_selected_unit() -> None:
     """A task that named the ship unit literally would report the wrong unit's result."""
-    text = PLAYBOOK.read_text()
+    text = PLAYBOOK.read_text(encoding="utf-8")
     assert "node-backup-ship.service" not in text
     assert "node-backup-ship-check.service" not in text
 
 
 def test_the_make_flag_reaches_the_playbook() -> None:
-    recipe = re.search(r"^backup-node:.*?(?=^\S|\Z)", MAKEFILE.read_text(), re.S | re.M)
+    recipe = re.search(r"^backup-node:.*?(?=^\S|\Z)", MAKEFILE.read_text(encoding="utf-8"), re.S | re.M)
     assert recipe, "Makefile has no backup-node target"
     assert '$(if $(INTEGRITY),--extra-vars "integrity=true",)' in recipe.group(0)
     assert re.search(r"infra ansible run -p backup-node .*\$\(_INTEGRITY\)", recipe.group(0))
@@ -60,7 +63,7 @@ def test_the_make_flag_reaches_the_playbook() -> None:
 
 def test_prune_selects_the_retention_unit() -> None:
     """`make backup-node PRUNE=1` runs node-backup-prune.service now (BACKUP-057 Q6)."""
-    assert _unit(prune="true") == yaml.safe_load(DEFAULTS.read_text())["node_backup_prune_service_name"]
+    assert _unit(prune="true") == yaml.safe_load(DEFAULTS.read_text(encoding="utf-8"))["node_backup_prune_service_name"]
 
 
 def test_only_prune_1_prunes() -> None:

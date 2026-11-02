@@ -20,6 +20,8 @@
   # declared as `location` in common.yaml. Both groups are generated
   # (BACKUP-062), so a fifth backup node needs no edit here.
   hosts: node_backup:&always_on
+  # A later failure must not drop the handlers earlier tasks notified (#2824).
+  force_handlers: true
   become: true
   gather_facts: true
   # NO ignore_unreachable here, deliberately. These two are always-on
@@ -58,15 +60,18 @@
       include_vars:
         file: "{{ playbook_dir }}/../../config/values/common.yaml"
         name: common
+      tags: [always]
 
     - name: Load environment overrides
       include_vars:
         file: "{{ playbook_dir }}/../../config/values/{{ deploy_env }}.yaml"
         name: env_overrides
+      tags: [always]
 
     - name: Merge configs (env overrides win)
       set_fact:
         config: "{{ common | combine(env_overrides, recursive=True) }}"
+      tags: [always]
 
     - name: Decrypt common secrets (controller-side)
       command: sops -d {{ playbook_dir }}/../../config/secrets/common.enc.yaml
@@ -76,6 +81,7 @@
       changed_when: false
       check_mode: false
       no_log: true
+      tags: [always]
 
     # The node pairs live in the env file (BACKUP-057 PR 3), the passwords in
     # common. Merged the way the toolkit merges them, env over common.
@@ -87,11 +93,16 @@
       changed_when: false
       check_mode: false
       no_log: true
+      tags: [always]
 
     - name: Parse decrypted secrets
       set_fact:
         secrets: "{{ sops_common.stdout | from_yaml | combine(sops_env.stdout | from_yaml, recursive=True) }}"
       no_log: true
+      tags: [always]
+
+    - import_tasks: _includes/require-secrets.yml
+      tags: [always]
 
   roles: &backup_roles
     # The notifier every node_backup unit names in its `OnFailure=`. Included
@@ -112,6 +123,9 @@
       vars:
         node_backup_sources: "{{ config.backup.sources[node_short_name] | default({}) }}"
         node_backup_restic_version: "{{ config.backup.r2.restic_version }}"
+        # R: the prune waits this long for history copied into the repository
+        # (#1920). No role default, so a play that forgets it fails the apply.
+        node_backup_r2_lock_retention_days: "{{ config.backup.r2.lock_retention_days }}"
         # Own bucket: its root, named as `node_bucket()` names it
         # (`kubelab-backup-<node>`, r2_tfvars.NODE_BUCKET_PREFIX; the isolation
         # test renders this and compares). Shared bucket: the prefix as before.
@@ -168,6 +182,8 @@
 
 - name: Deploy node-path backup to the on-demand nodes (BACKUP-044 Part 3)
   hosts: node_backup:&on_demand
+  # A later failure must not drop the handlers earlier tasks notified (#2824).
+  force_handlers: true
   become: true
   gather_facts: true
   # Beelink and RPi4 are on-demand homelab nodes (ADR-028) and are routinely

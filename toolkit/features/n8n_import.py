@@ -637,7 +637,7 @@ def _load_workflow(workflow_full: Path, cm: ConfigurationManager) -> tuple[str, 
         return None
 
     try:
-        workflow_text = workflow_full.read_text()
+        workflow_text = workflow_full.read_text(encoding="utf-8")
     except OSError as exc:
         logger.error(f"  Failed to read workflow '{workflow_full}': {exc}")
         return None

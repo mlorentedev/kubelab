@@ -46,7 +46,7 @@ def gh(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch):
     """Put the stub first on PATH; return a reader for the calls it received."""
     bindir = tmp_path / "bin"
     bindir.mkdir()
-    (bindir / "gh").write_text(_GH_STUB)
+    (bindir / "gh").write_text(_GH_STUB, encoding="utf-8")
     (bindir / "gh").chmod(0o755)
     calls = tmp_path / "gh_calls"
     calls.touch()
@@ -54,10 +54,10 @@ def gh(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("GH_CALLS", str(calls))
     monkeypatch.setenv("STUB_SHA", FULL)
     contract = tmp_path / "kubelab.yaml"
-    contract.write_text(WEB_CONTRACT.read_text())
+    contract.write_text(WEB_CONTRACT.read_text(encoding="utf-8"), encoding="utf-8")
     monkeypatch.setenv("STUB_CONTRACT", str(contract))
     monkeypatch.setattr(promotion, "resolve_image_sha", lambda env, name: TAG)
-    return lambda: calls.read_text().splitlines()
+    return lambda: calls.read_text(encoding="utf-8").splitlines()
 
 
 def _ready(*argv: str):
@@ -88,7 +88,9 @@ def test_no_contract_at_the_pinned_commit_is_not_ready(gh, monkeypatch: pytest.M
 
 
 def test_an_invalid_contract_at_the_pinned_commit_is_not_ready(gh, tmp_path: pathlib.Path) -> None:
-    (tmp_path / "kubelab.yaml").write_text(WEB_CONTRACT.read_text().replace("port: 8080", "port: 0"))
+    (tmp_path / "kubelab.yaml").write_text(
+        WEB_CONTRACT.read_text(encoding="utf-8").replace("port: 8080", "port: 0"), encoding="utf-8"
+    )
     code, answer = _ready("--app", "web")
 
     assert code == 1
@@ -98,7 +100,8 @@ def test_an_invalid_contract_at_the_pinned_commit_is_not_ready(gh, tmp_path: pat
 def test_a_contract_for_another_product_is_not_ready(gh, tmp_path: pathlib.Path) -> None:
     """Valid by schema, refused by the registry: the check is the receiver's, not the schema's."""
     (tmp_path / "kubelab.yaml").write_text(
-        WEB_CONTRACT.read_text().replace("mlorentedev/kubelab-web", "mlorentedev/kubelab-api")
+        WEB_CONTRACT.read_text(encoding="utf-8").replace("mlorentedev/kubelab-web", "mlorentedev/kubelab-api"),
+        encoding="utf-8",
     )
     code, answer = _ready("--app", "web")
 
@@ -149,9 +152,10 @@ def test_a_product_on_another_forge_asks_github_nothing(gh, tmp_path: pathlib.Pa
 
     registry = tmp_path / "registry.yaml"
     registry.write_text(
-        (REPO_ROOT / "tests/fixtures/product/registry.yaml").read_text()
+        (REPO_ROOT / "tests/fixtures/product/registry.yaml").read_text(encoding="utf-8")
         + "  forged:\n    repository: mlorentedev/forged\n    forge: gitea\n    receiver: generic\n"
-        "    events:\n      staging: forged-image-published\n"
+        "    events:\n      staging: forged-image-published\n",
+        encoding="utf-8",
     )
     with pytest.raises(ContractError, match="forge: gitea"):
         product_ready.check_ready("forged", registry=registry)

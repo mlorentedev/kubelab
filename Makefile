@@ -55,7 +55,7 @@ help:
 	@echo ""
 	@echo "Infrastructure (Ansible):"
 	@echo "  make provision NODE=x ENV=y  Provision a node (NODE=ace1|ace2|aws1|bee|rpi3|rpi4|jetson|vps, ENV=staging|prod|hub) [TAGS=tag1,tag2] [EXTRA='k=v']"
-	@echo "  make maintain NODE=x         Disk cleanup (NODE=aws1|ace1|ace2|beelink|vps|all) [TIMER=1] [TAGS=tag1,tag2]"
+	@echo "  make maintain NODE=x         Disk cleanup (NODE=gcp1|ace1|ace2|beelink|vps|rpi3|rpi4|all) [TIMER=1] [TAGS=tag1,tag2]"
 	@echo "  make reboot NODE=x ENV=y     Reboot a node only if it has a pending reboot, one host at a time [EXTRA='reboot_force=true reboot_allow_vps=true'] [CHECK=1]"
 	@echo "  make node-reclaim NODE=x     Remove orphaned buildx builders + CI job volumes over SSH [APPLY=1] (works at 0 bytes free, where Ansible cannot)"
 	@echo "  make deploy TARGET=x ENV=y  Deploy services (TARGET=vps|dns|k3s|harden-nodes)"
@@ -63,9 +63,8 @@ help:
 	@echo ""
 	@echo "Monitoring (Uptime Kuma):"
 	@echo "  make monitoring-export   Export monitors to JSON (config-as-code)"
-	@echo "  make monitoring-import   Import monitors from JSON seed"
 	@echo "  make monitoring-apply     Apply monitors from seed JSON (CHECK=1 plan only, PRUNE=1 allow deletes)"
-	@echo "  make monitoring-bootstrap Bootstrap fresh Uptime Kuma (admin + import)"
+	@echo "  make monitoring-bootstrap Bootstrap fresh Uptime Kuma (admin + monitors)"
 	@echo "  make monitoring-status   Check Uptime Kuma status on RPi3"
 	@echo ""
 	@echo "Kubernetes:"
@@ -85,6 +84,7 @@ help:
 	@echo "  make register-spoke ENV=x      Register spoke cluster in Argo CD hub"
 	@echo "  make unregister-spoke ENV=x    Remove spoke from Argo CD hub"
 	@echo "  make argo-set-revision APP=x REV=y  Patch Application targetRevision (preview/patch-back)"
+	@echo "  make verify-product APP=x ENV=y  Verify a product is live at origin/master HEAD (Argo + version.json)"
 	@echo "  make restore-window APP=x ENV=y [END=1]  Pause auto-sync and stop one app for a data restore"
 	@echo "  make check-spokes              Verify registered spokes are reachable"
 	@echo "  make hub-pause HUB=<kubecfg>   Stop one hub reconciling (reversible; keeps its state)"
@@ -182,10 +182,10 @@ setup-certs:
 setup-ansible:
 	@if command -v ansible-galaxy >/dev/null 2>&1; then \
 		echo "Installing Ansible Galaxy collections..."; \
-		ansible-galaxy collection install -r infra/ansible/requirements.yml >/dev/null 2>&1; \
+		ansible-galaxy collection install -r infra/ansible/requirements.yml && \
 		echo "✓ Ansible collections installed"; \
 	else \
-		echo "⚠ ansible-galaxy not found — skipping Ansible setup (install with: pip install ansible)"; \
+		echo "⚠ ansible-galaxy not found — skipping Ansible setup (install with: pip install ansible-core)"; \
 	fi
 
 .PHONY: regen-certs
@@ -228,13 +228,24 @@ setup-local-dns:
 # Idempotent: re-running in an already-bootstrapped worktree is ~1s no-op. A venv
 # whose scripts name another directory (a renamed worktree with an in-project
 # `.venv`) is not ready: it is rebuilt, and restored if the rebuild fails.
-# `poetry.lock` is gitignored, so a long-lived checkout keeps the lock of the
-# day it was first installed. Once pyproject.toml moves on (a new dependency),
-# `poetry install` refuses the stale lock and the checkout cannot import what
-# master now needs. Relock only when stale; CI resolves fresh the same way.
+# `poetry.lock` is committed (TOOL-125), so a checkout installs what CI installs.
+# A lock can still trail pyproject.toml in a branch that edits a dependency, and
+# `poetry install` refuses it: relock only when stale, and the lock's diff is
+# then the change to commit beside pyproject.toml.
 # Discovered as TOOL-010 after Wave 1 DT-010 PR hit `make sync-homepage`
 # failures in a fresh worktree (no .venv -> toolkit package not importable).
 .PHONY: worktree-init
+# In-project, not Poetry's default: that one puts the venv in its cache unless a
+# `.venv` already exists, and Ansible's controller-side tasks run `<repo>/.venv/bin/
+# toolkit`. A worktree set up the other way minted a token it could not record (#2902).
+# An activated venv wins over that setting, so VIRTUAL_ENV is emptied for the recipe.
+# The setting governs only creation: Poetry reuses a cache venv it already has for the
+# project, whatever the setting says, so one resolved anywhere but WORKTREE_VENV is set
+# aside and rebuilt like a relocated one (measured 2026-11-01 on a worktree with a cache venv).
+WORKTREE_VENV ?= $(CURDIR)/.venv
+worktree-init: export POETRY_VIRTUALENVS_IN_PROJECT := true
+worktree-init: export VIRTUAL_ENV :=
+worktree-init: export WORKTREE_VENV := $(WORKTREE_VENV)
 worktree-init:
 	@echo "=== Bootstrapping worktree: $$(pwd) ==="
 	@# No private package source exists, so Poetry has no credential to fetch.
@@ -248,14 +259,20 @@ worktree-init:
 	@# Only the script's exit 1 means "moved"; a crash or a missing python3 (exit 2, 127)
 	@# must not condemn a healthy venv. A signal during the install restores it too: an
 	@# `else` branch is never reached by a shell that was killed.
+	@# The toolkit is checked after the install, not inferred: these steps rest on Poetry's env lookup,
+	@# which is exactly what failed here once. A missing one counts as a failed install,
+	@# so the previous venv comes back then too.
 	@venv=$$($(POETRY) env info --path 2>/dev/null || true); aside=""; moved=0; \
-	if [ -n "$$venv" ] && [ -d "$$venv" ]; then python3 -I scripts/venv_relocated.py "$$venv" || moved=$$?; fi; \
+	if [ -n "$$venv" ] && [ -d "$$venv" ]; then python3 -I scripts/venv_relocated.py "$$venv" || moved=$$?; \
+		if [ "$$moved" = 0 ] && ! [ "$$venv" -ef "$(WORKTREE_VENV)" ]; then moved=1; fi; \
+	fi; \
 	if [ "$$moved" = 1 ]; then \
 		aside="$$venv.relocated"; rm -rf "$$aside"; mv "$$venv" "$$aside"; \
 		echo "venv moved aside to $$aside; rebuilding"; \
 		trap 'rm -rf "$$venv"; mv "$$aside" "$$venv"; echo "interrupted; previous venv restored"; exit 143' INT TERM; \
 	fi; \
-	if PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring $(POETRY) install --no-interaction; then \
+	if PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring $(POETRY) install --no-interaction \
+		&& { [ -x "$(WORKTREE_VENV)/bin/toolkit" ] || { echo "ERROR: no $(WORKTREE_VENV)/bin/toolkit after install; Poetry resolved: $$($(POETRY) env info --path 2>/dev/null)" >&2; false; }; }; then \
 		trap - INT TERM; [ -z "$$aside" ] || rm -rf "$$aside"; \
 	else \
 		[ -z "$$aside" ] || { rm -rf "$$venv"; mv "$$aside" "$$venv"; echo "install failed; previous venv restored"; }; \
@@ -278,6 +295,13 @@ credentials-generate:
 	@$(TOOLKIT) credentials generate --env $(ENV) --auto-update
 	@if [ "$(ENV)" != "dev" ]; then $(TOOLKIT) sync all --env $(ENV); fi
 
+# Reset one Authelia login's password (#909): IDENTITY is a key of
+# apps.auth.identities (superadmin, operator), never the shell's $(USER).
+# Prompts for the password, writes its hash to SOPS; then commit and apply-secrets.
+.PHONY: credentials-reset-password
+credentials-reset-password:
+	@$(TOOLKIT) credentials hash-password --identity "$(IDENTITY)" --env $(ENV)
+
 .PHONY: config-generate
 config-generate:
 	@$(TOOLKIT) config generate --env $(ENV)
@@ -291,6 +315,7 @@ config-generate:
 #   - infra/k8s/overlays/<env>/generated/ingress.yaml      (CI-GATE-002)
 #   - infra/ansible/generated/<env>/hosts.yml              (CI-GATE-002)
 #   - infra/k8s/overlays/<env>/generated/configmaps.yaml   (CI-GATE-003)
+#   - infra/k8s/overlays/<env>/generated/hooks.yaml        (GITOPS-003 AC3)
 #
 # These generators read EXCLUSIVELY from `common.yaml` + `<env>.yaml`
 # (post-SSOT-012, configmaps.yaml no longer pulls non-secret values from
@@ -391,6 +416,8 @@ config-check-drift:
 	done; \
 	_paths="infra/k8s/overlays/$(ENV)/generated/ingress.yaml \
 	        infra/k8s/overlays/$(ENV)/generated/configmaps.yaml \
+	        infra/k8s/overlays/$(ENV)/generated/hooks.yaml \
+	        infra/k8s/overlays/$(ENV)/generated/migrations.yaml \
 	        infra/ansible/generated/$(ENV)/hosts.yml"; \
 	if [ $$_status -ne 0 ]; then \
 		echo "✗ A generator failed for $(ENV); nothing was compared"; \
@@ -498,10 +525,6 @@ secrets-copy-nan-key: ## Copy NAN_API_KEY from Bitwarden into prod SOPS for PR-A
 monitoring-export:
 	@$(TOOLKIT) monitoring export
 
-.PHONY: monitoring-import
-monitoring-import:
-	@$(TOOLKIT) monitoring import
-
 .PHONY: monitoring-apply
 monitoring-apply: ## Sync monitors from the seed (CHECK=1 prints the plan only, PRUNE=1 allows deletes)
 	@$(TOOLKIT) monitoring apply $(if $(filter 1,$(CHECK)),--check,) $(if $(filter 1,$(PRUNE)),--prune,)
@@ -524,9 +547,10 @@ secrets-audit:
 
 # Read-only: GETs against the Cloudflare API with the ACME token, which is used
 # and never printed. 403 on zone settings is the expected answer (#2459).
+# `LIVE=1` also compares each cluster's Secret with it (#2928).
 .PHONY: acme-token-scope
 acme-token-scope:
-	@$(TOOLKIT) secrets acme-token-scope
+	@$(TOOLKIT) secrets acme-token-scope $(if $(LIVE),--live,)
 
 # Plan only. `APPLY=1` is what creates organizations and repositories for real —
 # opt-in because the first run mutates a live forge (TOOL-035, #1076).
@@ -688,10 +712,12 @@ _deploy-argocd-helm: _require-hub-reachable
 	OIDC_SECRET=$$(ENV=dev $(POETRY) run toolkit secrets show apps.services.security.authelia.oidc_client_secret_argocd --env common 2>/dev/null | tail -1) && \
 	SLACK_WEBHOOK=$$(ENV=dev $(POETRY) run toolkit secrets show argocd.slack_webhook_url --env common 2>/dev/null | tail -1) && \
 	GH_WEBHOOK_SECRET=$$(ENV=dev $(POETRY) run toolkit secrets show argocd.github_webhook_secret --env common 2>/dev/null | tail -1) && \
+	GH_STATUS_TOKEN=$$(ENV=dev $(POETRY) run toolkit secrets show argocd.github_status_token --env common 2>/dev/null | tail -1) && \
 	test -n "$$ARGOCD_HASH"       || { echo "FATAL: argocd.admin_password_hash decrypted empty — refusing to install Argo CD with a blank admin password (check SOPS age key)" >&2; exit 1; } && \
 	test -n "$$OIDC_SECRET"       || { echo "FATAL: oidc_client_secret_argocd decrypted empty — refusing to install Argo CD with blank OIDC (check SOPS age key)" >&2; exit 1; } && \
 	test -n "$$SLACK_WEBHOOK"     || { echo "FATAL: argocd.slack_webhook_url decrypted empty — refusing to install (check SOPS age key)" >&2; exit 1; } && \
 	test -n "$$GH_WEBHOOK_SECRET" || { echo "FATAL: argocd.github_webhook_secret decrypted empty — refusing to install (check SOPS age key)" >&2; exit 1; } && \
+	test -n "$$GH_STATUS_TOKEN"   || { echo "FATAL: argocd.github_status_token decrypted empty — refusing to install without the commit-status token (GITOPS-003; mint it per its catalog entry)" >&2; exit 1; } && \
 	ARGOCD_CHART=$$($(TOOLKIT) config get argocd.chart_version) && \
 	test -n "$$ARGOCD_CHART" || { echo "FATAL: argocd.chart_version missing from common.yaml — refusing to install an unpinned chart" >&2; exit 1; } && \
 	helm upgrade --install argocd argo/argo-cd \
@@ -702,6 +728,7 @@ _deploy-argocd-helm: _require-hub-reachable
 		--set "configs.secret.argocdServerAdminPassword=$$ARGOCD_HASH" \
 		--set "configs.secret.extra.oidc\.authelia\.clientSecret=$$OIDC_SECRET" \
 		--set "notifications.secret.items.slack-webhook-url=$$SLACK_WEBHOOK" \
+		--set "notifications.secret.items.github-status-token=$$GH_STATUS_TOKEN" \
 		--set "configs.secret.githubSecret=$$GH_WEBHOOK_SECRET" \
 		--timeout 10m
 	@echo "$$(date): Helm upgrade done" >> /tmp/argocd-timing.log
@@ -857,6 +884,16 @@ sync-app:
 	@echo "=== Triggering sync for $(APP) ==="
 	@kubectl --kubeconfig $(HUB_KUBECONFIG) -n argocd patch application $(APP) --type merge -p '{"operation":{"initiatedBy":{"username":"makefile"},"sync":{"revision":"HEAD"}}}'
 	@echo "✓ Sync triggered for $(APP)"
+
+# Verify a product is live at origin/master HEAD by consequence (GITOPS-003):
+# Synced + Succeeded on the hub, then /version.json serving the pinned tag.
+# Exit 3 = not verifiable yet (no `commit` served), never a pass; 4 = superseded by a
+# later merge that pins another tag. Run on the mesh.
+# Usage: make verify-product APP=web ENV=staging|prod [TIMEOUT=600]
+.PHONY: verify-product
+verify-product:
+	@test -n "$(APP)" -a -n "$(ENV)" || (echo "Usage: make verify-product APP=web ENV=staging|prod [TIMEOUT=600]" && exit 2)
+	@$(TOOLKIT) infra argo verify-product --app $(APP) --env $(ENV) --kubeconfig $(HUB_KUBECONFIG) $(if $(TIMEOUT),--timeout $(TIMEOUT),)
 
 # Register a spoke cluster in Argo CD hub (scoped RBAC, not cluster-admin)
 # Usage: make register-spoke ENV=staging|prod
@@ -1021,30 +1058,13 @@ provision:
 	# invocation, which is exactly what these targets exist to prevent.
 	$(eval _EXTRA := $(if $(EXTRA),--extra-vars "$(EXTRA)",))
 	# `ansible run` generates the inventory it runs against (TOOL-090), in the
-	# mode it is given: BOOTSTRAP (LAN IPs) and TRANSPORT reach the generator
-	# through run's own flags, and a failed generation stops the playbook. The
-	# restore line after a bootstrap/bastion run is a generate on its own: it
-	# puts the mesh inventory back on disk for anything that reads the file
-	# without running (a raw ansible-playbook, or `run --skip-generate`). It runs
-	# either way, so it is `;`. The exit is the run's status when the run failed,
-	# else the restore's: a failed restore leaves the bootstrap inventory on disk,
-	# and a success would hide that.
-	@if [ -n "$(BOOTSTRAP)" ] || [ -n "$(TRANSPORT)" ]; then \
-		echo "=== Inventory for this run: $(if $(BOOTSTRAP),LAN IPs,mesh)$(if $(TRANSPORT), via $(TRANSPORT),) ==="; \
-		$(TOOLKIT) infra ansible run -p provision-$(NODE) -e $(_ENV) $(_BOOT) $(_TRANSPORT) $(_K) $(_TAGS) $(_CHECK) $(_EXTRA) $(_FRESH); \
-		_exit=$$?; \
-		echo "=== Restoring: inventory with mesh Tailscale IPs ==="; \
-		$(TOOLKIT) infra ansible generate --env $(_ENV); \
-		_restore=$$?; \
-		[ $$_exit -ne 0 ] && exit $$_exit; \
-		exit $$_restore; \
-	else \
-		$(TOOLKIT) infra ansible run -p provision-$(NODE) -e $(_ENV) $(_K) $(_TAGS) $(_CHECK) $(_EXTRA) $(_FRESH); \
-	fi
+	# mode it is given, and after a BOOTSTRAP or TRANSPORT run puts the mesh one
+	# back on disk itself, failed run or not (see `ansible_run`).
+	@$(TOOLKIT) infra ansible run -p provision-$(NODE) -e $(_ENV) $(_BOOT) $(_TRANSPORT) $(_K) $(_TAGS) $(_CHECK) $(_EXTRA) $(_FRESH)
 
 .PHONY: maintain
 maintain:
-	@test -n "$(NODE)" || (echo "Usage: make maintain NODE=aws1|ace1|ace2|beelink|vps|rpi3|rpi4|all [TIMER=1] [TAGS=tag1,tag2] [CHECK=1]" && exit 1)
+	@test -n "$(NODE)" || (echo "Usage: make maintain NODE=gcp1|ace1|ace2|beelink|vps|rpi3|rpi4|all [TIMER=1] [TAGS=tag1,tag2] [CHECK=1]" && exit 1)
 	$(eval _ENV := $(or $(filter staging prod,$(ENV)),staging))
 	$(eval _TIMER := $(if $(TIMER),--extra-vars "install_timer=true",))
 	$(eval _TAGS := $(if $(TAGS),--tags $(TAGS),))
@@ -1058,13 +1078,17 @@ maintain:
 # Reboot the nodes `make maintain` reported as needing it. The playbook skips
 # hosts with no pending reboot, takes one host at a time, and refuses the VPS
 # (Headscale) unless EXTRA='reboot_allow_vps=true'. No inline logic here.
+# BOOTSTRAP=1 reaches a node by its LAN IP, for one that is off the tailnet:
+# the edge with its uplink down is the case it was added for.
 .PHONY: reboot
 reboot:
-	@test -n "$(NODE)" || (echo "Usage: make reboot NODE=ace1|ace2|beelink|gcp1|vps|rpi3|rpi4 [ENV=staging|prod|hub] [EXTRA='reboot_force=true reboot_allow_vps=true'] [CHECK=1]" && exit 1)
+	@test -n "$(NODE)" || (echo "Usage: make reboot NODE=ace1|ace2|beelink|gcp1|vps|rpi3|rpi4 [ENV=staging|prod|hub] [BOOTSTRAP=1] [TRANSPORT=bastion] [EXTRA='reboot_force=true reboot_allow_vps=true'] [CHECK=1]" && exit 1)
 	$(eval _ENV := $(or $(filter staging prod hub,$(ENV)),staging))
+	$(eval _BOOT := $(if $(BOOTSTRAP),--bootstrap,))
+	$(eval _TRANSPORT := $(if $(TRANSPORT),--transport $(TRANSPORT),))
 	$(eval _EXTRA := $(if $(EXTRA),--extra-vars "$(EXTRA)",))
 	$(eval _CHECK := $(if $(CHECK),--check,))
-	@$(TOOLKIT) infra ansible run -p reboot -e $(_ENV) -l $(NODE) $(_EXTRA) $(_CHECK)
+	@$(TOOLKIT) infra ansible run -p reboot -e $(_ENV) -l $(NODE) $(_BOOT) $(_TRANSPORT) $(_EXTRA) $(_CHECK)
 
 # Emergency reclaim for the residue `make maintain` structurally cannot reach
 # (OPS-024/#1657). Two reasons it is a separate path and not a tag on that one:
@@ -1105,7 +1129,7 @@ node-reclaim: ## Remove orphaned buildx builders and CI job volumes over SSH (AP
 # documented and unreachable.
 .PHONY: maintain-notify-test
 maintain-notify-test:
-	@test -n "$(NODE)" || (echo "Usage: make maintain-notify-test NODE=aws1|ace1|ace2|beelink|vps|rpi3|rpi4|all [ENV=staging|prod|hub] [EXTRA='notify_test_unit=<unit>']" && exit 1)
+	@test -n "$(NODE)" || (echo "Usage: make maintain-notify-test NODE=gcp1|ace1|ace2|beelink|vps|rpi3|rpi4|all [ENV=staging|prod|hub] [EXTRA='notify_test_unit=<unit>']" && exit 1)
 	$(eval _ENV := $(or $(filter staging prod hub,$(ENV)),staging))
 	$(eval _EXTRA := $(if $(EXTRA),--extra-vars "$(EXTRA)",))
 	@if [ "$(NODE)" = "all" ]; then \
@@ -1128,6 +1152,15 @@ headscale-recycle-stale:
 	$(eval _APPLY := $(if $(APPLY),--apply,))
 	@$(TOOLKIT) infra headscale recycle-stale --name $(NODE) $(_APPLY)
 
+# Put a node back on the mesh (NET-005 task 32). The toolkit runs the node's own
+# play, tailscale role only, over the LAN, and the role mints a single-use key on
+# Headscale only when the node is off the mesh. ENV defaults to prod, where the
+# edge is provisioned.
+.PHONY: headscale-rejoin
+headscale-rejoin: ## Rejoin a node to the mesh with a single-use key (NODE=rpi4)
+	@test -n "$(NODE)" || (echo "Usage: make headscale-rejoin NODE=<node> [ENV=prod|staging]" && exit 1)
+	@$(TOOLKIT) infra headscale rejoin --node $(NODE) --env $(or $(filter staging prod,$(ENV)),prod)
+
 # Disk ceiling on a live node (GCP-001 AC8). Random 4K, `--direct=1`, bounded
 # file, unconditional cleanup — the reasoning is in the playbook's header, where
 # it stays next to the flags it justifies.
@@ -1145,12 +1178,14 @@ benchmark-disk:
 
 .PHONY: deploy
 deploy:
-	@test -n "$(TARGET)" || (echo "Usage: make deploy TARGET=vps|dns|k3s|harden-nodes ENV=staging|prod [CHECK=1] [FORCE=1]" && exit 1)
-	@test -n "$(filter $(ENV),staging prod)" || (echo "Usage: make deploy TARGET=vps|dns|k3s|harden-nodes ENV=staging|prod [CHECK=1] [FORCE=1]" && exit 1)
+	@test -n "$(TARGET)" || (echo "Usage: make deploy TARGET=vps|dns|k3s|harden-nodes ENV=staging|prod [CHECK=1] [TAGS=tag1,tag2] [FORCE=1]" && exit 1)
+	@test -n "$(filter $(ENV),staging prod)" || (echo "Usage: make deploy TARGET=vps|dns|k3s|harden-nodes ENV=staging|prod [CHECK=1] [TAGS=tag1,tag2] [FORCE=1]" && exit 1)
 	$(eval _CHECK := $(if $(CHECK),--check,))
+	# A play builds what its roles read under any TAGS: tests/test_pre_task_facts.py (#2817).
+	$(eval _TAGS := $(if $(TAGS),--tags $(TAGS),))
 	# Refuse a checkout behind origin/master on what Ansible renders; only FORCE=1 overrides, FORCE=0 does not (OPS-042).
 	$(eval _FRESH := --require-fresh $(if $(filter 1,$(FORCE)),--force,))
-	@$(TOOLKIT) infra ansible run -p deploy-$(TARGET) -e $(ENV) $(_CHECK) $(_FRESH)
+	@$(TOOLKIT) infra ansible run -p deploy-$(TARGET) -e $(ENV) $(_CHECK) $(_TAGS) $(_FRESH)
 
 # Run ONE node-path backup now, rather than waiting for its timer (BACKUP-044).
 #
@@ -1638,9 +1673,9 @@ vikunja-audit-users: ## List Vikunja accounts, separating password signups from 
 	@$(TOOLKIT) services vikunja audit-users --env $(ENV)
 
 .PHONY: provision-postgres-tenant
-provision-postgres-tenant: ## Idempotently provision PostgreSQL tenant role and database
-	@test -n "$(filter $(ENV),staging prod)" || (echo "Usage: make provision-postgres-tenant ENV=staging|prod TENANT=vikunja" && exit 1)
-	@$(TOOLKIT) infra k8s provision-postgres-tenant --env $(ENV) --tenant $(or $(TENANT),vikunja)
+provision-postgres-tenant: ## Idempotently provision PostgreSQL tenant roles and databases (TENANT=x for one)
+	@test -n "$(filter $(ENV),staging prod)" || (echo "Usage: make provision-postgres-tenant ENV=staging|prod [TENANT=api]" && exit 1)
+	@$(TOOLKIT) infra k8s provision-postgres-tenant --env $(ENV) $(if $(TENANT),--tenant $(TENANT))
 
 .PHONY: validate-sync
 validate-sync:
@@ -1713,19 +1748,6 @@ n8n-probe:
 	@test -n "$(filter $(ENV),staging prod)" || (echo "Usage: make n8n-probe ENV=staging|prod" && exit 1)
 	@$(TOOLKIT) infra n8n probe --env $(ENV)
 
-# Prove the offsite backup destination (Cloudflare R2) is usable: that the token
-# is scoped to its own bucket, that the bucket is reachable, and that a
-# write/read/DELETE round-trip succeeds. Writes 1 KB under `_smoketest/` and
-# removes it, so it is safe against the live destination.
-#
-# The delete probe is the one that pays for itself: a token without delete lets
-# backups report healthy for weeks, and only fails when `restic forget` first
-# tries to reclaim space — with a full bucket and a retention policy that has
-# never actually retained anything (BACKUP-044).
-.PHONY: backup-verify-destination
-backup-verify-destination:
-	@$(TOOLKIT) backup verify-destination --env $(or $(filter staging prod,$(ENV)),prod)
-
 # Mints each backup.sources node its own R2 token (Object Read & Write on
 # kubelab-backup-<node> only) and restic password, straight into prod SOPS
 # (BACKUP-057 PR 3). NODE= limits it to one node, WATCHER=1 to the watcher's
@@ -1749,14 +1771,6 @@ backup-migrate:
 	@test -z "$(CHECK)" -o "$(CHECK)" = 1 || (echo "CHECK takes 1 or nothing, got '$(CHECK)'" && exit 1)
 	@$(TOOLKIT) backup migrate --node $(NODE) --env $(ENV) $(if $(CHECK),--check)
 
-# One level above backup-verify-destination: that one proves the BUCKET works,
-# this one proves RESTIC works in it. Runs the full lifecycle (init, backup,
-# snapshots, check) against a throwaway repository and removes it. They are
-# different claims and only the second is what backups depend on.
-.PHONY: backup-verify-restic
-backup-verify-restic:
-	@$(TOOLKIT) backup verify-restic --env $(or $(filter staging prod,$(ENV)),prod)
-
 .PHONY: sync-terraform-backend
 sync-terraform-backend: ## Render infra/terraform/backend.s3.tfbackend from terraform.state (TF-007)
 	@$(TOOLKIT) sync terraform-backend
@@ -1766,6 +1780,12 @@ sync-terraform-backend: ## Render infra/terraform/backend.s3.tfbackend from terr
 .PHONY: sync-r2-watcher-targets
 sync-r2-watcher-targets:
 	@$(TOOLKIT) sync r2-watcher-targets
+
+# Regenerate the edge watcher's targets from networking (NET-005 AC12). Run after a
+# node joins or leaves the edge's networks or changes class; the test suite fails until you do.
+.PHONY: sync-edge-watcher-targets
+sync-edge-watcher-targets:
+	@$(TOOLKIT) sync edge-watcher-targets
 
 # BACKUP-044 AC1: does every declared node actually HAVE a backup, and how old
 # is it — asked from this workstation rather than from the nodes themselves.
@@ -1913,6 +1933,66 @@ alerts:
 	$(eval _ENV := $(if $(filter staging prod hub,$(ENV)),$(ENV),prod))
 	@$(TOOLKIT) obs alerts --env $(_ENV)
 
+# Say whether the lab edge's uplink is up, behind a portal, or dead (NET-005 AC5).
+# Reaches the edge over its LAN address, so it answers from the lab switch or the
+# lab Wi-Fi while the tailnet is down with the uplink. make exits 2 for any failure;
+# `toolkit infra edge status` keeps the edge's code (0 up, 2 portal, 3 dead, 4 unknown).
+.PHONY: edge-status
+edge-status: ## Report the lab edge's uplink: up, portal or dead
+	@$(TOOLKIT) infra edge status
+
+# Say whether a boot brought back everything the edge serves: the hard-reset test
+# in docs/runbooks/lab-edge.md. CASE names what the case took away (no-uplink,
+# no-lan); VIA=tailnet reaches the edge when the LAN is what was taken away.
+.PHONY: edge-boot-check
+edge-boot-check: ## Check what the edge brought back after a boot [CASE=no-uplink|no-lan] [VIA=tailnet]
+	@$(TOOLKIT) infra edge boot-check $(if $(CASE),--case $(CASE)) $(if $(VIA),--via $(VIA))
+
+# Say whether the uplink adapter has held 48 hours of this boot with no reset, the
+# soak in NET-005 B12. Reads the edge's kern.log over the LAN, since its journal
+# holds about 8 hours (#2807). Exits 0 passed, 1 reset, 2 in progress, 3 cannot tell.
+.PHONY: edge-soak
+edge-soak: ## Read the edge's uplink soak: 48 h of this boot with no adapter reset
+	@$(TOOLKIT) infra edge soak
+
+# Measure the uplink's line rate on the edge (AC8, #2876): the adapter's own counters,
+# before the shaper, over one window per direction. Run it twice and shape at 90% of
+# the lower reading. Exits 0 measured, 2 shaper binding (lift it), 3 cannot tell.
+# Staging only: the toolkit refuses any other ENV. docs/runbooks/load-test.md
+.PHONY: load-test load-test-clear
+load-test: ## Measure staging's capacity with k6 on ace2 (ENV=staging) [REPEATS=3 SECONDS=60 MAX_RATE=6400]
+	@$(TOOLKIT) infra load-test run --env $(ENV) $(if $(REPEATS),--repeats $(REPEATS)) $(if $(SECONDS),--seconds $(SECONDS)) $(if $(MAX_RATE),--max-rate $(MAX_RATE))
+
+load-test-clear: ## Remove the limiter-bypass route a dead load test left in staging (ENV=staging)
+	@$(TOOLKIT) infra load-test clear --env $(ENV)
+
+.PHONY: edge-measure
+edge-measure: ## Measure the edge uplink's line rate, before the shaper [SECONDS=60]
+	@$(TOOLKIT) infra edge measure $(if $(SECONDS),--seconds $(SECONDS))
+
+# Load the uplink from bee, a download then an upload, while rpi3 on the lab Wi-Fi
+# times a TCP connect every second, with and without the shaper (NET-005 B9, AC8).
+# The shaper is always restored and read back. Runs from the switch.
+.PHONY: edge-shape-check
+edge-shape-check: ## Time a lab Wi-Fi client's connects under bulk load, shaped and not [BOUND_MS=n]
+	@$(TOOLKIT) infra edge shape-check $(if $(BOUND_MS),--bound-ms $(BOUND_MS))
+
+# Unload the lab Wi-Fi's driver on the edge, as a radio halt would, and watch the
+# liveness ladder bring the AP back with no human step (NET-005 B10, AC13). Runs
+# over the LAN; rpi3 and every lab Wi-Fi client drop until it serves again.
+.PHONY: edge-ap-halt
+edge-ap-halt: ## Halt the edge's lab Wi-Fi radio on purpose and watch it come back
+	@$(TOOLKIT) infra edge ap-halt
+
+# Join this laptop to the lab LAN, the edge's management path (NET-005 AC11).
+# ROUTE=1 makes the edge the default route, for the portal login with the
+# laptop's own Wi-Fi off; STATIC=1 holds a fixed address when the edge serves
+# no DHCP (a fresh SD card, a provision that cut the LAN); REMOVE=1 deletes the
+# profile; IFACE names the adapter when there is more than one.
+.PHONY: edge-lan-link
+edge-lan-link: ## Join this laptop to the lab LAN [ROUTE=1] [STATIC=1] [REMOVE=1] [IFACE=<device>]
+	@$(TOOLKIT) infra edge lan-link $(if $(filter 1,$(ROUTE)),--route) $(if $(filter 1,$(STATIC)),--static) $(if $(filter 1,$(REMOVE)),--remove) $(if $(IFACE),--interface $(IFACE))
+
 # Run a CronJob once now, print its log and delete the Job (TOOL-084). For the
 # watchers (`r2-backup-watcher`, ...) the log IS the verdict, so this is how to
 # re-check without waiting for the schedule. No default ENV: an allow-list, not
@@ -1986,16 +2066,31 @@ test:
 # commit/mutate/checkout line that lost work when a hook refused the commit
 # (lesson-480). Refuses a dirty tree; restores the file from its own bytes.
 # FROM and TO reach the toolkit through the environment, so quotes need no
-# escaping; write a literal `$` as `$$`.
+# escaping, and each is read raw: make would otherwise expand them and drop every
+# `$` before the toolkit saw the text (#2847). An empty TO deletes FROM: click reads
+# an empty envvar as unset, so a TO from the command line or the environment, the
+# two origins make exports to the shell, is passed as `--to` too (#2839).
 #   make mutate FILE=toolkit/x.py FROM='> 0' TO='>= 0' TEST=tests/test_x.py
 # Exit 0 only when the test went red. make reports every other outcome as its own
 # exit 2; the toolkit's code is the N in `Error N`: 1 = stayed green, 2 = refused
-# (dirty tree, no unique match, or TEST does not pass unmutated: a red baseline
-# certifies every mutant as red), 3 = no verdict (pytest errored or collected
-# nothing against the mutant).
+# (dirty tree, no unique match, or TEST unmutated fails, collects nothing or errors
+# before a result: a red baseline certifies every mutant as red), 3 = no verdict
+# (pytest errored or collected nothing against the mutant).
+ifneq (,$(filter mutate,$(MAKECMDGOALS)))
+MUTATE_TO_GIVEN := $(filter command line environment,$(origin TO))
+ifneq (,$(filter command line environment,$(origin FROM)))
+override FROM := $(value FROM)
+export FROM
+endif
+ifneq (,$(MUTATE_TO_GIVEN))
+override TO := $(value TO)
+export TO
+endif
+endif
+
 .PHONY: mutate
 mutate:
-	@$(TOOLKIT) tools mutate --file "$(FILE)" --test "$(TEST)"
+	@$(TOOLKIT) tools mutate --file "$(FILE)" --test "$(TEST)" $(if $(MUTATE_TO_GIVEN),--to "$$TO")
 
 .PHONY: test-fast
 test-fast:

@@ -88,7 +88,7 @@ def application_name(env: str) -> str:
 def declared_sync_policy(applications_dir: Path, env: str) -> dict[str, Any]:
     """The `spec.syncPolicy` of the env's Application as committed, which `make deploy-apps` applies."""
     path = Path(applications_dir) / f"{env}.yaml"
-    for doc in yaml.safe_load_all(path.read_text()):
+    for doc in yaml.safe_load_all(path.read_text(encoding="utf-8")):
         if isinstance(doc, dict) and doc.get("kind") == "Application":
             return doc["spec"]["syncPolicy"]
     raise WindowError(f"{path} declares no Application")

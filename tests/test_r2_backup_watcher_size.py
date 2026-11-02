@@ -69,17 +69,18 @@ def fleet(tmp_path: pathlib.Path, request):
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     rclone = bin_dir / "rclone"
-    rclone.write_text(FAKE_RCLONE)
+    rclone.write_text(FAKE_RCLONE, encoding="utf-8")
     rclone.chmod(0o755)
     targets = tmp_path / "targets.txt"
     targets.write_text(
         "# header comment\n"
         f"rpi3 {PREFIX}/rpi3 {'1' * 64} 192.0.2.6 22 always-on uptime_kuma\n"
-        f"vps {PREFIX}/kubelab-vps {'2' * 64} 192.0.2.2 22 always-on authelia n8n"  # no final newline
+        f"vps {PREFIX}/kubelab-vps {'2' * 64} 192.0.2.2 22 always-on authelia n8n",  # no final newline
+        encoding="utf-8",
     )
-    (fake / "kubelab-backups.bytes").write_text(f"{BUCKET_BYTES}\n")
+    (fake / "kubelab-backups.bytes").write_text(f"{BUCKET_BYTES}\n", encoding="utf-8")
     for prefix, size in NODE_BYTES.items():
-        (fake / f"kubelab-backups_{prefix}.bytes").write_text(f"{size}\n")
+        (fake / f"kubelab-backups_{prefix}.bytes").write_text(f"{size}\n", encoding="utf-8")
     out = tmp_path / "sizes" / "sizes.txt"
     out.parent.mkdir()
     env = {
@@ -99,7 +100,7 @@ def _run(fleet) -> tuple[subprocess.CompletedProcess, dict[tuple[str, str], list
     proc = subprocess.run([*shell, str(SIZE)], env=env, capture_output=True, text=True, timeout=60)
     entries: dict[tuple[str, str], list[str]] = {}
     if out.exists():
-        for line in out.read_text().splitlines():
+        for line in out.read_text(encoding="utf-8").splitlines():
             kind, name, *rest = line.split()
             assert (kind, name) not in entries, f"duplicate entry {kind} {name}"
             entries[(kind, name)] = rest
@@ -107,7 +108,7 @@ def _run(fleet) -> tuple[subprocess.CompletedProcess, dict[tuple[str, str], list
 
 
 def _calls(fake: pathlib.Path) -> list[str]:
-    return (fake / "calls").read_text().splitlines() if (fake / "calls").exists() else []
+    return (fake / "calls").read_text(encoding="utf-8").splitlines() if (fake / "calls").exists() else []
 
 
 def test_it_sizes_each_bucket_once_and_each_node_prefix(fleet) -> None:
@@ -126,11 +127,12 @@ def test_two_buckets_are_each_listed_once_at_their_root(fleet) -> None:
     fake, _, env, _ = fleet
     targets = pathlib.Path(env["WATCHER_TARGETS"])
     targets.write_text(
-        targets.read_text()
-        + f"\nrpi4 s3:https://{HOST}/kubelab-backup-rpi4/rpi4 {'3' * 64} 192.0.2.10 22 on-demand pihole\n"
+        targets.read_text(encoding="utf-8")
+        + f"\nrpi4 s3:https://{HOST}/kubelab-backup-rpi4/rpi4 {'3' * 64} 192.0.2.10 22 on-demand pihole\n",
+        encoding="utf-8",
     )
-    (fake / "kubelab-backup-rpi4.bytes").write_text("5000\n")
-    (fake / "kubelab-backup-rpi4_rpi4.bytes").write_text("4000\n")
+    (fake / "kubelab-backup-rpi4.bytes").write_text("5000\n", encoding="utf-8")
+    (fake / "kubelab-backup-rpi4_rpi4.bytes").write_text("4000\n", encoding="utf-8")
     proc, entries = _run(fleet)
     assert proc.returncode == 0, proc.stderr
     assert entries[("bucket", "kubelab-backups")][0] == str(BUCKET_BYTES)
@@ -153,9 +155,11 @@ def _add_root_node(fleet, marker: str = "bytes", content: str = "7000\n") -> pat
     fake, _, env, _ = fleet
     targets = pathlib.Path(env["WATCHER_TARGETS"])
     targets.write_text(
-        targets.read_text() + f"\nace2 s3:https://{HOST}/kubelab-backup-ace2 {'4' * 64} 192.0.2.5 22 on-demand hermes\n"
+        targets.read_text(encoding="utf-8")
+        + f"\nace2 s3:https://{HOST}/kubelab-backup-ace2 {'4' * 64} 192.0.2.5 22 on-demand hermes\n",
+        encoding="utf-8",
     )
-    (fake / f"kubelab-backup-ace2.{marker}").write_text(content)
+    (fake / f"kubelab-backup-ace2.{marker}").write_text(content, encoding="utf-8")
     return fake
 
 
@@ -205,7 +209,7 @@ def test_it_reaches_r2_by_the_targets_endpoint_with_no_config_file(fleet) -> Non
 @pytest.mark.parametrize("marker", ["fail", "nobytes"])
 def test_a_failed_node_listing_is_null_and_never_fails_the_pod(fleet, marker) -> None:
     fake = fleet[0]
-    (fake / f"kubelab-backups_kubelab-vps.{marker}").write_text("AccessDenied: Access Denied\n")
+    (fake / f"kubelab-backups_kubelab-vps.{marker}").write_text("AccessDenied: Access Denied\n", encoding="utf-8")
     proc, entries = _run(fleet)
     assert proc.returncode == 0
     assert entries[("node", "vps")][0] == "null"
@@ -216,7 +220,7 @@ def test_a_failed_node_listing_is_null_and_never_fails_the_pod(fleet, marker) ->
 
 def test_a_failed_bucket_listing_is_null(fleet) -> None:
     fake = fleet[0]
-    (fake / "kubelab-backups.fail").write_text("AccessDenied: Access Denied\n")
+    (fake / "kubelab-backups.fail").write_text("AccessDenied: Access Denied\n", encoding="utf-8")
     proc, entries = _run(fleet)
     assert proc.returncode == 0
     assert entries[("bucket", "kubelab-backups")][0] == "null"
@@ -225,7 +229,7 @@ def test_a_failed_bucket_listing_is_null(fleet) -> None:
 
 def test_a_hung_listing_is_cut_off_and_null(fleet) -> None:
     fake = fleet[0]
-    (fake / "kubelab-backups_rpi3.hang").write_text("")
+    (fake / "kubelab-backups_rpi3.hang").write_text("", encoding="utf-8")
     started = time.monotonic()
     proc, entries = _run(fleet)
     assert time.monotonic() - started < 15, "SIZE_TIMEOUT must bound every listing"

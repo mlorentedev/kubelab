@@ -39,18 +39,19 @@ spec:
       storageClass: local-path
       size: 128Mi
     experimental:
-      plugins:
-        bouncer:
-          moduleName: "github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin"
-          version: "v1.5.1"
-        # api-key (ADR-035 Stage 1): used by Middlewares api-key-* rendered
-        # from infra/k8s/overlays/<env>/middlewares/*.yaml.tpl via
-        # `make apply-middleware-secrets ENV=<env>`. Plugin returns HTTP 403
-        # for any rejected request. Both X-API-Key and Authorization: Bearer
-        # headers are supported (Bearer enabled for Stage 2 OIDC forward-compat).
-        api-key:
-          moduleName: "github.com/dtomlinson91/traefik-api-key-middleware"
-          version: "v0.1.2"
+      # Local plugins only (#2565): the role puts each source on the node, so a start
+      # downloads nothing. A plugin that then fails to load stops Traefik instead of
+      # starting it without the routes that use it; the rolling update
+      # (maxUnavailable: 0) keeps the old pod serving while a new one fails.
+      abortOnPluginFailure: true
+      localPlugins:
+{% for plugin in k3s_traefik_local_plugins %}
+        {{ plugin.name }}:
+          type: hostPath
+          moduleName: "{{ plugin.module }}"
+          mountPath: "/plugins-local/src/{{ plugin.module }}"
+          hostPath: "{{ k3s_traefik_local_plugins_dir }}/{{ plugin.name }}/{{ plugin.version }}"
+{% endfor %}
     volumes:
       - name: crowdsec-bouncer-traefik
         mountPath: "/etc/traefik/crowdsec"
@@ -77,6 +78,12 @@ spec:
       - "--certificatesresolvers.letsencrypt.acme.email={{ k3s_traefik_acme_email }}"
       - "--certificatesresolvers.letsencrypt.acme.storage=/data/acme.json"
       - "--certificatesresolvers.letsencrypt.acme.dnschallenge.resolvers={{ k3s_traefik_acme_dns_resolvers }}"
+{% if not k3s_traefik_acme_propagation_checks | bool %}
+      # See k3s_traefik_acme_propagation_checks: the site may answer the
+      # authoritative check itself, so wait instead of asking (#2699).
+      - "--certificatesresolvers.letsencrypt.acme.dnschallenge.propagation.disableChecks=true"
+      - "--certificatesresolvers.letsencrypt.acme.dnschallenge.propagation.delayBeforeChecks=60s"
+{% endif %}
       - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
       - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
       - "--entrypoints.web.http.redirections.entryPoint.permanent=true"

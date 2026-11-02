@@ -62,6 +62,11 @@ make provision NODE=bee ENV=prod TAGS=gitea
 make provision NODE=bee ENV=prod TAGS=gitea   # `bee` names provision-bee.yml; backup-node wants the host, `beelink`. Second run: changed=0
 ```
 
+The Beelink is behind the lab edge, so the run sizes the stack's pull before it starts, against the edge's
+downlink, and states the estimate (#2742). Only images the node lacks count: the new Gitea image is about 72 MB,
+about 3 min. If the runner's tag moved too, its ~852 MB (about 38 min) takes the pull past the 30 min budget
+and the run stops before pulling. Rerun it with `EXTRA='image_pull_allow_slow=true'`.
+
 Then check `/api/healthz`, one push, one PR, one OIDC login, the runner listing (`Settings > Actions >
 Runners`) and the anonymous surface (`tests/infra/test_gitea_anonymous_surface_live.py`: its recorded answers are
 the 1.25.5 ones, so a changed default shows up there first). A forge workflow that sets `concurrency` is the measurement for the ticket: two quick pushes to

@@ -51,7 +51,7 @@ RECORD_TASK = "Record the machine token in SOPS"
 
 
 def _tasks() -> list[dict]:
-    return [t for t in yaml.safe_load((ROLE / "tasks/main.yml").read_text()) if isinstance(t, dict)]
+    return [t for t in yaml.safe_load((ROLE / "tasks/main.yml").read_text(encoding="utf-8")) if isinstance(t, dict)]
 
 
 def _task(name: str) -> dict:
@@ -66,7 +66,7 @@ def _task(name: str) -> dict:
 
 def test_the_machine_identity_is_declared_in_the_identity_map() -> None:
     """A row in `apps.auth.identities`, not a literal in a playbook."""
-    common = yaml.safe_load(COMMON.read_text())
+    common = yaml.safe_load(COMMON.read_text(encoding="utf-8"))
     identities = common["apps"]["auth"]["identities"]
 
     assert "machine" in identities, (
@@ -83,8 +83,8 @@ def test_the_machine_identity_is_declared_in_the_identity_map() -> None:
 
 def test_the_playbook_resolves_the_bot_name_through_the_map() -> None:
     """The anti-alias assertion: the name must not appear as a literal."""
-    playbook = (REPO / "infra/ansible/playbooks/provision-bee.yml").read_text()
-    common = yaml.safe_load(COMMON.read_text())
+    playbook = (REPO / "infra/ansible/playbooks/provision-bee.yml").read_text(encoding="utf-8")
+    common = yaml.safe_load(COMMON.read_text(encoding="utf-8"))
     machine = common["apps"]["auth"]["identities"]["machine"]
 
     live = [line for line in playbook.splitlines() if machine in line and not line.strip().startswith("#")]
@@ -157,7 +157,7 @@ def bot_harness(tmp_path: pathlib.Path):
     bin_dir.mkdir()
     calls = tmp_path / "calls.log"
 
-    (bin_dir / "wget").write_text("#!/bin/sh\nexit 0\n")
+    (bin_dir / "wget").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
 
     def build(*, bot_exists: bool, prohibited: bool) -> None:
         rows = f"1\t{BOT}\tbot@example.test\n" if bot_exists else ""
@@ -170,7 +170,8 @@ case "$cmd" in
   *"admin auth list"*) printf 'ID\\tName\\n7\\tauthelia\\n' ;;
   *) exit 0 ;;
 esac
-"""
+""",
+            encoding="utf-8",
         )
         (bin_dir / "curl").write_text(
             f"""#!/bin/sh
@@ -179,13 +180,14 @@ case "$*" in
   *PATCH*) exit 0 ;;
   *) printf '{{"login":"{BOT}","prohibit_login":{str(prohibited).lower()}}}' ;;
 esac
-"""
+""",
+            encoding="utf-8",
         )
         for stub in ("wget", "su", "curl"):
             (bin_dir / stub).chmod(0o755)
 
     marker = tmp_path / "state"
-    marker.write_text("")
+    marker.write_text("", encoding="utf-8")
 
     def run():
         env = {
@@ -210,14 +212,14 @@ def test_the_machine_account_is_created_when_absent(bot_harness):
     result = bot_harness.run()
     assert result.returncode == 0, result.stderr
     assert f"Created machine account '{BOT}'" in result.stdout
-    assert "admin user create --username hefesto" in bot_harness.calls.read_text()
+    assert "admin user create --username hefesto" in bot_harness.calls.read_text(encoding="utf-8")
 
 
 def test_an_existing_machine_account_is_not_recreated(bot_harness):
     bot_harness.build(bot_exists=True, prohibited=True)
     result = bot_harness.run()
     assert f"Machine account '{BOT}' exists" in result.stdout
-    assert "admin user create" not in bot_harness.calls.read_text()
+    assert "admin user create" not in bot_harness.calls.read_text(encoding="utf-8")
 
 
 def test_a_blocked_account_is_unblocked_so_its_token_can_authenticate(bot_harness):
@@ -235,7 +237,7 @@ def test_a_blocked_account_is_unblocked_so_its_token_can_authenticate(bot_harnes
     """
     bot_harness.build(bot_exists=False, prohibited=True)
     result = bot_harness.run()
-    calls = bot_harness.calls.read_text()
+    calls = bot_harness.calls.read_text(encoding="utf-8")
     assert "Updated machine account login state" in result.stdout
     assert "PATCH" in calls
     assert '"prohibit_login\\": false' in calls or "prohibit_login" in calls
@@ -258,7 +260,7 @@ def test_an_account_already_in_the_right_state_is_not_patched_again(bot_harness)
         "the script announced a change over an account already in the right state; "
         "`changed_when` matches on 'Updated', so this restarts Gitea every provision"
     )
-    assert "PATCH" not in bot_harness.calls.read_text()
+    assert "PATCH" not in bot_harness.calls.read_text(encoding="utf-8")
 
 
 def test_the_bot_section_is_skipped_when_no_machine_identity_is_declared(bot_harness):
@@ -331,7 +333,8 @@ def test_a_failed_login_state_patch_stops_the_run(bot_harness, tmp_path):
     # GET answers; PATCH fails with curl's HTTP-error status.
     (bin_dir / "curl").write_text(
         '#!/bin/sh\ncase "$*" in\n  *PATCH*) exit 22 ;;\n'
-        '  *) printf \'{"login":"hefesto","prohibit_login":true}\' ;;\nesac\n'
+        '  *) printf \'{"login":"hefesto","prohibit_login":true}\' ;;\nesac\n',
+        encoding="utf-8",
     )
     (bin_dir / "curl").chmod(0o755)
 

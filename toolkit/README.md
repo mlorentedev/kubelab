@@ -52,13 +52,11 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit backup drill-postgres` | Restore the newest Postgres dump from R2 into a scratch container and check it is complete. |
 | `toolkit backup escrow-check` | Compare each restic password in SOPS with its Bitwarden escrow entry (BACKUP-057). |
 | `toolkit backup generate-password` | Generate the restic repository password and store it in SOPS. |
-| `toolkit backup health-check` | Run full R2 destination verification + fleet coverage check and notify Slack. |
+| `toolkit backup health-check` | Run the isolation probe and the fleet coverage check, and notify Slack. |
 | `toolkit backup isolation-probe` | Fail on any R2 request a stolen node credential should be refused (BACKUP-057). |
 | `toolkit backup migrate` | Move one node's restic history into its own bucket (BACKUP-057 AC4). |
 | `toolkit backup mint-node-tokens` | Mint each node's own R2 token and restic password into SOPS (BACKUP-057). |
 | `toolkit backup restore-window` | Pause an env's Argo CD auto-sync and stop one app, so its data can be replaced (BACKUP-070). |
-| `toolkit backup verify-destination` | Prove the R2 destination is usable: scope, reach, and a write/read/delete round-trip. |
-| `toolkit backup verify-restic` | Prove restic can create, use and verify a repository in R2. |
 | `toolkit board` | Bitácora board governance: keep the Stream field true to the registry. |
 | `toolkit board deps` | Report open issues named by a dependency keyword in another open issue's body (GOV-005 AC3 guard). |
 | `toolkit board ids` | Report (default) or check for open issues that share a ticket id. |
@@ -101,10 +99,21 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit infra argo set-revision` | Patch an Argo CD Application's spec.source.targetRevision. |
 | `toolkit infra argo spoke-url` | Print one spoke's K3s apiserver URL, resolved from the SSOT (#1215). |
 | `toolkit infra argo unregister-spoke` | Detach ONE hub from ONE spoke, without pruning the spoke. |
+| `toolkit infra argo verify-product` | Verify a product is deployed at origin/master HEAD by consequence (GITOPS-003, #1478). |
+| `toolkit infra argo wait-status` | Wait for the commit status Argo CD posts per sync (GITOPS-003 AC2, #1478). |
+| `toolkit infra edge` | The lab edge (rpi4): uplink status (NET-005) |
+| `toolkit infra edge ap-halt` | Halt the lab Wi-Fi's radio on purpose and watch the edge bring it back (B10). |
+| `toolkit infra edge boot-check` | Say whether a boot brought back everything the edge serves (the hard-reset test). |
+| `toolkit infra edge lan-link` | Join this laptop to the lab LAN with a NetworkManager profile (NET-005 AC11). |
+| `toolkit infra edge measure` | Measure the uplink's line rate on the edge, one window per direction (AC8). |
+| `toolkit infra edge shape-check` | Check that the shaper keeps a lab Wi-Fi client usable under bulk load (B9, AC8). |
+| `toolkit infra edge soak` | Say whether the uplink adapter has held 48 hours of this boot with no reset (B12). |
+| `toolkit infra edge status` | Say whether the edge's uplink is up, behind a portal, or dead. |
 | `toolkit infra headscale` | Headscale VPN ACL policy + mesh probe (ADR-041) |
 | `toolkit infra headscale policy-check` | Render policy.hujson from the SSOT and validate it with `headscale policy check` (Docker). |
 | `toolkit infra headscale probe` | Probe the preserved mesh flows after a policy reload (auto-revert gate, ADR-041). |
 | `toolkit infra headscale recycle-stale` | Reclaim a canonical node name from a dead record after a preemption (#1369). |
+| `toolkit infra headscale rejoin` | Put a node back on the mesh with a single-use, one-hour key (NET-005 task 32). |
 | `toolkit infra k8s` | Kubernetes management commands |
 | `toolkit infra k8s access` | Cluster-access transport (ADR-052): bring up/tear down/inspect the local->apiserver tunnel |
 | `toolkit infra k8s access connect` | Bring up the cluster-access transport (idempotent). |
@@ -117,10 +126,13 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit infra k8s deploy` | Deploy K8s manifests to the cluster. |
 | `toolkit infra k8s dry-run` | Generate manifests and validate with dry-run (no apply). |
 | `toolkit infra k8s fetch-kubeconfig` | Fetch a cluster's kubeconfig with a transport-agnostic server (ADR-052). |
-| `toolkit infra k8s provision-postgres-tenant` | Idempotently provision a tenant role and database in PostgreSQL (infra.postgres). |
+| `toolkit infra k8s provision-postgres-tenant` | Idempotently provision tenant roles and databases in PostgreSQL (infra.postgres). |
 | `toolkit infra k8s render-apply` | Render RESOLVE_* placeholders (MagicDNS) in a single manifest, then server-side apply. |
 | `toolkit infra k8s restart` | Restart any K8s deployment (rollout restart + wait) on the env's cluster. |
 | `toolkit infra k8s status` | Show K8s resource status for the kubelab namespace. |
+| `toolkit infra load-test` | Measure staging's capacity (OPS-054); never prod |
+| `toolkit infra load-test clear` | Remove the route a run that died left behind. Idempotent. |
+| `toolkit infra load-test run` | Measure staging: a baseline under the limiter, then ramps to the first degraded step. |
 | `toolkit infra n8n` | n8n workflow import (TOOL-009) + notification-fabric smoke (NOTIFY-001) |
 | `toolkit infra n8n import` | Reconstruct the n8n workflow + Header Auth credential from Git + SOPS (TOOL-009). |
 | `toolkit infra n8n probe` | Probe the public n8n webhooks end to end (APP-CONFIG-015 AC4/AC5). |
@@ -141,9 +153,8 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit infra vps snapshot` | Snapshot the VPS through the Hetzner API: the rollback of last resort (PREP-002). |
 | `toolkit monitoring` | Uptime Kuma monitoring: status and config-as-code (backup is node_backup) |
 | `toolkit monitoring apply` | Declarative sync: apply monitors from seed JSON to Uptime Kuma. |
-| `toolkit monitoring bootstrap` | Full disaster recovery: create admin user + import monitors. |
+| `toolkit monitoring bootstrap` | Full disaster recovery: create admin user + apply monitors. |
 | `toolkit monitoring export` | Export monitors and notifications to JSON (config-as-code). |
-| `toolkit monitoring import` | Import monitors from JSON seed files into Uptime Kuma. |
 | `toolkit monitoring status` | Check Uptime Kuma connectivity and container status on RPi3. |
 | `toolkit obs` | Agentic Observability & SRE triage commands (Loki, Grafana, Slack). |
 | `toolkit obs alerts` | List active Grafana alerts and their firing states. |
@@ -156,6 +167,7 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit product app-for-event` | Name the app a dispatch event type belongs to; exit 1 if the registry maps it to none. |
 | `toolkit product list` | List the registered products, in registry order. |
 | `toolkit product ready` | Check the contract at the commit staging runs, as the generic receiver would; exit 1 if it would refuse. |
+| `toolkit product release-contract` | Fetch the contract at the release's commit, proven by digest, and write it to --out; exit 1 if refused. |
 | `toolkit product render` | Render a contract into apps.platform.<app>; without a flag, print the contract-owned keys. |
 | `toolkit product show` | Print where a product comes from: its forge, repository and receiver; exit 1 if unregistered. |
 | `toolkit product validate` | Validate a product contract against the schema, and with --registry against the platform; exit 1 if refused. |
@@ -204,6 +216,7 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit sync` | Sync generated files from SSOT (common.yaml, SOPS). |
 | `toolkit sync all` | Run all sync operations. |
 | `toolkit sync branding` | Sync IDP brand CSS from common.yaml SSOT. |
+| `toolkit sync edge-watcher-targets` | Render the edge watcher's targets from networking (NET-005 AC12). |
 | `toolkit sync images` | Sync K8s image tags from common.yaml to kustomization.yaml. |
 | `toolkit sync oidc` | Generate the OIDC client files from the SSOT and the stored SOPS digests (SSOT-017). |
 | `toolkit sync operators` | Refresh vendored cluster_bootstrap operator manifests from their SSOT version (ADR-047). |
@@ -219,6 +232,8 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit tools certs status` | Show certificate status for an environment. |
 | `toolkit tools cli-reference` | Keep the README's command table equal to the command tree it describes. |
 | `toolkit tools delivery-health` | Refuse a delivery workflow whose newest run never started. |
+| `toolkit tools deploy-merge` | Judge every open PR to the default branch: merge, close or skip (DELIVERY-004 AC6). |
+| `toolkit tools deploy-shape` | Judge whether a PR is a mechanical staging deploy (DELIVERY-004, #1619). |
 | `toolkit tools lessons-index` | Order each category's lesson rows newest first (by date, then by number within a date, #1912), after refusing a corpus a rewrite would hide. |
 | `toolkit tools mutate` | Run the test unmutated, apply one replacement, run it again, restore the file. |
 | `toolkit tools review-attestation` | Report whether a PR was actually reviewed, and refuse it if not. |

@@ -8,8 +8,10 @@ from __future__ import annotations
 
 import json
 import subprocess
+import time
 from dataclasses import dataclass
-from typing import Any
+from enum import IntEnum
+from typing import Any, Callable
 
 
 class ApplicationNotFoundError(Exception):
@@ -160,3 +162,94 @@ def check_drift(applications_dir: str, kubeconfig: str) -> DriftCheckResult:
         f"kubectl diff exited {proc.returncode} (not 0 or 1) — cannot determine drift. "
         f"stderr: {(proc.stderr or '').strip()}"
     )
+
+
+class StatusFetchError(Exception):
+    """The commit statuses could not be read (gh failed, non-JSON) — never "no status"."""
+
+
+class WaitStatus(IntEnum):
+    """The exit code of `wait-status`. Callers branch on these numbers."""
+
+    SUCCESS = 0
+    FAILED = 1
+    CANNOT_CHECK = 2
+
+
+def latest_status(statuses: list[dict[str, Any]], context: str) -> dict[str, Any] | None:
+    """The newest status of ``context``, by ``updated_at``.
+
+    GitHub lists a commit's statuses newest first, but the order is not relied
+    on: a stale `pending` taken for the latest would wait out a healthy sync.
+    `max` keeps the first of equal timestamps, so the list order breaks ties.
+    """
+    matches = [s for s in statuses if s.get("context") == context]
+    return max(matches, key=lambda s: s.get("updated_at") or "", default=None)
+
+
+def fetch_statuses(repo: str, sha: str) -> list[dict[str, Any]]:
+    """Every status posted on ``sha``, through `gh api` (REST, its own rate-limit bucket).
+
+    The per-commit list, NOT the combined `/status`: the combined state answers
+    `pending` for a commit with no statuses at all, which would hide exactly the
+    "Argo never posted" case this check exists to report.
+    """
+    proc = subprocess.run(
+        ["gh", "api", f"repos/{repo}/commits/{sha}/statuses?per_page=100"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        raise StatusFetchError(proc.stderr.strip()[:200] or "gh api failed")
+    try:
+        payload = json.loads(proc.stdout)
+    except json.JSONDecodeError as exc:
+        raise StatusFetchError(f"gh returned non-JSON: {proc.stdout[:200]}") from exc
+    if not isinstance(payload, list):
+        raise StatusFetchError("gh returned something other than a list of statuses")
+    return payload
+
+
+def wait_status(
+    *,
+    context: str,
+    fetch: Callable[[], list[dict[str, Any]]],
+    timeout: float,
+    poll: float = 15.0,
+    now: Callable[[], float] = time.monotonic,
+    sleep: Callable[[float], None] = time.sleep,
+) -> tuple[WaitStatus, str]:
+    """Poll ``context``'s status until it settles or the deadline passes (GITOPS-003 AC2).
+
+    `success` is green and `failure`/`error` red at once, with the description
+    Argo CD wrote from `operationState.message`. `pending` and no status keep
+    waiting; at the deadline they are red with different words, because "Argo
+    never posted" and "the sync never finished" have different fixes. An API
+    failure is retried, and is CANNOT_CHECK only if it is the last observation;
+    the line then also says what the status was when it was last read.
+    """
+    deadline = now() + timeout
+    seen = ""
+    while True:
+        try:
+            status = latest_status(fetch(), context)
+        except StatusFetchError as exc:
+            verdict, line = WaitStatus.CANNOT_CHECK, f"statuses could not be read: {exc}"
+            if seen:
+                line += f"; last read: {seen}"
+        else:
+            if status is None:
+                verdict, line = WaitStatus.FAILED, f"no status arrived for {context}"
+            else:
+                state, description = status.get("state"), status.get("description") or "<no description>"
+                line = f"{context} is {state}: {description}"
+                if state == "success":
+                    return WaitStatus.SUCCESS, line
+                if state in ("failure", "error"):
+                    return WaitStatus.FAILED, line
+                verdict, line = WaitStatus.FAILED, f"{context} still pending: {description}"
+            seen = line
+        if now() >= deadline:
+            return verdict, f"{line} (deadline of {timeout:.0f}s reached)"
+        sleep(poll)

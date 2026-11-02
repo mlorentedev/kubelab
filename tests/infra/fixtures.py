@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import warnings
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -27,7 +28,7 @@ class NodeInfo:
 def _load_common_config() -> dict:
     """Load common.yaml for networking values (VPS IP, Tailscale CIDR, etc.)."""
     config_path = _REPO_ROOT / "infra" / "config" / "values" / "common.yaml"
-    with open(config_path) as f:
+    with open(config_path, encoding="utf-8") as f:
         return yaml.safe_load(f)
 
 
@@ -53,7 +54,7 @@ def _init_default_ssh_user() -> None:
     if not inventory_path.exists():
         return
     try:
-        with open(inventory_path) as f:
+        with open(inventory_path, encoding="utf-8") as f:
             data = yaml.safe_load(f)
         if data is None:
             return
@@ -77,19 +78,44 @@ def ssh_user(node: NodeInfo) -> str:
     return node.vars.get("ansible_user", _DEFAULT_SSH_USER)
 
 
+#: The cloud blocks the inventory generator lets `retired` remove, besides `nodes.*`.
+#: A flag anywhere else removes nothing from the generated inventory, so it must
+#: not remove anything from the suite either (test_infra_inventory_retired.py).
+RETIRABLE_CLOUD_BLOCKS = ("aws", "gcp")
+
+
+def retired_addresses(networking: dict) -> frozenset[str]:
+    """Every address of a node declared `retired`: a rebuild recipe, not a machine.
+
+    The inventory names hosts its own way (`kubelab-jet1` for
+    `networking.nodes.jetson`), so the address is what links it to the declaration.
+    `tailscale_dns` counts as one: it is the `ansible_host` the generator gives a hub.
+    """
+    blocks = [*networking.get("nodes", {}).values(), *(networking.get(key) for key in RETIRABLE_CLOUD_BLOCKS)]
+    return frozenset(
+        block[attr]
+        for block in blocks
+        if block and block.get("retired")
+        for attr in ("tailscale_ip", "tailscale_dns", "lan_ip", "public_ip")
+        if block.get(attr)
+    )
+
+
 def load_inventory(
     inventory_path: Path | None = None,
+    networking: dict | None = None,
 ) -> list[NodeInfo]:
-    """Parse the Ansible inventory YAML and return a list of NodeInfo."""
+    """Parse the Ansible inventory YAML and return its nodes, less the retired ones."""
     if inventory_path is None:
         inventory_path = _REPO_ROOT / "infra" / "ansible" / "inventories" / "homelab.yml"
 
     if not inventory_path.exists():
         return []
 
-    with open(inventory_path) as f:
+    with open(inventory_path, encoding="utf-8") as f:
         data = yaml.safe_load(f)
 
+    retired = retired_addresses(_COMMON["networking"] if networking is None else networking)
     nodes: list[NodeInfo] = []
     children = data.get("all", {}).get("children", {})
     for group_name, group_data in children.items():
@@ -97,6 +123,10 @@ def load_inventory(
         for hostname, host_vars in hosts.items():
             if host_vars is None:
                 host_vars = {}
+            if host_vars.get("ansible_host", hostname) in retired:
+                # Said, as the generator says it: a reduced run must name what it stopped covering.
+                warnings.warn(f"{hostname} is retired in common.yaml: the infra suite does not check it", stacklevel=2)
+                continue
             nodes.append(
                 NodeInfo(
                     name=hostname,

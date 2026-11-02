@@ -81,21 +81,16 @@ live privilege over each app's break-glass path.
   user to sign in once, then run the review again.
 - **Argo CD denials.** The UI opens the confirmation dialog *before* the server
   authorizes (lesson-473). Never confirm a destructive action to prove a
-  denial. Check the allowed half in the browser (a Sync). Check the denied half
-  with the evaluator over the live policy, until AUTH-012 (#1876) folds it into
-  `auth-review`:
-
-  ```bash
-  kubectl --kubeconfig ~/.kube/kubelab-hub-config -n argocd \
-    get cm argocd-rbac-cm -o jsonpath='{.data.policy\.csv}' > policy.csv
-  docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/w" -e KUBECONFIG=/w/kc \
-    quay.io/argoproj/argocd:<argocd.app_version> \
-    argocd admin settings rbac can users delete applications '*/*' \
-    --policy-file /w/policy.csv --default-role role:readonly
-  ```
-
-  `kc` is a placeholder kubeconfig (`user: {token: none}`). The command needs
-  one to start, and it never contacts the cluster. Exit 0 means allowed.
+  denial. Check the allowed half in the browser (a Sync). `make auth-review
+  ENV=<env>` checks both halves for every tier: it reads the hub's live
+  `policy.csv` and `policy.default` and asks the pinned image's evaluator the
+  cases in `ARGOCD_RBAC_CASES` (`toolkit/features/access_review.py`), the same
+  matrix CI holds the shipped file to (#1876). A tier reads `drift` naming the
+  first case the policy answers wrongly, for example `allowed delete
+  applications */*` for `operator`. Docker must be running. Without it the
+  review reads `failed` (cannot check), never `ok`. A `drift` here usually
+  means the hub has not had `make deploy-argocd` since the merge, because the
+  RBAC reaches the hub only through that target.
 - **Break-glass accounts** are local and belong to no group. `auth-review`
   lists them (`sign-in: Auth Proxy` or `local`), and they are not moved by any
   of this. See [break-glass](break-glass.md).

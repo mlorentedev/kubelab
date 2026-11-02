@@ -68,7 +68,7 @@ def _recipe_lines() -> list[tuple[str, int, str]]:
     """
     out: list[tuple[str, int, str]] = []
     target = None
-    for n, line in enumerate(MAKEFILE.read_text().splitlines(), start=1):
+    for n, line in enumerate(MAKEFILE.read_text(encoding="utf-8").splitlines(), start=1):
         m = re.match(r"^([a-zA-Z0-9_-]+):", line)
         if m:
             target = m.group(1)
@@ -132,7 +132,7 @@ class TestTheDeadGuardIsGone:
         wrong count for exactly that reason."""
         quoted = [
             n
-            for n, line in enumerate(MAKEFILE.read_text().splitlines(), start=1)
+            for n, line in enumerate(MAKEFILE.read_text(encoding="utf-8").splitlines(), start=1)
             if DEAD_GUARD.search(line) and not line.startswith("\t")
         ]
         assert quoted, "expected the Makefile to still explain this defect in prose somewhere"

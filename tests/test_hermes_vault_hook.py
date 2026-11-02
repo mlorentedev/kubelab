@@ -18,7 +18,7 @@ from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
 REPO = Path(__file__).resolve().parent.parent
 ROLE = REPO / "infra/ansible/roles/agent_stack"
-COMMON = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text())
+COMMON = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
 ZONE = COMMON["apps"]["services"]["ai"]["hermes_kubelab"]["vault_zone"]
 
 
@@ -31,7 +31,7 @@ def _hook(hooks: Path, zone: str) -> Path:
     env = Environment(loader=FileSystemLoader(str(ROLE / "templates")), undefined=StrictUndefined)
     hook = hooks / "pre-commit"
     template = env.get_template("pre-commit-zone.sh.j2")
-    hook.write_text(template.render(ansible_managed="managed", agent_stack_vault_zone=zone))
+    hook.write_text(template.render(ansible_managed="managed", agent_stack_vault_zone=zone), encoding="utf-8")
     hook.chmod(0o755)
     return hook
 
@@ -51,7 +51,7 @@ def _vault(tmp_path: Path, zone: str) -> Path:
         _git(repo, *args)
     for path in ("10_projects/kubelab/roadmap.md", f"{zone}/notes.md"):
         (repo / path).parent.mkdir(parents=True, exist_ok=True)
-        (repo / path).write_text("seed\n")
+        (repo / path).write_text("seed\n", encoding="utf-8")
     _git(repo, "add", "-A")
     assert _git(repo, "commit", "-q", "--no-verify", "-m", "seed").returncode == 0
     return repo
@@ -69,7 +69,7 @@ def _commit(repo: Path) -> int:
 
 def _write(repo: Path, path: str) -> None:
     (repo / path).parent.mkdir(parents=True, exist_ok=True)
-    (repo / path).write_text("change\n")
+    (repo / path).write_text("change\n", encoding="utf-8")
 
 
 def test_a_change_inside_the_zone_is_accepted(vault: Path) -> None:
@@ -123,14 +123,14 @@ def test_a_failing_git_refuses_the_commit(tmp_path: Path) -> None:
     hook = _hook(tmp_path / "hooks", ZONE)
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
-    (bin_dir / "git").write_text("#!/bin/sh\nexit 128\n")
+    (bin_dir / "git").write_text("#!/bin/sh\nexit 128\n", encoding="utf-8")
     (bin_dir / "git").chmod(0o755)
     env = {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}"}
     assert subprocess.run([str(hook)], env=env, cwd=tmp_path, capture_output=True, check=False).returncode != 0
 
 
 def test_the_zone_comes_from_the_ssot() -> None:
-    source = (ROLE / "templates/pre-commit-zone.sh.j2").read_text()
+    source = (ROLE / "templates/pre-commit-zone.sh.j2").read_text(encoding="utf-8")
     assert "{{ agent_stack_vault_zone }}" in source
     assert "hermes-kubelab" not in source
     from tests.test_agent_egress import _role_vars
@@ -139,7 +139,7 @@ def test_the_zone_comes_from_the_ssot() -> None:
 
 
 def test_the_agent_cannot_edit_the_hook() -> None:
-    tasks = yaml.safe_load((ROLE / "tasks/vault_zone.yml").read_text())
+    tasks = yaml.safe_load((ROLE / "tasks/vault_zone.yml").read_text(encoding="utf-8"))
     renders = [t for t in tasks if (t.get("ansible.builtin.template") or {}).get("src") == "pre-commit-zone.sh.j2"]
     assert len(renders) == 1
     spec = renders[0]["ansible.builtin.template"]
@@ -160,5 +160,5 @@ def test_the_agent_cannot_edit_the_hook() -> None:
     assert len(dirs) == 1
     assert dirs[0]["ansible.builtin.file"]["owner"] == "root", "an agent-owned parent can swap the hook"
     assert dirs[0]["ansible.builtin.file"]["mode"] == "0755", "a parent others can write lets them unlink the hook"
-    defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text())
+    defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text(encoding="utf-8"))
     assert not defaults["agent_stack_vault_hooks"].startswith("/home/")

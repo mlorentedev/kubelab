@@ -19,7 +19,7 @@ def _get_base_domain(env: str) -> str:
     """Read base_domain for the given environment from config values."""
     env_path = _REPO_ROOT / "infra" / "config" / "values" / f"{env}.yaml"
     if env_path.exists():
-        with open(env_path) as f:
+        with open(env_path, encoding="utf-8") as f:
             env_config = yaml.safe_load(f) or {}
         domain = env_config.get("global", {}).get("base_domain")
         if domain:

@@ -31,21 +31,24 @@ SECRET_INPUTS = (
     "_agent_stack_webui_secret_key",
     "_agent_stack_hermes_api_key",
     "_agent_stack_mcp_bridge_key",
+    "_agent_stack_searxng_key",
 )
 COMPOSE_FILES = ("compose-webui.yml.j2", "compose-hermes.yml.j2")
 CONFIGURED = "agent_stack_webui_configured | bool"
 
 
 def _common() -> dict:
-    return yaml.safe_load(COMMON.read_text())
+    return yaml.safe_load(COMMON.read_text(encoding="utf-8"))
 
 
 def _context() -> dict:
     common = _common()
-    defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text())
+    defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text(encoding="utf-8"))
     return {
         **defaults,
         "ansible_managed": "managed",
+        "agent_stack_docker_dns_servers": common["networking"]["tailnet_first_resolvers"],
+        "agent_stack_hermes_dns_servers": common["networking"]["public_resolvers"],
         "tailscale_ip": common["networking"]["nodes"]["ace2"]["tailscale_ip"],
         "agent_stack_webui": common["apps"]["services"]["ai"]["open_webui"],
         "agent_stack_webui_oidc_client_id": "open-webui-oidc",
@@ -59,10 +62,13 @@ def _context() -> dict:
         "agent_stack_hermes": common["apps"]["services"]["ai"]["hermes_kubelab"],
         "agent_stack_vault_zone": common["apps"]["services"]["ai"]["hermes_kubelab"]["vault_zone"],
         "agent_stack_headscale_url": f"https://{common['apps']['services']['core']['headscale']['domain']}",
-        "agent_stack_deny_rules": yaml.safe_load((ROLE / "files/guardrails-denylist.yaml").read_text())["rules"],
+        "agent_stack_deny_rules": yaml.safe_load((ROLE / "files/guardrails-denylist.yaml").read_text(encoding="utf-8"))[
+            "rules"
+        ],
         "_agent_stack_agent_uid": 999,
         "_agent_stack_hermes_api_key": "hermes-api-key-sentinel",
         "_agent_stack_mcp_bridge_key": "mcp-bridge-key-sentinel",
+        "_agent_stack_searxng_key": "searxng-key-sentinel",
         "agent_stack_webui_bridge": common["networking"]["nodes"]["ace2"]["webui_bridge"],
     }
 
@@ -111,7 +117,7 @@ def _tasks() -> list[dict]:
     """Every task in every file of the role, including those nested in a block."""
     flat: list[dict] = []
     for path in sorted((ROLE / "tasks").glob("*.yml")):
-        for task in yaml.safe_load(path.read_text()) or []:
+        for task in yaml.safe_load(path.read_text(encoding="utf-8")) or []:
             flat.append(task)
             flat.extend(task.get("block") or [])
     return flat
@@ -158,7 +164,7 @@ def test_the_env_file_is_private_and_never_logged() -> None:
 @pytest.mark.parametrize("compose_file", COMPOSE_FILES)
 @pytest.mark.parametrize("secret", SECRET_INPUTS)
 def test_no_secret_reaches_the_compose_file(secret: str, compose_file: str) -> None:
-    source = (ROLE / "templates" / compose_file).read_text()
+    source = (ROLE / "templates" / compose_file).read_text(encoding="utf-8")
     assert secret not in source
     assert _context()[secret] not in _render(compose_file)
 
@@ -170,13 +176,16 @@ def _env() -> dict[str, str]:
 
 
 def test_sso_signs_up_and_the_form_admits_only_the_seeded_break_glass_account() -> None:
-    """The form is the break-glass door (ADR-062 D4). Nobody can sign up through it.
+    """The form is the break-glass door (ADR-062 D4), hidden but reachable at
+    `/auth?form=signin`. Nobody can sign up through it.
 
-    `ENABLE_LOGIN_FORM=false` would only hide the form: `/api/v1/auths/signin` keeps
-    taking passwords (v0.12.0, lesson-520), so it never made SSO the only door.
+    `ENABLE_LOGIN_FORM=false` only hides the form: `/api/v1/auths/signin` keeps
+    taking passwords (v0.12.5, lesson-520). v0.12.5 sends a visitor to Authelia
+    only while the form is hidden (#2482), and `?form=` shows it again.
     """
     env = _env()
-    assert env["ENABLE_LOGIN_FORM"] == "true"
+    assert env["ENABLE_LOGIN_FORM"] == "false", "the auto-redirect to Authelia needs the form hidden"
+    assert env["OAUTH_AUTO_REDIRECT"] == "true", "people start at Authelia, not at Open WebUI's page"
     assert env["ENABLE_PASSWORD_AUTH"] == "true", "the sign-in endpoint refuses passwords without it"
     assert env["ENABLE_SIGNUP"] == "false"
     assert env["ENABLE_OAUTH_SIGNUP"] == "true"
@@ -186,6 +195,28 @@ def test_sso_signs_up_and_the_form_admits_only_the_seeded_break_glass_account() 
     assert env["WEBUI_ADMIN_PASSWORD"] == "admin-password-sentinel"
     assert env["OAUTH_CLIENT_SECRET"] == "oidc-secret-sentinel"
     assert env["ENABLE_OLLAMA_API"] == "false"
+
+
+def test_break_glass_opens_the_hidden_form_not_the_idp(monkeypatch: pytest.MonkeyPatch) -> None:
+    """With the form hidden, Open WebUI's page redirects to Authelia: exactly what is
+    down when the break-glass path is in use. `?form=` shows the form and stops it.
+
+    Reads the URL the command prints, not the declaration (pr-agent on #2655), so
+    the guard goes red if the command stops appending the declared path. Only the
+    live lookup is replaced: the declaration is the committed one."""
+    from typer.testing import CliRunner
+
+    from toolkit.cli import auth
+    from toolkit.main import app
+
+    decl = _common()["apps"]["services"]["security"]["authelia"]["break_glass"]["open-webui"]
+    ace2 = "http://ace2.test:3080"
+    monkeypatch.setattr(auth.shutil, "which", lambda _: "/usr/bin/kubectl")
+    monkeypatch.setattr(auth.bg, "resolve", lambda *_: (decl, None, break_glass.Direct(url=ace2)))
+
+    result = CliRunner().invoke(app, ["auth", "break-glass", "open-webui", "--env", "prod", "--dry-run"])
+    assert result.exit_code == 0, result.output
+    assert f"way in:   {ace2}/auth?form=signin " in result.output
 
 
 def test_tiers_come_from_authelia_groups_and_anyone_else_is_refused() -> None:
@@ -198,7 +229,7 @@ def test_tiers_come_from_authelia_groups_and_anyone_else_is_refused() -> None:
 
 
 def test_userinfo_is_always_read_because_authelia_sends_groups_only_there() -> None:
-    """lesson-457: groups are in UserInfo, not the ID token. Open WebUI v0.12.0 calls
+    """lesson-457: groups are in UserInfo, not the ID token. Open WebUI v0.12.5 calls
     UserInfo only when the ID token lacks the email or the username claim, so the
     username claim is one Authelia keeps out of the ID token."""
     assert _env()["OAUTH_USERNAME_CLAIM"] == "preferred_username"
@@ -213,7 +244,7 @@ def test_open_webui_is_not_deployed_without_an_oidc_secret_and_a_break_glass_pas
     """With the form on and an empty database, the first visitor to sign up becomes admin
     (`auths.py` gates the first signup on neither ENABLE_SIGNUP nor anything else). The
     seeded break-glass account is what closes that, so no seed, no start."""
-    defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text())
+    defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text(encoding="utf-8"))
     gate = defaults["agent_stack_webui_configured"]
     assert "agent_stack_webui_oidc_client_secret | length > 0" in gate
     assert "agent_stack_webui_admin_password | length > 0" in gate
@@ -240,7 +271,7 @@ def test_the_redirect_uri_is_the_public_name_the_client_registers() -> None:
 
 
 def test_the_role_runs_on_ace2_after_dev_node() -> None:
-    plays = yaml.safe_load((REPO / "infra/ansible/playbooks/provision-ace2.yml").read_text())
+    plays = yaml.safe_load((REPO / "infra/ansible/playbooks/provision-ace2.yml").read_text(encoding="utf-8"))
     roles = [r["role"].rsplit("/", 1)[-1] for r in plays[1]["roles"]]
     assert "agent_stack" in roles
     assert roles.index("agent_stack") > roles.index("dev_node")
@@ -251,7 +282,7 @@ def test_open_webui_reads_the_one_nan_key_pr_agent_uses() -> None:
     from toolkit.features.secrets_manager import SECRET_CATALOG
 
     key = "apps.services.automation.pr_agent.nan_api_key"
-    plays = yaml.safe_load((REPO / "infra/ansible/playbooks/provision-ace2.yml").read_text())
+    plays = yaml.safe_load((REPO / "infra/ansible/playbooks/provision-ace2.yml").read_text(encoding="utf-8"))
     [stack] = [r for r in plays[1]["roles"] if r["role"].endswith("agent_stack")]
     # Prod's vault: the key is registered `envs=("prod",)`, and `secrets` here is staging's.
     assert stack["vars"]["agent_stack_nan_api_key"] == "{{ gitea_secrets." + key + " | default('') }}"
@@ -267,12 +298,12 @@ def test_open_webui_reads_the_one_nan_key_pr_agent_uses() -> None:
     stray = sorted(
         f"{store.name}:{path}"
         for store in sorted((REPO / "infra/config/secrets").glob("*.enc.yaml"))
-        for path in _key_paths(yaml.safe_load(store.read_text()))
+        for path in _key_paths(yaml.safe_load(store.read_text(encoding="utf-8")))
         if path.endswith(".nan_api_key")
         and not (path in specs and store.name.split(".")[0] in ("common", *specs[path].envs))
     )
     assert not stray, f"a NaN key outside the catalog, or in a vault its spec does not cover: {stray}"
-    assert key in _key_paths(yaml.safe_load((REPO / "infra/config/secrets/prod.enc.yaml").read_text()))
+    assert key in _key_paths(yaml.safe_load((REPO / "infra/config/secrets/prod.enc.yaml").read_text(encoding="utf-8")))
 
 
 def _key_paths(node: object, prefix: str = "") -> list[str]:
@@ -300,7 +331,7 @@ def test_the_container_resolves_through_magicdns_first() -> None:
 
 
 def test_only_open_webuis_own_origin_may_read_it_with_credentials() -> None:
-    """v0.12.0 defaults `CORS_ALLOW_ORIGIN` to `*` and passes it to Starlette with
+    """v0.12.5 defaults `CORS_ALLOW_ORIGIN` to `*` and passes it to Starlette with
     `allow_credentials=True`, which echoes any origin back on a request with a cookie,
     and socket.io accepts the upgrade from any origin (#2109, measured live). `.internal`
     is on no public suffix list, so every `*.kubelab.internal` host is the same site."""

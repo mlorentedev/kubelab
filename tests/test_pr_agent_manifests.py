@@ -63,7 +63,7 @@ def _container(deployment: dict, name: str) -> dict:
 
 class TestDeployment:
     def test_image_matches_common_yaml(self) -> None:
-        common = yaml.safe_load((REPO_ROOT / "infra/config/values/common.yaml").read_text())
+        common = yaml.safe_load((REPO_ROOT / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
         expected = common["apps"]["services"]["automation"]["pr_agent"]["image"]
 
         container = _container(_one(_prod_docs(), "Deployment", "pr-agent"), "pr-agent")

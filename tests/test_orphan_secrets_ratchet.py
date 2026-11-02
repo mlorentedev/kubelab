@@ -36,7 +36,7 @@ from toolkit.features.secrets_manager import (
 #: act.** If you are here because a test failed after adding a baseline entry:
 #: that is the mechanism working, not a broken test. Ask whether the key should be
 #: registered or deleted before raising this number.
-ORPHAN_BASELINE_MAX = 16
+ORPHAN_BASELINE_MAX = 10
 
 
 def test_the_baseline_may_only_shrink() -> None:

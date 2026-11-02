@@ -19,7 +19,7 @@
 #
 # Why a cloud firewall and not ufw: ufw CANNOT restrict a published port.
 # Docker and klipper-lb DNAT in PREROUTING, before ufw's filter chains, and
-# DOCKER-USER is empty fleet-wide (#959). Hetzner enforces at its own edge,
+# DOCKER-USER holds no rule here (#959). Hetzner enforces at its own edge,
 # upstream of the host entirely, which is why this layer holds where ufw does
 # not. ufw is kept in step for defence in depth, from the same SSOT.
 

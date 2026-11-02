@@ -1,0 +1,4 @@
+# Managed by Ansible (gateway role). One line per lab Wi-Fi PSK (ADR-075 D8).
+{% for entry in gateway_ap_psks %}
+keyid={{ entry.keyid }} 00:00:00:00:00:00 {{ entry.psk }}
+{% endfor %}

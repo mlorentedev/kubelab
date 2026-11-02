@@ -1,0 +1,594 @@
+"""A stack published on a node's Tailscale address must come back serving after a boot.
+
+#2500. Two ways it comes back running and serving nothing:
+
+1. dockerd resurrects the container through `restart: unless-stopped` before the
+   address exists, and the bind is dropped. Plain `up -d` adopts that container,
+   because the network attachment is not part of the compose spec hash
+   (ANSIBLE-053, beelink). The repair is `--force-recreate` once the address exists.
+2. The address arrives after the wait helper's bound. The unit fails in
+   `ExecStartPre`, `ExecStart` never runs, and nothing re-runs a oneshot that
+   failed at boot. Measured on 2026-10-26 after the lab moved site: every homelab
+   node and rpi3 booted before the tailnet was reachable, and a day later rpi3's
+   Uptime Kuma, bee's Gitea and every Glances were still up, healthy and attached
+   to no network, their units `failed`. The repair is a retry, and a provision
+   that starts a unit left failed.
+
+The provision also compares the bindings each container asked for with the ones in
+effect and recreates on a difference, through one shared task file.
+
+#2776. The retry must not run inside a start job. systemd records the boot as
+finished only once its job table is empty, and a oneshot waits inside its start
+job, so on a site with no uplink the wait, retried every 30 s, kept a job queued
+most of the time and the boot's end was a matter of chance. The units are `exec`
+units: the job ends once the command runs, and the wait runs in that command.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import re
+import subprocess
+from pathlib import Path
+from typing import Any
+
+import pytest
+import yaml
+
+from tests.ansible_jinja import ansible_env
+from tests.repo_files import repo_files
+
+REPO = Path(__file__).resolve().parent.parent
+ROLES = REPO / "infra/ansible/roles"
+DRIFT = REPO / "infra/ansible/playbooks/_includes/compose-port-drift.yml"
+SETTLED = REPO / "infra/ansible/playbooks/_includes/stack-unit-settled.yml"
+WAIT = "wait-for-tailscale-addr.sh"
+
+#: The roles that bring up a compose stack bound to the Tailscale address, with
+#: their stack unit and the task that starts the stack at provision, for the
+#: roles that use the shared drift check.
+STACKS = {
+    "rpi3_services": ("kubelab-rpi3.service", "Start services"),
+    "beelink_services": ("kubelab-compose.service", "Start services"),
+    "glances": ("kubelab-glances.service", "Start Glances container"),
+}
+
+#: Every role's stack unit. agent_stack keeps its own drift check, which also
+#: compares memory limits and networks, so it is not in STACKS.
+UNITS_BY_ROLE = {role: unit for role, (unit, _) in STACKS.items()} | {
+    "agent_stack": "agent-stack-webui.service",
+}
+
+
+def _directives(path: Path) -> dict[str, list[str]]:
+    """Values of each systemd directive, from executable lines only.
+
+    The templates explain the race at length and the prose names the very flags
+    asserted here, so a scan of the whole file is green whether or not a directive
+    carries them.
+    """
+    out: dict[str, list[str]] = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith(("#", ";", "[", "{#")):
+            continue
+        key, sep, value = stripped.partition("=")
+        if sep:
+            out.setdefault(key, []).append(value)
+    return out
+
+
+def _waits_for_the_tailnet(value: str) -> bool:
+    return WAIT in value and "tailscale_ip }}" in value
+
+
+def _waiting_units() -> dict[str, dict[str, list[str]]]:
+    """Every unit template that waits for the node's Tailscale address, wherever the wait sits.
+
+    agent-stack-hermes-bind waits for a Docker bridge instead, which the system
+    daemon creates at start with no uplink involved.
+    """
+    units = {}
+    for path in sorted(ROLES.glob("*/templates/*.service.j2")):
+        directives = _directives(path)
+        if any(_waits_for_the_tailnet(v) for v in directives.get("ExecStartPre", []) + directives.get("ExecStart", [])):
+            units[str(path.relative_to(ROLES))] = directives
+    return units
+
+
+UNITS = _waiting_units()
+
+
+def test_every_known_stack_unit_is_found() -> None:
+    """The checks below are only as wide as the discovery; an empty one passes them all."""
+    found = {name.split("/")[0] for name in UNITS}
+    assert set(UNITS_BY_ROLE) <= found, found
+
+
+@pytest.mark.parametrize("name", sorted(UNITS))
+def test_the_unit_stays_active_after_it_ran(name: str) -> None:
+    """Without it the unit goes inactive once ExecStart exits, and the provision's
+    `state: started` would recreate a healthy stack on every run."""
+    assert UNITS[name].get("RemainAfterExit") == ["yes"], name
+
+
+@pytest.mark.parametrize("name", sorted(UNITS))
+def test_the_wait_runs_outside_the_start_job(name: str) -> None:
+    """#2776. In ExecStartPre, or in a oneshot, the wait holds a job for as long as it runs."""
+    directives = UNITS[name]
+    assert directives.get("Type") == ["exec"], f"{name}: its start job lasts as long as the wait"
+    assert not any(WAIT in v for v in directives.get("ExecStartPre", [])), f"{name}: the wait is in ExecStartPre"
+    (start,) = directives.get("ExecStart", [])
+    assert _waits_for_the_tailnet(start), f"{name}: ExecStart no longer waits for the address"
+    assert start.index(WAIT) < start.index("exec /usr/bin/docker compose"), f"{name}: compose runs before the wait"
+
+
+@pytest.mark.parametrize("name", sorted(UNITS))
+def test_the_unit_recreates_the_stack(name: str) -> None:
+    starts = [v for v in UNITS[name].get("ExecStart", []) if "compose" in v and " up" in v]
+    assert starts, f"{name} no longer brings a stack up; drop it from this check"
+    for value in starts:
+        assert "--force-recreate" in value, (
+            f"{name}: plain `up -d` adopts a container dockerd resurrected before the "
+            "address existed, unbound and attached to no network"
+        )
+
+
+@pytest.mark.parametrize("name", sorted(UNITS))
+def test_the_unit_never_pulls(name: str) -> None:
+    """The provision pulls; the unit only starts what is already on the node.
+
+    A pull cut at RuntimeMaxSec ends in a timeout, which `Restart=on-failure`
+    retries, so a slow link would pull forever and the unit never reach `failed`.
+    With `--pull never` a missing image exits 1 (compose 2.39, measured
+    2026-10-27), which RestartPreventExitStatus turns into `failed`.
+    """
+    starts = [v for v in UNITS[name].get("ExecStart", []) if "compose" in v and " up" in v]
+    assert starts, f"{name} no longer brings a stack up; drop it from this check"
+    for value in starts:
+        assert "--pull never" in value, f"{name}: the boot unit may pull: {value}"
+
+
+@pytest.mark.parametrize("name", sorted(UNITS))
+def test_the_unit_retries_when_the_address_comes_late(name: str) -> None:
+    directives = UNITS[name]
+    assert directives.get("Restart") == ["on-failure"], (
+        f"{name}: a oneshot that failed at boot is never run again, so an address that "
+        "arrives after the wait's bound leaves the stack unbound until someone notices"
+    )
+    (delay,) = directives.get("RestartSec", ["0"])
+    seconds = re.fullmatch(r"(\d+)s?", delay)
+    # Under 30 s the retries can hit systemd's default start limit (5 in 10 s)
+    # when the wait fails fast, and then the unit stops retrying for good.
+    assert seconds and int(seconds.group(1)) >= 30, f"{name}: RestartSec={delay}"
+
+
+@pytest.mark.parametrize("name", sorted(UNITS))
+def test_only_the_wait_is_retried(name: str) -> None:
+    """A compose error of its own must fail the unit, not recreate the stack every 30 s.
+
+    The wait and compose share ExecStart's exit status, and both scripts fail with
+    1, so the wait's failure is mapped to a status the unit still retries.
+    """
+    assert UNITS[name].get("RestartPreventExitStatus") == ["1"], name
+    (start,) = UNITS[name].get("ExecStart", [])
+    mapped = re.search(rf"{re.escape(WAIT)} [^|;]*\|\| exit (\d+);", start)
+    assert mapped, f"{name}: a failed wait exits with the status compose fails with"
+    assert mapped.group(1) not in ("0", "1"), f"{name}: a failed wait exits {mapped.group(1)}"
+
+
+def _shipped_units() -> dict[str, dict[str, list[str]]]:
+    """Every unit file the repo ships to a node: role templates and plain copies alike."""
+    ansible = REPO / "infra/ansible"
+    return {
+        str(path.relative_to(ansible)): _directives(path) for path in repo_files(ansible, "*.service", "*.service.j2")
+    }
+
+
+def test_no_shipped_oneshot_is_restarted() -> None:
+    """#2776. A oneshot that restarts waits inside a job on every attempt.
+
+    systemd records the boot as finished only once no job is left, so a oneshot
+    retried until a condition holds keeps a job queued for as long as the condition
+    fails. A retry belongs to an exec unit, whose job ends when its command runs.
+    It reads the unit files in this repository; a drop-in (none ships today) or a
+    unit made by hand on a node, like the edge's watchdog before #2675, is outside it.
+    """
+    units = _shipped_units()
+    assert len(units) > 10, f"only {len(units)} unit templates found; the glob is stale"
+    restarted = [
+        name for name, d in units.items() if d.get("Type") == ["oneshot"] and d.get("Restart", ["no"]) != ["no"]
+    ]
+    assert not restarted, f"oneshot units that restart: {restarted}"
+
+
+#: systemd's time-span units, in seconds (systemd.time(7)): `M` is a month, `m` a minute.
+SPAN_UNITS = {
+    **dict.fromkeys(("us", "usec", "μs"), 1e-6),
+    **dict.fromkeys(("ms", "msec"), 1e-3),
+    **dict.fromkeys(("", "s", "sec", "second", "seconds"), 1),
+    **dict.fromkeys(("m", "min", "minute", "minutes"), 60),
+    **dict.fromkeys(("h", "hr", "hour", "hours"), 3600),
+    **dict.fromkeys(("d", "day", "days"), 86400),
+    **dict.fromkeys(("w", "week", "weeks"), 604800),
+    **dict.fromkeys(("M", "month", "months"), 2630016),
+    **dict.fromkeys(("y", "year", "years"), 31557600),
+}
+SPAN_PART = r"\s*(\d+(?:\.\d+)?)\s*([^\d\s.]*)"
+
+
+def _span_seconds(value: str) -> float:
+    """A systemd time span (`600`, `5min`, `1.5s`, `1min 30s`) in seconds; `infinity` is infinite."""
+    if value.strip() == "infinity":
+        return float("inf")
+    parts = re.findall(SPAN_PART, value)
+    assert parts and re.fullmatch(rf"(?:{SPAN_PART})+\s*", value), f"not a time span: {value!r}"
+    unknown = [unit for _, unit in parts if unit not in SPAN_UNITS]
+    assert not unknown, f"{value!r}: not a systemd time unit: {unknown}"
+    return sum(float(n) * SPAN_UNITS[unit] for n, unit in parts)
+
+
+def _start_timeout(path: Path) -> str:
+    """The span that ends the unit's start job, as systemd reads the file.
+
+    The last assignment wins, and `TimeoutSec=` sets the start timeout as well, so
+    the answer is the last of either. Unset, or reset by an empty assignment, a
+    oneshot's start has none.
+    """
+    value = "infinity"
+    for line in path.read_text(encoding="utf-8").splitlines():
+        key, sep, rest = line.strip().partition("=")
+        if sep and key in ("TimeoutStartSec", "TimeoutSec"):
+            value = rest.strip() or "infinity"
+    return value
+
+
+def _role_default(name: str, var: str) -> str:
+    """The role default a templated directive names, so the bound is read, not assumed."""
+    defaults = yaml.safe_load(
+        (REPO / "infra/ansible" / name.split("/templates/")[0] / "defaults/main.yml").read_text(encoding="utf-8")
+    )
+    assert var in defaults, f"{name}: {var} is not a default of its role"
+    return str(defaults[var])
+
+
+def test_every_shipped_oneshot_bounds_its_start() -> None:
+    """#2786. A oneshot has no start timeout unless it sets one.
+
+    systemd disables `TimeoutStartSec` for `Type=oneshot` by default, and a unit
+    holds a start job for as long as its command runs, so one that waits on the
+    network keeps the boot from finishing (lesson-653). `0` disables the timeout
+    too. Same reach as the check above: unit files in this repository.
+    """
+    oneshots = [name for name, directives in _shipped_units().items() if directives.get("Type") == ["oneshot"]]
+    assert len(oneshots) > 10, f"only {len(oneshots)} oneshot units found; the glob or the parser is stale"
+    unbounded = []
+    for name in oneshots:
+        value = _start_timeout(REPO / "infra/ansible" / name)
+        templated = re.fullmatch(r"\{\{\s*(\w+)\s*\}\}", value.strip())
+        if templated:
+            value = _role_default(name, templated.group(1))
+        seconds = _span_seconds(value)
+        if not 0 < seconds < float("inf"):
+            unbounded.append(f"{name} ({value})")
+    assert not unbounded, f"oneshot units with no start timeout: {unbounded}"
+
+
+@pytest.mark.parametrize(
+    ("span", "seconds"),
+    [
+        ("600", 600),
+        ("5min", 300),
+        ("1.5s", 1.5),
+        ("1min 30s", 90),
+        ("500ms", 0.5),
+        ("1d", 86400),
+        ("2w", 1209600),
+        ("1M", 2630016),
+        ("infinity", float("inf")),
+    ],
+)
+def test_a_span_reads_as_systemd_reads_it(span: str, seconds: float) -> None:
+    """A unit bounded in days or fractions is bounded; reading it as unbounded is a false red."""
+    assert _span_seconds(span) == pytest.approx(seconds)
+
+
+def test_an_unknown_unit_is_named_not_a_key_error() -> None:
+    with pytest.raises(AssertionError, match="not a systemd time unit"):
+        _span_seconds("5parsecs")
+
+
+@pytest.mark.parametrize(
+    ("lines", "expected"),
+    [
+        pytest.param("TimeoutStartSec=30\nTimeoutSec=infinity", "infinity", id="timeoutsec-last"),
+        pytest.param("TimeoutSec=infinity\nTimeoutStartSec=30", "30", id="start-last"),
+        pytest.param("TimeoutStartSec=30\nTimeoutStartSec=", "infinity", id="reset"),
+        pytest.param("# TimeoutStartSec=30", "infinity", id="comment"),
+        pytest.param("ExecStart=/bin/true", "infinity", id="unset"),
+    ],
+)
+def test_the_last_assignment_bounds_the_start(lines: str, expected: str, tmp_path: Path) -> None:
+    """systemd keeps the last assignment, and `TimeoutSec=` sets the start timeout too."""
+    unit = tmp_path / "unit.service"
+    unit.write_text(f"[Service]\nType=oneshot\n{lines}\n", encoding="utf-8")
+    assert _start_timeout(unit) == expected
+
+
+def test_every_stack_on_the_tailnet_address_waits_for_it() -> None:
+    """A new stack that publishes on the address but has no waiting unit would
+    pass every check above, which only sees units that already wait."""
+    publishing = {
+        path.relative_to(ROLES).parts[0]
+        for path in ROLES.glob("*/templates/*compose*.j2")
+        if "tailscale_ip }}:" in path.read_text(encoding="utf-8")
+    }
+    assert publishing, "no compose template publishes on the address; the glob is stale"
+    waiting = {name.split("/")[0] for name in UNITS}
+    assert publishing <= waiting, f"publish on the address with no unit that waits for it: {publishing - waiting}"
+
+
+def _drift(stdout: str, rc: int = 0) -> bool:
+    (decide,) = [
+        t
+        for t in yaml.safe_load(DRIFT.read_text(encoding="utf-8"))
+        if "compose_port_drift" in (t.get("set_fact") or {})
+    ]
+    expression = decide["set_fact"]["compose_port_drift"]
+    env = ansible_env(str(DRIFT.parent))
+    rendered = env.from_string(expression).render(
+        _compose_port_drift_read={"rc": rc, "stdout_lines": stdout.splitlines()}
+    )
+    return rendered.strip() == "True"
+
+
+@pytest.mark.parametrize(
+    ("stdout", "rc", "expected"),
+    [
+        pytest.param("/uptime-kuma 1:0", 0, True, id="kuma-unbound"),  # measured on rpi3, 2026-10-26
+        pytest.param("/gitea 2:0\n/github-runner 0:0", 0, True, id="gitea-unbound"),  # measured on bee, same day
+        pytest.param("/gitea 2:2\n/github-runner 0:0", 0, False, id="stack-bound"),
+        pytest.param("/uptime-kuma 1:1", 0, False, id="kuma-bound"),
+        # It asks for no port, so none can be missing.
+        pytest.param("/github-runner 0:0", 0, False, id="no-port-asked"),
+        pytest.param("/gitea 12:0", 0, True, id="many-asked-none-bound"),
+        pytest.param("/gitea 2:10", 0, False, id="more-bound-than-asked"),
+        pytest.param("", 0, False, id="no-container-yet"),
+        # The read failed: decide nothing from it.
+        pytest.param("/uptime-kuma 1:0", 1, False, id="read-failed"),
+    ],
+)
+def test_the_shared_check_finds_a_binding_never_established(stdout: str, rc: int, expected: bool) -> None:
+    assert _drift(stdout, rc) is expected
+
+
+#: `docker`, as far as the drift check asks it. `inspect` fills in only the fields
+#: it knows and refuses any other, so a format that reads the wrong field, or in
+#: the wrong order, produces lines the check must then judge.
+DOCKER_STUB = """#!/usr/bin/env python3
+import json, os, sys
+containers = json.loads(os.environ["STUB_CONTAINERS"])
+args = sys.argv[1:]
+if args[0] == "compose":
+    if "-q" not in args:
+        print("NAME  IMAGE  STATUS")
+    status = args[args.index("--status") + 1] if "--status" in args else None
+    for c in containers:
+        if status in (None, c["status"]):
+            print(c["id"] if "-q" in args else c["name"])
+elif args[0] == "inspect":
+    fmt = args[args.index("--format") + 1]
+    ids = args[args.index("--format") + 2:]
+    if not ids:
+        sys.exit('"docker inspect" requires at least 1 argument.')
+    for i in ids:
+        c = next(c for c in containers if c["id"] == i)
+        line = (fmt.replace("{{.Name}}", "/" + c["name"])
+                   .replace("{{len .HostConfig.PortBindings}}", str(c["asked"]))
+                   .replace("{{len .NetworkSettings.Ports}}", str(c["bound"])))
+        if "{{" in line:
+            sys.exit("unknown field in " + fmt)
+        print(line)
+else:
+    sys.exit("unexpected docker call: " + " ".join(args))
+"""
+
+
+def _drift_tasks() -> list[dict]:
+    return yaml.safe_load(DRIFT.read_text(encoding="utf-8"))
+
+
+def _run_read(containers: list[dict[str, Any]], tmp_path: Path) -> tuple[int, str]:
+    """Render the read task as Ansible would and run it against the stub."""
+    (read,) = [t for t in _drift_tasks() if t.get("register") == "_compose_port_drift_read"]
+    command = (
+        ansible_env(str(DRIFT.parent))
+        .from_string(read["shell"])
+        .render(compose_port_drift_file="/opt/stack/compose.yml")
+    )
+    stub = tmp_path / "docker"
+    stub.write_text(DOCKER_STUB, encoding="utf-8")
+    stub.chmod(0o755)
+    env = {**os.environ, "PATH": f"{tmp_path}:{os.environ['PATH']}", "STUB_CONTAINERS": json.dumps(containers)}
+    result = subprocess.run(["/bin/sh", "-c", command], capture_output=True, text=True, env=env, check=False)
+    return result.returncode, result.stdout
+
+
+def _container(name: str, status: str, asked: int, bound: int) -> dict[str, Any]:
+    return {"id": f"id-{name}", "name": name, "status": status, "asked": asked, "bound": bound}
+
+
+@pytest.mark.parametrize(
+    ("containers", "expected"),
+    [
+        pytest.param([_container("uptime-kuma", "running", 1, 0)], True, id="kuma-unbound"),
+        pytest.param(
+            [_container("gitea", "running", 2, 0), _container("github-runner", "running", 0, 0)],
+            True,
+            id="gitea-unbound",
+        ),
+        pytest.param([_container("uptime-kuma", "running", 1, 1)], False, id="kuma-bound"),
+        # A stopped or crash-looping container has no ports in effect for a reason
+        # of its own; recreating the whole stack would not fix it.
+        pytest.param(
+            [_container("uptime-kuma", "running", 1, 1), _container("old", "exited", 1, 0)],
+            False,
+            id="stopped-container",
+        ),
+        pytest.param(
+            [_container("gitea", "running", 2, 2), _container("act-runner", "restarting", 1, 0)],
+            False,
+            id="restarting-container",
+        ),
+        pytest.param([], False, id="nothing-running"),
+    ],
+)
+def test_the_read_feeds_the_check_what_it_expects(
+    containers: list[dict[str, Any]], expected: bool, tmp_path: Path
+) -> None:
+    """The expression is only as good as the lines the shell task gives it."""
+    rc, stdout = _run_read(containers, tmp_path)
+    assert _drift(stdout, rc) is expected, (rc, stdout)
+
+
+def test_the_read_runs_in_a_dry_run() -> None:
+    """In check mode a skipped read registers no stdout, and the check decides nothing."""
+    (read,) = [t for t in _drift_tasks() if t.get("register") == "_compose_port_drift_read"]
+    assert read.get("check_mode") is False
+
+
+def _tasks(role: str) -> list[dict]:
+    return yaml.safe_load((ROLES / role / "tasks/main.yml").read_text(encoding="utf-8"))
+
+
+@pytest.mark.parametrize("role", sorted(STACKS))
+def test_the_provision_recreates_on_drift(role: str) -> None:
+    _, start_name = STACKS[role]
+    tasks = _tasks(role)
+    names = [t.get("name") for t in tasks]
+    imports = [
+        i for i, t in enumerate(tasks) if str(t.get("import_tasks", "")).endswith("_includes/compose-port-drift.yml")
+    ]
+    assert len(imports) == 1, f"{role} must run the shared drift check once"
+    start = names.index(start_name)
+    assert imports[0] < start, f"{role}: the check must run before '{start_name}'"
+    # A condition on an import lands on every task it imports, so the check could
+    # be switched off while it still reads as present.
+    assert "when" not in tasks[imports[0]], f"{role}: the drift check must run unconditionally"
+    vars_ = tasks[imports[0]].get("vars", {})
+    assert vars_.get("compose_port_drift_file", "").endswith("/compose.yml"), vars_
+    command = str(tasks[start]["command"])
+    assert "--force-recreate" in command and "compose_port_drift | bool" in command, (
+        f"{role}: '{start_name}' must recreate when the check found drift: {command}"
+    )
+
+
+def _all_tasks(tasks: list[dict]) -> list[dict]:
+    """Tasks at any depth: agent_stack nests its Open WebUI tasks in a block."""
+    out = []
+    for task in tasks:
+        out.append(task)
+        for key in ("block", "rescue", "always"):
+            out.extend(_all_tasks(task.get(key) or []))
+    return out
+
+
+def _starts_unit(task: dict, unit: str) -> bool:
+    module = task.get("systemd") or task.get("ansible.builtin.systemd") or {}
+    return module.get("name") == unit and module.get("state") == "started"
+
+
+def _unit_starts(role: str) -> list[dict]:
+    return [t for t in _all_tasks(_tasks(role)) if _starts_unit(t, UNITS_BY_ROLE[role])]
+
+
+@pytest.mark.parametrize("role", sorted(UNITS_BY_ROLE))
+def test_the_provision_starts_the_stack_unit(role: str) -> None:
+    """Enabling a unit does not start it, so a unit that failed at boot stays failed."""
+    assert _unit_starts(role), f"{role}: no task starts {UNITS_BY_ROLE[role]}"
+
+
+@pytest.mark.parametrize("role", sorted(UNITS_BY_ROLE))
+def test_the_unit_start_runs_outside_a_dry_run(role: str) -> None:
+    """A condition can switch the task off while it still reads as present."""
+    env = ansible_env(str(ROLES))
+    facts = {"ansible_check_mode": False, "_rpi3_unit_file": {"stat": {"exists": True}}}
+    for task in _unit_starts(role):
+        conditions = task.get("when", [])
+        for condition in conditions if isinstance(conditions, list) else [conditions]:
+            rendered = env.from_string(f"{{{{ ({condition}) | bool }}}}").render(**facts)
+            assert rendered.strip() == "True", f"{role}: `when: {condition}` skips the start"
+
+
+def _imports(task: dict, include: str) -> bool:
+    path = task.get("import_tasks") or task.get("ansible.builtin.import_tasks") or ""
+    return str(path).endswith(f"_includes/{include}")
+
+
+@pytest.mark.parametrize("role", sorted(UNITS_BY_ROLE))
+def test_the_provision_waits_for_the_unit_it_started(role: str) -> None:
+    """A `Type=exec` unit's start returns before its stack is up (#2776).
+
+    Without the wait, the compose run a role makes next races the unit's own
+    recreate on the same project, and a stack that never came up passes the play.
+    """
+    unit = UNITS_BY_ROLE[role]
+    tasks = _all_tasks(_tasks(role))
+    starts = [i for i, t in enumerate(tasks) if _starts_unit(t, unit)]
+    settles = [i for i, t in enumerate(tasks) if _imports(t, "stack-unit-settled.yml")]
+    assert starts and len(settles) == 1, f"{role} must wait once for the unit it starts"
+    (settle,) = settles
+    assert tasks[settle].get("vars", {}).get("stack_unit_settled_name") == unit, tasks[settle]
+    assert "when" not in tasks[settle], f"{role}: a condition on the import switches the wait off"
+    assert max(starts) < settle, f"{role}: the wait must follow the start"
+    if role in STACKS:
+        names = [t.get("name") for t in tasks]
+        compose_run = names.index(STACKS[role][1])
+        if compose_run > max(starts):
+            assert settle < compose_run, f"{role}: '{STACKS[role][1]}' runs before the unit settled"
+
+
+def _settle_tasks() -> tuple[dict, dict]:
+    tasks = yaml.safe_load(SETTLED.read_text(encoding="utf-8"))
+    (wait,) = [t for t in tasks if t.get("register") == "_stack_unit_settled"]
+    (check,) = [t for t in tasks if "assert" in t]
+    return wait, check
+
+
+def test_the_wait_outlasts_the_units_own_bound() -> None:
+    """Past the unit's bound it has restarted or failed, which the check then reads.
+
+    A shorter wait reads a unit still bringing its stack up and fails a healthy play.
+    """
+    wait, _ = _settle_tasks()
+    budget = int(wait["retries"]) * int(wait["delay"])
+    for role, unit in UNITS_BY_ROLE.items():
+        (name,) = [n for n in UNITS if n.startswith(f"{role}/") and n.endswith(f"/{unit}.j2")]
+        bounds = UNITS[name].get("TimeoutStartSec", []) + UNITS[name].get("RuntimeMaxSec", [])
+        assert bounds, f"{unit} sets no bound for the wait to outlast"
+        for bound in bounds:
+            seconds = re.fullmatch(r"(\d+)s?", bound)
+            assert seconds, f"{unit}: {bound} is not in seconds"
+            assert budget > int(seconds.group(1)), f"{unit}: waits {budget} s for a {bound} s bound"
+
+
+@pytest.mark.parametrize(
+    ("state", "waits", "passes"),
+    [
+        pytest.param("start", True, False, id="oneshot-starting"),
+        pytest.param("running", True, False, id="exec-bringing-it-up"),
+        pytest.param("exited", False, True, id="up"),
+        pytest.param("auto-restart", False, False, id="retrying"),
+        pytest.param("failed", False, False, id="compose-error"),
+        pytest.param("", False, False, id="unreadable"),
+    ],
+)
+def test_the_wait_ends_on_a_settled_state_and_only_exited_passes(state: str, waits: bool, passes: bool) -> None:
+    wait, check = _settle_tasks()
+    env = ansible_env(str(SETTLED.parent))
+    read = {"_stack_unit_settled": {"stdout": state}}
+    settled = env.from_string(f"{{{{ ({wait['until']}) | bool }}}}").render(**read)
+    assert (settled.strip() == "False") is waits, settled
+    up = env.from_string(f"{{{{ ({check['assert']['that']}) | bool }}}}").render(**read)
+    assert (up.strip() == "True") is passes, up

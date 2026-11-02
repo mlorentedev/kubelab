@@ -8,13 +8,23 @@ Traefik looks the zone up by name before it writes a challenge record.
 
 from __future__ import annotations
 
+import base64
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 import yaml
+from typer.testing import CliRunner
 
-from toolkit.features.acme_token_scope import ScopeUncheckableError, probe_acme_token
+from toolkit.cli.secrets import app
+from toolkit.features.acme_token_scope import (
+    CLUSTER_SECRET,
+    ScopeUncheckableError,
+    cluster_holds_token,
+    probe_acme_token,
+)
 
 REPO = Path(__file__).resolve().parent.parent
 ZONE_ID = "z1"
@@ -101,6 +111,80 @@ def test_a_403_is_an_answer_not_an_error(monkeypatch: pytest.MonkeyPatch) -> Non
 
 def test_the_probed_zones_are_the_issuing_apexes() -> None:
     """The CLI probes `edge.traefik.acme_domains[].main`; it must keep naming zones."""
-    common = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text())
+    common = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
     mains = [d["main"] for d in common["edge"]["traefik"]["acme_domains"]]
     assert "kubelab.live" in mains
+
+
+def _kubectl(stdout: str = "", returncode: int = 0, stderr: str = "") -> Any:
+    return lambda *a, **k: SimpleNamespace(stdout=stdout, stderr=stderr, returncode=returncode)
+
+
+def _encoded(token: str) -> str:
+    return base64.b64encode(token.encode()).decode()
+
+
+def test_the_secret_name_is_the_one_the_role_renders() -> None:
+    defaults = yaml.safe_load((REPO / "infra/ansible/roles/k3s_server/defaults/main.yml").read_text(encoding="utf-8"))
+
+    assert defaults["k3s_traefik_acme_secret_name"] == CLUSTER_SECRET
+
+
+def test_a_cluster_holding_the_token_matches() -> None:
+    assert cluster_holds_token("staging", "tok", run=_kubectl(_encoded("tok"))) is True
+
+
+def test_a_cluster_holding_another_token_does_not_match() -> None:
+    assert cluster_holds_token("staging", "tok", run=_kubectl(_encoded("other"))) is False
+
+
+def test_a_cluster_that_cannot_be_read_cannot_be_checked() -> None:
+    with pytest.raises(ScopeUncheckableError, match="connection refused"):
+        cluster_holds_token("staging", "tok", run=_kubectl(returncode=1, stderr="connection refused"))
+
+
+def test_a_secret_without_the_key_cannot_be_checked() -> None:
+    with pytest.raises(ScopeUncheckableError, match="no api-token"):
+        cluster_holds_token("staging", "tok", run=_kubectl(""))
+
+
+def test_a_failed_read_never_quotes_stdout() -> None:
+    with pytest.raises(ScopeUncheckableError) as caught:
+        cluster_holds_token("staging", "tok", run=_kubectl("c2VjcmV0", returncode=1, stderr="boom"))
+
+    assert "c2VjcmV0" not in str(caught.value)
+
+
+@pytest.mark.parametrize(
+    ("answers", "code"),
+    [
+        ([True, True], 0),
+        ([False, True], 1),
+        ([True, ScopeUncheckableError("down")], 2),
+        # Staging off must not hide a difference on prod.
+        ([ScopeUncheckableError("down"), False], 1),
+    ],
+)
+def test_live_exit_codes(answers: list[Any], code: int) -> None:
+    config = {"edge": {"traefik": {"acme_domains": [{"main": "kubelab.live"}]}}}
+    with (
+        patch("toolkit.cli.secrets._provider_value_lookup", return_value=lambda _key: "tok"),
+        patch("toolkit.features.configuration.ConfigurationManager.get_merged_config", return_value=config),
+        patch("toolkit.features.acme_token_scope.probe_acme_token", return_value=[]),
+        patch("toolkit.features.acme_token_scope.cluster_holds_token", side_effect=answers) as holds,
+    ):
+        result = CliRunner().invoke(app, ["acme-token-scope", "--live"])
+
+    assert result.exit_code == code
+    assert holds.call_count == 2
+
+
+def test_a_secret_that_is_not_base64_cannot_be_checked() -> None:
+    with pytest.raises(ScopeUncheckableError, match="not valid base64"):
+        cluster_holds_token("staging", "tok", run=_kubectl("not base64!"))
+
+
+def test_the_data_key_is_the_one_the_role_renders() -> None:
+    template = REPO / "infra/ansible/roles/k3s_server/templates/cloudflare-secret.yaml.j2"
+
+    assert "  api-token:" in template.read_text(encoding="utf-8")

@@ -52,6 +52,8 @@ import re
 import pytest
 import yaml
 
+from tests.repo_files import repo_files
+
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 ANSIBLE_DIR = REPO_ROOT / "infra/ansible"
 VALUES_DIR = REPO_ROOT / "infra/config/values"
@@ -71,7 +73,7 @@ CONFIG_REF = re.compile(r"\bconfig\.([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z
 JINJA_SPAN = re.compile(r"\{\{.*?\}\}|\{%.*?%\}", re.DOTALL)
 
 #: Trailing segments that are Jinja METHODS on an already-resolved value, not
-#: further keys: `config.edge.traefik.dns_resolver_1.split(':')`.
+#: further keys: `config.global.some_key.split(':')`.
 JINJA_METHODS = frozenset({"split", "keys", "values", "items", "get", "lower", "upper", "strip"})
 
 
@@ -113,7 +115,7 @@ def _resolves(config: dict, dotted: str) -> bool:
 def _references() -> list[tuple[pathlib.Path, int, str, str]]:
     """Every `config.*` reference in the Ansible tree, with its source line."""
     found = []
-    for path in sorted(ANSIBLE_DIR.rglob("*.yml")) + sorted(ANSIBLE_DIR.rglob("*.j2")):
+    for path in repo_files(ANSIBLE_DIR, "*.yml", "*.j2"):
         text = path.read_text(encoding="utf-8", errors="ignore")
         for lineno, line in enumerate(text.splitlines(), start=1):
             for span in JINJA_SPAN.finditer(line):

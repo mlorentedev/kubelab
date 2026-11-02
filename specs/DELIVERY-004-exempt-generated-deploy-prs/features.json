@@ -1,8 +1,15 @@
 [
   {
     "id": "DELIVERY-004-exempt-generated-deploy-prs-f1",
-    "behavior": "Outcome 1",
-    "verification": "echo 'not implemented' && exit 1",
+    "behavior": "AC1: deploy-shape judges mechanical / not-mechanical / unknown, each condition refused on its own",
+    "verification": "poetry run pytest -q --no-cov tests/test_deploy_shape.py",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "DELIVERY-004-exempt-generated-deploy-prs-f2",
+    "behavior": "AC2: review-attestation exempts a staging deploy only on a mechanical verdict at the head sha; the class is declared in the registry and named in no module",
+    "verification": "poetry run pytest -q --no-cov tests/test_review_attestation.py",
     "state": "pending",
     "evidence": ""
   }

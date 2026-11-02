@@ -15,7 +15,9 @@ from pathlib import Path
 import yaml
 
 REPO = Path(__file__).resolve().parent.parent
-COMPOSE = yaml.safe_load((REPO / "infra/stacks/services/observability/loki/compose.base.yml").read_text())
+COMPOSE = yaml.safe_load(
+    (REPO / "infra/stacks/services/observability/loki/compose.base.yml").read_text(encoding="utf-8")
+)
 
 
 def test_loki_has_no_shell_healthcheck() -> None:

@@ -134,10 +134,10 @@ class TestProdOnlyImages:
         monkeypatch.setattr(sync_k8s_images, "PROD_KUSTOMIZATION", prod_kustomization)
 
         assert sync_k8s_images.main() == 0
-        assert "n8nio/n8n" in base_kustomization.read_text()
-        assert "pragent/pr-agent" not in base_kustomization.read_text()
-        assert "pragent/pr-agent" in prod_kustomization.read_text()
-        assert "n8nio/n8n" not in prod_kustomization.read_text()
+        assert "n8nio/n8n" in base_kustomization.read_text(encoding="utf-8")
+        assert "pragent/pr-agent" not in base_kustomization.read_text(encoding="utf-8")
+        assert "pragent/pr-agent" in prod_kustomization.read_text(encoding="utf-8")
+        assert "n8nio/n8n" not in prod_kustomization.read_text(encoding="utf-8")
 
 
 class TestWindowsSafeCheckIdempotency:

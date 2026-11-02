@@ -1,0 +1,51 @@
+[
+  {
+    "id": "CONSOLE-004-forge-task-view-f1",
+    "behavior": "AC1 queue: see proposal.md",
+    "verification": "echo 'not implemented' && exit 1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CONSOLE-004-forge-task-view-f2",
+    "behavior": "AC2 writes: see proposal.md",
+    "verification": "echo 'not implemented' && exit 1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CONSOLE-004-forge-task-view-f3",
+    "behavior": "AC3 access: see proposal.md",
+    "verification": "echo 'not implemented' && exit 1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CONSOLE-004-forge-task-view-f4",
+    "behavior": "AC4 budget: see proposal.md",
+    "verification": "echo 'not implemented' && exit 1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CONSOLE-004-forge-task-view-f5",
+    "behavior": "AC5 end to end: see proposal.md",
+    "verification": "echo 'not implemented' && exit 1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CONSOLE-004-forge-task-view-f6",
+    "behavior": "AC6 observability: see proposal.md",
+    "verification": "echo 'not implemented' && exit 1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CONSOLE-004-forge-task-view-f7",
+    "behavior": "AC7 operations: see proposal.md",
+    "verification": "echo 'not implemented' && exit 1",
+    "state": "pending",
+    "evidence": ""
+  }
+]

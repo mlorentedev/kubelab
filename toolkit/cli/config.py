@@ -209,7 +209,7 @@ def config_get(
     from toolkit.config.settings import settings
 
     common = settings.project_root / "infra" / "config" / "values" / "common.yaml"
-    node = yaml.safe_load(common.read_text())
+    node = yaml.safe_load(common.read_text(encoding="utf-8"))
 
     walked: list[str] = []
     for part in path.split("."):

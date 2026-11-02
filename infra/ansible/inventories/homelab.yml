@@ -35,6 +35,7 @@ all:
         kubelab-ace2:
           ansible_host: 100.64.0.5   # networking.nodes.ace2.tailscale_ip
           lan_ip: 172.16.1.5
+        # Retired for now (networking.nodes.jetson.retired): the infra suite skips it.
         kubelab-jet1:
           ansible_host: 100.64.0.8   # networking.nodes.jetson.tailscale_ip
           legacy_python: true

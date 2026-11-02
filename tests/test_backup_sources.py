@@ -38,7 +38,7 @@ COMMON_YAML = Path(__file__).parent.parent / "infra" / "config" / "values" / "co
 
 @pytest.fixture(scope="module")
 def common() -> dict[str, Any]:
-    return yaml.safe_load(COMMON_YAML.read_text())
+    return yaml.safe_load(COMMON_YAML.read_text(encoding="utf-8"))
 
 
 @pytest.fixture(scope="module")

@@ -310,3 +310,21 @@ spec:
           port: 3456
   tls:
     certResolver: letsencrypt
+---
+# The delivery watcher reads prod's Argo CD status here (GITOPS-003 AC2). The
+# env list merges by `name`, so only ARGO_ENV changes.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: delivery-watcher
+  namespace: kubelab
+spec:
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: delivery-watcher
+              env:
+                - name: ARGO_ENV
+                  value: prod

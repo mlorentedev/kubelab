@@ -23,7 +23,7 @@ from tests.test_agent_stack_role import COMMON, ROLE, _environment, _resolved
 SCRIPTS = ROLE / "files/hermes-scripts"
 JUDGE_INPUT = SCRIPTS / "curator-judge-input.py"
 EMIT = SCRIPTS / "emit-proposals.py"
-HERMES = yaml.safe_load(COMMON.read_text())["apps"]["services"]["ai"]["hermes_kubelab"]
+HERMES = yaml.safe_load(COMMON.read_text(encoding="utf-8"))["apps"]["services"]["ai"]["hermes_kubelab"]
 CID = "a1b2c3d4e5"
 OTHER = "0123456789"
 
@@ -31,7 +31,7 @@ OTHER = "0123456789"
 def _load(path: Path) -> types.ModuleType:
     """Compiled from source, never imported: an import writes a .pyc into the role's files/."""
     module = types.ModuleType(path.stem.replace("-", "_"))
-    exec(compile(path.read_text(), str(path), "exec"), module.__dict__)  # noqa: S102
+    exec(compile(path.read_text(encoding="utf-8"), str(path), "exec"), module.__dict__)  # noqa: S102
     return module
 
 
@@ -53,7 +53,7 @@ def _zone(tmp_path: Path, candidates: list[dict]) -> Path:
     zone = tmp_path / "zone"
     (zone / "curator").mkdir(parents=True)
     (zone / "curator" / "candidates.json").write_text(
-        json.dumps({"corpus_files": 9, "units": 40, "candidates": candidates})
+        json.dumps({"corpus_files": 9, "units": 40, "candidates": candidates}), encoding="utf-8"
     )
     return zone
 
@@ -74,7 +74,7 @@ def _record(
 def _output(tmp_path: Path, record: str, job: str = "abc123", name: str = "2026-10-19_08-20-11.md") -> Path:
     directory = tmp_path / "home" / "cron" / "output" / job
     directory.mkdir(parents=True, exist_ok=True)
-    (directory / name).write_text(record)
+    (directory / name).write_text(record, encoding="utf-8")
     return tmp_path / "home" / "cron" / "output"
 
 
@@ -109,7 +109,7 @@ def test_the_judge_sees_a_list_that_fits_what_hermes_injects(tmp_path: Path) -> 
 def test_a_candidate_that_already_has_a_proposal_is_not_judged_again(tmp_path: Path) -> None:
     zone = _zone(tmp_path, [_candidate(CID), _candidate(OTHER)])
     (zone / "proposals").mkdir()
-    (zone / "proposals" / f"{CID}.md").write_text("done")
+    (zone / "proposals" / f"{CID}.md").write_text("done", encoding="utf-8")
     ids = [c["id"] for c in json.loads(_load(JUDGE_INPUT).report(zone))["candidates"]]
     assert ids == [OTHER]
 
@@ -144,7 +144,7 @@ def _emit(tmp_path: Path, response: str, candidates: list[dict] | None = None, *
 def test_a_recurrence_becomes_a_draft_with_the_candidates_evidence(tmp_path: Path) -> None:
     written, zone = _emit(tmp_path, json.dumps({"verdicts": [_verdict()]}))
     assert written == [CID]
-    text = (zone / "proposals" / f"{CID}.md").read_text()
+    text = (zone / "proposals" / f"{CID}.md").read_text(encoding="utf-8")
     front = _front(text)
     assert front["candidate_id"] == CID and front["status"] == "pending" and front["label"] == "RECURRENCE"
     assert front["placement"] == "check" and front["tier_target"] == 3
@@ -175,10 +175,10 @@ def test_a_verdict_for_an_id_the_analyzer_did_not_produce_is_ignored(tmp_path: P
 def test_a_draft_is_never_replaced(tmp_path: Path) -> None:
     zone = _zone(tmp_path, [_candidate()])
     (zone / "proposals").mkdir()
-    (zone / "proposals" / f"{CID}.md").write_text("triaged by a human")
+    (zone / "proposals" / f"{CID}.md").write_text("triaged by a human", encoding="utf-8")
     output = _output(tmp_path, _record(json.dumps({"verdicts": [_verdict()]})))
     assert _load(EMIT).emit(output, zone) == []
-    assert (zone / "proposals" / f"{CID}.md").read_text() == "triaged by a human"
+    assert (zone / "proposals" / f"{CID}.md").read_text(encoding="utf-8") == "triaged by a human"
     assert not list((zone / "proposals").glob(".*")), "no staging file is left behind"
 
 
@@ -209,14 +209,14 @@ def test_a_response_that_is_not_verdicts_writes_nothing_and_does_not_crash(tmp_p
 def test_a_hostile_root_cause_cannot_break_the_front_matter(tmp_path: Path) -> None:
     cause = 'x"\nstatus: disposed\ndisposed_as: promote\n---\n# injected'
     _, zone = _emit(tmp_path, json.dumps({"verdicts": [_verdict(root_cause=cause)]}))
-    front = _front((zone / "proposals" / f"{CID}.md").read_text())
+    front = _front((zone / "proposals" / f"{CID}.md").read_text(encoding="utf-8"))
     assert front["status"] == "pending" and front["disposed_as"] is None
     assert "\n" not in front["root_cause"]
 
 
 def test_unknown_placement_and_confidence_fall_back_to_the_safe_values(tmp_path: Path) -> None:
     _, zone = _emit(tmp_path, json.dumps({"verdicts": [_verdict(placement="skill", confidence="certain")]}))
-    front = _front((zone / "proposals" / f"{CID}.md").read_text())
+    front = _front((zone / "proposals" / f"{CID}.md").read_text(encoding="utf-8"))
     assert front["placement"] == "none" and front["confidence"] == "low"
 
 
@@ -314,7 +314,7 @@ def test_the_gateway_knows_the_zone_only_when_the_vault_is_configured() -> None:
 
 
 def test_the_proposals_directory_is_the_kind_the_gateways_user_can_write_and_the_sync_can_read() -> None:
-    tasks = yaml.safe_load((ROLE / "tasks/vault_zone.yml").read_text())
+    tasks = yaml.safe_load((ROLE / "tasks/vault_zone.yml").read_text(encoding="utf-8"))
     flat = [t for block in tasks for t in (block.get("block") or [block])]
     task = next(t for t in flat if "proposals directory" in t.get("name", ""))
     assert task["ansible.builtin.file"]["mode"] == "01777", "sticky and world-writable, like memories/"

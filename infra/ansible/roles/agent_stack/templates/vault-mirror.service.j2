@@ -19,6 +19,8 @@ ExecStart={{ agent_stack_vault_libexec }}/vault-mirror
 # The bridge runs as a non-root user and reads the tree.
 UMask=0022
 TimeoutStartSec=10min
+# The script's "remote unreachable, tree still fresh" (AI-030): no page for it.
+SuccessExitStatus=75
 NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=strict

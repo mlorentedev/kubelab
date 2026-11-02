@@ -34,7 +34,7 @@ def _script(name: str) -> types.ModuleType:
     files/, which other tests read as text."""
     path = SCRIPTS / name
     module = types.ModuleType(name.removesuffix(".py").replace("-", "_"))
-    exec(compile(path.read_text(), str(path), "exec"), module.__dict__)  # noqa: S102
+    exec(compile(path.read_text(encoding="utf-8"), str(path), "exec"), module.__dict__)  # noqa: S102
     return module
 
 
@@ -174,7 +174,7 @@ def test_the_database_is_opened_read_only(tmp_path: Path) -> None:
 
 
 def _declared_jobs() -> dict:
-    hermes = yaml.safe_load(COMMON.read_text())["apps"]["services"]["ai"]["hermes_kubelab"]
+    hermes = yaml.safe_load(COMMON.read_text(encoding="utf-8"))["apps"]["services"]["ai"]["hermes_kubelab"]
     return hermes["cron"]["jobs"]
 
 
@@ -191,11 +191,11 @@ def test_every_shipped_script_is_used_by_a_job_and_parses() -> None:
     shipped = {p.name for p in SCRIPTS.iterdir()}
     assert shipped == named, f"shipped but unused: {shipped - named}"
     for name in shipped:
-        compile((SCRIPTS / name).read_text(), name, "exec")
+        compile((SCRIPTS / name).read_text(encoding="utf-8"), name, "exec")
 
 
 def test_the_session_record_runs_on_the_scripts_data_and_writes_where_the_zone_is() -> None:
-    hermes = yaml.safe_load(COMMON.read_text())["apps"]["services"]["ai"]["hermes_kubelab"]
+    hermes = yaml.safe_load(COMMON.read_text(encoding="utf-8"))["apps"]["services"]["ai"]["hermes_kubelab"]
     job = hermes["cron"]["jobs"]["session-record"]
     assert job["mode"] == "agent"
     assert job["script"] == "session-activity.py"

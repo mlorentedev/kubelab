@@ -1,0 +1,5 @@
+# Managed by Ansible (gateway role). netplan's use-routes: false also turns off
+# UseGateway=, which defaults to UseRoutes=. This keeps option 3 (the gateway)
+# while option 121 (classless routes, TunnelVision) stays refused (ADR-075 D3).
+[DHCPv4]
+UseGateway=yes

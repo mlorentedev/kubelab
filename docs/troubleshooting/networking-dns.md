@@ -91,6 +91,8 @@ NetworkManager persists the connection across reboots automatically once connect
 
 **Date**: 2026-02-22 (recurrence of 2026-02-21 HW-019) | **Device**: kubelab-rpi4
 
+> **Historical (2026-10-25):** since ADR-075 the `gateway` role names the uplink `uplink0` by the adapter's MAC in SOPS, and the masquerade names `uplink0`, so a changed adapter no longer breaks NAT. Do not apply the fix below to the edge: change the MAC in SOPS and re-run `make provision NODE=rpi4 ENV=prod BOOTSTRAP=1 TAGS=gateway` (runbook [lab-edge](../runbooks/lab-edge.md)). The adapter names below are placeholders: the repository is public, and an adapter's MAC is not committed (ADR-075 C7).
+
 ### Symptoms
 
 - K3s pods stuck in `ErrImagePull` / `ImagePullBackOff`
@@ -105,11 +107,11 @@ If the adapter or its MAC changes, `/etc/nftables.conf` masquerade rule referenc
 
 ```bash
 # Broken config (hardcoded interface name)
-oifname "enx00e04c690e15" masquerade   # ← interface doesn't exist
+oifname "enx<old MAC>" masquerade   # ← interface doesn't exist
 
 # Actual interface
 ip link show | grep enx
-# enx00249b1b0d6b   ← different MAC = different name
+# enx<new MAC>   ← different MAC = different name
 ```
 
 ### Fix (permanent, generic)

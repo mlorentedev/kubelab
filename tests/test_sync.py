@@ -307,7 +307,7 @@ class TestSyncAllCoversR2WatcherTargets:
         repo = Path(__file__).resolve().parent.parent
         (tmp_path / "infra/config/values").mkdir(parents=True)
         (tmp_path / "infra/config/values/common.yaml").write_text(
-            (repo / "infra/config/values/common.yaml").read_text()
+            (repo / "infra/config/values/common.yaml").read_text(encoding="utf-8"), encoding="utf-8"
         )
         mocker.patch("toolkit.cli.sync._repo_root", return_value=tmp_path)
         assert _sync_r2_watcher_targets(check=True) is False

@@ -2068,9 +2068,14 @@ def execute(
                 report,
                 f"repo {repo.org}/{repo.name}",
                 RuntimeError(
-                    "no migration credential was supplied. The source is a private remote, so "
-                    "`apps.services.core.gitea.github_migration_token` must be present in SOPS "
-                    "for this environment."
+                    "no migration credential was supplied. The key was retired once every "
+                    "declared repository had arrived, so a new migration needs a new one: mint "
+                    "a fine-grained GitHub PAT, read-only on Contents, Metadata, Issues and Pull "
+                    "requests, with the shortest expiry that covers the run. Restore its "
+                    "SECRET_CATALOG and PROVIDER_CHECKS entries from #2938 so the audit and "
+                    "check-expiry see it, store it at "
+                    "`apps.services.core.gitea.github_migration_token` for this environment, "
+                    "and retire it again when the run ends."
                 ),
             )
             continue

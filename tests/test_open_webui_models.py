@@ -80,9 +80,24 @@ def test_speech_and_images_come_from_nan() -> None:
     assert env["IMAGE_SIZE"] == models["image_generation"]["size"]
 
 
+def test_every_chat_starts_with_the_image_tool_on() -> None:
+    """Off, the model has no `generate_image` tool and improvises one instead:
+    measured 2026-11-01, asked for a picture it drew an SVG and created a
+    workspace skill to store it. On, native function calling only offers the
+    tool (v0.12.5 `utils/tools.py`); it does not generate on every message."""
+    raw = _env()["DEFAULT_MODEL_METADATA"]
+    assert raw.startswith("'") and raw.endswith("'"), raw
+    assert "image_generation" in json.loads(raw[1:-1])["defaultFeatureIds"]
+    # The legacy path WOULD generate an image per message (`utils/middleware.py`).
+    # In any value, not one variable: `function_calling` could arrive in
+    # DEFAULT_MODEL_PARAMS or inside any JSON value. Values, not the raw file, so
+    # a comment that names the setting is not an override.
+    assert not [k for k, v in _env().items() if "function_calling" in v]
+
+
 def test_the_image_request_asks_for_what_nan_answers() -> None:
     """Open WebUI sends `response_format: b64_json` unless the model matches this
-    pattern (v0.12.0 `routers/images.py`). NaN was measured answering with a `url`
+    pattern (v0.12.5 `routers/images.py`). NaN was measured answering with a `url`
     to a request without it, so the configured model must match, and only it."""
     raw = _env()["IMAGE_URL_RESPONSE_MODELS_REGEX_PATTERN"]
     assert raw.startswith("'") and raw.endswith("'"), "unquoted, Compose interpolates the `$`"

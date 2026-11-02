@@ -40,6 +40,9 @@ def test_the_generated_inventory_carries_legacy_python_as_a_host_var() -> None:
     from toolkit.features.generator_ansible import AnsibleGenerator
 
     common = yaml.safe_load(COMMON.read_text(encoding="utf-8"))
+    # Built as if the Jetson were back: while it is `retired` no host carries
+    # the var, and this asks whether the generator passes it through.
+    common["networking"]["nodes"]["jetson"].pop("retired", None)
     inventory = AnsibleGenerator()._build_inventory(
         common["networking"], backup_sources=common.get("backup", {}).get("sources")
     )

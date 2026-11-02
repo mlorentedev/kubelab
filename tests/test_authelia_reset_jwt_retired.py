@@ -45,7 +45,7 @@ def test_no_k8s_secret_carries_it() -> None:
 
 @pytest.mark.parametrize("env", ["dev", "staging", "prod"])
 def test_no_env_vault_holds_the_key(env: str) -> None:
-    vault = yaml.safe_load((ROOT / f"infra/config/secrets/{env}.enc.yaml").read_text())
+    vault = yaml.safe_load((ROOT / f"infra/config/secrets/{env}.enc.yaml").read_text(encoding="utf-8"))
     authelia = vault.get("apps", {}).get("services", {}).get("security", {}).get("authelia", {})
     assert KEY not in authelia
 
@@ -64,6 +64,6 @@ def test_the_rendered_authelia_reads_no_reset_jwt(overlay: str) -> None:
 
 
 def test_the_dev_template_disables_reset_and_signs_nothing_for_it() -> None:
-    text = TEMPLATE.read_text()
+    text = TEMPLATE.read_text(encoding="utf-8")
     assert "RESET_PASSWORD" not in text
     assert "password_reset:\n    disable: true" in text

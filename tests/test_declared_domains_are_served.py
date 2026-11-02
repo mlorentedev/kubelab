@@ -41,7 +41,7 @@ ZONES_JSON = REPO_ROOT / "infra/terraform/dns/zones.json"
 VALUES = REPO_ROOT / "infra/config/values"
 
 #: Zone apexes the DNS module manages, by its `zone` key, read from the module.
-ZONES = json.loads(ZONES_JSON.read_text())
+ZONES = json.loads(ZONES_JSON.read_text(encoding="utf-8"))
 ZONE_APEX = {zone["key"]: apex for apex, zone in ZONES.items()}
 
 #: Domains served by something outside the Terraform DNS module -- a name
@@ -54,7 +54,7 @@ EXTERNALLY_MANAGED: frozenset[str] = frozenset()
 
 
 def _declared_dns_names() -> set[str]:
-    records = json.loads(SERVICES_JSON.read_text())
+    records = json.loads(SERVICES_JSON.read_text(encoding="utf-8"))
     names = set()
     for r in records:
         apex = ZONE_APEX[r["zone"]]

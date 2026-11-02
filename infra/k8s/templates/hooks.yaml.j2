@@ -1,0 +1,118 @@
+{#
+  Route probes (GITOPS-003 AC3, #1478). One Argo CD `PostSync` Job per
+  same-origin route that declares a `probe` in the SSOT (`extra_routes`).
+
+  It sends the request a browser on the app's host sends and fails the sync
+  unless the target service answers it: a Synced Application whose route reaches
+  the wrong service is how the newsletter form stayed broken (kubelab#774). A
+  failed hook fails the operation, so Argo CD posts `failure` on the commit.
+
+  It goes through Traefik's Service with SNI and Host on the real name
+  (`--connect-to`, Risk 1 in specs/GITOPS-003), so it crosses the same router,
+  middlewares and certificate as a browser, CrowdSec's bouncer included: one
+  deliberate 4xx per sync, from a pod address.
+
+  Limits: Argo CD runs PostSync only when every resource is Healthy, so a
+  Degraded Application skips the probe and still reports Succeeded. `make
+  deploy-k8s` applies this Job as a plain resource and it runs once; a kept
+  failed Job blocks that apply (a Job's spec is immutable) until its TTL.
+#}
+{% for app in apps %}
+{% for route in app.extra_routes if route.get('probe') %}
+{% set probe = route.probe %}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ probe.name }}
+  namespace: {{ namespace }}
+  labels:
+    app.kubernetes.io/name: {{ probe.name }}
+    app.kubernetes.io/component: route-probe
+    app.kubernetes.io/part-of: kubelab
+    app.kubernetes.io/managed-by: toolkit
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    # BeforeHookCreation stays: naming HookSucceeded alone drops Argo CD's
+    # default, and a kept failed Job would then refuse every later sync by name.
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation,HookSucceeded
+spec:
+  backoffLimit: 0
+  # Counts from creation, image pull included: a cold pull must not fail a sync.
+  activeDeadlineSeconds: 120
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ probe.name }}
+        app.kubernetes.io/component: route-probe
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+      containers:
+        - name: route-probe
+          image: {{ route_probe_image }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -- -sS -o /dev/null --max-time 20 \
+                --connect-to "$PROBE_HOST:443:$PROBE_CONNECT_TO" \
+                -X "$PROBE_METHOD" -w '%{http_code} %{content_type}'
+              [ -n "$PROBE_BODY" ] && set -- "$@" --data-raw "$PROBE_BODY"
+              got=$(curl "$@" "https://$PROBE_HOST$PROBE_PATH") || true
+              want="$EXPECT_STATUS $EXPECT_CONTENT_TYPE"
+              case "$got" in
+                "$want"*) echo "route-probe: $PROBE_METHOD $PROBE_HOST$PROBE_PATH answered '$got'"; exit 0 ;;
+              esac
+              echo "route-probe: $PROBE_METHOD $PROBE_HOST$PROBE_PATH answered '$got', expected '$want'" >&2
+              exit 1
+          env:
+            - name: PROBE_HOST
+              value: "{{ app.domain }}"
+            - name: PROBE_CONNECT_TO
+              value: traefik.kube-system.svc:443
+            - name: PROBE_METHOD
+              value: "{{ probe.method }}"
+            - name: PROBE_PATH
+              value: "{{ probe.path }}"
+            - name: PROBE_BODY
+              value: '{{ probe.body }}'
+            - name: EXPECT_STATUS
+              value: "{{ probe.expect_status }}"
+            - name: EXPECT_CONTENT_TYPE
+              value: "{{ probe.expect_content_type }}"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              memory: 16Mi
+            limits:
+              memory: 32Mi
+---
+# The probe only calls out (NET-002: every workload has an Ingress policy).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ probe.name }}-ingress
+  namespace: {{ namespace }}
+  labels:
+    app.kubernetes.io/name: {{ probe.name }}
+    app.kubernetes.io/part-of: kubelab
+    app.kubernetes.io/managed-by: toolkit
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ probe.name }}
+  policyTypes:
+    - Ingress
+{% endfor %}
+{% endfor %}

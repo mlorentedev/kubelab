@@ -76,7 +76,9 @@ BUILDER_PREFIX = "buildx_buildkit_builder-"
 
 # Volumes whose entire purpose is one CI job. Both are created by a runner and
 # never read again once the job ends; neither is declared anywhere in this repo.
-_RECLAIMABLE_VOLUME = re.compile(r"^(?:buildx_buildkit_builder-[0-9a-f-]+_state|GITEA-ACTIONS-TASK-\d+_.*)$")
+# act_runner named a job's volumes `GITEA-ACTIONS-TASK-<n>_WORKFLOW-...`;
+# gitea/runner 4.1.0 (#2425) names them `GITEA-ACTIONS-TASK-<n>-WORKFLOW-...`.
+_RECLAIMABLE_VOLUME = re.compile(r"^(?:buildx_buildkit_builder-[0-9a-f-]+_state|GITEA-ACTIONS-TASK-\d+[_-].*)$")
 
 # A builder older than the longest job this fleet runs cannot be mid-build.
 # The slowest job measured here is `resume`'s LaTeX build against a 5.6GB

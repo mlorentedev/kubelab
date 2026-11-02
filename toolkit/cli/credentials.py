@@ -10,7 +10,8 @@ from toolkit.config.constants import MESSAGES, PATH_STRUCTURES
 from toolkit.config.settings import PROJECT_ROOT, settings
 from toolkit.core.logging import logger
 from toolkit.core.sops import age_key_env
-from toolkit.features.credentials import CredentialsWriteFailed, credentials_manager
+from toolkit.features.configuration import ConfigurationManager
+from toolkit.features.credentials import CredentialsWriteFailed, authelia_password_hash_key, credentials_manager
 from toolkit.features.github_secrets import github_secrets_manager
 from toolkit.features.grafana_admin_identity import (
     GrafanaIdentityUnavailableError,
@@ -86,21 +87,45 @@ def show_secrets(
         print(yaml.dump(secrets, default_flow_style=False, sort_keys=False).rstrip())
 
 
+def _merged_config(env: str) -> dict[str, Any]:
+    return ConfigurationManager(env, PROJECT_ROOT).get_merged_config()
+
+
 @app.command("hash-password")
 def hash_password(
     key_path: Annotated[
-        str,
+        str | None,
         typer.Argument(
             help="Dot-separated path to the secret key "
-            "(e.g., 'apps.services.security.authelia.users_operator_password_hash')"
+            "(e.g., 'argocd.admin_password_hash'). Give this or --identity, not both."
         ),
-    ],
+    ] = None,
+    identity: Annotated[
+        str | None,
+        typer.Option(
+            "--identity",
+            help="Identity key of an Authelia login (apps.auth.identities, e.g. 'operator'); "
+            "resolves the key path. Give this or KEY_PATH, not both.",
+        ),
+    ] = None,
     env: Annotated[str, typer.Option("--env", "-e", help="Target environment")] = "dev",
 ) -> None:
     """
     Interactively prompts for a password, generates its Argon2 hash,
     and updates the specified key in the SOPS-encrypted secrets file.
+
+    `make credentials-reset-password ENV=<env> IDENTITY=<key>` resets an Authelia
+    login this way (#909).
     """
+    if (key_path is None) == (identity is None):
+        logger.error("Give a KEY_PATH or --identity, exactly one.")
+        raise typer.Exit(1)
+    if key_path is None:
+        try:
+            key_path = authelia_password_hash_key(str(identity), _merged_config(env))
+        except ValueError as e:
+            logger.error(str(e))
+            raise typer.Exit(1) from None
     credentials_manager.update_hashed_secret(key_path=key_path, env=env)
 
 

@@ -7,3 +7,9 @@ docker_log_max_size: "10m"
 docker_log_max_files: "3"
 docker_address_pool_base: "172.80.0.0/12"
 docker_address_pool_size: 24
+
+# --- smoke build, for the run that upgrades the engine (#2722) ---
+# provision-bee.yml turns it on with `base_system_release_holds`.
+docker_smoke_build: false
+docker_smoke_build_image: busybox:1.37.0
+docker_smoke_build_timeout_seconds: 180

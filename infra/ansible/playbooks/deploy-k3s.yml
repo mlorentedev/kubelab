@@ -11,6 +11,8 @@
 # --- Play 1: K3s Server ---
 - name: Deploy K3s server
   hosts: k3s_servers
+  # A later failure must not drop the handlers earlier tasks notified (#2824).
+  force_handlers: true
   become: true
   gather_facts: true
 
@@ -22,15 +24,18 @@
       include_vars:
         file: "{{ playbook_dir }}/../../config/values/common.yaml"
         name: common
+      tags: [always]
 
     - name: Load environment overrides
       include_vars:
         file: "{{ playbook_dir }}/../../config/values/{{ deploy_env }}.yaml"
         name: env_overrides
+      tags: [always]
 
     - name: Merge configs (env overrides win)
       set_fact:
         config: "{{ common | combine(env_overrides, recursive=True) }}"
+      tags: [always]
 
     - name: Decrypt common secrets (controller-side)
       command: sops -d {{ playbook_dir }}/../../config/secrets/common.enc.yaml
@@ -61,6 +66,7 @@
           {{ [ansible_host] +
              ([hostvars[inventory_hostname].lan_ip] if hostvars[inventory_hostname].lan_ip is defined else []) +
              ([hostvars[inventory_hostname].public_ip] if hostvars[inventory_hostname].public_ip is defined else []) }}
+      tags: [always]
 
   roles:
     - role: ../roles/k3s_server
@@ -87,7 +93,6 @@
         # empty string falls back too, not just an absent key.
         k3s_traefik_acme_email: "{{ config.edge.traefik.acme_email | default(config.apps.contact.email, true) }}"
         k3s_traefik_acme_dns_provider: "{{ config.edge.traefik.dns_provider }}"
-        k3s_traefik_acme_dns_resolvers: "{{ config.edge.traefik.dns_resolver_1 }},{{ config.edge.traefik.dns_resolver_2 }}"
         k3s_fetch_kubeconfig: true
         k3s_kubeconfig_local_path: "~/.kube/kubelab-{{ deploy_env }}-config"
         k3s_api_address: "{{ ansible_host }}"

@@ -17,7 +17,7 @@ KUSTOMIZATION = REPO_ROOT / "infra" / "k8s" / "base" / "kustomization.yaml"
 
 
 def test_fixture_was_captured_from_the_pinned_n8n_image() -> None:
-    tag = re.search(r"name: n8nio/n8n\s*\n\s*newTag: (\S+)", KUSTOMIZATION.read_text())
+    tag = re.search(r"name: n8nio/n8n\s*\n\s*newTag: (\S+)", KUSTOMIZATION.read_text(encoding="utf-8"))
     assert tag
     assert FIXTURE["n8n_image"] == f"n8nio/n8n:{tag.group(1)}", (
         "n8n was bumped but the Webhook item fixture was not re-captured. Run "

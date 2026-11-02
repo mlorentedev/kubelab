@@ -38,6 +38,105 @@
   # (measured during OPS-023, 2026-09-26).
   changed_when: false
 
+# VPN-ACL-014: a tenant segment comes from SOPS, so nothing upstream checks its shape.
+# Refuse a malformed one before the policy is rendered: a segment owned by a private
+# user, or reusing a private tag, would put the tenant's nodes inside rule 1. The owner
+# and tags are interpolated into the HuJSON policy, so they are held to Headscale's and
+# Tailscale's own name characters: a quote, space or brace would corrupt the policy.
+- name: Refuse a malformed tenant segment
+  assert:
+    that:
+      - item.owner is string and item.owner is regex('[A-Za-z][A-Za-z0-9._-]+', match_type='fullmatch')
+      - (item.owner ~ '@') not in headscale_policy_private_users + headscale_policy_private_destinations
+      - item.hosts_tag is string and item.hosts_tag is regex('tag:[A-Za-z][A-Za-z0-9-]*', match_type='fullmatch')
+      - item.clients_tag is string and item.clients_tag is regex('tag:[A-Za-z][A-Za-z0-9-]*', match_type='fullmatch')
+      - item.hosts_tag != item.clients_tag
+      - item.hosts_tag not in headscale_policy_private_destinations
+      - item.clients_tag not in headscale_policy_private_destinations
+      - item.ports is sequence and item.ports is not string and item.ports | length > 0
+      - item.ports | select('integer') | select('gt', 0) | select('le', 65535) | list | length == item.ports | length
+    fail_msg: "a tenant segment in SOPS is malformed; see the VPN-ACL-014 spec for its shape"
+  loop: "{{ headscale_policy_segments }}"
+  loop_control:
+    index_var: segment_index
+    label: "segment {{ segment_index }}"
+  when: headscale_policy_path | length > 0
+
+- name: Refuse tenant segments that share a tag
+  assert:
+    that:
+      - >-
+        (headscale_policy_segments | map(attribute='hosts_tag') | list
+        + headscale_policy_segments | map(attribute='clients_tag') | list) | unique | list | length
+        == 2 * (headscale_policy_segments | length)
+    fail_msg: "two tenant segments in SOPS share a tag"
+  when: headscale_policy_path | length > 0
+
+# VPN-ACL-014: rule 1 names its destinations, so a node under a user or tag it does not
+# name would silently lose every flow on reload. Read the nodes Headscale holds and
+# refuse the render if any is left out. A host where the container does not exist yet
+# (first install) holds no node; any other failure to ask stops the play.
+- name: Read the nodes Headscale holds
+  command: docker exec headscale headscale nodes list -o json
+  register: hs_nodes_list
+  changed_when: false
+  check_mode: false
+  failed_when: hs_nodes_list.rc != 0 and 'No such container' not in hs_nodes_list.stderr
+  when: headscale_policy_path | length > 0
+
+- name: Refuse a policy that cuts off a node Headscale holds
+  assert:
+    that:
+      - >-
+        (item.tags | default([]) | length > 0 and item.tags | select('in', hs_accounted) | list | length > 0)
+        or (item.tags | default([]) | length == 0 and (item.user.name ~ '@') in hs_accounted)
+    fail_msg: >-
+      rule 1 would no longer reach this node: add its user or tag to
+      headscale_policy_private_users or headscale_policy_private_destinations
+  vars:
+    hs_accounted: >-
+      {{ headscale_policy_private_users + headscale_policy_private_destinations
+      + headscale_policy_segments | map(attribute='hosts_tag') | list
+      + headscale_policy_segments | map(attribute='clients_tag') | list }}
+  loop: "{{ (hs_nodes_list.stdout | from_json) if hs_nodes_list.rc | default(1) == 0 else [] }}"
+  loop_control:
+    label: "node {{ item.id }}"
+  when: headscale_policy_path | length > 0
+
+# VPN-ACL-014 / VPN-ACL-013: a policy naming a user Headscale does not hold can be
+# rejected on reload while the deploy reports green. Create each segment owner first,
+# idempotently: only the ones the user list lacks, so a second run changes nothing.
+- name: Read the users Headscale holds
+  command: docker exec headscale headscale users list -o json
+  register: hs_users_list
+  changed_when: false
+  check_mode: false
+  failed_when: hs_users_list.rc != 0 and 'No such container' not in hs_users_list.stderr
+  when: headscale_policy_path | length > 0 and headscale_policy_segments | length > 0
+
+# The read above tolerates a missing container, which would skip owner creation while
+# the policy still names `owner@`. With segments declared that is a refusal, not a skip.
+- name: Refuse tenant segments while Headscale's users are unknown
+  assert:
+    that:
+      - hs_users_list.rc == 0
+    fail_msg: >-
+      tenant segments are declared but Headscale's users could not be listed, so their
+      owners cannot be created; deploy once without segments so the container exists
+  when: headscale_policy_path | length > 0 and headscale_policy_segments | length > 0
+
+- name: Create each segment owner Headscale does not hold yet
+  command: docker exec headscale headscale users create {{ item | quote }}
+  loop: >-
+    {{ headscale_policy_segments | map(attribute='owner') | unique
+    | reject('in', hs_users_list.stdout | from_json | map(attribute='name') | list) | list }}
+  loop_control:
+    index_var: owner_index
+    label: "segment owner {{ owner_index }}"
+  when: >-
+    headscale_policy_path | length > 0 and headscale_policy_segments | length > 0
+    and hs_users_list.rc | default(1) == 0
+
 # ADR-041 / VPN-ACL-001: render the HuJSON ACL policy into the bind-mounted
 # config dir (appears at headscale_policy_path inside the container). Dormant
 # while headscale_policy_path is "" (default → allow-all). On change this fires
@@ -115,25 +214,42 @@
         path: "{{ headscale_config_dir }}/{{ headscale_policy_path | basename }}.prev"
       register: hs_prev
 
+    - name: Read the previous policy
+      slurp:
+        src: "{{ headscale_config_dir }}/{{ headscale_policy_path | basename }}.prev"
+      register: hs_prev_text
+      when: hs_prev.stat.exists
+
+    # VPN-ACL-014: a previous policy from before segmentation grants a wildcard, and
+    # restoring it would hand every tenant node the private peers. While segments are
+    # declared, such a file is not a known-good policy.
+    - name: Decide whether the previous policy may be restored
+      set_fact:
+        hs_prev_safe: >-
+          {{ hs_prev.stat.exists and (headscale_policy_segments | length == 0
+          or (headscale_policy_marker in (hs_prev_text.content | b64decode)
+          and not ((hs_prev_text.content | b64decode) is search(headscale_policy_wildcard_pattern)))) }}
+
     - name: Restore the previous known-good policy
       copy:
         src: "{{ headscale_config_dir }}/{{ headscale_policy_path | basename }}.prev"
         dest: "{{ headscale_config_dir }}/{{ headscale_policy_path | basename }}"
         remote_src: true
         mode: "0644"
-      when: hs_prev.stat.exists
+      when: hs_prev_safe | bool
 
-    # First activation (no .prev): there is nothing to restore, so revert to an EXPLICIT
-    # allow-all — a failed probe must never strand the mesh on the just-loaded ACL (Codex P1).
-    - name: First activation — revert to an explicit allow-all policy
-      copy:
+    # No restorable previous policy (first activation, or one with a wildcard while
+    # segments exist): revert to the policy rendered with no segment. It keeps every
+    # private flow and grants a tenant nothing, so a failed probe neither strands the
+    # mesh nor undoes the isolation. Never an allow-all.
+    - name: Revert to the segment-free policy
+      template:
+        src: policy.hujson.j2
         dest: "{{ headscale_config_dir }}/{{ headscale_policy_path | basename }}"
         mode: "0644"
-        content: |
-          // AUTO-REVERT fallback (no prior policy on first activation): explicit allow-all,
-          // so a failed connectivity probe cannot strand the mesh on a partial ACL.
-          { "acls": [ { "action": "accept", "src": ["*"], "dst": ["*:*"] } ] }
-      when: not hs_prev.stat.exists
+      vars:
+        headscale_policy_segments: []
+      when: not (hs_prev_safe | bool)
 
     - name: Reload the reverted policy (SIGHUP)
       command: docker kill --signal=HUP headscale
@@ -142,6 +258,55 @@
       fail:
         msg: >-
           Connectivity probe failed after the policy reload; reverted to
-          {{ 'the previous known-good policy' if hs_prev.stat.exists
-             else 'an explicit allow-all (first activation, no prior policy)' }}.
+          {{ 'the previous known-good policy' if hs_prev_safe | bool
+             else 'the segment-free policy (no restorable previous policy)' }}.
           Inspect `toolkit infra headscale probe`.
+
+# SEC-037: restricted read-only SSH identities for unattended audits.
+- name: Declare the audit identities
+  import_tasks: audit_identity.yml
+
+# --- Retired TLS stack: certbot and nginx (OPS-047) ---------------------------
+# Last in the role on purpose. `make deploy TARGET=vps ENV=prod` passes no tags and is
+# also how an ACL change reaches the VPS, so these tasks run on every ACL deploy. A
+# locked or broken dpkg fails the purge; placed first it would stop the play before the
+# policy is rendered, reloaded and probed. Placed here the ACL work is done (or reverted
+# by its own probe) before apt is touched, and a failed purge still fails the play.
+# tests/test_headscale_legacy_tls_teardown.py holds the order: new Headscale tasks go above.
+# Why these go, and why the list is in defaults: see headscale_retired_tls_packages.
+# deploy-vps.yml has no play-level become, so each task escalates for itself.
+- name: Remove the retired certbot and nginx packages
+  apt:
+    name: "{{ headscale_retired_tls_packages }}"
+    state: absent
+    purge: true
+  become: true
+  tags: [cleanup]
+
+# The directory holds cloudflare.ini, a Cloudflare token certbot's own error
+# already reports as refused; removing it rotates nothing. certbot's postrm
+# deletes the directory itself only when no certificate is still valid (it asks
+# otherwise), so this task is what makes the outcome independent of that.
+- name: Remove the retired Let's Encrypt directory
+  file:
+    path: "{{ headscale_retired_letsencrypt_dir }}"
+    state: absent
+  become: true
+  tags: [cleanup]
+
+# Purging the package deletes the unit files, not their failed state: certbot.service
+# and certbot.timer stay in `systemctl --failed` as `not-found failed` until reset
+# (measured on a booted Ubuntu 24.04 container). `reset-failed` exits 0 whether or
+# not anything matches, so the read below gates it, and a second run reports changed=0.
+- name: Look for a failed certbot unit
+  command: systemctl list-units --failed --plain --no-legend --no-pager 'certbot*'
+  register: _certbot_failed
+  changed_when: false
+  check_mode: false
+  tags: [cleanup]
+
+- name: Clear the failed state of the removed certbot units
+  command: systemctl reset-failed 'certbot*'
+  become: true
+  when: "'certbot' in _certbot_failed.stdout"
+  tags: [cleanup]

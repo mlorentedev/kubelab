@@ -170,8 +170,8 @@ spec:
         - protocol: TCP
           port: 6379
 ---
-# Vikunja is the only client. The API reads no INFRA_POSTGRES_* yet (every
-# ConfigMap carries them, ADR-036); add it here when it connects. Grafana and
+# Vikunja and the API are the clients, each on its own tenant. Every ConfigMap
+# carries INFRA_POSTGRES_* (ADR-036), so that alone names no client. Grafana and
 # n8n use SQLite. Tenant provisioning and drills use `kubectl exec`, not the
 # network.
 apiVersion: networking.k8s.io/v1
@@ -192,9 +192,30 @@ spec:
         - podSelector:
             matchLabels:
               app.kubernetes.io/name: vikunja
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: api
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: api-migrate
       ports:
         - protocol: TCP
           port: 5432
+---
+# The API's migration Job serves nothing, so nothing may reach it.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: api-migrate-ingress
+  labels:
+    app.kubernetes.io/name: api-migrate
+    app.kubernetes.io/part-of: kubelab
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: api-migrate
+  policyTypes:
+    - Ingress
 ---
 # IngressRoute loki, the Grafana datasource, the Vector sink, and n8n's sre-auto-triage.
 apiVersion: networking.k8s.io/v1
@@ -373,5 +394,35 @@ spec:
   podSelector:
     matchLabels:
       app.kubernetes.io/name: r2-backup-watcher
+  policyTypes:
+    - Ingress
+---
+# A CronJob: it only calls out.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: delivery-watcher-ingress
+  labels:
+    app.kubernetes.io/name: delivery-watcher
+    app.kubernetes.io/part-of: kubelab
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: delivery-watcher
+  policyTypes:
+    - Ingress
+---
+# A CronJob: it only calls out.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: edge-watcher-ingress
+  labels:
+    app.kubernetes.io/name: edge-watcher
+    app.kubernetes.io/part-of: kubelab
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: edge-watcher
   policyTypes:
     - Ingress

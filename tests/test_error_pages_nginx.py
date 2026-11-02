@@ -32,7 +32,8 @@ def _docker_ready() -> bool:
 
 
 @pytest.fixture(scope="module")
-def base_url() -> Iterator[str]:
+def errors_container() -> Iterator[tuple[str, str]]:
+    """The running image's container name and base URL."""
     if not _docker_ready():
         if os.environ.get("CI"):
             pytest.fail("docker is required in CI to run the built errors image")
@@ -40,7 +41,8 @@ def base_url() -> Iterator[str]:
     tag = f"errors-test:{uuid.uuid4().hex[:8]}"
     name = f"errors-test-{uuid.uuid4().hex[:8]}"
     subprocess.run(["docker", "build", "-q", "-t", tag, str(CONTEXT)], check=True, capture_output=True)
-    subprocess.run(["docker", "run", "-d", "--rm", "--name", name, "-p", "127.0.0.1::8080", tag], check=True, capture_output=True)
+    run = ["docker", "run", "-d", "--rm", "--name", name, "-p", "127.0.0.1::8080", tag]
+    subprocess.run(run, check=True, capture_output=True)
     try:
         port = subprocess.run(
             ["docker", "port", name, "8080/tcp"], check=True, capture_output=True, text=True
@@ -55,20 +57,28 @@ def base_url() -> Iterator[str]:
         else:
             logs = subprocess.run(["docker", "logs", name], capture_output=True, text=True).stderr[-400:]
             raise RuntimeError(f"the errors image did not answer /health within 10s: {logs}")
-        yield url
+        yield name, url
     finally:
         subprocess.run(["docker", "rm", "-f", name], capture_output=True)
         subprocess.run(["docker", "rmi", "-f", tag], capture_output=True)
 
 
+
+@pytest.fixture(scope="module")
+def base_url(errors_container: tuple[str, str]) -> str:
+    return errors_container[1]
+
+
 def _get(url: str, accept: str | None = None) -> tuple[int, dict[str, str], str]:
     req = urllib.request.Request(url, headers={"Accept": accept} if accept else {})
+    resp: HTTPResponse | urllib.error.HTTPError
     try:
-        resp: HTTPResponse = urllib.request.urlopen(req, timeout=5)
+        ok: HTTPResponse = urllib.request.urlopen(req, timeout=5)
+        resp, code = ok, ok.status
     except urllib.error.HTTPError as err:
-        resp = err  # type: ignore[assignment]
+        resp, code = err, err.code
     headers = {k.lower(): v for k, v in resp.headers.items()}
-    return resp.status if hasattr(resp, "status") else resp.code, headers, resp.read().decode(errors="replace")
+    return code, headers, resp.read().decode(errors="replace")
 
 
 @pytest.mark.parametrize("status", [502, 503, 504])
@@ -129,3 +139,30 @@ def test_brand_assets_keep_their_long_cache(base_url: str) -> None:
     asset = next(p for p in root.rglob("*") if p.is_file())
     _, headers, _ = _get(f"{base_url}/brand/{asset.relative_to(root)}")
     assert "immutable" in headers["cache-control"]
+
+
+@pytest.mark.parametrize(
+    ("path", "accept", "served"),
+    [
+        ("/errors/502.html", None, "text/html"),
+        ("/errors/502.html", "application/json", "application/json"),
+        ("/errors/502.json", None, "application/json"),
+    ],
+)
+def test_the_error_pages_served_are_logged(
+    errors_container: tuple[str, str], path: str, accept: str | None, served: str
+) -> None:
+    """The edge records which error pages it serves (OPS-030 AC4). Both /errors/ locations
+    inherit `access_log` from the server, so a location that turns it off must fail here."""
+    name, url = errors_container
+    probe = uuid.uuid4().hex
+    code, headers, _ = _get(f"{url}{path}?probe={probe}", accept=accept)
+    # A 404 is logged too, and `$request` names the path asked for, not the one served:
+    # only the answer shows that a page was served, and which location served it.
+    assert (code, headers["content-type"].split(";")[0]) == (200, served)
+    for _ in range(25):
+        logs = subprocess.run(["docker", "logs", name], capture_output=True, text=True).stdout
+        if probe in logs:
+            return
+        time.sleep(0.2)
+    pytest.fail(f"{path} (Accept: {accept}) was served with no access log line")

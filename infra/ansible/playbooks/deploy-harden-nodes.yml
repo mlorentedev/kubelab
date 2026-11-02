@@ -21,6 +21,8 @@
 # --- Play 1: SSH hardening for rpi3 + beelink ---
 - name: "Harden SSH on unhardened nodes"
   hosts: rpi3,beelink
+  # A later failure must not drop the handlers earlier tasks notified (#2824).
+  force_handlers: true
   become: true
   gather_facts: true
 

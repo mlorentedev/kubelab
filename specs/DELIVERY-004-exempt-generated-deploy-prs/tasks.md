@@ -1,91 +1,78 @@
 ---
-tags: [spec, tasks, templates]
+tags: [spec, tasks]
 created: "2026-09-04"
 ---
 
 # Tasks - DELIVERY-004-exempt-generated-deploy-prs
 
-> TDD order. One task = one focused commit. Tick as you go. Reorder freely while spec is in `draft` state; freeze once you start `implementing`.
->
-> **Inline markers** (optional, additive — borrowed from `github/spec-kit`, adapt-not-adopt per #141):
-> - `[P]` — this task has **no dependency on another unchecked task**, so it is safe to run in parallel (fan out to a `Workflow`, or just batch). TDD chains (test → implement → refactor of the *same* behavior) are sequential and must NOT carry `[P]`; independent behaviors can.
-> - `[AC<n>]` — this task helps satisfy **acceptance criterion #`<n>`** from `proposal.md`. Lets `/spec check` map coverage deterministically; omit it and the check falls back to semantic judgment.
+> TDD order. Manu merges every PR in this lane. Draft while iterating, `gh pr ready`
+> once. Each PR gets a `## Review triage` comment.
 
 ## Setup
 
-- [x] Branch created from master: `feat/1619-exempt-generated-deploy-prs` ✓ 2026-09-04
-      (leads with the bitácora issue number per `pattern-git-workflow` §3, not the spec id)
-- [x] `proposal.md` is complete and acceptance criteria are testable ✓ 2026-09-04
-- [ ] No open questions left in `proposal.md` "Risks / open questions"
-      **BLOCKED** — the auto-merge item is marked MUST-RESOLVE and belongs to the operator.
-      It gates PR2 only; PR1 proceeds.
+- [x] Operator decision recorded on #1619 ✓ 2026-10-21 (dated 2026-10-20)
+- [x] Proposal rewritten against (a)-(d) ✓ 2026-10-21
+- [x] Coordinated: IDP-042 (no receiver change), GITOPS-003 (switch gated on its PR 2 and #2584) ✓ 2026-10-21
 
-## Implementation
+## PR 1 — `deploy-shape`, assert-only (AC1, AC2, AC3 declaration)
 
-> Two PRs. **PR1 (AC1–AC4) is self-contained and lands regardless of the operator's
-> auto-merge decision.** PR2 (AC5) is gated on it. Sequenced this way deliberately:
-> the reviewer-capacity finding is the larger share of the measured damage and must
-> not be held hostage to a policy question.
+- [x] [AC1] Failing tests for the pure predicate: each of the four conditions refused on its own; #2576/#2581 shapes accepted; contract-change shape and prod files refused.
+- [x] [AC1] `toolkit/features/deploy_shape.py`: pure `classify()` + an API reader (gh) that fails closed.
+- [x] [AC2] `mechanical` block in `harness/review-attestation.json`; extend the no-policy-in-module test to both modules.
+- [x] [AC1] `toolkit tools deploy-shape` CLI: JSON verdict, exit 0 mechanical / 1 not mechanical / 2 unknown.
+- [x] [AC1] `.github/workflows/deploy-shape.yml`: master's code. Published as a commit status since #2717 (`success` for both evaluated verdicts, the verdict in the description; `failure` for unknown). It was a check-run `success`/`neutral`/`failure` until then.
+- [x] [AC2] `review-attestation`: drop the file-only staging signature; exempt on a recomputed `mechanical` at the attested head sha.
+- [x] [AC3] `deploy-shape` added to `required_contexts` (#2643) and applied live from `origin/master` `91ff4b97`. A neutral run passes protection: #2653 at `5c5d7afd` had `deploy-shape: neutral`, every other required context green, and `mergeable_state: clean`. ✓ 2026-10-22. Correction (#2714, #2717): a check-run posted with `GITHUB_TOKEN` joins another workflow's suite, so protection only sometimes counted it, and #2653 was one of the lucky cases. The commit status is what makes AC3 hold: PRs merged after #2717 with `deploy-shape` present only as a status (#2869, #2874).
+- [x] Lesson in `docs/lessons/` (lesson-613) ✓ 2026-10-21
 
-### PR1 — the diff carries nothing reviewable
+## PR 2 — widening tests (AC4, AC5)
 
-- [ ] [P] [AC1] Failing test: a PR whose changed-file set is exactly the staging deploy pair
-      classifies as `exempt`. Asserts against `classify()` with a fixture built from the six
-      measured PRs. Red today — no such signature is declared.
-- [ ] [AC1] Declare `staging deploy (single app)` and `prod promote (single app)` in
-      `harness/review-attestation.json` under `exempt.signatures`, each with a `why` naming the
-      PRs it was measured on (#1560, #1582, #1590, #1601, #1617 staging; #1618 prod), matching
-      the standard the three `release-please` entries already set.
-- [ ] [AC3] Failing test **first**, then keep it: a PR carrying a signature's files **plus one
-      unrelated file** does NOT classify as `exempt`. This is the guard that decides whether
-      the whole feature is an exemption or a bypass — write it before trusting set equality.
-- [ ] [AC3] Prove it goes red: widen the comparison to a subset check (`changed <= set(...)`),
-      confirm the negative test fails, restore. **Commit before mutating** — `git checkout HEAD --`
-      is only safe against a committed state.
-- [ ] [AC1] Extend the existing test that forbids reviewer identities in
-      `toolkit/features/review_attestation.py` to also forbid signature paths. **Extend, do not
-      fork** — one test owning "the module names no policy data" beats two that drift apart.
-- [ ] [P] [AC4] Suppress the paid reviewers on a matching diff. The only genuinely new code, and
-      the half whose failure is silent: express it as the SAME changed-file predicate, evaluated
-      from the same file set. Never a branch-prefix or author condition (`RELEASE_PLEASE_TOKEN`
-      is a PAT and any branch can be named to match).
-- [ ] [AC4] Static test: no workflow condition added by this spec references a branch prefix or
-      an author. Cheap, and it is the assertion that keeps the predicate honest after a future edit.
-- [ ] [AC2] [AC4] Live verification on the next real deploy PR and the next real promote PR:
-      `review-attestation` status reads `exempt` naming the matched signature, and CodeRabbit and
-      Codex checks are absent. Record the PR numbers and the status strings in `verification.md`.
-      **Evidence from a live PR, not from a unit test** — the unit test proves `classify()`, the
-      status proves the gate reached the same conclusion on a real payload.
+- [x] [AC4] Golden test on the `mechanical` declaration; mutation proof per field ✓ 2026-10-21
+- [x] [AC5] Prod unreachable: predicate refuses prod files and semver tags; declaration admits only `staging` ✓ 2026-10-21
 
-### PR2 — no human needs to decide (staging only)
+## PR 3 — the merge step, switch off (AC6)
 
-> **Gated on the operator's decision.** Do not start until the Risks item is resolved.
+Design recorded 2026-10-21, approved by the operator 2026-10-22 with two additions: close
+empty deploy PRs instead of merging them, and pin the merge to the judged head sha.
 
-- [ ] [AC5] Enable auto-merge scoped to the staging signature only. Prod keeps its human merge —
-      the promotion decision is the human's contribution there, not the diff inspection.
-- [ ] [AC5] Assert prod is untouched: a promote PR observed after landing still requires a merge.
-      Without this the scope is claimed rather than demonstrated.
-- [ ] [AC5] Measure latency over the first five real staging deploy PRs after landing. Report
-      the number against the 11h (#1560) / 19h30m (#1590) baseline. A number, not "faster".
+- [x] [AC6] `toolkit tools deploy-merge`, a judge tested against a fake API like `evaluate()`
+  (`tests/test_deploy_merge.py`, each condition refused alone). It writes decisions and never
+  merges. A PR is merged only when, at one head sha read first and re-read last:
+  - `evaluate()` says `mechanical`;
+  - every context in `ci.branch_protection."mlorentedev/kubelab".master.required_contexts` (read
+    from common.yaml) passes on that sha, every reporter of it (status and check-run alike, the
+    latest run of a check) and none missing;
+  - `mergeable_state` is `clean` or `unstable` (amended 2026-11-01 on #1619: `unstable` means only a
+    context that is not required fails, and the line above checks every required one; #2883 waited
+    6.5h on `add-to-project` hitting a rate limit).
+  The switch is `mechanical.merge`; only the boolean `true` is on, and `load_declaration` ignores
+  the key, so a malformed switch never turns deploy-shape red. Deviation from the design: the
+  command enumerates the open PRs itself (REST, not GraphQL) instead of taking `--pr N`, since every
+  trigger enumerates. ✓ 2026-10-22
+- [x] [AC6] Empty PRs: a non-draft PR with no changed files is closed with a comment, behind the same
+  switch. It is a content rule, so it closes any such PR, not only the receiver's; reopening undoes
+  it. "Superseded" closes nothing: the receiver keeps one long-lived PR per app, so a newer tag is
+  a head move, which `--match-head-commit` refuses and the next run judges. ✓ 2026-10-22
+- [x] [AC6] Identity: `RELEASE_PLEASE_TOKEN` on the merge step only, so push workflows fire after the
+  merge; reads and the close use `GITHUB_TOKEN`. A test pins both. ✓ 2026-10-22
+- [x] [AC6] Trigger: `workflow_run` on CI, review-attestation and deploy-shape completing, a
+  schedule sweep, and `workflow_dispatch`. One repo-wide concurrency group,
+  `cancel-in-progress: false`. With the switch off, each run reports what it would do; that report
+  is the evidence PR 4 links. ✓ 2026-10-22
+- [x] [AC4] `MERGERS` gains `deploy-merge.yml` and its single merge line; `APPROVED` gains
+  `merge: false` in the same diff as the registry. ✓ 2026-10-22
+- Not a per-PR condition: the `argocd/kubelab-staging` status. Staging gets no status while ace1 is
+  off or the slot is repointed (deploy-verify.yml header), so the merger would block most of the
+  day. Green deploy-verify runs are PR 4's precondition, linked on #1619.
+- CI workflow path, so it is never landed under a standing grant.
+
+## PR 4 — the flip (AC7)
+
+- [ ] Preconditions linked on #1619, then flip. Rollback = revert.
 
 ## Closing
 
-- [ ] Every acceptance criterion from `proposal.md` is covered by at least one test
-- [ ] Every acceptance criterion has a matching entry in `features.json` (see below) with a non-vacuous verification command
-- [ ] Type checks pass
-- [ ] Lint passes
-- [ ] No unrelated changes in the diff (no scope creep)
-- [ ] `verification.md` filled in
-- [ ] PR opened referencing this spec folder
-- [ ] `#1203` updated: contention reduced, displacement NOT fixed — so nobody reads this as closing it
-
-## Machine-readable features
-
-This spec emits a sibling `features.json` (alongside this file) following [[pattern-feature-list-as-primitive]]. The JSON is the harness-facing contract: each acceptance criterion maps to ≥1 feature with `id`, `behavior`, `verification` (executable command), `state` (lifecycle), and `evidence` (harness-captured output).
-
-**Pass-state gating:** the agent CANNOT write `"state": "passing"` — only the harness, after running `verification` and capturing exit code 0, may set that terminal state. Reviewers must reject PRs where features.json contains `passing` entries with empty `evidence`.
-
-Note on AC2, AC4 and AC5: their verification is an observation of a live pull request, which no
-single shell command can conjure on demand. Their `verification` fields read the recorded PR
-number back out of `verification.md` and re-query it, so the command stays executable and the
-evidence stays falsifiable — rather than being declared unverifiable and quietly skipped.
+- [x] [AC8] Reviewer quota measured 2026-10-21: on #2576 and #2581 CodeRabbit ran a full review ("No actionable comments"), and Codex attempted one and hit its usage limit. Both still spend quota on deploy PRs. pr-agent skips them. Posted on #1619.
+- [ ] Follow-up on dotfiles#2836: swap the PAT for the App.
+- [ ] Gap on the prod signature recorded on #1741.
+- [ ] Independent adversarial review before archive.

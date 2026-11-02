@@ -111,7 +111,7 @@ class TestTheMigrationScaffoldingCannotOutliveTheMigration:
 
         from toolkit.features.k8s_kubeconfig import _common_path
 
-        config = yaml.safe_load(_common_path().read_text())
+        config = yaml.safe_load(_common_path().read_text(encoding="utf-8"))
         assert "hub-aws" not in (config.get("clusters") or {}), (
             "clusters.hub-aws is back. It addressed the hub retired by GCP-001 AC6, "
             "which no longer exists, so the entry can only name a cluster that "
@@ -191,7 +191,7 @@ class TestRewriteServerDirect:
         from toolkit.features.k8s_connect import _node_block, resolve_transport
         from toolkit.features.k8s_kubeconfig import _common_path
 
-        config = yaml.safe_load(_common_path().read_text())
+        config = yaml.safe_load(_common_path().read_text(encoding="utf-8"))
         networking = config.get("networking") or {}
         clusters = config.get("clusters") or {}
 
@@ -256,7 +256,8 @@ class TestClusterSSOT:
             "  hub:\n"
             "    node: aws1\n"
             "    ssh_alias: aws1\n"
-            "    local_port: 16445\n"
+            "    local_port: 16445\n",
+            encoding="utf-8",
         )
         return p
 
@@ -271,7 +272,7 @@ class TestClusterSSOT:
 
     def test_missing_required_key_raises(self, tmp_path: Path) -> None:
         p = tmp_path / "common.yaml"
-        p.write_text("clusters:\n  staging:\n    node: ace1\n")  # no ssh_alias / local_port
+        p.write_text("clusters:\n  staging:\n    node: ace1\n", encoding="utf-8")  # no ssh_alias / local_port
         with pytest.raises(KeyError, match="ssh_alias"):
             load_clusters(p)
 
@@ -312,7 +313,9 @@ class TestFetchKubeconfig:
 
     def _setup(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         common = tmp_path / "common.yaml"
-        common.write_text("clusters:\n  staging:\n    node: ace1\n    ssh_alias: ace1\n    local_port: 16443\n")
+        common.write_text(
+            "clusters:\n  staging:\n    node: ace1\n    ssh_alias: ace1\n    local_port: 16443\n", encoding="utf-8"
+        )
         dest = tmp_path / ".kube" / "kubelab-staging-config"
         monkeypatch.setattr(kc, "_common_path", lambda: common)
         monkeypatch.setattr(kc, "output_path", lambda env: dest)
@@ -330,8 +333,8 @@ class TestFetchKubeconfig:
         out = kc.fetch_kubeconfig("staging")
 
         assert out == dest
-        assert "server: https://127.0.0.1:16443" in dest.read_text()
-        assert "https://127.0.0.1:6443" not in dest.read_text()
+        assert "server: https://127.0.0.1:16443" in dest.read_text(encoding="utf-8")
+        assert "https://127.0.0.1:6443" not in dest.read_text(encoding="utf-8")
 
     def test_falls_back_to_tunnel_on_connect_failure(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mocker
@@ -348,7 +351,7 @@ class TestFetchKubeconfig:
         kc.fetch_kubeconfig("staging")
 
         tunnel_mock.assert_called_once()
-        assert "server: https://127.0.0.1:16443" in dest.read_text()
+        assert "server: https://127.0.0.1:16443" in dest.read_text(encoding="utf-8")
 
     def test_raises_loud_on_auth_failure_no_tunnel_fallback(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mocker

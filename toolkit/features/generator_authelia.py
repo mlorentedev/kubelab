@@ -1,5 +1,4 @@
 # toolkit/features/generator_authelia.py
-import os
 from typing import Any
 
 from toolkit.config.constants import AUTHELIA_CONFIG, COMPONENTS
@@ -23,7 +22,6 @@ class AutheliaGenerator(BaseGenerator):
             Dictionary with success status and list of generated files
         """
         logger.info(f"Generating Authelia configuration for {env}")
-        logger.debug(f"Effective UID: {os.geteuid()}, GID: {os.getegid()}")  # Add this line
 
         templates_dir = self.project_root / "infra" / "config" / "authelia" / "templates"
         output_dir = self.project_root / "infra" / "config" / "authelia" / "generated" / env
