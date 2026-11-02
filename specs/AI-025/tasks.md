@@ -23,7 +23,7 @@ PR 1 (web search):
 - [x] [AC2] Failing tests: SearXNG service with no port, read-only settings with `json`, key generated on the node, restart on settings change, Open WebUI env (`tests/test_open_webui_web_search.py`)
 - [x] [AC2] SearXNG in `compose-webui.yml.j2`, its settings and env templates, role tasks, `common.yaml` pin
 - [x] [AC5] `web_search` in `defaultFeatureIds`
-- [ ] [AC2] Provision ace2 from the branch twice (`changed=0`), then an operator query that needs current information returns cited results
+- [x] [AC2] Provision ace2 from the branch twice (`changed=0`), then an operator query that needs current information returns cited results
 
 PR 2 (code interpreter and memory):
 

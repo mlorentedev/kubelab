@@ -74,8 +74,9 @@ def test_open_webui_searches_through_searxng() -> None:
     assert env["WEB_SEARCH_ENGINE"] == "searxng"
     assert env["SEARXNG_QUERY_URL"] == f"http://searxng:{port}/search"
     assert env["WEB_SEARCH_RESULT_COUNT"] == str(_search()["result_count"])
-    # Fetching a result page must never reach the tailnet or the LAN (v0.12.5
-    # blocks non-global addresses unless this is on).
+    # A regression guard, not evidence of the behaviour: v0.12.5 refuses
+    # non-global addresses unless this is on (`retrieval/web/utils.py`,
+    # `_assert_addresses_allowed`). Absent today; it must never be turned on.
     assert env.get("ENABLE_RAG_LOCAL_WEB_FETCH", "false") == "false"
 
 
