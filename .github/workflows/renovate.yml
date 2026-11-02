@@ -1,0 +1,43 @@
+name: Renovate
+
+# Runs Renovate against this repository. renovate.json sat unread for ten weeks
+# because no engine consumed it (the Mend App was never installed), so the proof
+# that this works is the Dependency Dashboard issue, not a green run.
+#
+# RELEASE_PLEASE_TOKEN, not GITHUB_TOKEN: a PR opened with GITHUB_TOKEN triggers no
+# workflows, so an update would sit with no checks. The trigger list is short on
+# purpose: this token never runs on a pull_request event.
+#
+# renovate.json's own schedule decides when updates open. This cron only has to
+# fall inside it, and a dispatch outside it refreshes the dashboard alone.
+
+on:
+  schedule:
+    - cron: "17 1 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  renovate:
+    runs-on: ${{ fromJSON(vars.RUNNER_DOCKER || '["ubuntu-latest"]') }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: false
+
+      - uses: renovatebot/github-action@1c0cf989c02653fba0efe7ca5772338860ca71dc  # v46.3.12
+        with:
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          renovate-version: 44.199.2
+        env:
+          RENOVATE_REPOSITORIES: ${{ github.repository }}
+          RENOVATE_ONBOARDING: "false"
+          RENOVATE_REQUIRE_CONFIG: required
+          LOG_LEVEL: info
