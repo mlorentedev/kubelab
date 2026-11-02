@@ -42,6 +42,13 @@
       when: "'vps' in group_names"
       tags: [always]
 
+    # base_system reaches the VPS only through this play (#2702).
+    - name: Give the VPS the large-disk journal cap
+      set_fact:
+        journald_system_max_use: "{{ journald_large_disk_max_use }}"
+      when: "'vps' in group_names"
+      tags: [always]
+
   roles:
     - role: ../roles/base_system
       tags: [base, packages]
