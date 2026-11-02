@@ -252,7 +252,7 @@ def test_no_other_role_writes_the_edges_netplan() -> None:
     other than the edge may set a `netplan_` variable, and no source that every host
     reads may: a role's defaults or vars, an inventory, group_vars, host_vars."""
     base_system = yaml.safe_load((ANSIBLE / "roles" / "base_system" / "tasks" / "main.yml").read_text(encoding="utf-8"))
-    (gate,) = [task["when"] for task in base_system if "/etc/netplan/" in str(task)]
+    (gate,) = [task["when"] for task in base_system if task.get("import_tasks") == "netplan.yml"]
     assert gate == "netplan_address is defined"
     others = set(NODES) - EDGE
     for playbook in sorted((ANSIBLE / "playbooks").glob("*.yml")):
