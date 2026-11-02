@@ -19,28 +19,28 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 
 ## Test status
 
-- Test suite: `<command> -> <output / coverage %>`
-- Manual smoke test: what was exercised, what was observed
-- No regressions in existing test suite: yes / no (if no, document)
+- Test suite: `tests/test_load_test.py` -> 47 passed; CI `Tests` passed on the merged head `b78cf988`
+- Manual smoke test: two full runs against staging on 2026-11-02, reported in `docs/load-test/`; `--env prod` and `--env dev` refused with exit 1
+- No regressions in existing test suite: yes, per CI. Local failures in six files this change does not touch were not investigated
 
 ## Decisions made during implementation
 
 Brief log of non-obvious trade-offs or course corrections taken during the work. Routine choices belong in commit messages, not here.
 
--
--
+- A run stops on a rollout and on an edge restart instead of averaging them in, added after both corrupted early ramps.
+- The bypass route lives outside `infra/k8s`, so no overlay syncs it. The static rate-limit coverage test does not scan it; the live one does.
 
 ## Promotion candidates
 
 Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`. `dotf spec archive` refuses a line left unanswered, a `no` without a reason, and a `yes` whose file does not exist; a `00_meta/` path is looked up in the vault.
 
-- [ ] Lesson for the repo's `docs/lessons/`? <yes: path / no: reason>
-- [ ] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? <yes: path / no: reason>
-- [ ] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. <yes: path / no: reason>
+- [x] Lesson for the repo's `docs/lessons/`? yes: docs/lessons/kubernetes/lesson-696-a-load-tests-limit-can-be-a-limit-nobody-declared.md
+- [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? no: a measurement tool, with no structural decision
+- [x] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. no: seen in one project
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/OPS-054/` -> `specs/archive/OPS-054/`
+- [x] `proposal.md` frontmatter set to `status: archived`
+- [x] Folder moved: `specs/OPS-054/` -> `specs/archive/OPS-054/`
 - [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
-- [ ] Promotions above executed (if any)
+- [x] Promotions above executed (if any)
