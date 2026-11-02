@@ -13,21 +13,23 @@ created: "2026-11-01"
 
 ## Setup
 
-- [ ] Branch created from main: `feat/AI-025`
-- [ ] `proposal.md` is complete and acceptance criteria are testable
-- [ ] No open questions left in `proposal.md` "Risks / open questions"
+- [x] Branch `feat/ai025-openwebui-assistant` from master
+- [x] `proposal.md` complete; AC1 measured (#2915)
 
 ## Implementation
 
-> Replace these with the actual steps for this feature. Keep them small (one commit each) and in TDD order.
-> The `[P]` / `[AC<n>]` markers are optional — see the legend above. Behaviors 1 and 2 below are independent, so their *first* test task carries `[P]`.
+PR 1 (web search):
 
-- [ ] [P] [AC1] Write failing test for <behavior 1>
-- [ ] [AC1] Implement <module/function> to make it pass
-- [ ] Refactor for clarity (extract, rename, dedupe)
-- [ ] [P] [AC2] Write failing test for <behavior 2>
-- [ ] [AC2] Implement to make it pass
-- [ ] ...
+- [x] [AC2] Failing tests: SearXNG service with no port, read-only settings with `json`, key generated on the node, restart on settings change, Open WebUI env (`tests/test_open_webui_web_search.py`)
+- [x] [AC2] SearXNG in `compose-webui.yml.j2`, its settings and env templates, role tasks, `common.yaml` pin
+- [ ] [AC5] `web_search` in `defaultFeatureIds` (after #2904 lands)
+- [ ] [AC2] Provision ace2 from the branch twice (`changed=0`), then an operator query that needs current information returns cited results
+
+PR 2 (code interpreter and memory):
+
+- [ ] [AC3] [AC5] Failing test, then `code_interpreter` in `defaultFeatureIds`
+- [ ] [AC4] Failing test, then `ENABLE_MEMORY_BACKGROUND_REVIEW=true`
+- [ ] [AC3] [AC4] Provision, then the operator runs Python in a chat and sees a fact carried to a new chat
 
 ## Closing
 
