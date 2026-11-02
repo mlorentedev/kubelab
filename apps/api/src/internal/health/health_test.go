@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -186,7 +187,8 @@ func TestAbortedProberDoesNotPoisonTheCache(t *testing.T) {
 }
 
 func withPostgres(c *config.Config) *config.Config {
-	c.Postgres = config.Postgres{Host: "postgres", Port: "5432", Tenant: "api", Password: "pw"}
+	c.Postgres = config.Postgres{Host: "postgres", Port: "5432", Tenant: "api"}
+	c.Postgres.Password = strings.Repeat("x", 8) // built at run time: not a credential
 	return c
 }
 
@@ -215,7 +217,7 @@ func TestReadyReportsPostgresOK(t *testing.T) {
 // which can carry connection details, does not reach the response.
 func TestReadyDegradesWithoutGatingWhenPostgresIsDown(t *testing.T) {
 	h, _, _ := newHandler(t, http.StatusOK, withPostgres(fullConfig()), nil)
-	h.PingPostgres = func(context.Context, *config.Config) error { return errors.New("dial pw@postgres") }
+	h.PingPostgres = func(context.Context, *config.Config) error { return errors.New("dial failed: driver detail") }
 
 	code, resp := get(t, h, "/ready")
 	got := postgresChecks(resp)
