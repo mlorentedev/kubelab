@@ -40,18 +40,18 @@ This runs:
 - **ssh_hardening** — hardened sshd_config
 - **dns_resilience** — /etc/hosts entry for vpn.kubelab.live (public IP)
 - **rpi3_services** — Docker Compose with Uptime Kuma + Glances
-- **monitoring bootstrap** — creates the admin user from SOPS; no monitors yet
+- **monitoring bootstrap** — creates the admin user from SOPS, then the monitors from the seed; no notifications
 
 ### 3. Verify
 ```bash
 make monitoring-status     # Check RPi3 + containers + HTTP
-make monitoring-apply      # Create the monitors from the seed, one by one
+make monitoring-apply CHECK=1  # Print what differs from the seed, changing nothing
 ```
 
 Do not run `make monitoring-export` until the notifications are back: on an instance with none it overwrites the tracked `notifications.json` with an empty list, the only reference for recreating them.
 
 ### 3b. Restore notifications
-1. Recreate the channel in the Kuma UI from `infra/config/uptime-kuma/notifications.json` and mark it as the default. Its Slack webhook is not in that file.
+1. Recreate the channel in the Kuma UI from `infra/config/uptime-kuma/notifications.json` and mark it as the default. Its Slack webhook is not in that file: use the ALERT tier URL in SOPS, `apps.services.automation.apprise.slack.webhook_alerts`, or create a new incoming webhook for `#alerts` in Slack.
 2. Run `make monitoring-apply` again. It attaches only a default channel, and only to monitors outside `muted_notification_tags`, so a channel created after the monitors reaches none of them until this runs.
 3. Send a test notification from the channel's edit dialog and confirm it arrives.
 

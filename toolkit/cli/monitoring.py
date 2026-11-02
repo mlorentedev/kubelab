@@ -173,8 +173,8 @@ def bootstrap_cmd() -> None:
     """Full disaster recovery: create admin user + apply monitors.
 
     For fresh Uptime Kuma instances (new SD card). Creates admin user
-    from SOPS credentials, then imports monitors + notifications from
-    JSON seed files. Idempotent — safe to re-run.
+    from SOPS credentials, then creates the monitors from the seed.
+    Notifications are not restored. Idempotent — safe to re-run.
     """
     settings = get_settings()
     bootstrap_fn(settings.project_root)
