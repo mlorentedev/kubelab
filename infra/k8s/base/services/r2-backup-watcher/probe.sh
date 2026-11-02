@@ -48,7 +48,11 @@ set -u
 TARGETS="${WATCHER_TARGETS:-/etc/r2-backup-watcher/targets.txt}"
 STAGING="${STAGING_DIR:-/opt/node-backup/staging}"
 SENTINEL_NAME="${SENTINEL:-.capture-complete}"
-TIMEOUT="${RESTIC_TIMEOUT:-60}"
+# Per restic call. Measured in staging 2026-11-02 on the hotel uplink: the
+# slowest call was beelink's `ls` at 57s, against the 60s this used to be, which
+# is why beelink read `listing failed: signal terminated` every run from
+# 2026-10-27. 180 is three times that on a degraded link, not a fit to it.
+TIMEOUT="${RESTIC_TIMEOUT:-180}"
 SIZES="${WATCHER_SIZES:-/var/run/r2-sizes/sizes.txt}"
 REACH_TIMEOUT="${REACH_TIMEOUT:-5}"
 # A path, so a test can stand in for it: a busybox shell built as a standalone
@@ -127,8 +131,28 @@ node_password_var() {
 
 # Every restic call goes through here: never a lock (the token cannot write
 # one), never the cache (nothing to keep between Jobs), always a timeout.
+# Each call logs its duration, and a call cut off by the timeout says so first
+# in the reason: restic's own last words then are `signal terminated received`,
+# which reads like a transient fault and hid a call that never fit for days.
 restic_read() {
+    started="$(date +%s)"
     timeout "$TIMEOUT" restic -r "$repo" --no-lock --no-cache "$@" 2>"$errfile"
+    rc=$?
+    took=$(($(date +%s) - started))
+    if [ "$rc" -ne 0 ] && [ "$took" -ge "$TIMEOUT" ]; then
+        echo "r2-backup-watcher: $node: restic $1 timed out after ${TIMEOUT}s" >&2
+        first="$(head -n 1 "$errfile")"
+        case "$first" in
+            # Only what is printed when the timeout kills the call: restic's own
+            # words, or a shell's `Terminated` (busybox, the image's shell, on CI);
+            # anything else said first (R2's 401, #1939) is the cause and stays named.
+            '' | *'signal terminated'* | Terminated) printf 'timed out after %ss\n' "$TIMEOUT" >"$errfile" ;;
+            *) printf 'timed out after %ss: %s\n' "$TIMEOUT" "$first" >"$errfile" ;;
+        esac
+    else
+        echo "r2-backup-watcher: $node: restic $1 took ${took}s" >&2
+    fi
+    return "$rc"
 }
 
 # `<bytes|null> <seconds>` that size.sh wrote for one bucket or node, or nothing
