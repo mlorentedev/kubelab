@@ -86,6 +86,6 @@ def test_the_rule_window_holds_more_than_one_run(rendered) -> None:
     rules = yaml.safe_load(RULES.read_text(encoding="utf-8"))
     (rule,) = [r for g in rules["groups"] for r in g["rules"] if r["uid"] == "gitops003-argo-delivery"]
     (query,) = [d for d in rule["data"] if d["datasourceUid"] == "loki"]
-    window = re.search(r"\[(\d+)m\]", query["model"]["expr"])
-    assert window, query["model"]["expr"]
-    assert int(window.group(1)) >= 2 * int(period.group(1))
+    windows = [int(m) for m in re.findall(r"\[(\d+)m\]", query["model"]["expr"])]
+    assert windows, query["model"]["expr"]
+    assert min(windows) >= 2 * int(period.group(1)), windows
