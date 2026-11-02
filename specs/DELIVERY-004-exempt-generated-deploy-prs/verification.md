@@ -31,7 +31,9 @@ created: "2026-09-03"
   pending.
 - Review finding Major 1 (#2982): pins the merge and close feeds, the triggers and the token scope of
   `deploy-merge.yml`. Each of these edits goes RED under `make mutate`: `select(.action == "merge")` ->
-  `!= "skip"`; `.head_sha` -> `.pr`; `contents: read` -> `write`; the cron changed.
+  `!= "skip"`; `.head_sha` -> `.pr`; `contents: read` -> `write`; the cron changed. The review's two untested guards
+  are covered in the same PR, and each goes RED: `evaluate()`'s `base_ref != default_branch` -> `False`, and
+  dropping `or shape.head_sha != head` from `judge()`.
 
 ## Test status
 

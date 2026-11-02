@@ -148,15 +148,19 @@ class TestMergingActorDoesNotWiden:
     # `!= "skip"`) or feeding anything but `.head_sha` as the sha leaves the merge line
     # above intact and still widens what merges (adversarial review of #1619).
     FEEDS = {
-        "merge": """done < <(jq -r '.decisions[] | select(.action == "merge") | "\\(.pr) \\(.head_sha)"' "$RUNNER_TEMP/decisions.json")""",
-        "close": """jq -r '.decisions[] | select(.action == "close") | "\\(.pr) \\(.head_sha)"' "$RUNNER_TEMP/decisions.json" |""",
+        "merge": """done < <(jq -r '.decisions[] | select(.action == "merge") | "\\(.pr) \\(.head_sha)"' """
+        """"$RUNNER_TEMP/decisions.json")""",
+        "close": """jq -r '.decisions[] | select(.action == "close") | "\\(.pr) \\(.head_sha)"' """
+        """"$RUNNER_TEMP/decisions.json" |""",
     }
 
     def test_the_merge_and_close_loops_read_only_their_own_decisions_and_the_judged_sha(self) -> None:
         text = (WORKFLOWS / "deploy-merge.yml").read_text(encoding="utf-8")
         feeds = [line.strip() for line in text.splitlines() if "decisions.json" in line and "select(" in line]
         writers = [line for line in feeds if "would " not in line]
-        assert sorted(writers) == sorted(self.FEEDS.values()), f"deploy-merge.yml feeds its writes with {writers}: {DECIDED}"
+        assert sorted(writers) == sorted(self.FEEDS.values()), (
+            f"deploy-merge.yml feeds its writes with {writers}: {DECIDED}"
+        )
 
     def test_the_triggers_and_the_token_scope_are_the_approved_ones(self) -> None:
         """When the merger runs and what its GITHUB_TOKEN may do. A wildcard
