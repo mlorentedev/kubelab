@@ -48,3 +48,44 @@ func TestValidateConfig(t *testing.T) {
 		})
 	}
 }
+
+// TestPopulateConfigForge pins the forge credentials' names and that none of them is required:
+// the Deployment injects them from api-secrets and the ConfigMap, and staging has no Gitea token.
+func TestPopulateConfigForge(t *testing.T) {
+	t.Setenv("SITE_TITLE", "KubeLab")
+	t.Setenv("SITE_DOMAIN", "kubelab.live")
+
+	t.Run("absent", func(t *testing.T) {
+		for _, key := range []string{
+			"FORGE_GITEA_TOKEN", "INFRA_FORGE_GITHUB_APP_ID",
+			"INFRA_FORGE_GITHUB_INSTALLATION_ID", "FORGE_GITHUB_PRIVATE_KEY",
+		} {
+			t.Setenv(key, "")
+		}
+		cfg, err := populateConfig()
+		if err != nil {
+			t.Fatalf("populateConfig() without forge credentials failed: %v", err)
+		}
+		if cfg.Forge.GiteaToken != "" || cfg.Forge.GitHubPrivateKey != "" ||
+			cfg.Forge.GitHubAppID != "" || cfg.Forge.GitHubInstallationID != "" {
+			t.Fatalf("absent credentials must stay empty, got %+v", cfg.Forge)
+		}
+	})
+
+	t.Run("present", func(t *testing.T) {
+		t.Setenv("FORGE_GITEA_TOKEN", "gitea-token")
+		t.Setenv("INFRA_FORGE_GITHUB_APP_ID", "1")
+		t.Setenv("INFRA_FORGE_GITHUB_INSTALLATION_ID", "2")
+		t.Setenv("FORGE_GITHUB_PRIVATE_KEY", "pem-body")
+		cfg, err := populateConfig()
+		if err != nil {
+			t.Fatalf("populateConfig() with forge credentials failed: %v", err)
+		}
+		want := "gitea-token|1|2|pem-body"
+		got := cfg.Forge.GiteaToken + "|" + cfg.Forge.GitHubAppID + "|" +
+			cfg.Forge.GitHubInstallationID + "|" + cfg.Forge.GitHubPrivateKey
+		if got != want {
+			t.Fatalf("forge credentials read from the wrong variables: got %q, want %q", got, want)
+		}
+	})
+}
