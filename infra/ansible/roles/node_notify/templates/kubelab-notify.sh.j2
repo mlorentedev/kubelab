@@ -146,6 +146,13 @@ if [ "$MODE" = flush ]; then
       break
     done
     [ -n "$oldest" ] || exit 0
+    # systemd would kill a flush that outruns its unit's timeout and leave the unit
+    # failed with nothing wrong. The lock wait outlasts one delivery, so stopping
+    # that far short leaves room for one begun just before; the timer takes the rest.
+    if [ "$SECONDS" -ge {{ (node_notify_spool_timeout_seconds | int) - (node_notify_lock_wait_seconds | int) }} ]; then
+      echo "out of time for this run; the next one delivers the rest" >&2
+      exit 0
+    fi
     name="${oldest##*/}"
     stamp="${name%%-*}"
     # Only this script names a notice, `<nanoseconds>-<unit>`. Any other name has
@@ -171,13 +178,6 @@ if [ "$MODE" = flush ]; then
       exit 1
     fi
     rm -f "$oldest"
-    # systemd would kill a flush that outruns its unit's timeout and leave the unit
-    # failed with nothing wrong. The lock wait outlasts one delivery, so stopping
-    # that far short always leaves room for the one under way; the timer takes the rest.
-    if [ "$SECONDS" -ge {{ (node_notify_spool_timeout_seconds | int) - (node_notify_lock_wait_seconds | int) }} ]; then
-      echo "out of time for this run; the next one delivers the rest" >&2
-      exit 0
-    fi
   done
 fi
 

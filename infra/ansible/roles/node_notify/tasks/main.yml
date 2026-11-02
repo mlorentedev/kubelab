@@ -108,9 +108,10 @@
   command:
     argv: "{{ ['systemctl', 'reset-failed'] + node_notify_failed_notifiers.stdout_lines | map('split') | map('first') | list }}"
   when: node_notify_failed_notifiers.stdout_lines | length > 0
-  # A notifier unit can vanish between the listing and this reset. As in the
-  # script's own reset, that is no reason to fail: it fails the play here (#2870).
-  failed_when: false
+  # A notifier unit can vanish between the listing and this reset, and that alone
+  # should not fail the play (#2870). Any other refusal still does.
+  register: node_notify_reset
+  failed_when: node_notify_reset.rc != 0 and 'not loaded' not in node_notify_reset.stderr
 
 # NOTE: the single-purpose notifier this replaces is removed by
 # `node_maintenance`, not here, and the reason is ordering rather than
