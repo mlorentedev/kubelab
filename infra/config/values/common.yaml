@@ -2258,6 +2258,11 @@ apps:
           container_port: 8000
           memory_limit: 256m
           cpu_limit: "0.5"
+        # Memory review (spec AI-025): every this many user turns in a chat, the
+        # chat model reads it and saves what is worth remembering. Each review
+        # is one more NaN call; v0.12.5's default is 10.
+        memory:
+          review_interval_turns: 5
         # Web search (spec AI-025). v0.12.5 takes one engine and has no fallback,
         # so the engine is SearXNG, which aggregates others itself. It runs on
         # Open WebUI's network with no port, deployed by the agent_stack role.
