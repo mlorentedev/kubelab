@@ -10,8 +10,8 @@ rpi3_kuma_data_dir: /opt/monitoring/uptime-kuma-data
 # ENOTFOUND while prod stays green. Pinning 100.100.100.100 puts the container
 # back on the split-DNS path.
 #
-# Do NOT "simplify" this to the headscale role's ["1.1.1.1", "8.8.8.8"]: those
+# Do NOT "simplify" this to the headscale role's public_resolvers: those
 # resolvers cannot see staging either, which is the exact bug this fixes.
 # The public resolver stays as a second entry so the prod monitors keep
 # resolving if Tailscale is down on this node.
-docker_dns_servers: ["100.100.100.100", "1.1.1.1"]
+docker_dns_servers: "{{ config.networking.tailnet_first_resolvers }}"

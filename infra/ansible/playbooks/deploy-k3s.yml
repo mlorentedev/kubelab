@@ -93,7 +93,6 @@
         # empty string falls back too, not just an absent key.
         k3s_traefik_acme_email: "{{ config.edge.traefik.acme_email | default(config.apps.contact.email, true) }}"
         k3s_traefik_acme_dns_provider: "{{ config.edge.traefik.dns_provider }}"
-        k3s_traefik_acme_dns_resolvers: "{{ config.edge.traefik.dns_resolver_1 }},{{ config.edge.traefik.dns_resolver_2 }}"
         k3s_fetch_kubeconfig: true
         k3s_kubeconfig_local_path: "~/.kube/kubelab-{{ deploy_env }}-config"
         k3s_api_address: "{{ ansible_host }}"

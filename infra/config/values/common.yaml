@@ -48,6 +48,14 @@ branding:
 networking:
   lan_cidr: "172.16.1.0/24"
   tailscale_cidr: "100.64.0.0/10"
+  # Resolvers a process is pinned to, read by the role defaults (#2901). Two shapes
+  # on purpose, see the Docker-DNS gotcha in CLAUDE.md. public_resolvers cannot see
+  # VPN-only split-DNS zones and suits a container that needs public answers (Gitea,
+  # Headscale, the agent, ACME). tailnet_first_resolvers leads with MagicDNS for a
+  # container that must also resolve those zones; its public entry is only for a
+  # Tailscale outage. tests/test_public_resolvers_ssot.py keeps the two consistent.
+  public_resolvers: ["1.1.1.1", "8.8.8.8"]
+  tailnet_first_resolvers: ["100.100.100.100", "1.1.1.1"]
   # The lab's edge (ADR-075, NET-005): the RPi4 does NAT, DHCP, DNS and the lab
   # Wi-Fi, and only `uplink` changes from one site to the next. What would locate
   # a site or let a stranger on it claim the lab's paid access (SSIDs, PSKs, the
@@ -840,8 +848,6 @@ edge:
     # tests/test_ansible_config_keys_resolve.py -- do not rely on this comment.
     # DNS
     dns_provider: cloudflare
-    dns_resolver_1: 1.1.1.1:53
-    dns_resolver_2: 8.8.8.8:53
     dns_delay_before_check: 30
     # Logging
     access_log_format: json

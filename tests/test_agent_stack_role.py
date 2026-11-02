@@ -46,6 +46,8 @@ def _context() -> dict:
     return {
         **defaults,
         "ansible_managed": "managed",
+        "agent_stack_docker_dns_servers": common["networking"]["tailnet_first_resolvers"],
+        "agent_stack_hermes_dns_servers": common["networking"]["public_resolvers"],
         "tailscale_ip": common["networking"]["nodes"]["ace2"]["tailscale_ip"],
         "agent_stack_webui": common["apps"]["services"]["ai"]["open_webui"],
         "agent_stack_webui_oidc_client_id": "open-webui-oidc",
