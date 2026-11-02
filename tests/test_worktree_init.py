@@ -41,15 +41,23 @@ def _detector() -> ModuleType:
 
 
 def _fake_poetry(
-    tmp_path: pathlib.Path, *, lock_is_fresh: bool, venv: pathlib.Path | None = None, install_rc: int = 0
+    tmp_path: pathlib.Path,
+    *,
+    lock_is_fresh: bool,
+    venv: pathlib.Path | None = None,
+    install_rc: int = 0,
+    builds: bool = True,
 ) -> tuple[pathlib.Path, pathlib.Path]:
     log = tmp_path / "calls.log"
     script = tmp_path / "poetry"
     check_rc = 0 if lock_is_fresh else 1
     where = f'echo "{venv}"; exit 0' if venv else "exit 1"
+    # A real install leaves the toolkit entry point where the recipe then checks for it.
+    built = '[ -z "$WORKTREE_VENV" ] || { mkdir -p "$WORKTREE_VENV/bin"; : > "$WORKTREE_VENV/bin/toolkit"; chmod +x "$WORKTREE_VENV/bin/toolkit"; }; '
+    install = f"{built if builds else ''}exit 0" if install_rc == 0 else f"exit {install_rc}"
     script.write_text(
         f'#!/bin/sh\necho "$*" >> "{log}"\n'
-        f'case "$*" in "check --lock"*) exit {check_rc};; "env info"*) {where};; "install"*) exit {install_rc};; esac\n'
+        f'case "$*" in "check --lock"*) exit {check_rc};; "env info"*) {where};; "install"*) {install};; esac\n'
         "exit 0\n",
         encoding="utf-8",
     )
@@ -66,7 +74,7 @@ def _run(
 ) -> tuple[list[str], subprocess.CompletedProcess[str]]:
     script, log = _fake_poetry(tmp_path, lock_is_fresh=lock_is_fresh, venv=venv, install_rc=install_rc)
     done = subprocess.run(
-        ["make", "--no-print-directory", "worktree-init", f"POETRY={script}"],
+        ["make", "--no-print-directory", "worktree-init", f"POETRY={script}", f"WORKTREE_VENV={tmp_path / '.venv'}"],
         cwd=REPO,
         check=False,
         capture_output=True,
@@ -94,6 +102,50 @@ def test_a_fresh_lock_is_left_alone(tmp_path: pathlib.Path) -> None:
     calls, done = _run(tmp_path, lock_is_fresh=True)
     assert done.returncode == 0
     assert calls == ["check", "install"]
+
+
+def test_the_venv_is_installed_in_the_worktree(tmp_path: pathlib.Path) -> None:
+    """Ansible's record tasks run `<repo>/.venv/bin/toolkit`, so the venv must be there.
+
+    Poetry's own default puts it in its cache unless a `.venv` already exists, and a
+    worktree initialised that way failed a token record after the mint (#2902).
+    """
+    log = tmp_path / "env.log"
+    fake = tmp_path / "poetry"
+    fake.write_text(
+        f'#!/bin/sh\ncase "$*" in "install"*) echo "$POETRY_VIRTUALENVS_IN_PROJECT:$VIRTUAL_ENV" >> "{log}"; '
+        'mkdir -p "$WORKTREE_VENV/bin"; : > "$WORKTREE_VENV/bin/toolkit"; chmod +x "$WORKTREE_VENV/bin/toolkit";; '
+        '"env info"*) exit 1;; esac\nexit 0\n',
+        encoding="utf-8",
+    )
+    fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
+    done = subprocess.run(
+        ["make", "--no-print-directory", "worktree-init", f"POETRY={fake}", f"WORKTREE_VENV={tmp_path / '.venv'}"],
+        cwd=REPO,
+        check=False,
+        capture_output=True,
+        text=True,
+        # An activated venv elsewhere would take the install regardless of the setting.
+        env={**{k: v for k, v in os.environ.items() if k != "POETRY_VIRTUALENVS_IN_PROJECT"}, "VIRTUAL_ENV": "/elsewhere"},
+    )
+    assert done.returncode == 0, done.stderr
+    assert log.read_text(encoding="utf-8").split() == ["true:"]
+
+
+def test_an_install_that_leaves_no_toolkit_in_the_worktree_fails(tmp_path: pathlib.Path) -> None:
+    """The steps infer where Poetry builds; only the result says where it did (#2913)."""
+    fake = tmp_path / "poetry"
+    fake.write_text('#!/bin/sh\ncase "$*" in "env info"*) exit 1;; esac\nexit 0\n', encoding="utf-8")
+    fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
+    done = subprocess.run(
+        ["make", "--no-print-directory", "worktree-init", f"POETRY={fake}", f"WORKTREE_VENV={tmp_path / '.venv'}"],
+        cwd=REPO,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert done.returncode != 0
+    assert "bin/toolkit" in done.stderr
 
 
 class TestRelocatedVenv:
@@ -134,7 +186,8 @@ class TestRelocatedVenv:
         script.chmod(script.stat().st_mode | stat.S_IEXEC)
         fake, _ = _fake_poetry(tmp_path, lock_is_fresh=True, venv=venv_dir)
         done = subprocess.run(
-            ["make", "--no-print-directory", "worktree-init", f"POETRY={fake}"],
+            # Not venv_dir itself: path equality would keep it whatever the detector said.
+            ["make", "--no-print-directory", "worktree-init", f"POETRY={fake}", f"WORKTREE_VENV={tmp_path / 'wt' / '.venv'}"],
             cwd=REPO,
             check=False,
             capture_output=True,
@@ -175,8 +228,41 @@ class TestRelocatedVenv:
         calls, done = _run(tmp_path, lock_is_fresh=True, venv=venv)
         assert done.returncode == 0, done.stderr
         assert calls == ["check", "install"]
-        assert not venv.exists(), "the stale venv must be set aside so poetry builds a fresh one"
+        assert not (venv / "bin" / "pytest").exists(), "the stale venv must be set aside so poetry builds a fresh one"
+        assert (venv / "bin" / "toolkit").exists()
         assert not (tmp_path / ".venv.relocated").exists(), "a successful rebuild discards the old copy"
+
+    def test_a_cache_venv_is_replaced_by_one_in_the_worktree(self, tmp_path: pathlib.Path) -> None:
+        """Poetry reuses a cache venv it already has, whatever POETRY_VIRTUALENVS_IN_PROJECT says.
+
+        The setting governs only creation, so the env-var test above could not see this
+        half: a worktree with a cache venv kept it and had no `.venv/bin/toolkit`.
+        """
+        cache = tmp_path / "cache" / "toolkit-AbC123-py3.13"
+        cached = _venv(cache.parent / "x", shebang_dir=cache)
+        cached.rename(cache)
+        calls, done = _run(tmp_path, lock_is_fresh=True, venv=cache)
+        assert done.returncode == 0, done.stderr
+        assert calls == ["check", "install"]
+        assert not cache.exists(), "a venv outside the worktree must be set aside so poetry builds .venv"
+        assert (tmp_path / ".venv" / "bin" / "toolkit").exists(), "the rebuilt venv must be the worktree's"
+        assert not (cache.parent / f"{cache.name}.relocated").exists(), "a successful rebuild discards the old copy"
+
+    def test_an_install_that_builds_elsewhere_restores_the_cache_venv(self, tmp_path: pathlib.Path) -> None:
+        """Poetry exiting 0 is not the install succeeding: no worktree toolkit is a failure too."""
+        cache = tmp_path / "cache" / "toolkit-AbC123-py3.13"
+        _venv(cache.parent / "x", shebang_dir=cache).rename(cache)
+        fake, _ = _fake_poetry(tmp_path, lock_is_fresh=True, venv=cache, builds=False)
+        done = subprocess.run(
+            ["make", "--no-print-directory", "worktree-init", f"POETRY={fake}", f"WORKTREE_VENV={tmp_path / '.venv'}"],
+            cwd=REPO,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        assert done.returncode != 0
+        assert (cache / "bin" / "pytest").exists(), "the venv set aside must come back when the check fails"
+        assert not (cache.parent / f"{cache.name}.relocated").exists()
 
     def test_worktree_init_leaves_a_healthy_venv_alone(self, tmp_path: pathlib.Path) -> None:
         venv = _venv(tmp_path, shebang_dir=tmp_path / ".venv")

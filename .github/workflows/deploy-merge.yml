@@ -50,7 +50,7 @@ jobs:
     # A dispatch on another branch would judge with that branch's code. This
     # only stops an accidental one: a branch can edit this line too. Scoped to
     # the dispatch event because only a dispatch can name another branch; the
-    # schedule and workflow_run payloads do carry `repository` (lesson-682).
+    # schedule and workflow_run payloads do carry `repository` (lesson-686).
     if: github.event_name != 'workflow_dispatch' || github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-latest
     timeout-minutes: 15

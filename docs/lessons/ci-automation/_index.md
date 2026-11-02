@@ -4,7 +4,8 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
-| 682 | [A claim about a GitHub event payload is a prediction until a run of that event shows it](lesson-682-a-payload-shape-prediction-is-not-a-measurement.md) | 2026-11-01 |
+| 686 | [A claim about a GitHub event payload is a prediction until a run of that event shows it](lesson-686-a-payload-shape-prediction-is-not-a-measurement.md) | 2026-11-01 |
+| 685 | [A model's speed on small diffs says nothing about whether it finishes a large one](lesson-685-a-models-speed-on-small-diffs-says-nothing-about-whether-it-finishes-a-large-one.md) | 2026-11-01 |
 | 681 | [A GitHub `schedule` in this repository is a few-times-a-day signal, not a cron](lesson-681-a-github-schedule-here-is-a-few-times-a-day-signal-not-a-cron.md) | 2026-10-31 |
 | 668 | [A `check=True` subprocess in a fixture hides the stderr that names the failure](lesson-668-a-subprocess-check-in-a-fixture-hides-the-stderr-that-names-the-cause.md) | 2026-10-30 |
 | 635 | [A reaper that selects by name stops reaping when the runner renames what it creates](lesson-635-a-reaper-that-selects-by-name-stops-reaping-when-the-runner-renames.md) | 2026-10-27 |

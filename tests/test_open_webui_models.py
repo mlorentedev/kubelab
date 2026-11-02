@@ -82,7 +82,7 @@ def test_speech_and_images_come_from_nan() -> None:
 
 def test_the_image_request_asks_for_what_nan_answers() -> None:
     """Open WebUI sends `response_format: b64_json` unless the model matches this
-    pattern (v0.12.0 `routers/images.py`). NaN was measured answering with a `url`
+    pattern (v0.12.5 `routers/images.py`). NaN was measured answering with a `url`
     to a request without it, so the configured model must match, and only it."""
     raw = _env()["IMAGE_URL_RESPONSE_MODELS_REGEX_PATTERN"]
     assert raw.startswith("'") and raw.endswith("'"), "unquoted, Compose interpolates the `$`"

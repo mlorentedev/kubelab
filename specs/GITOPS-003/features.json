@@ -3,49 +3,49 @@
     "id": "GITOPS-003-f1",
     "behavior": "A merge touching infra/k8s/overlays/<env>/** carries a commit status argocd/kubelab-<env> (success|failure) within N minutes",
     "verification": "gh api repos/mlorentedev/kubelab/commits/$(git rev-parse origin/master)/status --jq '.statuses[] | select(.context==\"argocd/kubelab-staging\") | .state' | grep -Eq '^(success|failure)$'",
-    "state": "pending",
-    "evidence": ""
+    "state": "passing",
+    "evidence": "2026-11-01: exit 0 at master b9a2982; every master commit since #2613 carries argocd/kubelab-<env> success (verification.md)"
   },
   {
     "id": "GITOPS-003-f2",
     "behavior": "deploy-verify.yml ends red on failure or on no status after N minutes, green only on success",
-    "verification": "poetry run pytest tests/test_argo_wait_status.py -q",
-    "state": "pending",
-    "evidence": ""
+    "verification": "poetry run pytest tests/test_argo_wait_status.py tests/test_delivery_watcher.py -q --no-cov",
+    "state": "passing",
+    "evidence": "2026-11-01: this command, 37 passed. Not exercised by it: the live red path in staging (alert fired 18:14:35Z), recorded in verification.md"
   },
   {
     "id": "GITOPS-003-f3",
     "behavior": "The PostSync hook fails the sync when a malformed POST /api/subscribe on the web host answers text/html (nginx) and succeeds on 400 text/plain (API); the Job is cleaned up after success",
-    "verification": "poetry run pytest tests/test_k8s_generator_postsync_probe.py -q",
-    "state": "pending",
-    "evidence": ""
+    "verification": "poetry run pytest tests/test_k8s_generator_route_probe.py -q --no-cov",
+    "state": "passing",
+    "evidence": "2026-11-01: this command, 19 passed. Not exercised by it: the live runs (staging hold, and the hook Succeeded on the first prod and staging syncs after #2899, 2e84df1), recorded in verification.md"
   },
   {
     "id": "GITOPS-003-f4",
     "behavior": "make verify-product APP=<app> ENV=<env> exits 0 only when kubelab-<env> is Synced at origin/master HEAD with operationState Succeeded and the contract host's /version.json serves the pinned tag; 1 on failure, 2 when it cannot check, 3 when commit is absent (not verifiable yet)",
     "verification": "poetry run pytest tests/test_product_verify.py -q --no-cov && make verify-product APP=web ENV=staging",
-    "state": "pending",
-    "evidence": ""
+    "state": "passing",
+    "evidence": "2026-11-01: tests pass; make verify-product APP=web ENV=staging -> VERIFIED sha-a549dff at b9a2982"
   },
   {
     "id": "GITOPS-003-f5",
     "behavior": "trigger.on-sync-* expressions do not raise with operationState == nil or an empty syncResult",
-    "verification": "poetry run pytest tests/test_argocd_notification_triggers.py -q",
-    "state": "pending",
-    "evidence": ""
+    "verification": "poetry run pytest tests/test_argocd_notification_triggers.py -q --no-cov",
+    "state": "passing",
+    "evidence": "2026-11-01: 24 passed"
   },
   {
     "id": "GITOPS-003-f6",
     "behavior": "The token behind service.webhook.github is verified by consequence (authenticated GET returns 200)",
-    "verification": "poetry run pytest tests/infra/test_argocd_notifications_token.py -q",
-    "state": "pending",
-    "evidence": ""
+    "verification": "poetry run pytest tests/infra/test_argocd_status_token_live.py -m infra --override-ini=addopts= -q",
+    "state": "passing",
+    "evidence": "2026-11-01: 2 passed against the live token; the write grant is a declined gap (#2644)"
   },
   {
     "id": "GITOPS-003-f7",
     "behavior": "docs/runbooks carries a 'deploy-verify is red' section linked from lesson-407 and from the workflow failure message",
-    "verification": "grep -rq 'deploy-verify is red' docs/runbooks/ && grep -q 'deploy-verify is red' docs/lessons/gitops-delivery/lesson-407-*.md && grep -q 'deploy-verify is red' .github/workflows/deploy-verify.yml",
-    "state": "pending",
-    "evidence": ""
+    "verification": "grep -q '^## deploy-verify is red' docs/runbooks/gitops-delivery-promotion.md && grep -q 'deploy-verify-is-red' docs/lessons/gitops-delivery/lesson-407-*.md && grep -q 'deploy-verify-is-red' .github/workflows/deploy-verify.yml",
+    "state": "passing",
+    "evidence": "2026-11-01: exit 0 (runbook section, anchor linked from lesson-407 and deploy-verify.yml)"
   }
 ]
