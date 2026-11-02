@@ -116,4 +116,8 @@ def cluster_holds_token(env: str, token: str, run: Callable[..., Any] = subproce
         raise ScopeUncheckableError(f"{env}: cannot read the Secret: {done.stderr.strip()[:200]}")
     if not done.stdout:
         raise ScopeUncheckableError(f"{env}: the Secret has no api-token key")
-    return hmac.compare_digest(base64.b64decode(done.stdout), token.encode())
+    try:
+        held = base64.b64decode(done.stdout, validate=True)
+    except ValueError as exc:
+        raise ScopeUncheckableError(f"{env}: the Secret's api-token is not valid base64") from exc
+    return hmac.compare_digest(held, token.encode())

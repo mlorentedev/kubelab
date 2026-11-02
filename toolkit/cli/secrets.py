@@ -1004,14 +1004,22 @@ def acme_token_scope(
 
     if not live:
         return
-    try:
-        differing = [env for env in ("staging", "prod") if not cluster_holds_token(env, token)]
-    except ScopeUncheckableError as exc:
-        logger.error(f"CANNOT CHECK: {exc}")
-        raise typer.Exit(2) from exc
+    # Each cluster on its own: staging is on-demand, and a powered-off homelab must
+    # not stop the always-on cluster from being read.
+    differing: list[str] = []
+    unreadable = 0
+    for env in ("staging", "prod"):
+        try:
+            if not cluster_holds_token(env, token):
+                differing.append(env)
+        except ScopeUncheckableError as exc:
+            logger.error(f"CANNOT CHECK: {exc}")
+            unreadable += 1
     if differing:
         logger.error(f"Secret differs from cloudflare.acme_dns_token on: {', '.join(differing)}. Provision the node.")
         raise typer.Exit(1)
+    if unreadable:
+        raise typer.Exit(2)
     logger.success("both clusters' Secrets hold this token")
 
 

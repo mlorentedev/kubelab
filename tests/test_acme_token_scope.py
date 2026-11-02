@@ -125,7 +125,7 @@ def _encoded(token: str) -> str:
 
 
 def test_the_secret_name_is_the_one_the_role_renders() -> None:
-    defaults = yaml.safe_load((REPO / "infra/ansible/roles/k3s_server/defaults/main.yml").read_text())
+    defaults = yaml.safe_load((REPO / "infra/ansible/roles/k3s_server/defaults/main.yml").read_text(encoding="utf-8"))
 
     assert defaults["k3s_traefik_acme_secret_name"] == CLUSTER_SECRET
 
@@ -156,17 +156,35 @@ def test_a_failed_read_never_quotes_stdout() -> None:
 
 
 @pytest.mark.parametrize(
-    ("holds", "error", "code"),
-    [(True, None, 0), (False, None, 1), (True, ScopeUncheckableError("down"), 2)],
+    ("answers", "code"),
+    [
+        ([True, True], 0),
+        ([False, True], 1),
+        ([True, ScopeUncheckableError("down")], 2),
+        # Staging off must not hide a difference on prod.
+        ([ScopeUncheckableError("down"), False], 1),
+    ],
 )
-def test_live_exit_codes(holds: bool, error: Exception | None, code: int) -> None:
+def test_live_exit_codes(answers: list[Any], code: int) -> None:
     config = {"edge": {"traefik": {"acme_domains": [{"main": "kubelab.live"}]}}}
     with (
         patch("toolkit.cli.secrets._provider_value_lookup", return_value=lambda _key: "tok"),
         patch("toolkit.features.configuration.ConfigurationManager.get_merged_config", return_value=config),
         patch("toolkit.features.acme_token_scope.probe_acme_token", return_value=[]),
-        patch("toolkit.features.acme_token_scope.cluster_holds_token", return_value=holds, side_effect=error),
+        patch("toolkit.features.acme_token_scope.cluster_holds_token", side_effect=answers) as holds,
     ):
         result = CliRunner().invoke(app, ["acme-token-scope", "--live"])
 
     assert result.exit_code == code
+    assert holds.call_count == 2
+
+
+def test_a_secret_that_is_not_base64_cannot_be_checked() -> None:
+    with pytest.raises(ScopeUncheckableError, match="not valid base64"):
+        cluster_holds_token("staging", "tok", run=_kubectl("not base64!"))
+
+
+def test_the_data_key_is_the_one_the_role_renders() -> None:
+    template = REPO / "infra/ansible/roles/k3s_server/templates/cloudflare-secret.yaml.j2"
+
+    assert "  api-token:" in template.read_text(encoding="utf-8")
