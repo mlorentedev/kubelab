@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.0](https://github.com/mlorentedev/kubelab/compare/api-v1.2.0...api-v1.3.0) (2026-11-02)
+
+
+### Features
+
+* **api:** deliver the forge credentials to the API ([#2927](https://github.com/mlorentedev/kubelab/issues/2927)) ([80171ff](https://github.com/mlorentedev/kubelab/commit/80171ff984f236fd22a38be2e2ba5329227ca992))
+* **api:** read Gitea issues and pull requests behind the forge-neutral reader ([#2658](https://github.com/mlorentedev/kubelab/issues/2658)) ([8655ac2](https://github.com/mlorentedev/kubelab/commit/8655ac2652adeb6c69f74e383bb33f63c722bd29))
+
 ## [1.2.0](https://github.com/mlorentedev/kubelab/compare/api-v1.1.6...api-v1.2.0) (2026-10-22)
 
 
