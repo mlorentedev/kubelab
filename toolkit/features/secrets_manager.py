@@ -74,6 +74,10 @@ class SecretSpec:
     # and powerless. A floor, not proof: consequence checks (e.g. `make n8n-probe`)
     # show the value works. Empty means "any non-empty value".
     value_pattern: str = ""
+    # True for a value whose absence is a decision, not a gap: `audit` does not call
+    # it missing, and still holds it to `value_pattern` once it is set. Not for a
+    # credential something reads, where "absent" has to stay loud.
+    optional: bool = False
     rotate_note: str = ""  # What breaks or needs restarting on rotation
     envs: tuple[str, ...] = ("dev", "staging", "prod")  # Which envs need this
     # Declares that this secret is DELIVERED to Google Secret Manager for the GCP
@@ -1309,12 +1313,32 @@ SECRET_CATALOG: list[SecretSpec] = [
         services=("headscale",),
         format_hint="an IPv4/IPv6 address or CIDR, or a comma-separated list of them",
         value_pattern=r"[0-9A-Fa-f:./]+(,[0-9A-Fa-f:./]+)*",
+        # SEC-037 leaves it unset on purpose: the client's egress may rotate, and a
+        # stale pin would lock the audit out.
+        optional=True,
         rotate_note=(
             "Update common.enc.yaml, then `make deploy TARGET=vps ENV=prod` "
             "(or deploy-vps with `--tags headscale`). Removing it drops the `from=` pin."
         ),
         # The VPS is prod-only. The value lives in common.enc.yaml, which deploy-vps
         # merges under the env file (`envs` is the audit dimension, ANSIBLE-033).
+        envs=("prod",),
+    ),
+    SecretSpec(
+        # The whole subtree. Key names are plaintext in SOPS, so each segment sits
+        # under a neutral key (`tenant-1`) and its tenant's name stays in the value
+        # (VPN-ACL-014). This entry must never name one.
+        key_path="apps.services.core.headscale.segments",
+        expiry=Expiry.NEVER,
+        description=(
+            "Tenant segments of the shared Headscale, rendered into its ACL policy. Not a "
+            "credential: tenant inventory, kept out of the public tree."
+        ),
+        kind=SecretKind.EXTERNAL,
+        services=("headscale",),
+        format_hint="mapping of neutral key -> {owner, hosts_tag, clients_tag, ports}",
+        rotate_note="Not rotated. Edit the segment, then `make deploy TARGET=vps ENV=prod`.",
+        # Same reasoning as `audit_sources`: the VPS is prod-only.
         envs=("prod",),
     ),
     # =========================================================================
@@ -2276,7 +2300,7 @@ class SecretsManager:
                     result.malformed.append(spec.key_path)
                 else:
                     result.present.append(spec.key_path)
-            else:
+            elif not spec.optional:
                 result.missing.append(spec.key_path)
 
         # The reverse direction, which `AuditResult.unexpected` has declared
