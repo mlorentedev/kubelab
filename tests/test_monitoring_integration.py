@@ -99,11 +99,13 @@ def _wait_until_socket_reachable(url: str, timeout: float = 30.0) -> None:
     pytest.fail(f"Uptime Kuma socket never became reachable at {url}: {last_error!r}")
 
 
-def _start_kuma_container(name: str) -> str:
+def _start_kuma_container(name: str, command: tuple[str, ...] = ()) -> str:
     """Start a throwaway Kuma v2 container and block until it is actually reachable.
 
     Returns the URL. Caller owns teardown (`docker rm -f name`) — shared by
     every fixture in this file so the readiness-wait logic has one definition.
+    `command` replaces the image's default command, for a test that has to change
+    how the server behaves.
     """
     port = _free_port()
     url = f"http://127.0.0.1:{port}"
@@ -120,6 +122,7 @@ def _start_kuma_container(name: str) -> str:
             "-p",
             f"127.0.0.1:{port}:3001",
             _pinned_image(),
+            *command,
         ],
         check=True,
         capture_output=True,
@@ -194,7 +197,7 @@ def fresh_kuma_url():
 
 
 def _client(url: str):
-    api = UptimeKumaApi(url, timeout=60)
+    api = monitoring.GreetedKumaApi(url, timeout=60)
     api.login(ADMIN_USER, ADMIN_PASS)
     return api
 
@@ -588,3 +591,34 @@ class TestPushMonitorRoundTrip:
             apply_seed(self._seed())
 
         assert live() == []
+
+
+class TestLoginIsHeard:
+    """A login sent before Kuma registers its handler is dropped with no ack (#1985).
+
+    The gap is normally milliseconds, so the bug showed as one hang in dozens of
+    runs. Stretching it on the real server makes the failure certain.
+    """
+
+    @pytest.fixture
+    def slow_greeting_url(self):
+        name = f"{CONTAINER_NAME}-slow-greeting"
+        delay = "await new Promise(r => setTimeout(r, 500)); await sendInfo(socket, true);"
+        # `sed` exits 0 on no match, and an unpatched server would pass this test whatever the client does.
+        patched = (
+            f"sed -i 's/await sendInfo(socket, true);/{delay}/' server/server.js"
+            " && grep -q 'setTimeout(r, 500)' server/server.js && exec node server/server.js"
+        )
+        url = _start_kuma_container(name, ("sh", "-c", patched))
+        try:
+            _run_setup(url)
+            yield url
+        finally:
+            subprocess.run(["docker", "rm", "-f", name], capture_output=True)
+
+    def test_login_is_answered_while_the_server_is_still_greeting(self, slow_greeting_url):
+        api = monitoring.GreetedKumaApi(slow_greeting_url, timeout=10)
+        try:
+            api.login(ADMIN_USER, ADMIN_PASS)
+        finally:
+            api.disconnect()
