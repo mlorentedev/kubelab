@@ -268,7 +268,9 @@ def test_a_remote_that_never_answers_is_cut_off_at_the_fetch_timeout(mirror, tmp
         silent.listen(1)
         port = silent.getsockname()[1]
         started = time.monotonic()
-        result = _run(_script_for(tmp_path, root, f"http://127.0.0.1:{port}/k.git", agent_stack_vault_mirror_fetch_timeout=2))
+        result = _run(
+            _script_for(tmp_path, root, f"http://127.0.0.1:{port}/k.git", agent_stack_vault_mirror_fetch_timeout=2)
+        )
         elapsed = time.monotonic() - started
     assert result.returncode == 75, result.stderr
     assert elapsed < 15
@@ -296,3 +298,10 @@ def test_the_quiet_window_is_bounded_by_the_sync_interval() -> None:
     stale = _defaults()["agent_stack_vault_mirror_stale_after"]
     interval = int(SYNC["interval"].removesuffix("min")) * 60
     assert 4 * interval <= stale <= 12 * 3600
+
+
+def test_git_speaks_english_so_its_errors_can_be_classified() -> None:
+    """The quiet path matches git's stderr text, which a non-C locale translates."""
+    script = _render("vault-mirror.sh.j2")
+    pinned = script.index("export LC_ALL=C")
+    assert pinned < script.index("err=$(mgit fetch")

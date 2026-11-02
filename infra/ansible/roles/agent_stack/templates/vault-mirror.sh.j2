@@ -24,6 +24,9 @@ stale_after='{{ agent_stack_vault_mirror_stale_after }}'
 stamp='{{ agent_stack_vault_mirror }}/last-fetch'
 
 export GIT_TERMINAL_PROMPT=0
+# The unreachable-remote case below matches git's English stderr; a locale
+# systemd imports would translate it and turn every outage into a page.
+export LC_ALL=C
 
 # No hooks run and no reflog keeps a replaced tip alive; the token comes from
 # the credential systemd hands this run, never from a URL or the repository.
