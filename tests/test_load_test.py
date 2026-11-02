@@ -123,6 +123,7 @@ class TestVerdict:
         [
             ({"status_429": 1}, "limiter"),
             ({"pod_replaced": True}, "rollout"),
+            ({"edge_restarts": 1}, "edge-restart"),
             ({"generator_cpu": 86.0}, "generator"),
             ({"error_rate": 0.01}, "errors"),
             ({"p95_ms": 251.0}, "latency"),
@@ -164,6 +165,21 @@ class TestVerdict:
 
         lt.ramp(step, (100, 200, 400), lambda: None)
         assert seen == [100, 200]
+
+
+class TestEdgeRecovery:
+    """A crash loop must never be measured as a service failing at low rates."""
+
+    def test_it_waits_out_a_restart(self) -> None:
+        counts = iter([0, 1, 1, 1, 1])
+        slept: list[int] = []
+        lt.wait_for_stable_edge(lambda: True, lambda: next(counts), slept.append, 30, 100)
+        assert sum(slept) == 40  # the restart reset the clock
+
+    def test_an_edge_that_never_settles_stops_the_run(self) -> None:
+        counts = iter(range(100))
+        with pytest.raises(lt.LoadTestRefused):
+            lt.wait_for_stable_edge(lambda: True, lambda: next(counts), lambda _: None, 30, 100)
 
 
 class TestParsing:

@@ -24,7 +24,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-STEPS = (50, 100, 200, 400, 800, 1600, 3200, 6400)
+# Finer between 800 and 2000: the first run went from healthy at 800 to Traefik
+# OOMKilled at 1600, a cliff too wide to read.
+STEPS = (50, 100, 200, 400, 800, 1000, 1200, 1400, 1600, 2000, 3200, 6400)
 BASELINE_RATE = 25  # below the limiter's 30/s, so it needs no route at all
 STEP_SECONDS = 60
 SETTLE_SECONDS = 15
@@ -35,6 +37,13 @@ MAX_ERROR_RATE = 0.01
 MAX_P95_MS = 250.0
 MIN_ACHIEVED = 0.95
 MAX_GENERATOR_CPU = 85.0
+
+# After an edge restart nothing measured means anything until it stays up: the first
+# run's later ramps read a crash loop as a service failing at 50/s.
+EDGE_NAMESPACE = "kube-system"
+EDGE_WORKLOAD = "traefik"
+EDGE_STABLE_SECONDS = 120
+EDGE_WAIT_SECONDS = 900
 
 BYPASS_HEADER = "X-Load-Test"
 BYPASS_VALUE = "ops-054"
@@ -138,6 +147,8 @@ def parse_summary(stdout: str) -> dict[str, float]:
 def classify(step: dict[str, Any], rate: int, bypass: bool = True) -> list[str]:
     """Why this step does not count as healthy; empty means it does."""
     reasons = []
+    if step.get("edge_restarts"):
+        reasons.append("edge-restart")
     if step.get("pod_replaced"):
         reasons.append("rollout")  # a deploy landed mid-step: it measured the rollout
     if bypass and step["status_429"] > 0:
@@ -222,13 +233,22 @@ class Lab:
     def disarm(self) -> None:
         self.kubectl("delete", "-f", str(self.root / ROUTE_MANIFEST), "--ignore-not-found", impersonate=True)
 
-    def pod(self, workload: str) -> dict[str, Any]:
-        out = self.kubectl("get", "pods", "-n", "kubelab", "-l", f"app.kubernetes.io/name={workload}", "-o", "json")
+    def pod(self, workload: str, namespace: str = "kubelab") -> dict[str, Any]:
+        out = self.kubectl("get", "pods", "-n", namespace, "-l", f"app.kubernetes.io/name={workload}", "-o", "json")
         items = [p for p in json.loads(out)["items"] if p["status"].get("phase") == "Running"]
         return items[0]
 
-    def restarts(self, workload: str) -> int:
-        return sum(c["restartCount"] for c in self.pod(workload)["status"]["containerStatuses"])
+    def restarts(self, workload: str, namespace: str = "kubelab") -> int:
+        return sum(c["restartCount"] for c in self.pod(workload, namespace)["status"]["containerStatuses"])
+
+    def edge_ready(self) -> bool:
+        return all(c["ready"] for c in self.pod(EDGE_WORKLOAD, EDGE_NAMESPACE)["status"]["containerStatuses"])
+
+    def edge_memory_peak_mb(self) -> float:
+        """Highest the edge's pod has reached since its cgroup began: a ramp only climbs."""
+        uid = self.pod(EDGE_WORKLOAD, EDGE_NAMESPACE)["metadata"]["uid"].replace("-", "_")
+        path = f"/sys/fs/cgroup/kubepods.slice/kubepods-*/kubepods-*-pod{uid}.slice/memory.peak"
+        return round(int(self.ssh(self.target_node, f"cat {path}").strip()) / 1048576, 1)
 
     def cpu_line(self, node: str) -> str:
         return self.ssh(node, "head -1 /proc/stat")
@@ -256,6 +276,7 @@ def run_step(
     before = {n: lab.cpu_line(n) for n in (lab.target_node, lab.generator)}
     stat_before = lab.cpu_stat(target.workload)
     pod_before = lab.pod(target.workload)["metadata"]["uid"]
+    edge_before = lab.restarts(EDGE_WORKLOAD, EDGE_NAMESPACE)
     with ThreadPoolExecutor(max_workers=2) as pool:
         k6 = pool.submit(lab.ssh, lab.generator, k6_command(image, env), script, seconds + 120)
         mid = pool.submit(_sample_mid_step, lab, target.workload, min(TOP_AFTER_SECONDS, seconds))
@@ -267,6 +288,8 @@ def run_step(
     step["node_mem_available_mb"] = memory
     step["pods_top"] = top
     step["throttled_ms"] = throttled_ms(stat_before, lab.cpu_stat(target.workload))
+    step["edge_restarts"] = lab.restarts(EDGE_WORKLOAD, EDGE_NAMESPACE) - edge_before
+    step["edge_memory_peak_mb"] = lab.edge_memory_peak_mb()
     step["pod_replaced"] = lab.pod(target.workload)["metadata"]["uid"] != pod_before
     step["reasons"] = classify(step, rate, bypass)
     return step
@@ -277,6 +300,19 @@ def _sample_mid_step(lab: Lab, workload: str, delay: int) -> tuple[dict[str, str
 
     time.sleep(delay)
     return lab.top(workload), lab.memory_available_mb(lab.target_node)
+
+
+def wait_for_stable_edge(ready: Any, restarts: Any, sleep: Any, stable: int, limit: int, poll: int = 10) -> None:
+    """Return once the edge has been ready, without a restart, for `stable` seconds."""
+    calm, count = 0, restarts()
+    for _ in range(0, limit, poll):
+        sleep(poll)
+        now = restarts()
+        calm = calm + poll if ready() and now == count else 0
+        count = now
+        if calm >= stable:
+            return
+    raise LoadTestRefused(f"the edge did not stay up for {stable}s within {limit}s")
 
 
 def ramp(step_fn: Any, steps: tuple[int, ...], settle: Any) -> list[dict[str, Any]]:
@@ -326,6 +362,18 @@ def run(
     facts = _runtime_facts(lab, image)
     steps = tuple(rate for rate in STEPS if rate <= max_rate)
     restarts = {t.workload: lab.restarts(t.workload) for t in targets}
+    edge_restarts = lab.restarts(EDGE_WORKLOAD, EDGE_NAMESPACE)
+
+    def stable_edge() -> None:
+        wait_for_stable_edge(
+            lab.edge_ready,
+            lambda: lab.restarts(EDGE_WORKLOAD, EDGE_NAMESPACE),
+            time.sleep,
+            EDGE_STABLE_SECONDS,
+            EDGE_WAIT_SECONDS,
+        )
+
+    stable_edge()
     baselines = [run_step(lab, image, script, t, address, BASELINE_RATE, seconds, bypass=False) for t in targets]
     ramps: list[dict[str, Any]] = []
     try:
@@ -339,7 +387,7 @@ def run(
 
                 done = ramp(one, steps, lambda: time.sleep(SETTLE_SECONDS))
                 ramps.append({"target": target.name, "repeat": repeat, "steps": done, "knee": knee(done)})
-                time.sleep(SETTLE_SECONDS)
+                stable_edge()
     finally:
         lab.disarm()
         lab.ssh(lab.generator, f"docker image rm {image} >/dev/null 2>&1 || true")
@@ -355,7 +403,10 @@ def run(
         },
         "baseline": baselines,
         "ramps": ramps,
-        "restarts_during_run": {w: lab.restarts(w) - before for w, before in restarts.items()},
+        "restarts_during_run": {
+            **{w: lab.restarts(w) - before for w, before in restarts.items()},
+            EDGE_WORKLOAD: lab.restarts(EDGE_WORKLOAD, EDGE_NAMESPACE) - edge_restarts,
+        },
     }
 
 
@@ -363,8 +414,9 @@ def render(result: dict[str, Any]) -> str:
     """The raw figures as one Markdown table per ramp."""
     head = (
         "| rate/s | achieved/s | requests | p50 ms | p90 ms | p95 ms | p99 ms | max ms | errors | 429 | dropped | "
-        "peak VUs | in flight | node CPU % | generator CPU % | node mem free MB | throttled ms | pods | verdict |\n"
-        "|" + "---|" * 19
+        "peak VUs | in flight | edge mem peak MB | node CPU % | generator CPU % | node mem free MB | "
+        "throttled ms | pods | verdict |\n"
+        "|" + "---|" * 20
     )
 
     def row(s: dict[str, Any]) -> str:
@@ -373,7 +425,7 @@ def render(result: dict[str, Any]) -> str:
             s["rate"], f"{s['achieved_rps']:.1f}", int(s["requests"]), f"{s['p50_ms']:.2f}", f"{s['p90_ms']:.2f}",
             f"{s['p95_ms']:.2f}", f"{s['p99_ms']:.2f}", f"{s['max_ms']:.1f}", f"{s['error_rate']:.2%}",
             int(s["status_429"]), int(s["dropped"]), int(s["vus_peak"]),
-            f"{s['achieved_rps'] * s['avg_ms'] / 1000:.1f}",
+            f"{s['achieved_rps'] * s['avg_ms'] / 1000:.1f}", s.get("edge_memory_peak_mb", "n/a"),
             s["node_cpu"], s["generator_cpu"],
             s["node_mem_available_mb"], f"{s['throttled_ms']:.0f}", pods, ",".join(s["reasons"]) or "healthy",
         ]  # fmt: skip
