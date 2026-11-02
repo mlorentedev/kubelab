@@ -116,7 +116,8 @@ groups:
           summary: >-
             No PVC health line from disk-watcher in 45 minutes, so no PersistentVolumeClaim is being
             measured and the unbound-claim rule cannot fire. Check `kubectl get cronjob disk-watcher
-            -n kubelab`: suspended, failing, or a last run older than 30m is the cause.
+            -n kubelab` first: suspended, failing, or a last run older than 30m is the cause. If its
+            runs are current, the lines are not reaching Loki: read the Vector pod's log.
           runbook_url: https://github.com/mlorentedev/kubelab/blob/master/docs/runbooks/runbook-notifications-and-alerting.md
         data:
           - refId: A
