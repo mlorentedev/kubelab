@@ -1,5 +1,5 @@
 ---
-id: "lesson-694-a-connected-socket-is-not-a-server-that-can-hear-you"
+id: lesson-694-a-connected-socket-is-not-a-server-that-can-hear-you
 type: lesson
 status: active
 title: "A connected socket is not a server that can hear you"
