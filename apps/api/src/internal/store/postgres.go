@@ -49,3 +49,16 @@ func Ping(ctx context.Context, p config.Postgres) error {
 	}
 	return db.Ping(ctx)
 }
+
+// StoreEvent keeps a verified webhook delivery. The primary key on (forge, delivery_id)
+// turns a redelivery into a no-op, which is what makes it project once.
+func StoreEvent(ctx context.Context, p config.Postgres, forgeName, deliveryID, eventType string, payload []byte) error {
+	db, err := Pool(p)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(ctx, `INSERT INTO forge_event (forge, delivery_id, event_type, payload)
+		VALUES ($1, $2, $3, $4) ON CONFLICT (forge, delivery_id) DO NOTHING`,
+		forgeName, deliveryID, eventType, string(payload))
+	return err
+}
