@@ -107,7 +107,7 @@ Before archiving, flag what (if anything) should be promoted to the vault. If al
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/GITOPS-003/` -> `specs/archive/GITOPS-003/`
+- [x] `proposal.md` frontmatter set to `status: archived`
+- [x] Folder moved: `specs/GITOPS-003/` -> `specs/archive/GITOPS-003/`
 - [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
-- [ ] Promotions above executed (if any)
+- [x] Promotions above executed (if any)
