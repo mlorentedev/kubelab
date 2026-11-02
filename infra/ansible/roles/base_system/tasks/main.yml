@@ -31,23 +31,8 @@
     state: present
 
 - name: Configure static IP (netplan)
-  copy:
-    content: |
-      network:
-        version: 2
-        ethernets:
-          {{ netplan_interface }}:
-            addresses:
-              - {{ netplan_address }}
-            routes:
-              - to: default
-                via: {{ netplan_gateway }}
-            nameservers:
-              addresses: {{ netplan_dns | default([netplan_gateway, '8.8.8.8']) }}
-    dest: /etc/netplan/50-cloud-init.yaml
-    mode: "0600"
+  import_tasks: netplan.yml
   when: netplan_address is defined
-  notify: apply netplan
 
 # --- /etc/resolv.conf ownership --------------------------------------------
 # Tailscale picks its DNS-management mode by inspecting this file. When it is
