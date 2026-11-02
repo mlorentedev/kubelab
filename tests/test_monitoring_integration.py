@@ -606,7 +606,11 @@ class TestLoginIsHeard:
     def slow_greeting_url(self):
         name = f"{CONTAINER_NAME}-slow-greeting"
         delay = "await new Promise(r => setTimeout(r, 500)); await sendInfo(socket, true);"
-        patched = f"sed -i 's/await sendInfo(socket, true);/{delay}/' server/server.js && exec node server/server.js"
+        # `sed` exits 0 on no match, and an unpatched server would pass this test whatever the client does.
+        patched = (
+            f"sed -i 's/await sendInfo(socket, true);/{delay}/' server/server.js"
+            " && grep -q 'setTimeout(r, 500)' server/server.js && exec node server/server.js"
+        )
         url = _start_kuma_container(name, ("sh", "-c", patched))
         try:
             _run_setup(url)
