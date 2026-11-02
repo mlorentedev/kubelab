@@ -785,6 +785,25 @@ SECRET_CATALOG: list[SecretSpec] = [
         envs=("prod",),
     ),
     SecretSpec(
+        key_path="apps.services.core.github_app.private_key",
+        description=(
+            "Private key (PEM) of the `kubelab-console` GitHub App, read-only on Issues and Pull requests; "
+            "the forge task view's API signs its installation tokens with it (CONSOLE-004)"
+        ),
+        kind=SecretKind.EXTERNAL,
+        services=("api",),
+        format_hint="PEM-encoded RSA private key, as downloaded from the App settings",
+        rotate_note=(
+            "App settings > Private keys > Generate a private key (a second key can coexist), "
+            "`toolkit secrets set apps.services.core.github_app.private_key --env common --stdin < key.pem`, "
+            "then `make apply-secrets ENV=prod`, then delete the old key in the App settings."
+        ),
+        # GitHub App private keys carry no expiry; they live until someone deletes them.
+        expiry=Expiry.NEVER,
+        # Stored in common.enc.yaml (one App for every environment); `envs` is the audit dimension.
+        envs=("prod",),
+    ),
+    SecretSpec(
         key_path="apps.services.core.gitea.github_migration_token",
         description=(
             "Fine-grained GitHub PAT that Gitea's migration endpoint uses to READ "
