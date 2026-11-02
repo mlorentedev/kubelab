@@ -122,7 +122,6 @@ The lock does not cover:
 
 - **The admin token.** `cloudflare.r2_admin_token` can remove a lock rule. It is held in SOPS, decrypted on the operator workstation for `make tf-r2-apply`, and no node receives it. The lock bounds a compromised node, not a compromised Cloudflare account.
 - **Data older than R.** The rule ages an object from when it was written. Once an object is older than R days, a node's own credential can delete it, so a compromised node can destroy everything it wrote more than R days ago. That half was measured on a scratch bucket, not in prod: DELETEs of objects past R were accepted.
-- **A SOPS recipient key, until #1852 lands.** `.sops.yaml` still lists the CI key as a recipient of every `*.enc.yaml`. Whoever holds it can read every node's history in one decrypt and, through `cloudflare.r2_admin_token` in the same files, remove a lock rule and delete.
 
 The watcher's secret holds every node's restic password and an Object Read pair, so it can read every history and delete none.
 
