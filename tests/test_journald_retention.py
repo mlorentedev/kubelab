@@ -11,6 +11,8 @@ ANSIBLE = Path(__file__).resolve().parent.parent / "infra/ansible"
 DEFAULTS = yaml.safe_load((ANSIBLE / "roles/base_system/defaults/main.yml").read_text(encoding="utf-8"))
 LARGE_DISK = ("ace1", "ace2", "bee")
 SMALL_DISK = ("rpi3", "rpi4", "gcp1")
+# The VPS is decided in `provision.yml`, tested below. aws1 is retired.
+DECIDED_ELSEWHERE = ("vps", "aws1")
 
 
 def _base_system_play(node: str) -> dict:
@@ -39,3 +41,13 @@ def test_the_vps_takes_the_larger_cap_through_the_generic_play() -> None:
 @pytest.mark.parametrize("node", SMALL_DISK)
 def test_a_small_disk_node_keeps_the_bound(node: str) -> None:
     assert "journald_system_max_use" not in _base_system_play(node).get("vars", {})
+
+
+def test_every_node_that_runs_base_system_is_classified() -> None:
+    """A new node has to pick a side, or it would stay on 20M with nothing going red."""
+    running = {
+        path.stem.removeprefix("provision-")
+        for path in (ANSIBLE / "playbooks").glob("provision-*.yml")
+        if "base_system" in path.read_text(encoding="utf-8")
+    }
+    assert running == {*LARGE_DISK, *SMALL_DISK, *DECIDED_ELSEWHERE}
