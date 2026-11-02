@@ -13,10 +13,17 @@ Per zone, three answers are expected:
   cannot issue a certificate, whatever else it is allowed;
 - DNS records can be read (200);
 - zone settings are refused (403). A 200 means the token is broader than DNS.
+
+Those answers are about the SOPS value. What Traefik uses is the Secret in
+`kube-system`, which changes only at provision, so `cluster_holds_token` compares
+the two (#2928).
 """
 
 from __future__ import annotations
 
+import base64
+import hmac
+import subprocess
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import Any
@@ -86,3 +93,27 @@ def probe_acme_token(token: str, zones: Iterable[str], get: Get = http_get) -> l
         status, _ = get(f"/zones/{zone_id}/settings", token)
         probes.append(Probe(zone, "read zone settings", 403, status))
     return probes
+
+
+#: `k3s_traefik_acme_secret_name` in the k3s_server role; a test holds them equal.
+CLUSTER_SECRET = "cloudflare-api-token"
+
+
+def cluster_holds_token(env: str, token: str, run: Callable[..., Any] = subprocess.run) -> bool:
+    """Whether the Secret in `env`'s cluster holds `token`. The value never leaves here.
+
+    Only kubectl's stderr reaches an error message: stdout is the credential.
+    """
+    from toolkit.features.k8s_kubeconfig import output_path
+
+    command = ["kubectl", "--kubeconfig", str(output_path(env)), "--request-timeout=15s", "-n", "kube-system"]
+    command += ["get", "secret", CLUSTER_SECRET, "-o", "jsonpath={.data.api-token}"]
+    try:
+        done = run(command, capture_output=True, text=True, check=False)
+    except OSError as exc:
+        raise ScopeUncheckableError(f"kubectl could not run: {exc}") from exc
+    if done.returncode != 0:
+        raise ScopeUncheckableError(f"{env}: cannot read the Secret: {done.stderr.strip()[:200]}")
+    if not done.stdout:
+        raise ScopeUncheckableError(f"{env}: the Secret has no api-token key")
+    return hmac.compare_digest(base64.b64decode(done.stdout), token.encode())

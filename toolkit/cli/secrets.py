@@ -946,7 +946,12 @@ def check_expiry(
 
 
 @app.command("acme-token-scope")
-def acme_token_scope() -> None:
+def acme_token_scope(
+    live: Annotated[
+        bool,
+        typer.Option("--live", help="Also check that each cluster's Secret holds this same token (#2928)"),
+    ] = False,
+) -> None:
     """Ask Cloudflare what the ACME DNS-01 token may do on each issuing zone (#2459).
 
     Every request is a GET; the token is used, never printed. Expected per
@@ -959,8 +964,12 @@ def acme_token_scope() -> None:
 
     Exits 1 when a probe answers differently (a 200 on zone settings means the
     token is broader than DNS), 2 when Cloudflare cannot be asked.
+
+    These answers describe the SOPS value, and a Secret changes only at
+    provision. `--live` also compares each cluster's Secret with it, exiting 1 on
+    a difference and 2 when a cluster cannot be read.
     """
-    from toolkit.features.acme_token_scope import ScopeUncheckableError, probe_acme_token
+    from toolkit.features.acme_token_scope import ScopeUncheckableError, cluster_holds_token, probe_acme_token
     from toolkit.features.configuration import ConfigurationManager
 
     logger.section("ACME DNS-01 token scope")
@@ -992,6 +1001,18 @@ def acme_token_scope() -> None:
         logger.error(f"{len(wrong)} probe(s) answered differently than an ACME-only token should")
         raise typer.Exit(1)
     logger.success(f"{len(probes)} probes as expected: the token reaches DNS on its zones and nothing more")
+
+    if not live:
+        return
+    try:
+        differing = [env for env in ("staging", "prod") if not cluster_holds_token(env, token)]
+    except ScopeUncheckableError as exc:
+        logger.error(f"CANNOT CHECK: {exc}")
+        raise typer.Exit(2) from exc
+    if differing:
+        logger.error(f"Secret differs from cloudflare.acme_dns_token on: {', '.join(differing)}. Provision the node.")
+        raise typer.Exit(1)
+    logger.success("both clusters' Secrets hold this token")
 
 
 @app.command("preauth-keys")
