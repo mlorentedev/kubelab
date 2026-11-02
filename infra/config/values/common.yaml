@@ -521,6 +521,17 @@ infra:
     database: kubelab
     username: kubelab
     image: postgres:16-alpine
+  forge:
+    # The forge task view (CONSOLE-004) and the label set it shares with CONSOLE-006
+    # (#2588) read this block, hence `infra.*` (ADR-036) and not a per-app namespace.
+    # `github` names the `kubelab-console` GitHub App: two public identifiers, not
+    # credentials. Its private key lives in SOPS at `apps.services.core.github_app.private_key`
+    # and the API's Gitea token at `apps.services.core.gitea.issue_reader_token`; both reach
+    # the API through `api-secrets`, never a ConfigMap (`tests/test_forge_credentials_delivery.py`).
+    # The generator emits these as INFRA_FORGE_GITHUB_APP_ID and INFRA_FORGE_GITHUB_INSTALLATION_ID.
+    github:
+      app_id: 5573076
+      installation_id: 177667607
 resources:
   default_memory_limit: 512m
   default_memory_reservation: 256m
