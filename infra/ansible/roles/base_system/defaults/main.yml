@@ -63,7 +63,8 @@ deploy_base_dir: "/opt"
 journald_storage: "persistent"
 # 20M is the SD-card and small-disk bound, and a busy node overruns it in a day.
 # A play for a node with room sets journald_system_max_use to the larger value:
-# at the 1 MB an hour measured on ace2, 1G holds 14 days and more than one boot (#2702).
+# 1G holds 14 days up to about 3 MB an hour, three times what ace2 writes (#2702).
+# A busier node still reaches the two boots; list-boots after a provision says which.
 journald_system_max_use: "20M"
 journald_large_disk_max_use: "1G"
 journald_system_keep_free: "50M"
