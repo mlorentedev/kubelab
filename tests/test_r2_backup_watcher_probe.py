@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import os
 import pathlib
+import re
 import subprocess
 import time
 
@@ -578,8 +579,10 @@ def test_each_restic_call_logs_how_long_it_took(fleet) -> None:
     _, _, env = fleet
     shell = env.get("PROBE_SHELL", "sh").split()
     proc = subprocess.run([*shell, str(PROBE)], env=env, capture_output=True, text=True, timeout=60)
+    # A format, not `0s`: the fakes are real processes, and one that straddles
+    # a second boundary logs `1s` with nothing wrong.
     for call in ("snapshots", "ls", "cat"):
-        assert f"r2-backup-watcher: vps: restic {call} took 0s\n" in proc.stderr, proc.stderr
+        assert re.search(rf"^r2-backup-watcher: vps: restic {call} took [0-9]+s$", proc.stderr, re.M), proc.stderr
 
 
 def test_a_timed_out_call_says_so_in_the_log_and_the_reason(fleet) -> None:
