@@ -66,11 +66,23 @@ _INSTRUCTIONAL = ("runbooks", "troubleshooting")
 # CLAUDE.md is instructional too, and read by every agent session: it told them
 # to run `make deploy-vps`, a target that never existed, for months (#1748).
 _AGENT_INSTRUCTIONS = REPO / "CLAUDE.md"
+# The entry surfaces a newcomer runs first (CI-GATE-004, #837): the root README
+# and CONTRIBUTING, every app's README and the docs index. The 2026-07-07 process
+# audit found phantom targets in exactly these; DOCS-001 swept them, and this keeps
+# them swept. All were clean when added.
+_ENTRY_SURFACES = ("README.md", "CONTRIBUTING.md", "apps/*/README.md", "docs/README.md")
 
 
 def _runbooks() -> list[Path]:
     docs = [path for prefix in _INSTRUCTIONAL for path in (DOCS / prefix).rglob("*.md")]
-    return sorted([*docs, _AGENT_INSTRUCTIONS])
+    entry = [path for pattern in _ENTRY_SURFACES for path in REPO.glob(pattern)]
+    return sorted({*docs, *entry, _AGENT_INSTRUCTIONS})
+
+
+def test_every_entry_surface_is_scanned() -> None:
+    """A renamed README must not silently leave the scan."""
+    scanned = {str(d.relative_to(REPO)) for d in _runbooks()}
+    assert {"README.md", "CONTRIBUTING.md", "docs/README.md", "apps/api/README.md"} <= scanned, scanned
 
 
 def _referenced(path: Path) -> set[str]:
