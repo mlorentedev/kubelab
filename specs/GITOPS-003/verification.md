@@ -63,6 +63,8 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 
 - Live, 2026-11-01, AC3 after #2899 merged (`2e84df1`): the first sync of each environment ran the hook. Prod: operation `Succeeded` at 19:39:37Z with `Job web-route-probe-api PostSync Succeeded`, and `argocd/kubelab-prod success "Synced at 2e84df1"`. Staging: `Succeeded` at 19:39:46Z, same hook result, `argocd/kubelab-staging success`.
 
+- Live, 2026-10-31, AC2's no-data path, unplanned: staging's `gitops003-argo-delivery` fired at 06:09Z and resolved at about 06:38Z. The delivery watcher logged one line at 04:54Z and the next at 06:30Z, so the rule paged on a silent watcher, as AC2 says it must, not on a failed sync. Why staging's watcher was silent for 96 minutes is #1668's question (no data on an on-demand homelab).
+
 ## Independent pre-review, 2026-11-01 (PASS-WITH-GAPS)
 
 A reviewer subagent that did not implement the spec read the contract and the PRs, ran every `features.json` command and 14 mutations (all red; the control stayed green), and read the hub. It found no Blocker. Dispositions:
