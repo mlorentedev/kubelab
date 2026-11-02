@@ -146,10 +146,7 @@
       ]
     }
   ],
-  "ignoreDeps": [
-    "cloudflare/cloudflared",
-    "fbonalair/traefik-crowdsec-bouncer"
-  ],
+  "ignoreDeps": [],
   "dependencyDashboard": true,
   "dependencyDashboardTitle": "Renovate: service image updates"
 }
