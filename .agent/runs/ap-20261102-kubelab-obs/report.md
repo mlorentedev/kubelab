@@ -33,3 +33,14 @@ Paused 06:05Z-07:10Z by a usage limit; the wake-lock held.
 - #2991 out of draft at 10:27Z. pr-agent reviewed; the vacuous-guard finding applied (`d4c38184`, proven red by `make mutate`), three declined with reasons, live ACs deferred to #1668. Codex and CodeRabbit sent capacity notices.
 - Staging drill for #2991: the 09:56Z run reported `FIRING after 3.0m` from the 09:30Z instance, which the pre-check missed because staging Grafana had restarted at 09:54Z; filed as #2998 (OBS-044). The 12:44Z run refused correctly (a residue claim of unknown origin kept the rule firing; noted on #2998). A third run is scheduled once the instance resolves.
 - Staging slot: lent to the console lane 10:24Z-10:26Z on request, taken back, returned to master 12:45Z while the alert resolves.
+- 15:16Z-16:00Z: a clean staging drill of #2991 (`d4c38184`), started after 20 quiet minutes on each side of the slot change: `FIRING after 44.1m`, longer than `for: 15m`, so it is evidence. Slot returned to master at 16:00Z. The two earlier fast firings (3.0m, 1.0m) are recorded on #2998 as false greens.
+- #2991: CodeRabbit's second review triaged (summary now names log ingestion as the second cause, `aff1d4a7`; the 30m/`for: 0m` proposal declined). **Not merged**: no prod notice has been delivered since #2987 synced at 09:32Z (prod had nothing firing all day), so the envelope's "read the next prod notice before the next prod-bound merge" is unmet. Ready for the operator.
+- #2921 set Blocked on AC3 (journal read on ace2), with the two options on the issue.
+- Worktrees removed: `feat-obs-042-notice-contract`, `fix-ai-030-vault-mirror-fail-fast` (forced past its generated inventory). The launch worktree `feat-gitops-003-verify-staging` stays.
+
+## End state
+
+- Merged: #2987 (notice contract), #2992 (vault mirror fail-fast).
+- Open and ready: #2991 (PVC split + emitter-window guard), held for a prod notice.
+- Filed: #2998 (OBS-044, drill false green after a Grafana restart).
+- Board: #2929, #1668, #1320, #2924 In Progress; #2921 Blocked.
