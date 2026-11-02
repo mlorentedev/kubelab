@@ -14,10 +14,12 @@ delivery from Grafana 13.0.2 and recorded in the spec's verification.md.
 
 from __future__ import annotations
 
+import re
+
 import pytest
 import yaml
 
-from tests.test_grafana_alerting_render import EXPECTED_RECEIVER, _alerting_configmap
+from tests.test_grafana_alerting_render import EXPECTED_RECEIVER, _alerting_configmap, _rendered_root_url
 
 #: The contact points that carry the notice contract, and the tier tag each sends.
 APPRISE_CONTACT_POINTS = {"apprise-page": "page", "apprise-log": "log"}
@@ -59,7 +61,7 @@ class TestNoticeContract:
     def test_the_title_names_environment_state_and_reason(self, env: str) -> None:
         body = _templates(env)
         assert '{{- define "apprise.title" -}}' in body, f"{env}: no `apprise.title` define."
-        assert "{{ template \"notice.env\" . }}" in body, f"{env}: the title does not name the environment."
+        assert '{{ template "notice.env" . }}' in body, f"{env}: the title does not name the environment."
         assert ".CommonAnnotations.grafana_state_reason" in body, (
             f"{env}: the title does not mark a no-data or query-error firing."
         )
@@ -70,6 +72,19 @@ class TestNoticeContract:
         assert 'match "\\\\.staging\\\\." .ExternalURL' in body, (
             f"{env}: the environment name is not derived from `.ExternalURL`."
         )
+
+    def test_the_rendered_root_url_names_this_environment(self, env: str) -> None:
+        """The regex only works if each overlay's `.ExternalURL` answers it the right way.
+
+        Reading the template proves the define exists; this proves what it says. A prod
+        root URL that gained `.staging.`, or a staging one that lost it, would label
+        every notice with the other environment.
+        """
+        match = re.search(r'match "((?:[^"\\]|\\.)*)" \.ExternalURL', _templates(env))
+        assert match, f"{env}: no environment regex in `notice.env`."
+        pattern = match.group(1).encode().decode("unicode_escape")  # Go string literal -> regex
+        named = "staging" if re.search(pattern, _rendered_root_url(env)) else "prod"
+        assert named == env, f"{env}: GF_SERVER_ROOT_URL {_rendered_root_url(env)!r} makes `notice.env` say {named!r}."
 
     def test_the_body_states_the_cause_of_a_no_data_or_error_firing(self, env: str) -> None:
         body = _templates(env)
