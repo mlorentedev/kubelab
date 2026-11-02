@@ -36,13 +36,21 @@ def _catalog(key_path: str):
     return spec
 
 
-def _configmap_data(env: str) -> dict[str, str]:
-    """Every key of every ConfigMap the generator wrote for `env`."""
+def _configmaps(env: str) -> dict[str, dict[str, str]]:
+    """The generator's ConfigMaps for `env`, keyed by name."""
     path = REPO_ROOT / "infra" / "k8s" / "overlays" / env / "generated" / "configmaps.yaml"
+    return {
+        doc["metadata"]["name"]: doc.get("data") or {}
+        for doc in yaml.safe_load_all(path.read_text())
+        if doc and doc.get("kind") == "ConfigMap"
+    }
+
+
+def _configmap_data(env: str) -> dict[str, str]:
+    """Every key of every ConfigMap the generator wrote for `env`, merged."""
     data: dict[str, str] = {}
-    for doc in yaml.safe_load_all(path.read_text()):
-        if doc and doc.get("kind") == "ConfigMap":
-            data.update(doc.get("data") or {})
+    for part in _configmaps(env).values():
+        data.update(part)
     return data
 
 
@@ -74,12 +82,14 @@ class TestSecretsReachTheApi:
 
 
 class TestOnlyPublicValuesReachAConfigMap:
-    def test_the_ids_are_in_every_configmap_and_match_the_ssot(self) -> None:
+    def test_the_ids_are_in_the_api_configmap_and_match_the_ssot(self) -> None:
+        # Asserted on `api-config` itself: a merged view would pass while only another
+        # component's ConfigMap carried the IDs, and the API is the one that reads them.
         github = yaml.safe_load((REPO_ROOT / "infra/config/values/common.yaml").read_text())["infra"]["forge"][
             "github"
         ]
         for env in ("staging", "prod"):
-            data = _configmap_data(env)
+            data = _configmaps(env)["api-config"]
             assert data["INFRA_FORGE_GITHUB_APP_ID"] == str(github["app_id"])
             assert data["INFRA_FORGE_GITHUB_INSTALLATION_ID"] == str(github["installation_id"])
 
