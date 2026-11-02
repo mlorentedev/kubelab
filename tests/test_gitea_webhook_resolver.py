@@ -2,11 +2,10 @@
 
 Gitea refuses to deliver a webhook to a private or CGNAT address
 (`[webhook] ALLOWED_HOST_LIST`, default `external`). The Beelink's host resolver
-holds both public servers and the LAN gateway, and systemd-resolved answers from
-whichever one is current. The LAN gateway's CoreDNS maps every prod name to the
-VPS's tailnet address (see test_coredns_prod_zone_targets.py), so a container that
-inherits the host resolver gets 100.64.0.2 for `pr-agent.kubelab.live` part of the
-time, and Gitea denies the delivery: `deny pr-agent.kubelab.live(100.64.0.2:443)`.
+is the LAN gateway (#2909), whose CoreDNS maps every prod name to the VPS's tailnet
+address (see test_coredns_prod_zone_targets.py). A container that inherits it gets
+100.64.0.2 for `pr-agent.kubelab.live`, and Gitea denies the delivery:
+`deny pr-agent.kubelab.live(100.64.0.2:443)`.
 
 Pinning the container to public resolvers makes every webhook target resolve to
 the public address. MagicDNS is not a fix here: with `override_local_dns: false` it

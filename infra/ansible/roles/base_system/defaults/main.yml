@@ -95,3 +95,11 @@ base_system_release_holds: false
 # dropping dns_resilience's block. Nodes installed from the ISO already carry
 # the marker, which the installer writes. The edge's play turns it on.
 base_system_disable_cloud_init: false
+
+# The netplan file this role owns, and its timed revert (tasks/netplan.yml, #2909).
+base_system_netplan_path: /etc/netplan/50-cloud-init.yaml
+base_system_netplan_revert_path: /usr/local/sbin/kubelab-netplan-revert
+base_system_netplan_revert_unit: kubelab-netplan-revert
+base_system_netplan_revert_after: 180s
+# A name only a working resolver answers: it is in no node's /etc/hosts.
+base_system_netplan_probe_host: github.com
