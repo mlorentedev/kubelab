@@ -196,16 +196,19 @@ curl -fsSL https://tailscale.com/install.sh | sh
 sudo tailscale up --login-server=https://vpn.kubelab.live --authkey=<KEY>
 ```
 
-Nodes to register:
-1. Workstation (msi)
-2. VPS (kubelab-vps)
-3. Beelink (kubelab-bee)
-4. K3s server (kubelab-k3s-server)
-5. K3s agent-1 (kubelab-k3s-agent-1)
-6. K3s agent-2 (kubelab-k3s-agent-2)
-7. RPi 4 (kubelab-rpi4)
-8. RPi 3 (kubelab-rpi3)
-9. Jetson Nano (kubelab-jet1)
+Nodes to register: the entries of `networking.vps`, `networking.nodes.*` and `networking.operator_workstations` in `common.yaml`, which is the SSOT for names and addresses (Phase 4 mirrors it):
+
+1. Operator workstation (`mac`, `networking.operator_workstations`)
+2. VPS (`kubelab-vps`)
+3. Beelink (`beelink`)
+4. ace1 (`ace1`, K3s staging)
+5. ace2 (`ace2`)
+6. RPi 4 (`rpi4`)
+7. RPi 3 (`rpi3`)
+8. gcp1 (`gcp1`, Argo CD hub; `common.yaml` declares no address for it, see Phase 4)
+9. Jetson Nano (`jetson`; `retired: true` in `common.yaml`, register it again only when it returns to the lab)
+
+The name Headscale shows for a node is its given name, which can differ from the `hostname` above. `headscale nodes list` is the live answer.
 
 ### 2.2 Verify mesh
 
@@ -213,28 +216,13 @@ Nodes to register:
 tailscale status
 ```
 
-Expected:
-```
-100.64.0.1  msi                  kubelab  linux  -
-100.64.0.2  kubelab-vps          kubelab  linux  -
-100.64.0.3  kubelab-bee          kubelab  linux  -
-100.64.0.4  kubelab-k3s-server   kubelab  linux  -
-100.64.0.5  kubelab-rpi4         kubelab  linux  -
-100.64.0.6  kubelab-rpi3         kubelab  linux  -
-100.64.0.7  kubelab-k3s-agent-1  kubelab  linux  -
-100.64.0.8  kubelab-jet1         kubelab  linux  -
-100.64.0.9  kubelab-k3s-agent-2  kubelab  linux  -
-```
+Every node of 2.1 that is powered on must appear, at the `tailscale_ip` Phase 4 lists for it. On-demand nodes (ADR-028) are offline while the homelab is off.
 
 ```bash
-tailscale ping kubelab-vps
-# → pong from kubelab-vps (100.64.0.2) via 162.55.57.175:41641 in 158ms
-
-tailscale ping kubelab-rpi4
-# → pong from kubelab-rpi4 (100.64.0.5) via 172.16.1.1:41641 in 29ms
-
-tailscale ping kubelab-k3s-server
-# → pong from kubelab-k3s-server (100.64.0.4) via 172.16.1.10:41641 in 36ms
+tailscale ping 100.64.0.2    # VPS (networking.vps.tailscale_ip)
+tailscale ping 100.64.0.10   # RPi 4 (networking.nodes.rpi4.tailscale_ip)
+tailscale ping 100.64.0.11   # ace1 (networking.nodes.ace1.tailscale_ip)
+# → pong from <node> (<address>) via <endpoint>
 ```
 
 ---
@@ -330,19 +318,23 @@ curl -s http://172.16.1.1/admin/ | head -5
 
 ---
 
-## Phase 4: Record Tailscale IPs
+## Phase 4: Tailscale IPs
 
-| Device | Hostname | Headscale IP | LAN IP |
-|--------|----------|-------------|--------|
-| Workstation | msi | 100.64.0.1 | — |
-| VPS | kubelab-vps | 100.64.0.2 | 162.55.57.175 |
-| Beelink | kubelab-bee | 100.64.0.3 | 10.0.0.130 |
-| K3s server | kubelab-k3s-server | 100.64.0.4 | 172.16.1.10 |
-| RPi 4 | kubelab-rpi4 | 100.64.0.10 | 10.0.0.131 / 172.16.1.1 |
-| RPi 3 | kubelab-rpi3 | 100.64.0.6 | 10.0.0.133 |
-| K3s agent-1 | kubelab-k3s-agent-1 | 100.64.0.7 | 172.16.1.11 |
-| Jetson Nano | kubelab-jet1 | 100.64.0.8 | 10.0.0.134 |
-| K3s agent-2 | kubelab-k3s-agent-2 | 100.64.0.9 | 172.16.1.12 |
+A reading of `networking.*` in `common.yaml`, which is the SSOT: when a value there changes, this table is the copy that is wrong.
+
+| Device | `hostname` | Tailscale IP | LAN / public IP |
+|--------|------------|--------------|-----------------|
+| Operator workstation | mac | 100.64.0.15 | — |
+| VPS | kubelab-vps | 100.64.0.2 | 162.55.57.175 (public) |
+| Beelink | beelink | 100.64.0.3 | 172.16.1.3 |
+| ace1 | ace1 | 100.64.0.11 | 172.16.1.2 |
+| ace2 | ace2 | 100.64.0.5 | 172.16.1.5 |
+| RPi 4 | rpi4 | 100.64.0.10 | 172.16.1.1 (LAN), 10.0.0.1 (lab Wi-Fi) |
+| RPi 3 | rpi3 | 100.64.0.6 | 10.0.0.157 (lab Wi-Fi) |
+| gcp1 | gcp1 | none declared: MagicDNS `gcp1.kubelab.internal` | — |
+| Jetson Nano (retired) | jetson | 100.64.0.8 | 172.16.1.4 |
+
+gcp1 has no address in `common.yaml` on purpose: it rotates on every re-registration, so use its MagicDNS name.
 
 ---
 
@@ -432,6 +424,13 @@ Host vps
   User deployer
   IdentityFile ~/.ssh/id_ed25519
 
+# Public-IP path to the VPS (networking.vps.public_ip): Headscale runs there, so
+# the way in when the mesh is down cannot go through the mesh.
+Host vps-pub
+  Hostname 162.55.57.175
+  User deployer
+  IdentityFile ~/.ssh/id_ed25519
+
 # --- Argo CD hubs (cloud, mesh-only: no LAN and no public fallback) ---
 # By MagicDNS name, never by Tailscale IP: both are Spot instances whose address
 # rotates on every preemption. `clusters.hub.ssh_alias` in common.yaml selects
@@ -505,7 +504,7 @@ Applied on: workstation ✓, RPi 3 ✓ (2026-02-21).
 ```bash
 # From any Tailscale node
 dig api.staging.kubelab.live +short
-# → 100.64.0.4 (k3s-server Tailscale IP, Traefik Ingress)
+# → 100.64.0.11 (ace1's Tailscale IP, networking.nodes.ace1.tailscale_ip: K3s Traefik Ingress)
 ```
 
 ---
@@ -664,6 +663,8 @@ The VPS is a `k3s_server` in prod, so ingress there is **K3s Traefik**, configur
 
 ## Last tested
 
+Dated history, kept as written. Node names in the older entries (`k3s-server`, `kubelab-rpi4`, `jet1`) are the names of the day, and the current roster is Phase 2 and Phase 4. Nothing below is a test of the current system.
+
 2026-02-21: All phases complete (1-6). 9 nodes registered, mesh connectivity verified.
 Subnet router active (RPi 4 → 172.16.1.0/24). Split DNS operational (staging.kubelab.live → CoreDNS).
 DNS fix applied on RPi4 (`--accept-dns=false` + `chattr +i`).
@@ -783,9 +784,10 @@ The source is the template `infra/ansible/roles/headscale/templates/policy.hujso
 | `kubelab` | 2 | Admin and infrastructure nodes (full mesh access) | workstation, corporate workstation (ts-bridge), phone (future), fleet nodes |
 | `work` | 3 | Windows PCs (RDP targets, implicit deny outbound) | 3+ Windows mini PCs (ts-bridge server) |
 | `agents` | 4 | Owns the preauth keys of tagged agent nodes (ADR-041); Headscale lists those nodes under `tagged-devices`, not under this user | Agent hosts carrying `tag:hermes` |
-| `contractors` | (future) | External access, restricted scope | Contractor machines (ts-bridge client) |
 
 The IDs are the ones in `common.yaml` (`apps.services.core.headscale`); `users list` is the live answer. **Key:** the human user (manu) always authenticates as `kubelab`. The `work` user represents a device class, not a person.
+
+The policy names no `contractors` user or group (ADR-013 designed them and was never deployed, per ADR-041). Access for another organisation is a tenant segment, with its own owner user, created by the role (Phase 9).
 
 ### 8.3 ACL rules summary
 
@@ -816,42 +818,41 @@ Already on. `config.yaml.j2` renders `policy.mode: file` and `policy.path` from 
 
 ---
 
-## Phase 9: Contractor Onboarding (Future)
+## Phase 9: External Access (Tenant Segments)
 
-> **Added 2026-02-25.** Ref: [ADR-013](../adr/adr-013-vpn-consolidation.md).
+> **Replaces the contractor design of ADR-013** (a `contractors` user, `group:contractors` and one ACL per contractor). The policy has none of those. The mechanism is the tenant segment of VPN-ACL-014, in `infra/ansible/roles/headscale/templates/policy.hujson.j2`; its spec is `specs/VPN-ACL-014-tenant-segments/`.
 
-When onboarding a contractor who needs RDP access to Windows PCs:
+Another organisation's nodes share this Headscale without seeing the private inventory. A segment is data, never a rule written in the template.
 
-### 9.1 Generate contractor key
+### 9.1 What a segment is
 
-```bash
-# Time-limited, non-reusable key
-docker exec headscale headscale preauthkeys create --user <CONTRACTORS_USER_ID> --expiration 720h
+One entry under `apps.services.core.headscale.segments` in SOPS, each under a neutral key because key names are plaintext in SOPS:
+
+```yaml
+<neutral-key>:
+  owner: <headscale user>      # created by the role if Headscale lacks it
+  hosts_tag: tag:<name>        # the nodes being reached
+  clients_tag: tag:<name>      # the nodes doing the reaching
+  ports: [<int>, ...]
 ```
 
-### 9.2 Distribute ts-bridge
+The tenant's name stays in the values, never in this repository. The template renders exactly one grant per segment, `clients_tag` to `hosts_tag` on those ports (rule 3 in 8.3), and both tags are owned by `owner@`. The segment's hosts originate nothing, nothing reaches its clients, and rule 1 names its destinations so no private user reaches a segment tag.
 
-Provide the contractor with:
-1. ts-bridge binary (from GitHub releases)
-2. `.env` file with:
-   ```bash
-   TS_CONTROL_URL=https://vpn.kubelab.live
-   TS_AUTHKEY=<CONTRACTOR_PREAUTH_KEY>
-   TS_TARGET=<WINDOWS_PC_HEADSCALE_IP>:3389
-   ```
+### 9.2 Declare or change a segment
 
-### 9.3 Verify isolation
+1. Edit the segment in `common.enc.yaml` (the entry is `apps.services.core.headscale.segments` in `SECRET_CATALOG`, `toolkit/features/secrets_manager.py`).
+2. `make check-headscale-policy` validates the template on the pinned image, segment-free and with a synthetic segment. It never reads the segment in SOPS, so a malformed real one is caught by the role's refusals below, at deploy.
+3. `make deploy TARGET=vps ENV=prod`, which behaves as in 8.4.
 
-Contractor can ONLY reach Windows PCs on port 3389 (per ACL). Cannot reach homelab, K3s, or any other service. Verify:
+Before it renders, the role refuses a segment that is malformed, owned by a private identity (`kubelab`, `manu`, `work`), reuses a private tag or shares a tag with another segment, and it stops if a node Headscale holds would be reached by neither rule 1 nor a segment. While segments are declared, a failed probe restores only a policy this template rendered, never one with a wildcard grant.
 
-```bash
-# From contractor's ts-bridge: RDP should work
-# From contractor's ts-bridge: SSH to any homelab node should timeout/refuse
-```
+### 9.3 Not covered here
+
+How a tenant node is issued its key and tag, and what the tenant runs on its side, are not documented in this repository: there is no runbook for onboarding a tenant node, so do not infer one from the contractor steps this phase used to carry. For the tagged-key mechanics Headscale requires, see [onboard-vpn-fleet-agent](onboard-vpn-fleet-agent.md) (agents, not tenants).
 
 ### 9.4 Revoke access
 
 ```bash
-# Remove the node
-docker exec headscale headscale nodes delete -i <CONTRACTOR_NODE_ID>
+# Remove a node
+docker exec headscale headscale nodes delete -i <NODE_ID>
 ```

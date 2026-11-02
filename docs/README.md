@@ -22,7 +22,7 @@ Project-bound knowledge (docs-as-code). The *build/operate* layer lives here, ve
 | See what's actually deployed where | [`architecture/service-catalog.md`](architecture/service-catalog.md) — accuracy not re-verified since the 2026-07-07 audit ([D4](audits/docs-audit-2026-07-07.md)) |
 | Check hardware/node topology | [`architecture/hardware/`](architecture/hardware/), [`architecture/infra/networking-topology.md`](architecture/infra/networking-topology.md) |
 | Bootstrap a brand-new bare-metal node | [`runbooks/hardware-setup.md`](runbooks/hardware-setup.md) — **known stale** ([D9](audits/docs-audit-2026-07-07.md), pre-migration Proxmox world), not yet rewritten |
-| Set up Headscale / the VPN mesh | [`runbooks/headscale-setup.md`](runbooks/headscale-setup.md) — **known stale** ([D15-D17](audits/docs-audit-2026-07-07.md), node roster + config paths), not yet rewritten |
+| Set up Headscale / the VPN mesh | [`runbooks/headscale-setup.md`](runbooks/headscale-setup.md) — rewritten against `common.yaml` and VPN-ACL-014 except what [D15](audits/docs-audit-2026-07-07.md) still lists: ace1/ace2 described as Proxmox hosts (Phase 3, the note after the SSH block) and the SSH block's own known-stale entries (#1289) |
 | Debug staging/prod DNS | [`runbooks/dns-homelab.md`](runbooks/dns-homelab.md), [`runbooks/dns-and-domains.md`](runbooks/dns-and-domains.md) — **known stale** ([D18-D19](audits/docs-audit-2026-07-07.md)), not yet rewritten |
 | Understand a past gotcha or post-mortem | [`lessons/_index.md`](lessons/_index.md) — one file per lesson, grouped by category |
 
