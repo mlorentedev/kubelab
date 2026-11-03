@@ -247,7 +247,8 @@ def _keys_the_export_would_drop(monitors: list[dict[str, Any]], seed_path: Path)
         return []
     seed = json.loads(seed_path.read_text(encoding="utf-8"))
     exported = {monitor.get("key") for monitor in monitors}
-    return sorted(entry["key"] for entry in seed if entry.get("key") not in exported)
+    declared = {entry["key"] for entry in seed if entry.get("key")}
+    return sorted(declared - exported)
 
 
 def export_monitors(project_root: Path) -> Path:

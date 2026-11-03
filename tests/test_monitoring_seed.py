@@ -199,6 +199,11 @@ class TestExportNeverDropsADeclaredMonitor:
         written = tmp_path / monitoring.EXPORT_DIR / monitoring.MONITORS_FILE
         assert written.read_text(encoding="utf-8") == '[{"key": "a"}, {"key": "b"}]'
 
+    def test_a_seed_entry_with_no_key_is_not_a_crash(self, tmp_path) -> None:
+        seed = tmp_path / "monitors.json"
+        seed.write_text('[{"name": "hand-made"}, {"key": "a"}]', encoding="utf-8")
+        assert monitoring._keys_the_export_would_drop([{"key": "a"}], seed) == []
+
     def test_a_monitor_new_on_the_instance_is_still_exported(self, tmp_path, monkeypatch) -> None:
         keys = [entry["key"] for entry in json.loads(self._export(tmp_path, monkeypatch, ["a", "b", "new"]))]
         assert keys == ["a", "b", "new"]
