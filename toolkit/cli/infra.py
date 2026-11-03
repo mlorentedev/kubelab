@@ -311,6 +311,93 @@ def edge_measure(
     raise typer.Exit(code)
 
 
+load_test_app = typer.Typer(help="Measure staging's capacity (OPS-054); never prod")
+app.add_typer(load_test_app, name="load-test")
+
+
+def _load_test_results_dir(output: str, root: Path) -> Path:
+    """A relative directory means the repo's, and it exists before a two-hour run needs it."""
+    directory = root / output
+    directory.mkdir(parents=True, exist_ok=True)
+    return directory
+
+
+def _load_test_lab(env: str) -> tuple[Any, dict[str, Any], dict[str, Any]]:
+    """Refuses any env but staging before it reads a value or opens a connection."""
+    from toolkit.features.configuration import ConfigurationManager
+    from toolkit.features.load_test import Lab, refuse_unless_staging, resolve_nodes
+
+    refuse_unless_staging(env)
+    staging = ConfigurationManager(env, settings.project_root).get_plaintext_values()
+    prod = ConfigurationManager("prod", settings.project_root).get_plaintext_values()
+    node, _, generator = resolve_nodes(staging, prod)
+    identity = _spoke_service_account()
+    return Lab(settings.project_root, str(output_path(env)), identity, node, generator), staging, prod
+
+
+@load_test_app.command("run")
+def load_test_run(
+    env: Annotated[str, typer.Option("--env", help="Must be staging; anything else is refused")] = "staging",
+    repeats: Annotated[int, typer.Option("--repeats", help="Ramps per target")] = 3,
+    seconds: Annotated[int, typer.Option("--seconds", help="Length of each step")] = 60,
+    max_rate: Annotated[int, typer.Option("--max-rate", help="Highest step, requests per second")] = 6400,
+    output: Annotated[str, typer.Option("--output", help="Results directory")] = "docs/load-test",
+) -> None:
+    """Measure staging: a baseline under the limiter, then ramps to the first degraded step.
+
+    Takes no URL. Writes <date>-<commit>.json and .md, and always removes the route
+    it applies. Exits 0 with results, 1 when refused or when a step could not run.
+    """
+    import json
+    import subprocess
+    from datetime import datetime, timezone
+
+    from toolkit.features.load_test import LoadTestRefused, build_targets, render, resolve_nodes, run
+
+    try:
+        lab, staging, prod = _load_test_lab(env)
+        _, address, _ = resolve_nodes(staging, prod)
+        targets = build_targets(staging, prod)
+        commit = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            check=True,
+            cwd=settings.project_root,
+        ).stdout.strip()
+        now = datetime.now(timezone.utc)
+        base = _load_test_results_dir(output, settings.project_root) / f"{now:%Y-%m-%d}-{commit}"
+
+        def save(result: dict[str, Any]) -> None:
+            result = {**result, "date": now.strftime("%Y-%m-%dT%H:%MZ"), "commit": commit}
+            base.with_suffix(".json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+            base.with_suffix(".md").write_text(render(result), encoding="utf-8")
+
+        image = staging["load_test"]["image"]
+        save(run(lab, image, targets, address, repeats, seconds, max_rate, checkpoint=save))
+    except (LoadTestRefused, subprocess.SubprocessError, OSError) as e:
+        logger.error(str(e))
+        raise typer.Exit(1) from e
+    typer.echo(f"{base}.json")
+
+
+@load_test_app.command("clear")
+def load_test_clear(env: Annotated[str, typer.Option("--env")] = "staging") -> None:
+    """Remove the route a run that died left behind. Idempotent."""
+    import subprocess
+
+    from toolkit.features.load_test import LoadTestRefused
+
+    try:
+        lab, _, _ = _load_test_lab(env)
+        lab.assert_cluster()
+        lab.disarm()
+    except (LoadTestRefused, subprocess.SubprocessError, OSError) as e:
+        logger.error(str(e))
+        raise typer.Exit(1) from e
+
+
 @edge_app.command("shape-check")
 def edge_shape_check(
     bound_ms: Annotated[
@@ -1160,7 +1247,7 @@ def k8s_alert_smoke(
 # simply stops growing, indistinguishable from a healthy backup until someone
 # needs a restore.
 #
-# The replacement is `make backup-node` / `make backup-verify-restic`, and the
+# The replacement is `make backup-node` / `make backup-drill-node`, and the
 # restore procedure is docs/runbooks/offsite-backup-restore.md.
 #
 # `networking.vps.backup.*` in common.yaml is now read by nothing. Left in
@@ -1378,52 +1465,59 @@ def k8s_apply_secrets(
 @k8s_app.command("provision-postgres-tenant")
 def k8s_provision_postgres_tenant(
     env: Annotated[str, typer.Option("--env", "-e", help="Target environment")] = "staging",
-    tenant: Annotated[str, typer.Option("--tenant", "-t", help="Tenant name (e.g. vikunja)")] = "vikunja",
-    dry_run: Annotated[bool, typer.Option("--dry-run", help="Render SQL only")] = False,
+    tenant: Annotated[str | None, typer.Option("--tenant", "-t", help="One tenant; omit for all of them")] = None,
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run", help="Check tenant and secret resolve; apply nothing, show no SQL")
+    ] = False,
 ) -> None:
-    """Idempotently provision a tenant role and database in PostgreSQL (infra.postgres)."""
+    """Idempotently provision tenant roles and databases in PostgreSQL (infra.postgres)."""
     import subprocess
 
     from toolkit.features.configuration import ConfigurationManager
-    from toolkit.features.postgres_provisioner import build_provision_sql
+    from toolkit.features.postgres_provisioner import TENANT_PASSWORD_PATHS, build_provision_sql
+
+    if tenant is not None and tenant not in TENANT_PASSWORD_PATHS:
+        logger.error(f"Unknown tenant {tenant}. Declared: {', '.join(sorted(TENANT_PASSWORD_PATHS))}")
+        raise typer.Exit(1)
 
     cfg = ConfigurationManager(env=env)
-    password = cfg.get_secret_by_path(f"apps.services.core.{tenant}.db_password")
-    if not password:
-        logger.error(
-            f"Missing secret apps.services.core.{tenant}.db_password in SOPS for {env} — cannot provision tenant"
-        )
-        raise typer.Exit(1)
+    for name in [tenant] if tenant else sorted(TENANT_PASSWORD_PATHS):
+        key_path = TENANT_PASSWORD_PATHS[name]
+        password = cfg.get_secret_by_path(key_path)
+        if not password:
+            logger.error(f"Missing secret {key_path} in SOPS for {env} — cannot provision tenant")
+            raise typer.Exit(1)
 
-    sql = build_provision_sql(username=tenant, password=password, database=tenant)
+        sql = build_provision_sql(username=name, password=password, database=name)
 
-    if dry_run:
-        logger.info(f"Generated SQL for tenant {tenant}:\n{sql}")
-        return
+        if dry_run:
+            logger.info(f"Generated SQL for tenant {name} (not shown: it holds the password)")
+            continue
 
-    logger.info(f"Applying tenant provisioning for {tenant} in postgres ({env})...")
-    kubeconfig = _get_kubeconfig(env)
-    cmd = [
-        "kubectl",
-        "--kubeconfig",
-        kubeconfig,
-        "-n",
-        "kubelab",
-        "exec",
-        "-i",
-        "deployment/postgres",
-        "--",
-        "psql",
-        "-U",
-        "kubelab",
-        "-d",
-        "kubelab",
-    ]
-    res = subprocess.run(cmd, input=sql, text=True, capture_output=True)
-    if res.returncode != 0:
-        logger.error(f"Provisioning failed for tenant {tenant} in postgres ({env}): {res.stderr}")
-        raise typer.Exit(1)
-    logger.success(f"PostgreSQL tenant {tenant} provisioned successfully.")
+        logger.info(f"Applying tenant provisioning for {name} in postgres ({env})...")
+        cmd = [
+            "kubectl",
+            "--kubeconfig",
+            _get_kubeconfig(env),
+            "-n",
+            "kubelab",
+            "exec",
+            "-i",
+            "deployment/postgres",
+            "--",
+            "psql",
+            "-U",
+            "kubelab",
+            "-d",
+            "kubelab",
+        ]
+        res = subprocess.run(cmd, input=sql, text=True, capture_output=True)
+        if res.returncode != 0:
+            # psql echoes a statement it cannot parse, and these statements hold the password.
+            detail = res.stderr.replace(password, "***")
+            logger.error(f"Provisioning failed for tenant {name} in postgres ({env}): {detail}")
+            raise typer.Exit(1)
+        logger.success(f"PostgreSQL tenant {name} provisioned successfully.")
 
 
 @k8s_app.command("apply-middleware-secrets")

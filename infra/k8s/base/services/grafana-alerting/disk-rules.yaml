@@ -15,22 +15,21 @@ groups:
         title: PersistentVolumeClaim unbound or failed
         condition: C
         for: 15m
-        noDataState: Alerting
+        # `OK`, and only because `obs042-disk-watcher-silent` below watches the
+        # watcher (#1668). This rule groups `by (namespace, pvc)`, so a claim
+        # that is deleted takes its label set with it: under `Alerting` Grafana
+        # could not tell "the problem went away" from "the observer went away",
+        # and a deleted claim stayed FIRING for ~90 minutes (staging,
+        # 2026-09-05). Silence of the whole stream is the other rule's question.
+        noDataState: OK
         execErrState: Alerting
         annotations:
-          # TWO CAUSES, and the text must not assert one of them. `noDataState`
-          # below is `Alerting`, which is the right default for a metric that
-          # must never go quiet — but it means this rule fires both when a PVC
-          # is genuinely unbound AND when the watcher stops reporting. Reading
-          # only the first into the summary is what let #1377 run for a day and
-          # a half: the alert said "a storage backend outage is preventing
-          # provisioning" while every PVC in both clusters was Bound and the
-          # real fault was a query that could not parse its own input.
+          # One cause. It used to hedge between an unbound claim and a stopped
+          # watcher because it alerted on both; #1377 shows what the hedge cost.
           summary: >-
-            Either a PersistentVolumeClaim in namespace kubelab is not 'Bound',
-            or the disk-watcher stopped reporting — this rule alerts on no data too.
-            Check `kubectl get pvc -n kubelab` first: if every claim is Bound, the fault
-            is in the watcher or the query, not in storage.
+            A PersistentVolumeClaim in namespace kubelab has not been 'Bound' for 15 minutes,
+            so the workload that mounts it cannot start. `kubectl get pvc -n kubelab` names the
+            claim; its events say why provisioning failed.
           runbook_url: https://github.com/mlorentedev/kubelab/blob/master/docs/runbooks/runbook-notifications-and-alerting.md
         data:
           - refId: A
@@ -95,12 +94,89 @@ groups:
                 type: __expr__
                 uid: __expr__
 
+      - uid: obs042-disk-watcher-silent
+        title: disk-watcher stopped reporting PVC health
+        condition: C
+        for: 15m
+        # The liveness half of #1668's split. The query is POSITIVE and has no
+        # grouping, so it returns one series while the watcher reports and
+        # nothing when it stops; `noDataState: Alerting` does the firing, and
+        # the notice says "(no data)", which is the literal cause here. The
+        # threshold below never trips on real data (a count is >= 1); it exists
+        # because a rule needs a condition.
+        #
+        # Not `absent_over_time`: that returns a series only on silence, so
+        # paired with `Alerting` it would fire on a healthy watcher.
+        #
+        # 45m against a 15m schedule is three samples: one late run is
+        # survivable, two are not (#1320).
+        noDataState: Alerting
+        execErrState: Alerting
+        annotations:
+          summary: >-
+            No PVC health line from disk-watcher in 45 minutes, so no PersistentVolumeClaim is being
+            measured and the unbound-claim rule cannot fire. Check `kubectl get cronjob disk-watcher
+            -n kubelab` first: suspended, failing, or a last run older than 30m is the cause. If its
+            runs are current, the lines are not reaching Loki: read the Vector pod's log.
+          runbook_url: https://github.com/mlorentedev/kubelab/blob/master/docs/runbooks/runbook-notifications-and-alerting.md
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 2700
+              to: 0
+            datasourceUid: loki
+            model:
+              refId: A
+              datasource:
+                type: loki
+                uid: loki
+              editorMode: code
+              queryType: range
+              expr: >-
+                sum(count_over_time(
+                  {container="disk-watcher"}
+                    | json
+                    | metric=`disk_pvc_health`
+                  [45m]
+                ))
+          - refId: B
+            relativeTimeRange:
+              from: 2700
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              reducer: last
+              expression: A
+              datasource:
+                type: __expr__
+                uid: __expr__
+          - refId: C
+            relativeTimeRange:
+              from: 2700
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    type: lt
+                    params: [1]
+              datasource:
+                type: __expr__
+                uid: __expr__
+
       - uid: obs015-disk-root-saturation
         title: Node root filesystem disk space critical (>90%)
         condition: C
         for: 15m
-        # `Alerting`, matching the sibling rule above, and for the same reason it
-        # gives: a metric that must never go quiet cannot treat silence as health.
+        # `Alerting`: a metric that must never go quiet cannot treat silence as
+        # health. (The PVC rule above is `OK` since #1668 split its liveness out
+        # into `obs042-disk-watcher-silent`; this rule was not split, so it keeps
+        # both causes and says so. Splitting it is the operator's call.)
         #
         # This said `OK` until 2026-09-05, and the asymmetry was invisible because
         # both rules read the SAME stream: if `disk-watcher` stops, the PVC rule

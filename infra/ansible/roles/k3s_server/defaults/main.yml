@@ -25,6 +25,11 @@ k3s_etcd_snapshot_retention: 5
 
 # Traefik HelmChartConfig — ports from SSOT (config.k3s.traefik.*)
 k3s_configure_traefik: true
+# Staging's load test OOMKilled Traefik at 384Mi with 2,400-4,000 VUs and again at
+# 768Mi with 3,200 (docs/load-test/2026-11-02-f3f1ed1d.md): over 240 KiB a connection.
+# 1536Mi had no OOMKill in eight ramps, highest sample 973Mi at 2,800 VUs (2026-11-02-4da6811b.md).
+k3s_traefik_memory_request: 128Mi
+k3s_traefik_memory_limit: 1536Mi
 k3s_traefik_http_port: 80
 k3s_traefik_https_port: 443
 

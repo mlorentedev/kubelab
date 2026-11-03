@@ -169,8 +169,10 @@ Following Google SRE error budget doctrine, public ingress alerts fire on actual
 ## 8. Fleet Volume & Disk Saturation Watcher (`disk-watcher.yaml` & `disk-rules.yaml`)
 
 - In-cluster CronJob `disk-watcher` runs every 15 minutes inspecting PVCs and root disk capacity in `kubelab`.
-- Evaluates PVC Bound phase (`obs015-pvc-unbound-failure`) with `noDataState: Alerting`.
-- Alerts if root filesystem capacity crosses 90% (`obs015-disk-root-saturation`).
+- Evaluates PVC Bound phase (`obs015-pvc-unbound-failure`) with `noDataState: OK`, so a deleted claim resolves instead of staying FIRING (#1668).
+- Alerts when the watcher itself goes quiet (`obs042-disk-watcher-silent`): no PVC health line in 45 minutes. It fires as `(no data)`, and the first check is `kubectl get cronjob disk-watcher -n kubelab`.
+- Alerts if root filesystem capacity crosses 90% (`obs015-disk-root-saturation`). This rule still alerts on no data too, so a silent watcher fires it alongside the liveness rule.
+- Every `noDataState: Alerting` rule's window must hold at least two runs of its watcher; `tests/test_alerting_emitter_window.py` enforces it fleet-wide (#1320).
 
 ## 9. Perimeter Threat Defense (`security-rules.yaml`)
 

@@ -1,0 +1,51 @@
+[
+  {
+    "id": "OPS-054-f1",
+    "behavior": "One documented command runs the test with a pinned image",
+    "verification": "grep -q '^load-test:' Makefile && test -s docs/runbooks/load-test.md && grep -q 'image: grafana/k6:' infra/config/values/common.yaml",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "OPS-054-f2",
+    "behavior": "The tool refuses anything but staging and judges steps by declared rules",
+    "verification": ".venv/bin/python -m pytest tests/test_load_test.py -q",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "OPS-054-f3",
+    "behavior": "Results are committed with their raw percentiles",
+    "verification": "test -s docs/load-test/2026-11-02-7ccf57f4.json && test -s docs/load-test/2026-11-02-7ccf57f4.md",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "OPS-054-f4",
+    "behavior": "The limiter is bypassed only by a header-scoped route kept out of the synced manifests",
+    "verification": "grep -q 'X-Load-Test' infra/load-test/limiter-bypass-route.yaml && ! grep -rq 'X-Load-Test' infra/k8s",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "OPS-054-f5",
+    "behavior": "The report holds the publishable sentence and what it may not imply",
+    "verification": "grep -q '^## What can be published' docs/load-test/report-2026-11-02.md && grep -q 'It may not be used to imply' docs/load-test/report-2026-11-02.md",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "OPS-054-f6",
+    "behavior": "The report states how staging differs from production",
+    "verification": "grep -q '^## How staging differs from production' docs/load-test/report-2026-11-02.md",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "OPS-054-f7",
+    "behavior": "Defects found are ticketed with root cause",
+    "verification": "grep -q '#2975' docs/load-test/report-2026-11-02.md && grep -q '#2977' docs/load-test/report-2026-11-02.md",
+    "state": "pending",
+    "evidence": ""
+  }
+]

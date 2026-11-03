@@ -10,8 +10,8 @@
 # `make provision`/`make deploy` refuse a controller that holds anything else.
 collections:
   - name: community.docker
-    version: "5.0.6"
+    version: "5.4.0"
   - name: community.general
-    version: "12.4.0"
+    version: "13.5.0"
   - name: ansible.posix
     version: "2.2.2"

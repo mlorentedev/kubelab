@@ -140,7 +140,7 @@ The size decides whether R = 30 fits the free tier. It is measured by the watche
 - [x] [AC5] (✓ 2026-10-07, landed ahead of PR 5 on its own: it depends on nothing the migration changes. The Bitwarden side is `dotf secrets probe`, which already reports sha256[:12] without the value, so no value crosses into the toolkit) `make backup-escrow-check`. For every restic password in SOPS (`backup.restic_password` and each `backup.nodes.<n>.restic_password`), it compares that value's hash with the hash of its `dotf` Bitwarden entry (`KUBELAB_RESTIC_PASSWORD[_<NODE>]`). No value is printed. It exits non-zero on a missing or stale entry.
 
   On 2026-10-03 this comparison was made by hand. The runbook's "if the escrow is missing or stale, there is no recovery" is otherwise checked by no one. The R2 pairs are re-mintable and stay out of the escrow.
-- [ ] (Needs #2917 first: `backup-verify-*` read `backup.r2.bucket`) After AC4 has been verified on all four nodes **and** one weekly `check` has passed on every new bucket: delete `kubelab-backups` and its token, and remove `backup.r2.bucket` / `backup.r2.access_key_id` from `common.yaml` and SOPS. This is its own PR if the weekly check lands after PR 5.
+- [ ] (Needs `coverage()` off `backup.r2.bucket` first: it still reads it through `load_destination`) After AC4 has been verified on all four nodes **and** one weekly `check` has passed on every new bucket: delete `kubelab-backups` and its token, and remove `backup.r2.bucket` / `backup.r2.access_key_id` from `common.yaml` and SOPS. This is its own PR if the weekly check lands after PR 5.
 
 ## Closing
 

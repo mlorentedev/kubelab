@@ -39,6 +39,9 @@ type Config struct {
 		GitHubAppID          string
 		GitHubInstallationID string
 		GitHubPrivateKey     string // PEM of the GitHub App, never logged
+		GitHubWebhookSecret  string // empty rejects every delivery
+		GiteaWebhookSecret   string // empty rejects every delivery
+		Sources              string // forge:owner/repo, comma separated; empty reads nothing
 	}
 	Email struct {
 		Host   string
@@ -48,6 +51,7 @@ type Config struct {
 		User   string
 		Pass   string
 	}
+	Postgres Postgres
 }
 
 var config *Config
@@ -97,6 +101,8 @@ func populateConfig() (*Config, error) {
 	cfg.Beehiiv.APIKey = os.Getenv("BEEHIIV_API_KEY")
 	cfg.Beehiiv.PubID = os.Getenv("BEEHIIV_PUB_ID")
 
+	cfg.Postgres = loadPostgres()
+
 	// SMTP Configuration (shared infra namespace — ADR-036 / SSOT-012)
 	cfg.Email.Host = os.Getenv("INFRA_SMTP_HOST")
 	cfg.Email.Port = os.Getenv("INFRA_SMTP_PORT")
@@ -111,6 +117,9 @@ func populateConfig() (*Config, error) {
 	cfg.Forge.GitHubAppID = os.Getenv("INFRA_FORGE_GITHUB_APP_ID")
 	cfg.Forge.GitHubInstallationID = os.Getenv("INFRA_FORGE_GITHUB_INSTALLATION_ID")
 	cfg.Forge.GitHubPrivateKey = os.Getenv("FORGE_GITHUB_PRIVATE_KEY")
+	cfg.Forge.GitHubWebhookSecret = os.Getenv("FORGE_GITHUB_WEBHOOK_SECRET")
+	cfg.Forge.GiteaWebhookSecret = os.Getenv("FORGE_GITEA_WEBHOOK_SECRET")
+	cfg.Forge.Sources = os.Getenv("INFRA_FORGE_SOURCES")
 
 	// Validate configuration
 	if err := validateConfig(cfg); err != nil {

@@ -24,6 +24,7 @@ import pathlib
 import re
 
 import pytest
+import yaml
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 SERVICES = REPO_ROOT / "infra/k8s/base/services"
@@ -93,17 +94,20 @@ def test_the_pvc_health_field_is_numeric_specifically() -> None:
     assert 'healthy: (if .status.phase == "Bound" then 1 else 0 end)' in body
 
 
-def test_the_no_data_case_is_admitted_in_the_summary() -> None:
-    """`noDataState: Alerting` means the rule fires for two different reasons.
+def test_each_half_of_the_split_states_one_cause() -> None:
+    """#1668 AC3. The PVC rule hedged ("either unbound, or the watcher stopped")
+    because it alerted on no data too, the operational half of #1377. Since the
+    split each rule has one cause and its summary names it, so neither hedges.
 
-    A summary that names only one of them turns a silent watcher into a
-    confident, wrong diagnosis — the operational half of #1377.
+    Which rule may tolerate silence is `test_alerting_no_data_is_not_health`'s job.
     """
-    body = (RULES_DIR / "disk-rules.yaml").read_text(encoding="utf-8")
-    pvc_rule = body[body.index("obs015-pvc-unbound-failure") :]
-    summary = pvc_rule[pvc_rule.index("summary:") : pvc_rule.index("runbook_url:")].lower()
+    doc = yaml.safe_load((RULES_DIR / "disk-rules.yaml").read_text(encoding="utf-8"))
+    rules = {r["uid"]: r for g in doc["groups"] for r in g["rules"]}
+    pvc = rules["obs015-pvc-unbound-failure"]["annotations"]["summary"].lower()
+    silent = rules["obs042-disk-watcher-silent"]["annotations"]["summary"].lower()
 
-    assert "noDataState: Alerting" in pvc_rule, "if this rule stops alerting on no data, revisit the summary too"
-    assert "no data" in summary or "stopped reporting" in summary, (
-        "the summary asserts a storage failure without admitting the rule also fires when the watcher goes silent"
-    )
+    assert rules["obs015-pvc-unbound-failure"]["noDataState"] == "OK", "the PVC rule alerts on no data again"
+    for name, summary in (("pvc", pvc), ("silent", silent)):
+        assert "either" not in summary, f"the {name} rule's summary hedges between two causes"
+    assert "watcher" not in pvc, "the PVC rule names the watcher, which is the other rule's cause"
+    assert "disk-watcher" in silent, "the liveness rule does not name what went silent"

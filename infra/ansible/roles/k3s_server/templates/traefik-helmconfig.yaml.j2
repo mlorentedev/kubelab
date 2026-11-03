@@ -34,6 +34,13 @@ spec:
         expose:
           default: false
         exposedPort: 9000
+    # Declared here so the kube-system LimitRange default never sizes the ingress
+    # (OBS-043). Memory follows open connections, not traffic at rest.
+    resources:
+      requests:
+        memory: {{ k3s_traefik_memory_request }}
+      limits:
+        memory: {{ k3s_traefik_memory_limit }}
     persistence:
       enabled: true
       storageClass: local-path

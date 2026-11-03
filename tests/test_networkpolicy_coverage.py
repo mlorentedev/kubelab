@@ -99,7 +99,10 @@ def _container_port(workload: dict[str, Any], target: int | str) -> int:
 
 def _allowed(overlay: str, source: str, target: dict[str, Any], port: int) -> bool:
     """Does a policy selecting `target` let `source` (a workload name, or
-    `traefik`) connect on `port`?"""
+    `traefik`) connect on `port`? A policy names pods by label, and a workload's name can
+    carry a hash its label does not (`api-migrate-<hash>`)."""
+    workload = _workloads(overlay).get(source)
+    label = _labels(workload).get(NAME, source) if workload else source
     for policy in _policy_for(overlay, target):
         for rule in policy["spec"].get("ingress", []):
             if port not in {p["port"] for p in rule.get("ports", [])}:
@@ -107,7 +110,7 @@ def _allowed(overlay: str, source: str, target: dict[str, Any], port: int) -> bo
             for peer in rule["from"]:
                 if source == "traefik" and peer == TRAEFIK:
                     return True
-                if set(peer) == {"podSelector"} and peer["podSelector"]["matchLabels"].get(NAME) == source:
+                if set(peer) == {"podSelector"} and peer["podSelector"]["matchLabels"].get(NAME) == label:
                     return True
     return False
 

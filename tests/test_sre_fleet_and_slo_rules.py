@@ -53,8 +53,11 @@ def test_disk_rules_structure_and_syntax() -> None:
     assert "obs015-pvc-unbound-failure" in uids
     assert "obs015-disk-root-saturation" in uids
 
+    # #1668: the PVC rule lets a vanished claim resolve; watcher silence is its own rule.
     pvc_rule = next(r for r in rules if r["uid"] == "obs015-pvc-unbound-failure")
-    assert pvc_rule.get("noDataState") == "Alerting"
+    assert pvc_rule.get("noDataState") == "OK"
+    silent_rule = next(r for r in rules if r["uid"] == "obs042-disk-watcher-silent")
+    assert silent_rule.get("noDataState") == "Alerting"
 
 
 def test_slo_rules_structure_and_syntax() -> None:

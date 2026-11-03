@@ -1847,6 +1847,14 @@ SECRET_CATALOG: list[SecretSpec] = [
         envs=("staging", "prod"),
     ),
     SecretSpec(
+        key_path="apps.platform.api.db_password",
+        description="PostgreSQL password for the api tenant role (DATA-007)",
+        kind=SecretKind.RANDOM_TOKEN,
+        services=("api", "postgres"),
+        rotate_note="provision-postgres-tenant and apply-secrets for api-secrets, restart api.",
+        envs=("staging", "prod"),
+    ),
+    SecretSpec(
         key_path="apps.platform.api.beehiiv_api_key",
         expiry=Expiry.NEVER,
         description="Beehiiv newsletter API key",
@@ -2513,6 +2521,7 @@ class SecretsManager:
             ["sops", "-d", str(sops_file)],
             capture_output=True,
             text=True,
+            encoding="utf-8",
             env=age_key_env(),  # auto-discover SOPS_AGE_KEY_FILE (toolkit/core/sops.py)
         )
         if result.returncode != 0:
@@ -2558,6 +2567,7 @@ class SecretsManager:
             ["sops", "set", str(sops_file), sops_path, json.dumps(value)],
             capture_output=True,
             text=True,
+            encoding="utf-8",
             env=age_key_env(),  # auto-discover SOPS_AGE_KEY_FILE (toolkit/core/sops.py)
         )
 
@@ -2588,6 +2598,7 @@ class SecretsManager:
             ["sops", "unset", str(sops_file), sops_path],
             capture_output=True,
             text=True,
+            encoding="utf-8",
             env=age_key_env(),  # auto-discover SOPS_AGE_KEY_FILE (toolkit/core/sops.py)
         )
 
