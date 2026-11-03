@@ -154,6 +154,7 @@ _VIKUNJA_ENVS = ("staging", "prod")
 # -- Forge Actions secrets (TOOL-062) --
 _FORGE_RESUME = "apps.services.core.gitea.actions_secrets.personal.resume"
 _FORGE_IST = "apps.services.core.gitea.actions_secrets.personal.imagesensortool"
+_GITHUB_CLASSIC_PAT = r"ghp_[A-Za-z0-9]+"
 _GDRIVE_ROTATE = (
     "Re-mint with resume's `scripts/get_drive_refresh_token.py` (browser consent; the consent "
     "screen must be In production or the token dies in 7 days), `toolkit secrets set <key> --env "
@@ -269,6 +270,25 @@ SECRET_CATALOG: list[SecretSpec] = [
         kind=SecretKind.EXTERNAL,
         services=("ci",),
         rotate_note="Re-issue in Docker Hub, then mirror to GitHub Actions as DOCKERHUB_TOKEN.",
+    ),
+    # The cluster's half of the GHCR split (#2884): read-only, so a node cannot
+    # overwrite an image it runs. One value for both clusters, hence common.
+    # Consumed by the image pull secret IDP-053 renders (#2612); until then nothing
+    # reads it. The push half is `ghcr_token` under the forge Actions secrets.
+    SecretSpec(
+        key_path="ghcr.pull_token",
+        expiry=Expiry.PROVIDER,
+        description="GitHub classic PAT, read:packages, that pulls private product images from ghcr.io",
+        kind=SecretKind.EXTERNAL,
+        services=("image_pull",),
+        format_hint="classic PAT (ghp_…): GHCR accepts no fine-grained token, so it reads every package on the account",
+        value_pattern=_GITHUB_CLASSIC_PAT,
+        rotate_note=(
+            "Mint a new classic token with read:packages only, update the Bitwarden item `ghcr-pull-kubelab`, "
+            "`toolkit secrets set ghcr.pull_token --env common --stdin`, then revoke the old one."
+        ),
+        # Stored in common.enc.yaml; `envs` is the audit dimension.
+        envs=("staging", "prod"),
     ),
     # =========================================================================
     # Basic Auth (Traefik)
@@ -859,6 +879,36 @@ SECRET_CATALOG: list[SecretSpec] = [
         services=("gitea_actions",),
         rotate_note="Changes only if the folder moves: set the new id, then push with `--force`.",
         expiry=Expiry.NEVER,
+        envs=("prod",),
+        forge_actions=("personal/resume",),
+    ),
+    # resume's image workflow pushes to ghcr.io. The token is account-wide because
+    # GHCR accepts only classic tokens, and it stays in forge CI: the cluster holds
+    # the read-only half, `ghcr.pull_token` (#2884).
+    SecretSpec(
+        key_path=f"{_FORGE_RESUME}.ghcr_username",
+        description="GitHub account that owns ghcr_token and the ghcr.io/mlorentedev namespace",
+        # Not a credential: the login that goes with ghcr_token.
+        kind=SecretKind.EXTERNAL,
+        services=("gitea_actions",),
+        rotate_note="Changes only with ghcr_token's owner: set both, then push with `--force`.",
+        expiry=Expiry.NEVER,
+        envs=("prod",),
+        forge_actions=("personal/resume",),
+    ),
+    SecretSpec(
+        key_path=f"{_FORGE_RESUME}.ghcr_token",
+        description="GitHub classic PAT, write:packages, that pushes resume's image to ghcr.io from forge CI",
+        kind=SecretKind.EXTERNAL,
+        services=("gitea_actions",),
+        format_hint="classic PAT (ghp_…): GHCR accepts no fine-grained token",
+        value_pattern=_GITHUB_CLASSIC_PAT,
+        rotate_note=(
+            "Mint a new classic token with write:packages only, update the Bitwarden item `ghcr-push-forge-ci`, "
+            f"`toolkit secrets set {_FORGE_RESUME}.ghcr_token --env prod --stdin`, push with "
+            "`toolkit services gitea actions-secrets --apply --force`, then revoke the old one."
+        ),
+        expiry=Expiry.PROVIDER,
         envs=("prod",),
         forge_actions=("personal/resume",),
     ),
