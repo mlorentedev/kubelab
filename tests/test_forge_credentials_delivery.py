@@ -119,3 +119,10 @@ def test_webhook_secrets_are_catalogued_for_prod_and_delivered_as_optional() -> 
         assert _catalog(key_path).envs == ("prod",)
         assert API_SECRETS.optional_keys[name] == _flattened(key_path)
         assert name in GO_CONFIG.read_text(encoding="utf-8")
+        assert name in _placeholders("prod"), f"{name} has no placeholder in the prod overlay's secrets.yaml"
+
+
+def _placeholders(env: str) -> set[str]:
+    path = REPO_ROOT / "infra" / "k8s" / "overlays" / env / "secrets.yaml"
+    docs = yaml.safe_load_all(path.read_text(encoding="utf-8"))
+    return set(next(d for d in docs if d and d["metadata"]["name"] == "api-secrets")["stringData"])
