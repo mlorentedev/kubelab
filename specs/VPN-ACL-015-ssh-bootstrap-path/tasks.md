@@ -75,12 +75,14 @@ declaration is `networking.vps.ssh_bootstrap: {user: hs-bootstrap, permit_open:
   `PermitOpen`, and that an empty list renders none. Expected: FAIL, then PASS. This
   narrows `deployer` from `permitopen any` to the control plane while clients move;
   the list is emptied by a second PR once AC3 holds.
-- [ ] [AC1] [AC2] `make mutate` on the Match block's `PermitOpen` and on the
-  `restrict` prefix. Expected: both RED.
-- [ ] Update `docs/runbooks/headscale-setup.md` (enrol and revoke a bootstrap key; also
+- [x] [AC1] [AC2] `make mutate` on the Match block's `PermitOpen` and on the
+  `restrict` prefix. Expected: both RED. ✓ 2026-11-02, four mutants all RED
+  (`toolkit tools mutate`): no `restrict`, `PermitOpen *`, `PermitTTY yes`, the
+  same-user check removed.
+- [x] Update `docs/runbooks/headscale-setup.md` (enrol and revoke a bootstrap key; also
   correct its claim that the segments live in `common.enc.yaml`: they are in
   `prod.enc.yaml`) and
-  the CLAUDE.md RPi4-jump-host gotcha's sibling line for the VPS.
+  the CLAUDE.md RPi4-jump-host gotcha's sibling line for the VPS. ✓ 2026-11-02, Phase 10.
 
 Note (2026-11-02): the VPS host vars come from a `provision.yml` `set_fact` (the
 precedent of the firewall allow-list), not the generator, because the destination is

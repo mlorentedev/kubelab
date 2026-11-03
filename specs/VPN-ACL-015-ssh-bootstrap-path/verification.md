@@ -9,8 +9,20 @@ created: "2026-11-02"
 
 Map every acceptance criterion from `proposal.md` to concrete proof (commit hash, test name, or observed behavior).
 
-- [ ] AC1 -> test `<name>`
-- [ ] AC2 -> test `<name>`
+- [x] AC1 -> `tests/test_ssh_hardening_bootstrap_forward.py`:
+  `test_the_vps_renders_the_golden_file_plus_one_bootstrap_block`,
+  `test_both_blocks_render_each_closed_and_the_global_default_stays_no`,
+  `test_a_malformed_forward_is_refused` (13 cases),
+  `test_sshd_itself_limits_each_user_to_what_was_declared` (CI only: no sshd on the
+  Windows workstation); `tests/test_ssh_hardening_lan_jump.py` still holds every other
+  host to its golden file; `test_sshd_and_the_keys_open_the_same_single_destination`.
+- [x] AC2 -> `tests/test_headscale_bootstrap_ssh.py`:
+  `test_each_key_gets_one_line_restricted_to_the_control_plane`,
+  `test_a_key_absent_from_sops_is_absent_from_the_file`,
+  `test_a_malformed_key_is_refused` (10 cases),
+  `test_the_file_is_root_owned_and_its_render_is_never_printed`,
+  `test_keys_reach_the_role_only_from_sops`; catalog in
+  `tests/test_secrets_headscale_catalog.py`.
 - [ ] AC3 -> live check `<date>`
 - [x] AC4 -> drift read on 2026-11-02, before any change (below).
 - [ ] AC5 -> live check `<date>`
@@ -39,16 +51,25 @@ bootstrap path the filtered clients use.
 
 ## Test status
 
-- Test suite: `<command> -> <output / coverage %>`
-- Manual smoke test: what was exercised, what was observed
-- No regressions in existing test suite: yes / no (if no, document)
+- `pytest tests/test_headscale_bootstrap_ssh.py tests/test_ssh_hardening_bootstrap_forward.py
+  tests/test_ssh_hardening_lan_jump.py tests/test_headscale_segments.py tests/test_headscale_role.py`:
+  134 passed, 2 skipped (the `sshd -T` cases; Windows, 2026-11-02). All `tests/test_secret*.py`:
+  216 passed.
+- Mutations (`toolkit tools mutate`), all RED: `restrict` removed from the key line;
+  `PermitOpen *` in provision.yml; `PermitTTY yes`; the same-user check removed.
+- Live checks (AC3, AC5): pending rollout.
 
 ## Decisions made during implementation
 
 Brief log of non-obvious trade-offs or course corrections taken during the work. Routine choices belong in commit messages, not here.
 
--
--
+- The VPS's host var is a `provision.yml` `set_fact`, not a generator host var: its
+  destination derives from `apps.services.core.headscale.domain`, which the
+  inventory generator does not read.
+- The transitional block is `narrow_ssh_user: true`, so the SSH user is not repeated
+  in common.yaml (it is `networking.ssh_users.cloud`).
+- The key list is checked at deploy by the role, not by `value_pattern`, which
+  checks one whole value and this entry is a mapping.
 
 ## Promotion candidates
 
