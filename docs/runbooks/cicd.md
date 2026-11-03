@@ -290,7 +290,7 @@ duplicated here to avoid the two docs drifting apart.
 | `ci-pipeline.yml` | Reusable: per-app build/lint/test/security-scan, `sha-<short>` preview tag |
 | `ci-publish.yml` | Reusable: Docker build + push + Trivy scan + build-completion notify (ADR-044) |
 | `release.yml` | release-please: cuts `api`/`errors` semver; re-tags (`api`, ADR-056) or rebuilds (`errors`); auto-opens the `errors` prod-pin PR (DELIVERY-003) |
-| `staging-deploy.yml` | Continuous staging delivery for `api` — builds `sha-<short>` on every `master` push touching `apps/**`, opens the deploy PR |
+| `staging-deploy.yml` | Continuous staging delivery for `api` — builds `sha-<short>` on every `master` push touching `apps/api/**`, force-updates the one `deploy/staging-api` PR (#1681) |
 | `product-image-receiver.yml` | Generic cross-repo receiver (ADR-067) — the registry maps a `repository_dispatch` to a product; validates its `kubelab.yaml` at the image's commit and force-updates one `deploy/staging-<app>` PR |
 | `promote-prod.yml` | Manual `workflow_dispatch` — gated prod promotion for `api`/`web` |
 | `ci-cleanup.yml` | Weekly cron (Mondays 04:00 UTC) — prunes old `sha-*` tags via `toolkit registry prune`; never touches prod semver |

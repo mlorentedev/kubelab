@@ -38,7 +38,7 @@ from pathlib import Path
 
 import pytest
 import yaml
-from uptime_kuma_api import UptimeKumaApi
+from uptime_kuma_api import UptimeKumaApi, UptimeKumaException
 
 from toolkit.features import monitoring
 from toolkit.features.monitoring_diff import PushTokenError, diff_monitors, extract_key
@@ -196,10 +196,28 @@ def fresh_kuma_url():
         subprocess.run(["docker", "rm", "-f", name], capture_output=True)
 
 
+LOGIN_ATTEMPTS = 5
+LOGIN_LIMIT_WAIT_SECONDS = 20
+
+
 def _client(url: str):
-    api = monitoring.GreetedKumaApi(url, timeout=60)
-    api.login(ADMIN_USER, ADMIN_PASS)
-    return api
+    """Log in, waiting out Kuma's login limit.
+
+    Each test here logs in several times on one instance, and the limit answers
+    `Too frequently` on whichever test the clock lands on, which a slower or
+    faster run moves around.
+    """
+    for attempt in range(LOGIN_ATTEMPTS):
+        api = monitoring.GreetedKumaApi(url, timeout=60)
+        try:
+            api.login(ADMIN_USER, ADMIN_PASS)
+            return api
+        except UptimeKumaException as e:
+            api.disconnect()
+            if "Too frequently" not in str(e) or attempt == LOGIN_ATTEMPTS - 1:
+                raise
+            time.sleep(LOGIN_LIMIT_WAIT_SECONDS)
+    raise AssertionError("unreachable: the last attempt returns or raises")
 
 
 @pytest.fixture
@@ -398,6 +416,34 @@ class TestApplyAgainstARealInstance:
             seed, live(), muted_tags=frozenset({"staging"}), has_default_notification=True
         )
         assert (len(create), len(edit), len(delete)) == (0, 0, 0)
+
+    def test_exporting_a_converged_instance_writes_the_seed_back_byte_for_byte(
+        self, apply_seed, kuma_url, monkeypatch, tmp_path
+    ):
+        """The export's whole contract, against what a real Kuma answers (#2291).
+
+        Only the notification id differs by instance: `wipe` leaves the counter
+        running, so the expected file takes this instance's default id. The seed's
+        `active: false` entry also proves apply pauses it: nothing else writes that.
+        """
+        _add_default_notification(kuma_url)
+        muted = monitoring._get_muted_notification_tags(REPO_ROOT)
+        monkeypatch.setattr(monitoring, "_get_muted_notification_tags", lambda _root: muted)
+        seed = _real_seed()
+        apply_seed(seed)
+
+        monkeypatch.setattr(monitoring, "_connect", lambda _root: (_client(kuma_url), {"url": kuma_url}))
+        path = tmp_path / monitoring.EXPORT_DIR / monitoring.MONITORS_FILE
+        path.write_text(monitoring._seed_json(seed), encoding="utf-8")
+        monitoring.export_monitors(tmp_path)
+
+        exported = path.read_text(encoding="utf-8")
+        ids = {i for entry in json.loads(exported) for i in entry["notificationIDList"]}
+        assert len(ids) == 1
+        for entry in seed:
+            if entry["notificationIDList"]:
+                entry["notificationIDList"] = sorted(ids)
+        assert exported == monitoring._seed_json(seed)
 
     def test_dropping_a_monitor_from_the_seed_deletes_exactly_that_one(self, live, apply_seed):
         """AC3's real exercise: the delete path, which the spec flagged as untested."""

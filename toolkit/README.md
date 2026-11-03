@@ -146,6 +146,7 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit infra terraform gcp-resize` | Set the MIG's target size. 0 stops paying for the VM; 1 boots a fresh one. |
 | `toolkit infra terraform gcp-status` | Describe the hub's managed instance group. Read-only. |
 | `toolkit infra terraform killswitch-prove` | Prove the billing kill switch fires, end to end (AC2b). |
+| `toolkit infra terraform r2-documents-token` | Mint the product documents bucket's token into prod SOPS (STOR-002). Idempotent. |
 | `toolkit infra terraform run` | Run one Terraform action against one root (TF-007). |
 | `toolkit infra terraform state-bootstrap` | Create the state bucket, its history lock rule and its token (TF-007). Idempotent. |
 | `toolkit infra terraform verify-killswitch` | Prove the billing kill switch fires, against a scratch project (AC2b). |

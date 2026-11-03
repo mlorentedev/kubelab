@@ -35,6 +35,8 @@ from toolkit.features.backup_node_credentials import (
     secret_key_path,
 )
 from toolkit.features.configuration import ConfigurationManager
+from toolkit.features.r2_documents_token import ACCESS_KEY_PATH as DOCUMENTS_ACCESS_KEY_PATH
+from toolkit.features.r2_documents_token import SECRET_KEY_PATH as DOCUMENTS_SECRET_KEY_PATH
 from toolkit.features.secret_expiry import Expiry
 
 # =============================================================================
@@ -154,6 +156,7 @@ _VIKUNJA_ENVS = ("staging", "prod")
 # -- Forge Actions secrets (TOOL-062) --
 _FORGE_RESUME = "apps.services.core.gitea.actions_secrets.personal.resume"
 _FORGE_IST = "apps.services.core.gitea.actions_secrets.personal.imagesensortool"
+_GITHUB_CLASSIC_PAT = r"ghp_[A-Za-z0-9]+"
 _GDRIVE_ROTATE = (
     "Re-mint with resume's `scripts/get_drive_refresh_token.py` (browser consent; the consent "
     "screen must be In production or the token dies in 7 days), `toolkit secrets set <key> --env "
@@ -269,6 +272,25 @@ SECRET_CATALOG: list[SecretSpec] = [
         kind=SecretKind.EXTERNAL,
         services=("ci",),
         rotate_note="Re-issue in Docker Hub, then mirror to GitHub Actions as DOCKERHUB_TOKEN.",
+    ),
+    # The cluster's half of the GHCR split (#2884): read-only, so a node cannot
+    # overwrite an image it runs. One value for both clusters, hence common.
+    # Consumed by the image pull secret IDP-053 renders (#2612); until then nothing
+    # reads it. The push half is `ghcr_token` under the forge Actions secrets.
+    SecretSpec(
+        key_path="ghcr.pull_token",
+        expiry=Expiry.PROVIDER,
+        description="GitHub classic PAT, read:packages, that pulls private product images from ghcr.io",
+        kind=SecretKind.EXTERNAL,
+        services=("image_pull",),
+        format_hint="classic PAT (ghp_…): GHCR accepts no fine-grained token, so it reads every package on the account",
+        value_pattern=_GITHUB_CLASSIC_PAT,
+        rotate_note=(
+            "Mint a new classic token with read:packages only, update the Bitwarden item `ghcr-pull-kubelab`, "
+            "`toolkit secrets set ghcr.pull_token --env common --stdin`, then revoke the old one."
+        ),
+        # Stored in common.enc.yaml; `envs` is the audit dimension.
+        envs=("staging", "prod"),
     ),
     # =========================================================================
     # Basic Auth (Traefik)
@@ -862,6 +884,36 @@ SECRET_CATALOG: list[SecretSpec] = [
         envs=("prod",),
         forge_actions=("personal/resume",),
     ),
+    # resume's image workflow pushes to ghcr.io. The token is account-wide because
+    # GHCR accepts only classic tokens, and it stays in forge CI: the cluster holds
+    # the read-only half, `ghcr.pull_token` (#2884).
+    SecretSpec(
+        key_path=f"{_FORGE_RESUME}.ghcr_username",
+        description="GitHub account that owns ghcr_token and the ghcr.io/mlorentedev namespace",
+        # Not a credential: the login that goes with ghcr_token.
+        kind=SecretKind.EXTERNAL,
+        services=("gitea_actions",),
+        rotate_note="Changes only with ghcr_token's owner: set both, then push with `--force`.",
+        expiry=Expiry.NEVER,
+        envs=("prod",),
+        forge_actions=("personal/resume",),
+    ),
+    SecretSpec(
+        key_path=f"{_FORGE_RESUME}.ghcr_token",
+        description="GitHub classic PAT, write:packages, that pushes resume's image to ghcr.io from forge CI",
+        kind=SecretKind.EXTERNAL,
+        services=("gitea_actions",),
+        format_hint="classic PAT (ghp_…): GHCR accepts no fine-grained token",
+        value_pattern=_GITHUB_CLASSIC_PAT,
+        rotate_note=(
+            "Mint a new classic token with write:packages only, update the Bitwarden item `ghcr-push-forge-ci`, "
+            f"`toolkit secrets set {_FORGE_RESUME}.ghcr_token --env prod --stdin`, push with "
+            "`toolkit services gitea actions-secrets --apply --force`, then revoke the old one."
+        ),
+        expiry=Expiry.PROVIDER,
+        envs=("prod",),
+        forge_actions=("personal/resume",),
+    ),
     # imagesensortool's image workflow pushes the site image to the forge's
     # container registry; the per-job GITEA_TOKEN cannot write packages.
     SecretSpec(
@@ -1309,6 +1361,28 @@ SECRET_CATALOG: list[SecretSpec] = [
         # Same reasoning as `audit_sources`: the VPS is prod-only.
         envs=("prod",),
     ),
+    SecretSpec(
+        # The whole subtree, for the reason the segments entry gives: each enrolled
+        # machine's key sits under a neutral key (`client-1`), so this entry must never
+        # name one (VPN-ACL-015).
+        key_path="apps.services.core.headscale.bootstrap_ssh_keys",
+        expiry=Expiry.NEVER,
+        description=(
+            "Public SSH keys allowed to forward to the control plane through the VPS's "
+            "bootstrap account (ts-bridge --bootstrap-ssh). Not credentials: inventory of "
+            "enrolled machines, kept out of the public tree."
+        ),
+        kind=SecretKind.EXTERNAL,
+        services=("headscale",),
+        format_hint="mapping of neutral key -> one public key line (no options)",
+        rotate_note=(
+            "Revoke by removing the entry, enrol by adding one, then "
+            "`make deploy TARGET=vps ENV=prod`. The deploy refuses a line with options."
+        ),
+        # Absent is a decision (no machine enrolled), not a gap.
+        optional=True,
+        envs=("prod",),
+    ),
     # =========================================================================
     # GCP hub (ADR-063) — read by cloud-init from Secret Manager, not by a human
     # =========================================================================
@@ -1451,6 +1525,32 @@ SECRET_CATALOG: list[SecretSpec] = [
         services=("terraform",),
         format_hint="SHA-256 of the R2 API token value; shown once, not recoverable",
         rotate_note="Rotated together with terraform.state.access_key_id: they are one credential.",
+        envs=("prod",),
+    ),
+    # STOR-002 (#2535): Object Read & Write on the product documents bucket only,
+    # so it cannot administer the bucket or lift its lock. In prod.enc.yaml; it
+    # reaches the product's operator through SOPS, never through a product's CI.
+    SecretSpec(
+        key_path=DOCUMENTS_ACCESS_KEY_PATH,
+        expiry=Expiry.NEVER,
+        description="R2 access key id, Object Read & Write on kubelab-product-documents only",
+        kind=SecretKind.EXTERNAL,
+        services=("product-documents",),
+        format_hint="R2 API token id (not the token value)",
+        rotate_note=(
+            "`make r2-documents-token ROTATE=1` mints a new token, verifies it, stores it and "
+            "revokes the old one; then hand the new pair to the product's operator."
+        ),
+        envs=("prod",),
+    ),
+    SecretSpec(
+        key_path=DOCUMENTS_SECRET_KEY_PATH,
+        expiry=Expiry.NEVER,
+        description="R2 secret access key, Object Read & Write on kubelab-product-documents only",
+        kind=SecretKind.EXTERNAL,
+        services=("product-documents",),
+        format_hint="SHA-256 of the R2 API token value; shown once, not recoverable",
+        rotate_note=f"Rotated together with {DOCUMENTS_ACCESS_KEY_PATH}: they are one credential.",
         envs=("prod",),
     ),
     # BACKUP-057 PR 3: mints the per-node and watcher R2 tokens. It holds Account
@@ -1845,6 +1945,26 @@ SECRET_CATALOG: list[SecretSpec] = [
         services=("postgres",),
         rotate_note="apply-secrets for postgres-secrets; ALTER USER + restart postgres (and api once it connects).",
         envs=("staging", "prod"),
+    ),
+    # What the forges sign webhook deliveries to the API with (CONSOLE-004). Prod only:
+    # staging is VPN-only, so no forge can reach it.
+    SecretSpec(
+        key_path="apps.platform.api.forge_github_webhook_secret",
+        description="HMAC secret GitHub signs webhook deliveries to the API with",
+        kind=SecretKind.RANDOM_HEX,
+        length=32,
+        services=("api",),
+        rotate_note="apply-secrets for api-secrets, restart api, then update the GitHub webhook's secret.",
+        envs=("prod",),
+    ),
+    SecretSpec(
+        key_path="apps.platform.api.forge_gitea_webhook_secret",
+        description="HMAC secret Gitea signs webhook deliveries to the API with",
+        kind=SecretKind.RANDOM_HEX,
+        length=32,
+        services=("api", "gitea"),
+        rotate_note="apply-secrets for api-secrets, restart api, then update the Gitea webhook's secret.",
+        envs=("prod",),
     ),
     SecretSpec(
         key_path="apps.platform.api.db_password",

@@ -42,7 +42,18 @@
       when: "'vps' in group_names"
       tags: [always]
 
-    # base_system reaches the VPS only through this play (#2702).
+    # VPN-ACL-015. ssh_hardening renders a Match block that lets this account
+    # forward to the control plane and nowhere else. `narrow_ssh_user` keeps the
+    # VPS's own SSH user forwarding to the same single destination until its
+    # clients move. The destination must equal the keys' (deploy-vps.yml).
+    - name: Declare the control-plane bootstrap forward from SSOT (networking.vps.ssh_bootstrap)
+      set_fact:
+        ssh_bootstrap_forward:
+          user: "{{ config.networking.vps.ssh_bootstrap.user }}"
+          permit_open: "{{ config.apps.services.core.headscale.domain }}:{{ config.networking.vps.ssh_bootstrap.port | default(443) }}"
+          transitional_users: "{{ [ansible_user] if config.networking.vps.ssh_bootstrap.narrow_ssh_user | default(false) else [] }}"
+      when: "'vps' in group_names and config.networking.vps.ssh_bootstrap is defined"
+      tags: [always]
     - name: Give the VPS the large-disk journal cap
       set_fact:
         journald_system_max_use: "{{ journald_large_disk_max_use }}"

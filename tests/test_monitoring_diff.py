@@ -20,6 +20,7 @@ from toolkit.features.monitoring_diff import (
     embed_key,
     extract_key,
     hydrate_push_tokens,
+    monitors_to_pause,
     strip_key,
     tag_drift,
     wants_notifications,
@@ -555,3 +556,27 @@ class TestTagDrift:
     def test_an_empty_tags_field_removes_every_live_tag(self):
         _, extra = tag_drift({"tags": []}, self.LIVE)
         assert [t["tag_id"] for t in extra] == [7, 9]
+
+
+class TestMonitorsToPause:
+    """`active` travels in no edit, so a declared pause is converged on its own (#2291)."""
+
+    @staticmethod
+    def _live(key: str, *, active: bool) -> dict:
+        return {"id": 1, "name": key, "active": active, "description": embed_key("", key)}
+
+    def test_a_running_monitor_the_seed_pauses_is_paused(self):
+        seed = [{"key": "dormant", "active": False}]
+        assert monitors_to_pause(seed, [self._live("dormant", active=True)]) != []
+
+    def test_one_already_paused_is_left_alone(self):
+        seed = [{"key": "dormant", "active": False}]
+        assert monitors_to_pause(seed, [self._live("dormant", active=False)]) == []
+
+    def test_a_pause_set_at_runtime_survives_a_seed_that_says_active(self):
+        seed = [{"key": "up", "active": True}]
+        assert monitors_to_pause(seed, [self._live("up", active=False)]) == []
+
+    def test_a_monitor_the_seed_does_not_pause_keeps_running(self):
+        seed = [{"key": "dormant", "active": False}, {"key": "up", "active": True}]
+        assert monitors_to_pause(seed, [self._live("up", active=True)]) == []

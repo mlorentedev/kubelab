@@ -96,4 +96,5 @@ class TestAPIHealthStructure:
         # A degraded dependency still answers 200 and keeps the pod in rotation.
         assert data["status"] in {"ready", "degraded"}, data
         components = {c["component"] for c in data.get("checks", [])}
-        assert components == {"beehiiv", "email"}, f"/ready components: {sorted(components)}"
+        # Both envs declare the API's Postgres tenant, so the check is always there.
+        assert components == {"beehiiv", "email", "postgres"}, f"/ready components: {sorted(components)}"

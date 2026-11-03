@@ -266,6 +266,10 @@
 - name: Declare the audit identities
   import_tasks: audit_identity.yml
 
+# VPN-ACL-015: the account clients use to forward to the control plane.
+- name: Declare the control-plane bootstrap account
+  import_tasks: bootstrap_identity.yml
+
 # --- Retired TLS stack: certbot and nginx (OPS-047) ---------------------------
 # Last in the role on purpose. `make deploy TARGET=vps ENV=prod` passes no tags and is
 # also how an ACL change reaches the VPS, so these tasks run on every ACL deploy. A

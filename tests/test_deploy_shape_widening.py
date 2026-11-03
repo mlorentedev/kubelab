@@ -17,7 +17,7 @@ import re
 
 import pytest
 
-from toolkit.features.deploy_merge import MERGE_STATES_OK
+from toolkit.features.deploy_merge import ALLOWED_UNSTABLE, MERGE_STATES_OK
 from toolkit.features.deploy_shape import load_declaration
 from toolkit.features.review_attestation import DEFAULT_REGISTRY
 
@@ -38,9 +38,9 @@ APPROVED = {
     "overlay_files": ["infra/k8s/overlays/staging/generated/deployments.yaml"],
     "version_path": ["apps", "platform", "{app}", "version"],
     "tag_pattern": "^sha-[0-9a-f]{7,40}$",
-    # The merge step's switch, OFF as PR 3 shipped it. Flipping it here and in
-    # the registry is PR 4, one reviewed diff, never a test fix.
-    "merge": False,
+    # The merge step's switch, ON since PR 4 (2026-11-03, evidence on #1619).
+    # Changing it here and in the registry is one reviewed diff, never a test fix.
+    "merge": True,
 }
 
 # Every way a workflow can merge a pull request. Auto-merge has its own guard
@@ -117,6 +117,11 @@ class TestMergingActorDoesNotWiden:
             f"workflows that merge pull requests: {found}; declared: {sorted(MERGERS)}. A new merger is "
             f"{DECIDED}."
         )
+
+    def test_the_contexts_unstable_may_excuse_are_the_approved_ones(self) -> None:
+        """#2983: option B on #1619 was approved for `add-to-project` only. Each added name
+        is a context the merger stops enforcing."""
+        assert ALLOWED_UNSTABLE == frozenset({"add-to-project"}), f"unstable excuses {set(ALLOWED_UNSTABLE)}: {DECIDED}"
 
     def test_the_merge_states_the_judge_accepts_are_the_approved_ones(self) -> None:
         """`unstable` was added on #1619 (2026-11-01): only contexts that are not required fail

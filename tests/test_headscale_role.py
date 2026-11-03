@@ -46,6 +46,7 @@ def _base_context(**overrides: object) -> dict[str, object]:
         headscale_derp_region_code="kubelab",
         headscale_derp_region_name="KubeLab Homelab",
         headscale_derp_verify_clients=True,
+        headscale_dns_global=["192.0.2.1"],
         headscale_dns_split={},
         headscale_dns_extra_records=[],
         headscale_db_type="sqlite",

@@ -31,6 +31,7 @@ from toolkit.features.gitea_actions_secrets import (
     format_actions_secrets_plan,
     plan_actions_secrets,
 )
+from toolkit.features.secret_expiry import PROVIDER_CHECKS, Expiry, github_pat_expiry
 from toolkit.features.secrets_manager import (
     SECRET_CATALOG,
     SecretKind,
@@ -60,6 +61,10 @@ EXPECTED_DELIVERED = {
     # to push the site image; the per-job GITEA_TOKEN cannot write packages.
     (f"{IST_PREFIX}.registry_user", IMAGESENSORTOOL),
     (f"{IST_PREFIX}.registry_token", IMAGESENSORTOOL),
+    # resume's image workflow pushes to ghcr.io; GHCR takes only an account-wide
+    # classic token, so the push half never leaves forge CI (#2884).
+    (f"{PREFIX}.ghcr_token", RESUME),
+    (f"{PREFIX}.ghcr_username", RESUME),
 }
 
 
@@ -96,6 +101,29 @@ def test_every_delivered_secret_says_what_rotating_it_costs() -> None:
             f"{spec.key_path}: rotate_note must name the forced re-push; the forge "
             f"cannot tell a stale value from a current one."
         )
+
+
+def test_the_push_token_never_reaches_a_cluster_and_the_pull_token_never_reaches_ci() -> None:
+    """#2884: split so the cluster cannot overwrite an image it runs.
+
+    GHCR tokens are account-wide, so the split is the only limit on what a holder
+    can do. The pull token serves both clusters, which is why it lives in common.
+    """
+    by_path = {s.key_path: s for s in SECRET_CATALOG}
+    push, pull = by_path[f"{PREFIX}.ghcr_token"], by_path["ghcr.pull_token"]
+    assert push.forge_actions == (RESUME,)
+    assert pull.forge_actions == ()
+    assert pull.envs == ("staging", "prod")
+    assert push.services == ("gitea_actions",)
+    assert "gitea_actions" not in pull.services
+
+
+@pytest.mark.parametrize("key_path", [f"{PREFIX}.ghcr_token", "ghcr.pull_token"])
+def test_a_ghcr_token_expires_on_a_date_github_can_be_asked_for(key_path: str) -> None:
+    """Both were minted to die on a date, and GitHub's header answers for classic tokens too."""
+    spec = next(s for s in SECRET_CATALOG if s.key_path == key_path)
+    assert spec.expiry is Expiry.PROVIDER
+    assert PROVIDER_CHECKS[key_path] is github_pat_expiry
 
 
 def test_no_two_delivered_secrets_share_a_name_in_one_repository() -> None:
@@ -337,11 +365,13 @@ LEAVES = ("gdrive_oauth_client_id", "gdrive_oauth_client_secret", "gdrive_oauth_
 NAN = "NAN_API_KEY"
 # imagesensortool's two, likewise always valued.
 IST = ("REGISTRY_USER", "REGISTRY_TOKEN")
+# resume's GHCR push pair, likewise: LEAVES stays the four the tests vary.
+GHCR = ("GHCR_USERNAME", "GHCR_TOKEN")
 
 
 def _merged(**values: str) -> dict[str, Any]:
     """A prod config holding the forge credential, the NaN key and whichever GDRIVE values are given."""
-    resume = dict(values)
+    resume = {"ghcr_username": "manu", "ghcr_token": f"{VALUE}-ghcr", **values}
     return {
         "apps": {
             "services": {
@@ -391,7 +421,7 @@ def test_plan_only_writes_nothing_and_never_prints_a_value(monkeypatch: pytest.M
     result = _invoke(monkeypatch, _merged(**{leaf: VALUE for leaf in LEAVES}), forge)
     assert result.exit_code == 0, result.output
     assert forge.puts == []
-    assert result.output.count("(create, from") == len(LEAVES) + 1 + len(IST)
+    assert result.output.count("(create, from") == len(LEAVES) + 1 + len(IST) + len(GHCR)
     assert VALUE not in result.output
 
 
@@ -406,10 +436,11 @@ def test_apply_writes_every_target_to_its_own_repository_and_a_second_run_has_no
         [("personal", "resume", leaf.upper()) for leaf in LEAVES]
         + [("teledyne", "fae-brain", NAN)]
         + [("personal", "imagesensortool", name) for name in IST]
+        + [("personal", "resume", name) for name in GHCR]
     )
     assert VALUE not in result.output
 
-    second = _CliForge(live={leaf.upper() for leaf in LEAVES} | {NAN, *IST})
+    second = _CliForge(live={leaf.upper() for leaf in LEAVES} | {NAN, *IST, *GHCR})
     rerun = _invoke(monkeypatch, config, second, "--apply")
     assert rerun.exit_code == 0, rerun.output
     assert second.puts == [], "changed=0 on re-run"
@@ -417,7 +448,7 @@ def test_apply_writes_every_target_to_its_own_repository_and_a_second_run_has_no
 
 def test_an_undeclared_live_secret_is_printed_and_left_alone_by_the_cli(monkeypatch: pytest.MonkeyPatch) -> None:
     """AC5 end to end: the planner test pins the tuple, this pins the row the operator reads."""
-    forge = _CliForge(live={leaf.upper() for leaf in LEAVES} | {NAN, *IST, "HAND_SET_TOKEN"})
+    forge = _CliForge(live={leaf.upper() for leaf in LEAVES} | {NAN, *IST, *GHCR, "HAND_SET_TOKEN"})
     result = _invoke(monkeypatch, _merged(**{leaf: VALUE for leaf in LEAVES}), forge, "--apply")
     assert result.exit_code == 0, result.output
     rows = [line for line in result.output.splitlines() if "HAND_SET_TOKEN" in line]
@@ -429,10 +460,10 @@ def test_an_undeclared_live_secret_is_printed_and_left_alone_by_the_cli(monkeypa
 
 
 def test_force_re_pushes_what_the_forge_already_has(monkeypatch: pytest.MonkeyPatch) -> None:
-    forge = _CliForge(live={leaf.upper() for leaf in LEAVES} | {NAN, *IST})
+    forge = _CliForge(live={leaf.upper() for leaf in LEAVES} | {NAN, *IST, *GHCR})
     result = _invoke(monkeypatch, _merged(**{leaf: VALUE for leaf in LEAVES}), forge, "--apply", "--force")
     assert result.exit_code == 0, result.output
-    assert len(forge.puts) == len(LEAVES) + 1 + len(IST)
+    assert len(forge.puts) == len(LEAVES) + 1 + len(IST) + len(GHCR)
 
 
 def test_a_missing_value_is_named_never_written_and_fails_the_run(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -442,7 +473,7 @@ def test_a_missing_value_is_named_never_written_and_fails_the_run(monkeypatch: p
     assert result.exit_code == 1
     assert "GDRIVE_OAUTH_REFRESH_TOKEN" in result.output
     assert "GDRIVE_OAUTH_REFRESH_TOKEN" not in {p[2] for p in forge.puts}
-    assert len(forge.puts) == 4 + len(IST), "every other valued secret still lands"
+    assert len(forge.puts) == 4 + len(IST) + len(GHCR), "every other valued secret still lands"
 
 
 def test_plan_only_also_fails_when_a_value_is_missing(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -461,7 +492,7 @@ def test_a_placeholder_is_not_a_value(monkeypatch: pytest.MonkeyPatch) -> None:
     forge = _CliForge()
     result = _invoke(monkeypatch, _merged(**{leaf: placeholder for leaf in LEAVES}), forge, "--apply")
     assert result.exit_code == 1
-    assert [p for p in forge.puts if p[:2] == ("personal", "resume")] == []
+    assert not [p for p in forge.puts if p[:2] == ("personal", "resume") and p[2] not in GHCR]
 
 
 # --- review of #1816 ------------------------------------------------------------
@@ -543,7 +574,7 @@ def test_a_repository_the_forge_cannot_list_is_reported_not_a_crash(monkeypatch:
     assert result.exit_code == 1
     # Counted by the row marker, not the reason: Rich wraps long rows at the test
     # runner's width, so a phrase can straddle a line break.
-    assert result.output.count("! personal/resume") == 4
+    assert result.output.count("! personal/resume") == len(LEAVES) + len(GHCR)
     assert "could not list" in result.output
     assert forge.puts == []
     assert not isinstance(result.exception, GiteaError)

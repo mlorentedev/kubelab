@@ -94,6 +94,36 @@ class TestMerge:
         assert decision.action == MERGE, decision.reason
 
 
+class TestUnstableExcusesOnlyTheAllowList:
+    """#2983: `unstable` means some context that is not required is failing. The judge
+    names which: only `add-to-project` (#2883, a rate limit) is excused. Drift is the
+    generator-equals-values check (ADR-027), and a merge with it red is not mechanical."""
+
+    def test_add_to_project_failing_still_merges(self, decl, products) -> None:
+        routes = mergeable(checks={"add-to-project": "failure"})
+        decision = run(MergeApi(routes, state="unstable"), decl, products)
+        assert decision.action == MERGE, decision.reason
+
+    @pytest.mark.parametrize("context", ["Drift / staging", "Drift / prod", "GitGuardian Security Checks"])
+    def test_any_other_red_context_refuses(self, decl, products, context: str) -> None:
+        routes = mergeable(checks={context: "failure"})
+        decision = run(MergeApi(routes, state="unstable"), decl, products)
+        assert decision.action == SKIP and context in decision.reason, decision.reason
+
+    def test_a_red_status_that_is_not_required_refuses_too(self, decl, products) -> None:
+        routes = mergeable(statuses={"pr-agent": "failure"})
+        decision = run(MergeApi(routes, state="unstable"), decl, products)
+        assert decision.action == SKIP and "pr-agent" in decision.reason, decision.reason
+
+    def test_a_context_still_running_refuses(self, decl, products) -> None:
+        """Fail closed: the workflow_run trigger judges again when it finishes."""
+        routes = mergeable(checks={"Drift / staging": "success"})
+        runs = routes[f"repos/{REPO}/commits/{HEAD}/check-runs?per_page=100"]["check_runs"]
+        runs[-1] = {**runs[-1], "status": "in_progress", "conclusion": None}
+        decision = run(MergeApi(routes), decl, products)
+        assert decision.action == SKIP and "Drift / staging" in decision.reason, decision.reason
+
+
 class TestEachConditionRefusesAlone:
     def test_not_mechanical(self, decl, products) -> None:
         routes = mergeable()
@@ -201,9 +231,9 @@ class TestSwitch:
         path.write_text("{not json", encoding="utf-8")
         assert merge_enabled(path) is False
 
-    def test_the_committed_switch_is_off(self) -> None:
-        """PR 4 flips it, with the test in tests/test_deploy_shape_widening.py."""
-        assert merge_enabled(REGISTRY_PATH) is False
+    def test_the_committed_switch_is_on(self) -> None:
+        """PR 4 flipped it, together with tests/test_deploy_shape_widening.py."""
+        assert merge_enabled(REGISTRY_PATH) is True
 
 
 class TestRequiredContexts:

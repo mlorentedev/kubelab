@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.3.1](https://github.com/mlorentedev/kubelab/compare/api-v1.3.0...api-v1.3.1) (2026-11-03)
+
+
+### Bug Fixes
+
+* **api:** move golang.org/x/crypto past the openpgp advisory ([#3041](https://github.com/mlorentedev/kubelab/issues/3041)) ([b4375b9](https://github.com/mlorentedev/kubelab/commit/b4375b95150d16e13fde5948d55afc77b99c7f42))
+
+## [1.3.0](https://github.com/mlorentedev/kubelab/compare/api-v1.2.0...api-v1.3.0) (2026-11-02)
+
+
+### Features
+
+* **api:** add the forge read model migration ([#2933](https://github.com/mlorentedev/kubelab/issues/2933)) ([f6d9fe8](https://github.com/mlorentedev/kubelab/commit/f6d9fe883a31c9353c9e83120eae6df4bf0c5f62))
+* **api:** connect to a Postgres tenant and report it in readiness ([#2932](https://github.com/mlorentedev/kubelab/issues/2932)) ([4917abe](https://github.com/mlorentedev/kubelab/commit/4917abe6fde6dad3cc02f47cb7fe8b302e8702b3))
+* **api:** deliver the forge credentials to the API ([#2927](https://github.com/mlorentedev/kubelab/issues/2927)) ([80171ff](https://github.com/mlorentedev/kubelab/commit/80171ff984f236fd22a38be2e2ba5329227ca992))
+* **api:** mint GitHub App installation tokens for the forge reader ([#2976](https://github.com/mlorentedev/kubelab/issues/2976)) ([4de3b1a](https://github.com/mlorentedev/kubelab/commit/4de3b1a163b7474feea93149092f007aa43b2247))
+* **api:** project stored forge webhooks into the read model ([#3004](https://github.com/mlorentedev/kubelab/issues/3004)) ([75346a3](https://github.com/mlorentedev/kubelab/commit/75346a3036777d2277160d7e41e75f818b7ac32a))
+* **api:** read Gitea issues and pull requests behind the forge-neutral reader ([#2658](https://github.com/mlorentedev/kubelab/issues/2658)) ([8655ac2](https://github.com/mlorentedev/kubelab/commit/8655ac2652adeb6c69f74e383bb33f63c722bd29))
+* **api:** receive signed forge webhooks into the event store ([#2997](https://github.com/mlorentedev/kubelab/issues/2997)) ([299c094](https://github.com/mlorentedev/kubelab/commit/299c09412c13143faa583287e448746c5cd2e4e7))
+* **api:** reconcile the forge read model under an hourly call ceiling ([#3001](https://github.com/mlorentedev/kubelab/issues/3001)) ([58cdce4](https://github.com/mlorentedev/kubelab/commit/58cdce4110f2b23dcfffe549d825f90db009eae8))
+
 ## [1.2.0](https://github.com/mlorentedev/kubelab/compare/api-v1.1.6...api-v1.2.0) (2026-10-22)
 
 

@@ -246,6 +246,18 @@ networking:
     hetzner_server_name: "mlorente-01"
     public_ip: "162.55.57.175"
     tailscale_ip: "100.64.0.2"
+    # VPN-ACL-015 (#2862): clients on networks that block or inspect the control
+    # plane reach Headscale through an SSH forward on this host
+    # (`ts-bridge connect --bootstrap-ssh <user>@<public_ip>`). This account may
+    # forward to apps.services.core.headscale.domain:<port> and nowhere else; its
+    # keys are in SOPS (apps.services.core.headscale.bootstrap_ssh_keys).
+    # `narrow_ssh_user: true` would also let the SSH user forward to the same single
+    # destination, for clients that have not moved yet. None remain (2026-11-02), so
+    # that user forwards nothing, like every other account.
+    ssh_bootstrap:
+      user: "hs-bootstrap"
+      port: 443
+      narrow_ssh_user: false
     ansible_groups: ["vps", "docker_hosts"]  # prod.yaml adds k3s_servers
     docker_network: "kubelab"  # Migrated from "proxy" by traefik_vps role (ADR-020 Phase 2b)
     # The node's display name, read by platform_manifest. The rest of this block
@@ -1932,7 +1944,7 @@ apps:
         # ADR028-004: config promotes as ConfigMaps; session store is disposable.
         state_promotion: dual
         location: always-on
-        image: authelia/authelia:4.39.15
+        image: authelia/authelia:4.39.28
         redis_image: redis:7-alpine
         enable_auth: false
         domain: auth.kubelab.live
@@ -1994,6 +2006,10 @@ apps:
           # when it is opaque, logs the token itself at warn. A signed (RFC 9068)
           # token is parsed instead. The role still comes from UserInfo's groups.
           access_token_signed_response_alg: RS256
+          # RFC 9068 requires `aud`. Grafana requests no audience, so it is granted
+          # implicitly, or the claim stays absent (#1845).
+          audience: [grafana]
+          requested_audience_mode: implicit
         # Prod only: Gitea is a singleton (ADR-061).
         - client_id: gitea
           client_name: Gitea

@@ -866,7 +866,7 @@ class CredentialsManager:
         import copy
 
         # Top-level keys that are shared across all environments
-        SHARED_TOP_KEYS = {"dockerhub", "hetzner", "cloudflare", "webhooks"}
+        SHARED_TOP_KEYS = {"dockerhub", "ghcr", "hetzner", "cloudflare", "webhooks"}
 
         # Nested subtrees that are shared (external service credentials)
         # Format: tuple of keys to traverse

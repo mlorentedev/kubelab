@@ -16,11 +16,14 @@ groups:
         condition: C
         for: 15m
         # `OK`, and only because `obs042-disk-watcher-silent` below watches the
-        # watcher (#1668). This rule groups `by (namespace, pvc)`, so a claim
-        # that is deleted takes its label set with it: under `Alerting` Grafana
-        # could not tell "the problem went away" from "the observer went away",
-        # and a deleted claim stayed FIRING for ~90 minutes (staging,
-        # 2026-09-05). Silence of the whole stream is the other rule's question.
+        # watcher (#1668). Silence of the whole stream is the other rule's question.
+        #
+        # `OK` did NOT shorten how long a deleted claim stays FIRING: ~90 minutes
+        # under `Alerting` (staging, 2026-09-05) and 89.5 minutes under `OK`
+        # (staging, 2026-11-03). Other claims keep the result non-empty, so
+        # noDataState never applies. The deleted claim's series goes missing
+        # instead: it leaves the `[30m]` window, then Grafana resolves it after
+        # its missing-series evaluations at the 15m interval (#1668).
         noDataState: OK
         execErrState: Alerting
         annotations:
@@ -169,16 +172,83 @@ groups:
                 type: __expr__
                 uid: __expr__
 
+      - uid: obs042-disk-root-silent
+        title: disk-watcher stopped reporting root disk usage
+        condition: C
+        for: 15m
+        # The liveness half of the root rule's split, the same shape as
+        # `obs042-disk-watcher-silent` above. It counts its own metric, not the
+        # PVC one: disk-watcher writes both lines from one run, and a run that
+        # fails between them leaves one present and the other gone.
+        noDataState: Alerting
+        execErrState: Alerting
+        annotations:
+          summary: >-
+            No root disk usage line from disk-watcher in 45 minutes, so no node's root filesystem is
+            being measured and the saturation rule cannot fire. Check `kubectl get cronjob
+            disk-watcher -n kubelab` first: suspended, failing, or a last run older than 30m is the
+            cause. If its runs are current and PVC lines still arrive, the root measurement itself
+            fails: read the CronJob's last pod log.
+          runbook_url: https://github.com/mlorentedev/kubelab/blob/master/docs/runbooks/runbook-notifications-and-alerting.md
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 2700
+              to: 0
+            datasourceUid: loki
+            model:
+              refId: A
+              datasource:
+                type: loki
+                uid: loki
+              editorMode: code
+              queryType: range
+              expr: >-
+                sum(count_over_time(
+                  {container="disk-watcher"}
+                    | json
+                    | metric=`disk_root_usage`
+                  [45m]
+                ))
+          - refId: B
+            relativeTimeRange:
+              from: 2700
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              reducer: last
+              expression: A
+              datasource:
+                type: __expr__
+                uid: __expr__
+          - refId: C
+            relativeTimeRange:
+              from: 2700
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    type: lt
+                    params: [1]
+              datasource:
+                type: __expr__
+                uid: __expr__
+
       - uid: obs015-disk-root-saturation
         title: Node root filesystem disk space critical (>90%)
         condition: C
         for: 15m
-        # `Alerting`: a metric that must never go quiet cannot treat silence as
-        # health. (The PVC rule above is `OK` since #1668 split its liveness out
-        # into `obs042-disk-watcher-silent`; this rule was not split, so it keeps
-        # both causes and says so. Splitting it is the operator's call.)
+        # `OK` since the split: silence pages through `obs042-disk-root-silent`
+        # above, so this rule has one cause and its summary names it.
         #
-        # This said `OK` until 2026-09-05, and the asymmetry was invisible because
+        # It said `Alerting` from 2026-09-05 until the split, and `OK` before
+        # that with no liveness rule at all. The defect then was invisible because
         # both rules read the SAME stream: if `disk-watcher` stops, the PVC rule
         # above goes red and this one goes green, from one cause. So the node
         # whose disk is unwatched is exactly the node that looks fine.
@@ -193,20 +263,15 @@ groups:
         # jetson) are off by design, so when a producer for them exists this rule
         # cannot be the one that watches them; silence is their normal state.
         # Today the only producer is the in-cluster CronJob on always-on nodes,
-        # which is why `Alerting` is correct NOW and why adding those nodes here
-        # later would be wrong.
-        noDataState: Alerting
+        # which is why its silence pages and why adding those nodes to the
+        # liveness rule later would be wrong.
+        noDataState: OK
         execErrState: Error
         annotations:
-          # TWO CAUSES, and the summary must not assert one of them. #1377 cost a
-          # day and a half on the rule above by naming only the interesting cause,
-          # so the responder chased a storage fault while the real fault was the
-          # watcher. The cheap check goes first, in the text, not in a runbook.
           summary: >-
-            Either a node's root filesystem crossed 90%, or the disk-watcher stopped reporting —
-            this rule alerts on no data too. Check `kubectl get cronjob disk-watcher -n kubelab`
-            first: if it is suspended, failing, or its last run is older than 30m, the fault is the
-            watcher and no node is being measured at all.
+            A node's root filesystem is above 90%; the node is in the alert's labels. A silent
+            disk-watcher does not fire this rule: that pages as "disk-watcher stopped reporting
+            root disk usage".
           runbook_url: https://github.com/mlorentedev/kubelab/blob/master/docs/runbooks/runbook-notifications-and-alerting.md
         data:
           - refId: A

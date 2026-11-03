@@ -48,9 +48,10 @@ created: "2026-10-21"
 - [ ] [AC1] Regression test: a source that is down renders unreachable with its last read time, never empty
 - [ ] [P] [AC4] Webhook receiver: reject an invalid HMAC, store the event before projecting it
   - [x] ✓ 2026-10-22 Signature verification for both forges, GitHub `sha256=` prefix and Gitea bare hex (#2636)
-  - [x] ✓ 2026-11-02 Receiver endpoint and the event store: `POST /api/forge/webhooks/:forge`, HMAC before any write, a redelivery is a no-op. The two webhook secrets are not delivered yet, so every delivery is refused until they are
+  - [x] ✓ 2026-11-02 Receiver endpoint and the event store: `POST /api/forge/webhooks/:forge`, HMAC before any write, a redelivery is a no-op. Until the webhook secrets reached prod, every delivery was refused
   - [x] ✓ 2026-11-02 Projection: every 10 seconds, the `forge_source` row first because of the foreign key, item and delivery mark in one transaction, and a late older delivery does not overwrite a newer read (PR-Agent finding on #2933)
-  - [ ] Deliver `FORGE_GITHUB_WEBHOOK_SECRET` and `FORGE_GITEA_WEBHOOK_SECRET` through SOPS and `SECRET_CATALOG`
+  - [x] ✓ 2026-11-03 Deliver `FORGE_GITHUB_WEBHOOK_SECRET` and `FORGE_GITEA_WEBHOOK_SECRET` through SOPS and `SECRET_CATALOG`, prod only: staging is VPN-only, so no forge reaches it
+  - [ ] Register the two webhooks as code
 - [x] ✓ 2026-11-02 [AC4] Test: the same delivery twice projects once (`TestSameDeliveryProjectsOnce`, against Postgres)
 - [x] ✓ 2026-11-02 [AC4] Periodic reconcile per source every 10 minutes under the hourly call ceiling, with a guard test that counts calls. `infra.forge.sources` declares GitHub only: which Gitea repository to read is the operator's call, and the Gitea reader is wired with it
 - [ ] [AC1] Queue endpoint with the inbox reason (author, requested reviewer, failing CI, waiting on me)

@@ -130,6 +130,17 @@ def _leaves(before: Any, after: Any, path: tuple[Any, ...] = ()) -> list[tuple[t
     return [] if before == after else [(path, before, after)]
 
 
+def _owner(docs: Any, path: tuple[Any, ...]) -> Any:
+    """The `name` of the mapping that holds the leaf at `path`, or None."""
+    node = docs
+    try:
+        for key in path[:-1]:
+            node = node[key]
+    except (KeyError, IndexError, TypeError):
+        return None
+    return node.get("name") if isinstance(node, dict) else None
+
+
 def classify_diff(
     changes: list[dict[str, Any]],
     before: Mapping[str, str],
@@ -151,11 +162,11 @@ def classify_diff(
     values_path, overlay_paths = decl.values_file, decl.overlay_files
     try:
         values = _leaves(yaml.safe_load(before[values_path]), yaml.safe_load(after[values_path]))
-        overlay: list[tuple[tuple[Any, ...], Any, Any]] = []
+        overlay: list[tuple[tuple[Any, ...], Any, Any, Any]] = []
         for overlay_path in overlay_paths:
             docs_before = list(yaml.safe_load_all(before[overlay_path]))
             docs_after = list(yaml.safe_load_all(after[overlay_path]))
-            overlay += _leaves(docs_before, docs_after)
+            overlay += [(p, b, a, _owner(docs_after, p)) for p, b, a in _leaves(docs_before, docs_after)]
     except (KeyError, yaml.YAMLError) as exc:
         return Shape(UNKNOWN, f"cannot read the declared files: {exc!r}")
 
@@ -172,7 +183,7 @@ def classify_diff(
 
     if not overlay:
         return Shape(NOT_MECHANICAL, f"{app}'s version moved and the overlay did not")
-    for leaf_path, image_before, image_after in overlay:
+    for leaf_path, image_before, image_after, owner in overlay:
         if not leaf_path or leaf_path[-1] != "image":
             return Shape(NOT_MECHANICAL, f"the overlay changed {leaf_path!r}, which is not an image")
         if not isinstance(image_before, str) or not isinstance(image_after, str):
@@ -181,6 +192,10 @@ def classify_diff(
         repo_after, _, tag_after = image_after.rpartition(":")
         if not repo or repo != repo_after or (tag_before, tag_after) != (old, new):
             return Shape(NOT_MECHANICAL, f"the overlay moved {image_before} to {image_after}, not {old} to {new}")
+        # Two apps can share a tag after a joint deploy, so old -> new alone does not say
+        # whose image moved; the container it belongs to does (#2983).
+        if owner != app:
+            return Shape(NOT_MECHANICAL, f"the overlay moved the image of container {owner!r}, not {app}'s")
 
     return Shape(MECHANICAL, f"{app} {old} -> {new}, overlay image only", app=app, old=old, new=new)
 
