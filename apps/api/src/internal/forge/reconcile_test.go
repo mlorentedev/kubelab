@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -138,5 +139,84 @@ func TestReconcileStaysUnderTheHourlyCeiling(t *testing.T) {
 	r.Once(context.Background())
 	if len(model.unreachable) != 1 {
 		t.Fatalf("past the ceiling the source must read as unreachable: %v", model.unreachable)
+	}
+}
+
+// flakyReader fails its first call, as the database did for a new pod, and
+// signals its first success.
+type flakyReader struct {
+	mu    sync.Mutex
+	calls int
+	read  chan struct{}
+	once  sync.Once
+}
+
+func (f *flakyReader) ListItems(_ context.Context, s forge.Source, _ time.Time) ([]forge.Item, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls++
+	if f.calls == 1 {
+		return nil, &forge.SourceError{Source: s, Err: errors.New("connection refused")}
+	}
+	f.once.Do(func() { close(f.read) })
+	return nil, nil
+}
+
+// countingReader counts its calls, and fails each one when err is set.
+type countingReader struct {
+	mu    sync.Mutex
+	calls int
+	err   error
+}
+
+func (c *countingReader) ListItems(_ context.Context, s forge.Source, _ time.Time) ([]forge.Item, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.calls++
+	if c.err != nil {
+		return nil, &forge.SourceError{Source: s, Err: c.err}
+	}
+	return nil, nil
+}
+
+func (c *countingReader) count() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.calls
+}
+
+func TestADownSourceIsRetriedAloneUntilTheNextCycle(t *testing.T) {
+	up := forge.Source{Forge: "github", Owner: "o", Repo: "up"}
+	down := forge.Source{Forge: "gitea", Owner: "o", Repo: "down"}
+	healthy := &countingReader{}
+	broken := &countingReader{err: errors.New("down")}
+	r := forge.Reconciler{
+		Readers: map[string]forge.Reader{"github": healthy, "gitea": broken},
+		Sources: []forge.Source{up, down},
+		Model:   newModel(),
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	r.Run(ctx, time.Hour, 5*time.Millisecond)
+	// About 40 retries fit in 200ms at 5ms each: fewer means no retry, far more means no pause.
+	if n := broken.count(); n < 3 || n > 60 {
+		t.Fatalf("the down source was read %d times in 200ms with a 5ms retry", n)
+	}
+	if n := healthy.count(); n != 1 {
+		t.Fatalf("the healthy source was read %d times while the other was retried", n)
+	}
+}
+
+func TestFailedCycleRetriesBeforeThePeriod(t *testing.T) {
+	src := forge.Source{Forge: "github", Owner: "o", Repo: "r"}
+	reader := &flakyReader{read: make(chan struct{})}
+	r := forge.Reconciler{Readers: map[string]forge.Reader{"github": reader}, Sources: []forge.Source{src}, Model: newModel()}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go r.Run(ctx, time.Hour, 10*time.Millisecond)
+	select {
+	case <-reader.read:
+	case <-time.After(2 * time.Second):
+		t.Fatal("a failed first read waited for the full period")
 	}
 }
