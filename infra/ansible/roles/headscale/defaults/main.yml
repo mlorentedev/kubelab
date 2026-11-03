@@ -15,6 +15,9 @@ restart_policy: "unless-stopped"
 tailscale_cidr: "100.64.0.0/10"
 
 # DNS config for Headscale's split DNS
+# With override_local_dns false these reach clients as fallback resolvers, not as
+# their resolvers (hscontrol/types/config.go, v0.28.0).
+headscale_dns_global: "{{ config.networking.public_resolvers }}"
 headscale_dns_split: {}
 headscale_dns_extra_records: []
 

@@ -42,9 +42,7 @@ def test_no_role_template_names_a_resolver_address() -> None:
         for a in {*PUBLIC, *TAILNET_FIRST}
         if a in _code(p)
     }
-    # A different pair, 1.1.1.1 and 1.0.0.1, so moving it changes what clients resolve
-    # through and restarts the coordination server: an operator's decision (#2945).
-    assert literals == {"headscale/templates/config.yaml.j2: 1.1.1.1"}
+    assert not literals
 
 
 def test_the_corefile_forwards_to_the_declared_resolvers() -> None:
@@ -103,3 +101,10 @@ def test_no_play_overrides_a_resolver_variable() -> None:
         if re.search(r"^\s+\w*(dns_servers|acme_dns_resolvers):", path.read_text(encoding="utf-8"), re.MULTILINE)
     ]
     assert not overrides
+
+
+def test_headscale_offers_the_declared_resolvers() -> None:
+    default = yaml.safe_load((ROLES / "headscale/defaults/main.yml").read_text(encoding="utf-8"))
+    assert default["headscale_dns_global"] == "{{ config.networking.public_resolvers }}"
+    template = (ROLES / "headscale/templates/config.yaml.j2").read_text(encoding="utf-8")
+    assert "{% for resolver in headscale_dns_global %}" in template

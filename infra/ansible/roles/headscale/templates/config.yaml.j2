@@ -40,8 +40,9 @@ dns:
   override_local_dns: false
   nameservers:
     global:
-      - 1.1.1.1
-      - 1.0.0.1
+{% for resolver in headscale_dns_global %}
+      - {{ resolver }}
+{% endfor %}
 {% if headscale_dns_split %}
     split:
 {% for domain, nameservers in headscale_dns_split.items() %}

@@ -95,6 +95,7 @@ def _rendered_split_dns() -> dict[str, Any]:
             "headscale_domain": headscale["domain"],
             "headscale_listen_port": headscale["default_port"],
             "tailscale_cidr": config["networking"]["tailscale_cidr"],
+            "headscale_dns_global": config["networking"]["public_resolvers"],
             # The "Build Headscale split DNS from staging zones" task in deploy-vps.yml.
             "headscale_dns_split": {zone: [rpi4] for zone in config["networking"]["staging_zones"]},
         }
