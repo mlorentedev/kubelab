@@ -35,8 +35,8 @@ from typing import Any
 # A field absent here is one the apply path never sends via `_params()`, so
 # flagging it as a difference would request an edit that cannot clear the flag.
 # Known members of that set, all observed live: `tags` (written by
-# add/delete_monitor_tag, compared by `tag_drift`), `active` (paused/resumed at
-# runtime), `id`, and `key` (ours; it travels in `description`).
+# add/delete_monitor_tag, compared by `tag_drift`), `active` (no edit carries it:
+# see `monitors_to_pause`), `id`, and `key` (ours; it travels in `description`).
 #
 # `notificationIDList` is deliberately NOT here despite the apply path writing
 # it on every create/edit (#912): its comparison is boolean presence against
@@ -225,6 +225,16 @@ def _comparable(monitor: dict[str, Any]) -> dict[str, Any]:
     if "description" in out:
         out["description"] = strip_key(out["description"])
     return out
+
+
+def monitors_to_pause(seed: list[dict[str, Any]], live: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The live monitors the seed declares paused and that are still running.
+
+    One way on purpose: a seed entry at `active: true` never resumes a monitor,
+    so a pause set in the UI during an incident survives the next apply.
+    """
+    declared = {entry.get("key") for entry in seed if entry.get("active") is False}
+    return [m for m in live if m.get("active") and extract_key(m.get("description")) in declared]
 
 
 def _normalize_notif_ids(value: Any) -> frozenset[str]:

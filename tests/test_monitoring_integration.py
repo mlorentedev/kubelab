@@ -405,7 +405,8 @@ class TestApplyAgainstARealInstance:
         """The export's whole contract, against what a real Kuma answers (#2291).
 
         Only the notification id differs by instance: `wipe` leaves the counter
-        running, so the expected file takes this instance's default id.
+        running, so the expected file takes this instance's default id. The seed's
+        `active: false` entry also proves apply pauses it: nothing else writes that.
         """
         _add_default_notification(kuma_url)
         muted = frozenset({"staging", "on-demand"})

@@ -20,6 +20,7 @@ from toolkit.features.monitoring_diff import (
     embed_key,
     extract_key,
     hydrate_push_tokens,
+    monitors_to_pause,
     strip_key,
     tag_drift,
     wants_notifications,
@@ -240,12 +241,22 @@ def _in_seed_order(monitors: list[dict[str, Any]], seed_path: Path) -> list[dict
     return sorted(monitors, key=lambda monitor: position.get(monitor.get("key"), len(position)))
 
 
+def _keys_the_export_would_drop(monitors: list[dict[str, Any]], seed_path: Path) -> list[str]:
+    """Seed keys with no live monitor: writing the export would un-declare them."""
+    if not seed_path.exists():
+        return []
+    seed = json.loads(seed_path.read_text(encoding="utf-8"))
+    exported = {monitor.get("key") for monitor in monitors}
+    return sorted(entry["key"] for entry in seed if entry.get("key") not in exported)
+
+
 def export_monitors(project_root: Path) -> Path:
     """Export all monitors and notifications to JSON files.
 
     The monitors file is written in the seed's shape, so a converged instance
-    leaves it byte-identical. A monitor the instance does not have leaves the
-    file, so converge with `make monitoring-apply` before exporting.
+    leaves it byte-identical. An instance missing a monitor the seed declares is
+    refused, and nothing is written: the seed is the source of truth, and an
+    entry dropped here would have a later `PRUNE=1` delete the monitor (#2291).
     """
     api, info = _connect(project_root)
 
@@ -260,6 +271,14 @@ def export_monitors(project_root: Path) -> Path:
         export_dir.mkdir(parents=True, exist_ok=True)
 
         monitors_path = export_dir / MONITORS_FILE
+        dropped = _keys_the_export_would_drop(clean_monitors, monitors_path)
+        if dropped:
+            logger.error(
+                f"Refusing to export: the instance has no monitor for {', '.join(dropped)}, which the seed "
+                "declares. Run 'make monitoring-apply' first, or remove them from the seed."
+            )
+            raise SystemExit(1)
+
         ordered = _in_seed_order(clean_monitors, monitors_path)
         monitors_path.write_text(_seed_json(ordered), encoding="utf-8")
         logger.success(f"Exported {len(clean_monitors)} monitors → {monitors_path}")
@@ -406,6 +425,8 @@ def apply_monitors(project_root: Path, *, check: bool = False, prune: bool = Fal
             logger.info(f"  edit   '{m.get('name')}' (id={m['id']})")
         for m in to_delete:
             logger.info(f"  delete '{m.get('name')}' (id={m['id']})")
+        for m in monitors_to_pause(seed_monitors, live):
+            logger.info(f"  pause  '{m.get('name')}' (id={m['id']})")
 
         if check:
             logger.info("CHECK: nothing written")
@@ -531,6 +552,15 @@ def apply_monitors(project_root: Path, *, check: bool = False, prune: bool = Fal
             except Exception as e:
                 failed.append(f"create '{m['name']}'")
                 logger.error(f"Failed to create '{m['name']}': {type(e).__name__}: {e!r}")
+
+        # After the writes, so a monitor created just now is paused too.
+        for m in monitors_to_pause(seed_monitors, api.get_monitors()):
+            try:
+                api.pause_monitor(m["id"])
+                logger.info(f"Paused '{m.get('name')}' (id={m['id']})")
+            except Exception as e:
+                failed.append(f"pause '{m.get('name')}'")
+                logger.error(f"Failed to pause '{m.get('name')}': {type(e).__name__}: {e!r}")
 
         summary = f"{created}/{len(to_create)} created, {edited}/{len(to_edit)} edited, {len(to_delete)} deleted"
         if failed:
