@@ -63,3 +63,21 @@ def test_an_ordinary_entry_absent_from_the_vault_is_still_missing() -> None:
     result = _audit_prod(_vault({}))
 
     assert SEGMENTS in result.missing
+
+
+BOOTSTRAP_KEYS = "apps.services.core.headscale.bootstrap_ssh_keys"
+
+
+def test_a_bootstrap_key_under_any_neutral_key_has_an_owner() -> None:
+    vault = _vault({"bootstrap_ssh_keys": {"client-9": "ssh-ed25519 AAAA c"}})
+
+    assert orphan_key_paths(vault) == []
+
+
+def test_the_catalog_never_names_an_enrolled_machine() -> None:
+    assert not [s.key_path for s in SECRET_CATALOG if s.key_path.startswith(f"{BOOTSTRAP_KEYS}.")]
+
+
+def test_no_enrolled_machine_is_a_decision_and_only_prod_holds_them() -> None:
+    assert _spec(BOOTSTRAP_KEYS).envs == ("prod",)
+    assert BOOTSTRAP_KEYS not in _audit_prod(_vault({})).missing

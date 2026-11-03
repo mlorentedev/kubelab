@@ -840,7 +840,7 @@ The tenant's name stays in the values, never in this repository. The template re
 
 ### 9.2 Declare or change a segment
 
-1. Edit the segment in `common.enc.yaml` (the entry is `apps.services.core.headscale.segments` in `SECRET_CATALOG`, `toolkit/features/secrets_manager.py`).
+1. Edit the segment in `prod.enc.yaml` (the entry is `apps.services.core.headscale.segments` in `SECRET_CATALOG`, `toolkit/features/secrets_manager.py`), e.g. `toolkit secrets set apps.services.core.headscale.segments.<neutral-key> --env prod --json '{...}'`.
 2. `make check-headscale-policy` validates the template on the pinned image, segment-free and with a synthetic segment. It never reads the segment in SOPS, so a malformed real one is caught by the role's refusals below, at deploy.
 3. `make deploy TARGET=vps ENV=prod`, which behaves as in 8.4.
 
@@ -856,3 +856,52 @@ How a tenant node is issued its key and tag, and what the tenant runs on its sid
 # Remove a node
 docker exec headscale headscale nodes delete -i <NODE_ID>
 ```
+
+---
+
+## Phase 10: Control-Plane Bootstrap over SSH
+
+> **Added 2026-11-02.** Ref: VPN-ACL-015 (#2862), `specs/VPN-ACL-015-ssh-bootstrap-path/`.
+
+Some networks sinkhole or TLS-inspect `vpn.kubelab.live` (measured on the office network: Palo Alto DNS Security answers `sinkhole.paloaltonetworks.com` even when the client uses a public resolver). Clients there reach Headscale with `ts-bridge connect --bootstrap-ssh hs-bootstrap@<networking.vps.public_ip>`: an `ssh -N -D` SOCKS forward through the VPS to the control plane.
+
+### 10.1 What is declared
+
+| Piece | Where | Owner |
+|---|---|---|
+| Account name, port, `narrow_ssh_user` | `networking.vps.ssh_bootstrap` in `common.yaml` | both roles read it |
+| `Match User hs-bootstrap`: `AllowTcpForwarding local`, `PermitOpen <headscale domain>:<port>`, no TTY, agent, X11, tunnel or stream-local forwarding, `ForceCommand /usr/sbin/nologin` | `ssh_hardening` template, handed to the VPS by `provision.yml` | `toolkit infra ansible run -p provision -e prod -l kubelab-vps -t ssh --require-fresh` (base `provision.yml`; `make provision NODE=vps` is K3s and never touches sshd) |
+| The account (`/usr/sbin/nologin`, no password) and its root-owned `authorized_keys`, one `restrict,port-forwarding,permitopen="<same destination>"` line per key | `headscale` role (`tasks/bootstrap_identity.yml`) | `make deploy TARGET=vps ENV=prod` |
+| The public keys, one per machine under a neutral key | `apps.services.core.headscale.bootstrap_ssh_keys.<client-N>` in `prod.enc.yaml` | operator |
+
+`narrow_ssh_user: true` also gives the VPS's SSH user (`networking.ssh_users.cloud`) a block with the same single destination, for clients that still connect as that user. Remove it once they have moved; that user then forwards nothing, like every other account.
+
+### 10.2 Enrol a machine
+
+1. On the machine, generate a key used for nothing else: `ssh-keygen -t ed25519 -f ~/.ssh/hs-bootstrap -C "hs-bootstrap <machine>"`. Never copy or escrow the private half: one key per machine is what makes revocation per machine.
+2. Store the public line: `toolkit secrets set apps.services.core.headscale.bootstrap_ssh_keys.client-<N> --env prod --stdin`. The deploy refuses a line carrying options or more than one key.
+3. `make deploy TARGET=vps ENV=prod`.
+4. Point the machine's OpenSSH at that key, since ts-bridge runs plain `ssh` and OpenSSH does not try a non-default filename on its own. On the operator's machines this entry belongs in the dotfiles generator of `~/.ssh/config`; elsewhere add it by hand:
+
+   ```text
+   Host hs-bootstrap
+       HostName <networking.vps.public_ip>
+       User hs-bootstrap
+       IdentityFile ~/.ssh/hs-bootstrap
+       IdentitiesOnly yes
+   ```
+
+5. From the machine: `ts-bridge connect --bootstrap-ssh hs-bootstrap` reaches `READY`. `ssh hs-bootstrap` gets no shell, and a forward to any other destination is refused (`administratively prohibited`).
+
+### 10.3 Revoke a machine
+
+Remove its entry (`toolkit secrets` or `sops`) and `make deploy TARGET=vps ENV=prod`. The role writes the whole `authorized_keys` from SOPS, so the line is gone after that deploy; an empty mapping revokes every machine. A refused attempt shows in the VPS's `auth.log`.
+
+The deploy stops new logins only: sshd does not re-check a session that already authenticated, so a running `ssh -N -D` tunnel keeps forwarding. End the account's sessions on the VPS, then confirm none is left:
+
+```bash
+sudo pkill -u hs-bootstrap sshd        # drops every bootstrap tunnel; machines still enrolled reconnect
+pgrep -u hs-bootstrap sshd || echo none
+```
+
+Then prove the revoked machine is refused on a new connection (`Permission denied (publickey)`).

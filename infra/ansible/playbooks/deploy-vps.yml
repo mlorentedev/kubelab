@@ -196,3 +196,12 @@
         headscale_policy_segments: >-
           {{ secrets.get('apps', {}).get('services', {}).get('core', {})
           .get('headscale', {}).get('segments', {}) | dict2items | map(attribute='value') | list }}
+        # VPN-ACL-015: the control-plane bootstrap account. Its name is public
+        # (common.yaml); its keys name enrolled machines, so they come from SOPS.
+        # The destination must equal the one ssh_hardening's block opens (provision.yml).
+        headscale_bootstrap_ssh_user: "{{ config.networking.vps.ssh_bootstrap.user | default('') }}"
+        headscale_bootstrap_permit_open: >-
+          {{ config.apps.services.core.headscale.domain }}:{{ config.networking.vps.ssh_bootstrap.port | default(443) }}
+        headscale_bootstrap_ssh_keys: >-
+          {{ secrets.get('apps', {}).get('services', {}).get('core', {})
+          .get('headscale', {}).get('bootstrap_ssh_keys', {}) }}
