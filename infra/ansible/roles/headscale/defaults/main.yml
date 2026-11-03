@@ -78,6 +78,15 @@ headscale_audit_sources: {}
 headscale_audit_user: "{{ ansible_user }}"
 headscale_audit_command: "/usr/local/bin/headscale-audit"
 
+# Control-plane bootstrap account (VPN-ACL-015). The name is
+# `networking.vps.ssh_bootstrap.user` in common.yaml; the keys (neutral name ->
+# public key line) come from SOPS. Empty user: nothing is created.
+headscale_bootstrap_ssh_user: ""
+headscale_bootstrap_ssh_keys: {}
+headscale_bootstrap_permit_open: ""
+# One public key and an optional comment, nothing else: options would widen it.
+headscale_bootstrap_key_pattern: '(ssh-ed25519|ecdsa-sha2-nistp(256|384|521)|sk-ssh-ed25519@openssh\.com) [A-Za-z0-9+/]+={0,3}( [ -~]*)?'
+
 # Retired TLS stack (OPS-047). The VPS still carried certbot and nginx from two
 # designs that Traefik replaced: the 2025 nginx + certbot setup for mlorente.dev,
 # and the 2026-02-26 setup in which Headscale terminated TLS itself from a certbot

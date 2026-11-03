@@ -9,8 +9,10 @@ A PR is merged only when all of these hold at one head sha:
 
     the verdict, recomputed here from master's code, is `mechanical`
     every context branch protection requires reports a passing state
-    GitHub reports the PR `clean`, or `unstable`: only a context that is not
-    required fails there, and the line above already checked every required one
+    GitHub reports the PR `clean`, or `unstable`
+    every other context passes too, except the ones `unstable` may excuse
+    (ALLOWED_UNSTABLE): `unstable` says something not required is failing, and
+    only a context named there may be that something
     the head is still that sha at the end of the judging
 
 A PR is closed only when it has no changed files: there is nothing to merge,
@@ -47,6 +49,11 @@ _CHECK_OK = frozenset({"success", "neutral", "skipped"})
 # limit (#1619). tests/test_deploy_shape_widening.py pins this set.
 MERGE_STATES_OK = frozenset({"clean", "unstable"})
 
+# The contexts that are not required and may still be failing on a PR the judge
+# merges. Option B on #1619 was approved for this one (#2883); anything else, Drift
+# above all (ADR-027), refuses (#2983). tests/test_deploy_shape_widening.py pins it.
+ALLOWED_UNSTABLE = frozenset({"add-to-project"})
+
 
 @dataclass(frozen=True)
 class Decision:
@@ -74,29 +81,33 @@ def required_contexts(common_yaml: Path, repo: str, branch: str) -> tuple[str, .
     return load_declared(config)[repo][branch].required_contexts
 
 
-def _failing_contexts(api: Api, repo: str, sha: str, required: Iterable[str]) -> list[str]:
-    """Each required context that is missing or not passing at `sha`, with its state.
+def _failing_contexts(api: Api, repo: str, sha: str, required: Iterable[str]) -> tuple[list[str], list[str]]:
+    """The contexts not passing at `sha`, with their state: (required, every other one not excused).
 
-    A context may be reported by a commit status, a check-run, or both. Every
-    reporter must pass, so a red one is never outvoted by a green one. Of several
-    runs of one check, the latest counts, as on the PR page.
+    A required context that nothing reports is missing. A context may be reported by
+    a commit status, a check-run, or both. Every reporter must pass, so a red one is
+    never outvoted by a green one. Of several runs of one check, the latest counts,
+    as on the PR page. A context still running is not passing.
     """
     statuses = api.json(f"repos/{repo}/commits/{sha}/status")["statuses"]
     runs = api.json(f"repos/{repo}/commits/{sha}/check-runs?per_page=100")["check_runs"]
     latest: dict[str, dict[str, Any]] = {}
     for r in sorted(runs, key=lambda r: r["id"]):
         latest[r["name"]] = r
-    failing = []
-    for context in required:
-        reported = [s["state"] for s in statuses if s["context"] == context]
+    required = tuple(required)
+
+    def not_passing(context: str) -> list[str]:
+        out = [f"{context}: {s['state']}" for s in statuses if s["context"] == context and s["state"] not in _STATUS_OK]
         run = latest.get(context)
-        if not reported and run is None:
-            failing.append(f"{context}: missing")
-            continue
-        failing += [f"{context}: {state}" for state in reported if state not in _STATUS_OK]
         if run is not None and (run["status"] != "completed" or run["conclusion"] not in _CHECK_OK):
-            failing.append(f"{context}: {run['conclusion'] or run['status']}")
-    return failing
+            out.append(f"{context}: {run['conclusion'] or run['status']}")
+        return out
+
+    reported = {s["context"] for s in statuses} | set(latest)
+    failing = [f"{c}: missing" for c in required if c not in reported]
+    failing += [f for c in required if c in reported for f in not_passing(c)]
+    others = sorted(reported - set(required) - ALLOWED_UNSTABLE)
+    return failing, [f for c in others for f in not_passing(c)]
 
 
 def judge(
@@ -121,9 +132,11 @@ def judge(
         shape = evaluate(number, repo, api, decl, products)
         if shape.verdict != MECHANICAL or shape.head_sha != head:
             return Decision(number, SKIP, f"{shape.verdict}: {shape.reason}", shape.head_sha)
-        failing = _failing_contexts(api, repo, head, required)
+        failing, unexcused = _failing_contexts(api, repo, head, required)
         if failing:
             return Decision(number, SKIP, f"required contexts not passing: {', '.join(failing)}", head)
+        if unexcused:
+            return Decision(number, SKIP, f"contexts not passing that nothing excuses: {', '.join(unexcused)}", head)
 
         final = api.json(f"repos/{repo}/pulls/{number}")
         if final["head"]["sha"] != head:
@@ -133,4 +146,4 @@ def judge(
             return Decision(number, SKIP, f"merge state is {state!r}, not one of {sorted(MERGE_STATES_OK)}", head)
     except Exception as exc:  # noqa: BLE001 — a PR that cannot be read is not merged
         return Decision(number, SKIP, f"cannot judge: {exc!r}")
-    return Decision(number, MERGE, f"{shape.reason}; every required context passing; {state}", head)
+    return Decision(number, MERGE, f"{shape.reason}; every context passing or excused; {state}", head)
