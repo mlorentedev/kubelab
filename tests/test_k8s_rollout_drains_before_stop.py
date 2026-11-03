@@ -25,8 +25,8 @@ REPO = Path(__file__).resolve().parent.parent
 # Traefik's Kubernetes provider throttles config reloads for 2 seconds, then needs
 # to load the new config.
 MIN_DRAIN_SECONDS = 5
-# Kubernetes' default terminationGracePeriodSeconds, which the sleep spends from.
-GRACE_SECONDS = 30
+# Kubernetes' default terminationGracePeriodSeconds, used when a pod spec declares none.
+DEFAULT_GRACE_SECONDS = 30
 
 
 def _render(overlay: str) -> list[dict[str, Any]]:
@@ -68,6 +68,7 @@ def test_every_routed_rolling_workload_drains_before_it_stops(overlay: str) -> N
     assert {w["metadata"]["name"] for w in workloads} >= {"api", "web"}, "the selection found too little"
     for workload in workloads:
         name = workload["metadata"]["name"]
-        container = workload["spec"]["template"]["spec"]["containers"][0]
-        sleep = container.get("lifecycle", {}).get("preStop", {}).get("sleep", {})
-        assert MIN_DRAIN_SECONDS <= sleep.get("seconds", 0) < GRACE_SECONDS, f"{name} stops without draining"
+        pod = workload["spec"]["template"]["spec"]
+        grace = pod.get("terminationGracePeriodSeconds", DEFAULT_GRACE_SECONDS)
+        sleep = pod["containers"][0].get("lifecycle", {}).get("preStop", {}).get("sleep", {})
+        assert MIN_DRAIN_SECONDS <= sleep.get("seconds", 0) < grace, f"{name} stops without draining within {grace}s"
