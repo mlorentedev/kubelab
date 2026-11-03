@@ -874,7 +874,7 @@ Some networks sinkhole or TLS-inspect `vpn.kubelab.live` (measured on the office
 | The account (`/usr/sbin/nologin`, no password) and its root-owned `authorized_keys`, one `restrict,port-forwarding,permitopen="<same destination>"` line per key | `headscale` role (`tasks/bootstrap_identity.yml`) | `make deploy TARGET=vps ENV=prod` |
 | The public keys, one per machine under a neutral key | `apps.services.core.headscale.bootstrap_ssh_keys.<client-N>` in `prod.enc.yaml` | operator |
 
-`narrow_ssh_user: true` also gives the VPS's SSH user (`networking.ssh_users.cloud`) a block with the same single destination, for clients that still connect as that user. Remove it once they have moved; that user then forwards nothing, like every other account.
+Setting `narrow_ssh_user: true` gives the VPS's SSH user (`networking.ssh_users.cloud`) a block with the same single destination, for clients that still connect as that user while they move. It is unset since 2026-11-02, when the last client moved, so that user forwards nothing, like every other account.
 
 ### 10.2 Enrol a machine
 
