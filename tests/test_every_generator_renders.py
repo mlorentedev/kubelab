@@ -55,7 +55,7 @@ def _placeholder_secrets(_manager: object, path: Path) -> dict[str, Any]:
 def repo_copy(tmp_path_factory: pytest.TempPathFactory) -> Path:
     """Generators write into their project root, so they run against a copy."""
     root = tmp_path_factory.mktemp("generate") / "repo"
-    shutil.copytree(REPO, root, ignore=shutil.ignore_patterns(".git", ".venv", "node_modules", "htmlcov"))
+    shutil.copytree(REPO, root, ignore=shutil.ignore_patterns(".git", ".worktrees", ".venv", "node_modules", "htmlcov"))
     return root
 
 
@@ -87,6 +87,8 @@ def test_traefik_resolvers_are_the_ssot_list(env: str, repo_copy: Path, monkeypa
     # The SSOT's own shape, checked apart from the template: a scalar or an entry
     # with a port would render malformed resolvers that this list comparison mirrors.
     assert isinstance(resolvers, list) and resolvers, resolvers
+    # IPv4 only: the template writes `<ip>:53`, which Traefik cannot parse for an
+    # IPv6 address (it needs `[<ip>]:53`).
     for ip in resolvers:
-        ipaddress.ip_address(ip)
+        ipaddress.IPv4Address(ip)
     assert found and all(f == [f"{ip}:53" for ip in resolvers] for f in found)
