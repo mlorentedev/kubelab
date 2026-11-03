@@ -41,6 +41,16 @@ spec:
         memory: {{ k3s_traefik_memory_request }}
       limits:
         memory: {{ k3s_traefik_memory_limit }}
+    # Liveness answers from the process that carries the traffic, so the chart's
+    # 2-second timeout and 30-second window restarted a saturated Traefik (OPS-063).
+    livenessProbe:
+      timeoutSeconds: {{ k3s_traefik_liveness_timeout_seconds }}
+      periodSeconds: {{ k3s_traefik_liveness_period_seconds }}
+      failureThreshold: {{ k3s_traefik_liveness_failure_threshold }}
+    # One replica: unready removes the only endpoint, so a single slow answer is not enough.
+    readinessProbe:
+      timeoutSeconds: {{ k3s_traefik_liveness_timeout_seconds }}
+      failureThreshold: 3
     persistence:
       enabled: true
       storageClass: local-path
