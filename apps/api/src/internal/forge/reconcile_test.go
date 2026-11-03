@@ -162,35 +162,47 @@ func (f *flakyReader) ListItems(_ context.Context, s forge.Source, _ time.Time) 
 	return nil, nil
 }
 
-// countingReader counts its calls and never fails.
+// countingReader counts its calls, and fails each one when err is set.
 type countingReader struct {
 	mu    sync.Mutex
 	calls int
+	err   error
 }
 
-func (c *countingReader) ListItems(context.Context, forge.Source, time.Time) ([]forge.Item, error) {
+func (c *countingReader) ListItems(_ context.Context, s forge.Source, _ time.Time) ([]forge.Item, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.calls++
+	if c.err != nil {
+		return nil, &forge.SourceError{Source: s, Err: c.err}
+	}
 	return nil, nil
+}
+
+func (c *countingReader) count() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.calls
 }
 
 func TestADownSourceIsRetriedAloneUntilTheNextCycle(t *testing.T) {
 	up := forge.Source{Forge: "github", Owner: "o", Repo: "up"}
 	down := forge.Source{Forge: "gitea", Owner: "o", Repo: "down"}
 	healthy := &countingReader{}
+	broken := &countingReader{err: errors.New("down")}
 	r := forge.Reconciler{
-		Readers: map[string]forge.Reader{"github": healthy, "gitea": &fakeReader{err: errors.New("down")}},
+		Readers: map[string]forge.Reader{"github": healthy, "gitea": broken},
 		Sources: []forge.Source{up, down},
 		Model:   newModel(),
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 	r.Run(ctx, time.Hour, 5*time.Millisecond)
-	healthy.mu.Lock()
-	defer healthy.mu.Unlock()
-	if healthy.calls != 1 {
-		t.Fatalf("the healthy source was read %d times while the other was retried", healthy.calls)
+	if n := broken.count(); n < 3 {
+		t.Fatalf("the down source was read %d times in 200ms with a 5ms retry", n)
+	}
+	if n := healthy.count(); n != 1 {
+		t.Fatalf("the healthy source was read %d times while the other was retried", n)
 	}
 }
 
