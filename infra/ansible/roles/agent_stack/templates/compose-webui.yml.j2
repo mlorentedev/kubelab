@@ -66,6 +66,10 @@ services:
     restart: unless-stopped
     env_file:
       - {{ agent_stack_dir }}/searxng.env
+    # The same key as Open WebUI's SEARXNG_QUERY_URL. The image's server is
+    # granian, which reads GRANIAN_PORT (SEARXNG_PORT is an entrypoint alias).
+    environment:
+      GRANIAN_PORT: "{{ agent_stack_webui.web_search.searxng.container_port }}"
     volumes:
       - {{ agent_stack_dir }}/searxng-settings.yml:/etc/searxng/settings.yml:ro
     cap_drop:

@@ -1,0 +1,70 @@
+---
+# =============================================================================
+# What Open WebUI runs, measured after the stack is up (#2970): its search
+# engine answers, and the instance serves the settings its env declares.
+# =============================================================================
+
+# Inside Open WebUI's container: SearXNG publishes no port. A dead engine would
+# otherwise provision as success and fail silently in every chat.
+- name: Probe SearXNG from Open WebUI's container
+  ansible.builtin.command:
+    argv: [docker, exec, -i, open-webui, python3, "-"]
+    stdin: "{{ lookup('ansible.builtin.file', 'searxng-probe.py') }}"
+  register: _agent_stack_search_probe
+  changed_when: false
+  until: >-
+    ansible_check_mode
+    or (_agent_stack_search_probe.rc == 0
+        and (_agent_stack_search_probe.stdout | from_json).status == 200
+        and (_agent_stack_search_probe.stdout | from_json).results > 0)
+  retries: 12
+  delay: 5
+  check_mode: false
+  ignore_errors: "{{ ansible_check_mode }}"
+
+# The env is what the role writes; this is what the instance serves. The export
+# holds every secret Open WebUI has, so it is read under no_log and only the
+# checked keys are kept.
+- name: Sign in as the break-glass admin to read the effective config
+  ansible.builtin.uri:
+    url: "{{ agent_stack_webui.scheme }}://{{ tailscale_ip }}:{{ agent_stack_webui.default_port }}/api/v1/auths/signin"
+    method: POST
+    body_format: json
+    body:
+      email: "{{ agent_stack_webui_admin_email }}"
+      password: "{{ agent_stack_webui_admin_password }}"
+    timeout: 10
+  register: _agent_stack_config_session
+  no_log: true
+  when: not ansible_check_mode
+
+- name: Read Open WebUI's effective config
+  ansible.builtin.uri:
+    url: "{{ agent_stack_webui.scheme }}://{{ tailscale_ip }}:{{ agent_stack_webui.default_port }}/api/v1/configs/export"
+    headers:
+      Authorization: "Bearer {{ _agent_stack_config_session.json.token }}"
+    timeout: 30
+  register: _agent_stack_config_export
+  no_log: true
+  when: not ansible_check_mode
+
+- name: Keep only the checked keys
+  ansible.builtin.set_fact:
+    _agent_stack_effective:
+      review: "{{ _agent_stack_config_export.json['memories.background_review.enable'] | default('absent') }}"
+      interval: "{{ _agent_stack_config_export.json['memories.review_interval_turns'] | default('absent') }}"
+      engine: "{{ _agent_stack_config_export.json['code_interpreter.engine'] | default('absent') }}"
+  when: not ansible_check_mode
+
+- name: Verify the instance serves the memory and code settings its env declares
+  ansible.builtin.assert:
+    that:
+      - (_agent_stack_effective.review | string | lower) == 'true'
+      - (_agent_stack_effective.interval | string) == (agent_stack_webui.memory.review_interval_turns | string)
+      - _agent_stack_effective.engine == 'pyodide'
+    fail_msg: >-
+      Open WebUI serves memories.background_review.enable={{ _agent_stack_effective.review }},
+      memories.review_interval_turns={{ _agent_stack_effective.interval }},
+      code_interpreter.engine={{ _agent_stack_effective.engine }}
+    success_msg: "Open WebUI serves the declared memory and code settings: {{ _agent_stack_effective }}"
+  when: not ansible_check_mode

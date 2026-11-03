@@ -83,3 +83,40 @@ def test_open_webui_searches_through_searxng() -> None:
 def test_every_chat_starts_with_web_search_on() -> None:
     raw = _env()["DEFAULT_MODEL_METADATA"]
     assert "web_search" in json.loads(raw[1:-1])["defaultFeatureIds"]
+
+
+def test_searxng_listens_on_the_port_open_webui_asks() -> None:
+    """One key, both sides (#2970). The pinned image's server is granian, which
+    reads GRANIAN_PORT (`container/Dockerfile`; SEARXNG_PORT is only an alias the
+    entrypoint copies into it)."""
+    port = _search()["searxng"]["container_port"]
+    assert _searxng_service()["environment"]["GRANIAN_PORT"] == str(port)
+    assert _env()["SEARXNG_QUERY_URL"].startswith(f"http://searxng:{port}/")
+
+
+def _probe_tasks() -> list[dict]:
+    """Scripts run inside Open WebUI's container, the script on stdin."""
+    commands = [(t, t.get("ansible.builtin.command")) for t in _tasks()]
+    return [
+        t
+        for t, cmd in commands
+        if isinstance(cmd, dict) and "open-webui" in cmd.get("argv", []) and "lookup" in str(cmd.get("stdin", ""))
+    ]
+
+
+def test_every_service_with_no_port_is_probed_from_open_webui() -> None:
+    """A service nobody can reach from outside is only checked from where its one
+    client stands; without a probe, a dead one provisions as success (#2970)."""
+    services = yaml.safe_load(_render("compose-webui.yml.j2"))["services"]
+    unpublished = {name for name, svc in services.items() if "ports" not in svc}
+    assert unpublished >= {"searxng"}, unpublished
+    probed = " ".join(str(t["ansible.builtin.command"]["stdin"]) for t in _probe_tasks())
+    for name in unpublished:
+        assert f"{name}-probe.py" in probed, f"nothing probes {name}"
+
+
+def test_the_search_probe_retries_and_needs_results() -> None:
+    [task] = [t for t in _probe_tasks() if "searxng-probe.py" in str(t["ansible.builtin.command"]["stdin"])]
+    assert task["retries"] >= 6
+    assert "results" in task["until"]
+    assert task["changed_when"] is False
