@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import json
 
+import yaml
+
 from tests.test_agent_stack_role import _common, _env
 
 
@@ -68,3 +70,11 @@ def test_the_running_instance_is_read_not_only_its_env() -> None:
         "code_interpreter.engine",
     ):
         assert key in checks, f"nothing asserts {key}"
+
+
+def test_the_sign_in_never_logs_the_break_glass_password() -> None:
+    from tests.test_agent_stack_role import ROLE
+
+    tasks = yaml.safe_load((ROLE / "tasks/webui_checks.yml").read_text(encoding="utf-8"))
+    [signin] = [t for t in tasks if "/api/v1/auths/signin" in str(t.get("ansible.builtin.uri", {}).get("url", ""))]
+    assert signin.get("no_log") is True

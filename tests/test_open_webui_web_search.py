@@ -120,3 +120,14 @@ def test_the_search_probe_retries_and_needs_results() -> None:
     assert task["retries"] >= 6
     assert "results" in task["until"]
     assert task["changed_when"] is False
+
+
+def test_the_checks_run_whenever_open_webui_does() -> None:
+    """The tests above find the probe in any task file; this holds the role to
+    actually running it (#2970)."""
+    from tests.test_agent_stack_role import ROLE
+
+    main = yaml.safe_load((ROLE / "tasks/main.yml").read_text(encoding="utf-8"))
+    [step] = [t for t in main if t.get("ansible.builtin.import_tasks") == "webui_checks.yml"]
+    assert step["when"] == "agent_stack_webui_configured | bool"
+    assert "agent_stack" in step["tags"]
