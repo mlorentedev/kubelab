@@ -58,6 +58,10 @@ spec:
             timeoutSeconds: 3
             failureThreshold: 3
 {% endif %}
+          lifecycle:
+            preStop:
+              sleep:
+                seconds: 5
           resources:
             limits:
               memory: {{ app.resources.memory_limit }}
