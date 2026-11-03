@@ -7,7 +7,7 @@ whose output it diffs, because CI has no SOPS key. The class is a key removed fr
 the values while a template still reads it, and it can recur in any generator.
 
 So this runs the same list the command runs (`services_for`, `generator_for`), in
-a copy of the repo, with every catalogued secret replaced by a placeholder. The
+a copy of the repo, with each env's committed secret keys holding placeholders. The
 renderer is strict, so a template that reads an undeclared name fails here.
 """
 
@@ -18,24 +18,36 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import yaml
 
 from toolkit.cli.config import generator_for, services_for
+from toolkit.config.constants import PATH_STRUCTURES
 from toolkit.features import configuration
-from toolkit.features.secrets_manager import SECRET_CATALOG
 
 REPO = Path(__file__).resolve().parents[1]
 ENVS = ("dev", "staging", "prod")
 
 
-def _placeholder_secrets(_manager: object, _path: Path) -> dict[str, Any]:
-    tree: dict[str, Any] = {}
-    for spec in SECRET_CATALOG:
-        *parents, leaf = spec.key_path.split(".")
-        node = tree
-        for part in parents:
-            node = node.setdefault(part, {})
-        node[leaf] = "placeholder"
-    return tree
+def _placeholders(node: Any) -> Any:
+    if isinstance(node, dict):
+        return {k: _placeholders(v) for k, v in node.items()}
+    if isinstance(node, list):
+        return [_placeholders(v) for v in node]
+    return "placeholder"
+
+
+def _placeholder_secrets(_manager: object, path: Path) -> dict[str, Any]:
+    """The committed file's own keys, each value a placeholder.
+
+    SOPS encrypts values and leaves key names in plaintext, so this reads which
+    secrets each env really declares without a key: a template reading a secret
+    that env's vault lacks fails here as it would on a machine with the age key.
+    """
+    if not path.exists():
+        return {}
+    tree = yaml.safe_load(path.read_text()) or {}
+    tree.pop("sops", None)
+    return _placeholders(tree)
 
 
 @pytest.fixture(scope="module")
@@ -54,3 +66,19 @@ def test_the_generator_renders(env: str, service: str, repo_copy: Path, monkeypa
     generator.project_root = repo_copy
     result = generator.generate(env)
     assert result.get("success"), f"{service} for {env}: {result.get('error')}"
+
+
+@pytest.mark.parametrize("env", ["staging", "prod"])
+def test_traefik_resolvers_are_the_ssot_list(env: str, repo_copy: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A port inside an entry, or a scalar Jinja iterates by character, still renders."""
+    monkeypatch.setattr(configuration.ConfigurationManager, "_decrypt_sops", _placeholder_secrets)
+    generator = generator_for("traefik")
+    assert generator is not None
+    generator.project_root = repo_copy
+    assert generator.generate(env).get("success")
+    resolvers = configuration.ConfigurationManager(env, project_root=repo_copy).get_merged_config()["networking"][
+        "public_resolvers"
+    ]
+    rendered = yaml.safe_load((repo_copy / PATH_STRUCTURES.TRAEFIK_CONFIG_OUTPUT_DIR / env / "traefik.yml").read_text())
+    found = [r["acme"]["dnsChallenge"]["resolvers"] for r in rendered["certificatesResolvers"].values()]
+    assert found and all(f == [f"{ip}:53" for ip in resolvers] for f in found)
