@@ -485,4 +485,7 @@ PROVIDER_CHECKS = {
     "apps.services.ai.hermes_kubelab.github_token": github_pat_expiry,
     # Argo CD's commit-status token (GITOPS-003): fine-grained, Commit statuses on kubelab only.
     "argocd.github_status_token": github_pat_expiry,
+    # The GHCR split (#2884): classic tokens, minted to expire on a date.
+    "ghcr.pull_token": github_pat_expiry,
+    "apps.services.core.gitea.actions_secrets.personal.resume.ghcr_token": github_pat_expiry,
 }

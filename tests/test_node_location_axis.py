@@ -70,7 +70,7 @@ ADR_028_TIERS = {
     "rpi3": "always-on",
     "ace1": "on-demand",
     "ace2": "on-demand",
-    "rpi4": "on-demand",
+    "rpi4": "always-on",  # ADR-028 amendment 2026-10-25 (ADR-075): the lab edge
     "beelink": "on-demand",
     "jetson": "on-demand",
 }
