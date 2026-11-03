@@ -5,7 +5,9 @@ with Traefik at 3.6 cores, the chart default (2-second timeout, three failures 1
 seconds apart) restarted it twice in a minute, dropping every open connection at
 the moment of saturation. Liveness exists for a process that is stuck, which a
 saturated one is not, so it now waits longer before deciding. A stuck Traefik is
-still restarted, within the bound asserted below.
+still restarted, within the bound asserted below. Readiness had the same default
+timeout and a threshold of 1, so one slow answer took the only replica out of the
+Service.
 """
 
 from __future__ import annotations
@@ -37,3 +39,10 @@ def test_liveness_waits_out_saturation_and_still_catches_a_stuck_process() -> No
     window = probe["periodSeconds"] * probe["failureThreshold"]
     assert probe["timeoutSeconds"] >= MIN_TIMEOUT_SECONDS
     assert MIN_SECONDS_TO_RESTART <= window <= MAX_SECONDS_TO_RESTART
+
+
+def test_readiness_does_not_drop_the_only_replica_for_one_slow_answer() -> None:
+    """One replica: unready removes the only endpoint, an outage, for one probe over 2 s by default."""
+    probe = _values()["readinessProbe"]
+    assert probe["timeoutSeconds"] >= MIN_TIMEOUT_SECONDS
+    assert probe["failureThreshold"] >= 3
