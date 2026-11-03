@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import json
 
+import yaml
+
 from tests.test_agent_stack_role import _common, _env
 
 
@@ -44,3 +46,35 @@ def test_memories_are_saved_without_being_asked() -> None:
     # More often than v0.12.5's default of 10, the reason the key is set at all;
     # 0 would never review.
     assert 1 <= _memory()["review_interval_turns"] < 10
+
+
+def _effective_config_tasks() -> list[dict]:
+    from tests.test_agent_stack_role import _tasks
+
+    return [t for t in _tasks() if "/api/v1/configs/export" in str(t.get("ansible.builtin.uri", {}).get("url", ""))]
+
+
+def test_the_running_instance_is_read_not_only_its_env() -> None:
+    """The tests above read the rendered env; this reads what the instance serves
+    after a provision (#2970). The export holds every secret the instance has, so
+    the read is no_log and only the keys checked are kept."""
+    from tests.test_agent_stack_role import _tasks
+
+    [read] = _effective_config_tasks()
+    assert read.get("no_log") is True
+    assert "Bearer" in str(read["ansible.builtin.uri"]["headers"]["Authorization"])
+    checks = " ".join(str(t.get("ansible.builtin.assert", {}).get("that", "")) for t in _tasks())
+    for key in (
+        "memories.background_review.enable",
+        "memories.review_interval_turns",
+        "code_interpreter.engine",
+    ):
+        assert key in checks, f"nothing asserts {key}"
+
+
+def test_the_sign_in_never_logs_the_break_glass_password() -> None:
+    from tests.test_agent_stack_role import ROLE
+
+    tasks = yaml.safe_load((ROLE / "tasks/webui_checks.yml").read_text(encoding="utf-8"))
+    [signin] = [t for t in tasks if "/api/v1/auths/signin" in str(t.get("ansible.builtin.uri", {}).get("url", ""))]
+    assert signin.get("no_log") is True

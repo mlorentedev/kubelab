@@ -17,6 +17,6 @@ tags: [kubelab, kubernetes, traefik, load-test]
 
 **Solution**: `k3s_traefik_memory_limit: 1536Mi` in the `k3s_server` role, measured by runs `f3f1ed1d`, `dbfa5158` and `4da6811b` under `docs/load-test/`. The liveness restart is #3018.
 
-**Rule**: Size an edge's memory from the connections open at saturation, measured, never from healthy steps. A run that stops at its first degraded step has not seen the peak. And read both `lastState.terminated` and the pod events before calling a restart memory: exit 0 says only that the process stopped cleanly, and `Killing` with `failed liveness probe` says who stopped it. Together they rule memory out.
+**Rule**: Size an edge's memory from the connections open at saturation, measured, never from healthy steps. A run that stops at its first degraded step has not seen the peak. And read both `lastState.terminated` and the pod events before calling a restart memory: exit 0 says only that the process stopped cleanly, and `Killing` with `failed liveness probe` says who stopped it. Together they rule out an OOM kill, not memory pressure.
 
 **Tags**: `#traefik` `#load-test` `#issue-2975` `#issue-3018`

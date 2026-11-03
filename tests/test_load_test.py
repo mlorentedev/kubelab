@@ -334,6 +334,20 @@ class TestRefusesARunThatMeasuresNothing:
     def test_the_smallest_real_run_passes(self) -> None:
         lt.refuse_empty_run(1, 1, lt.STEPS[0])
 
+    def test_a_floor_above_the_ceiling_selects_nothing_and_is_refused(self) -> None:
+        with pytest.raises(lt.LoadTestRefused):
+            lt.refuse_empty_run(1, 60, 1400, min_rate=1600)
+
+
+class TestStartsAtAFloor:
+    """A rerun at the knee: a ramp stops at its first degraded step, so a floor reaches past it."""
+
+    def test_no_floor_keeps_every_step_up_to_the_ceiling(self) -> None:
+        assert lt.select_steps(0, 400) == (50, 100, 200, 400)
+
+    def test_a_floor_drops_the_steps_below_it(self) -> None:
+        assert lt.select_steps(1400, 1600) == (1400, 1600)
+
 
 class TestEdgeDownWhileWaiting:
     def test_no_running_pod_is_not_ready_rather_than_a_refusal(self) -> None:

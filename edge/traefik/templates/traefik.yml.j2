@@ -66,6 +66,7 @@ certificatesResolvers:
         provider: {{ DNS_PROVIDER }}
         delayBeforeCheck: "{{ DNS_DELAY_BEFORE_CHECK }}"
         resolvers:
-          - {{ DNS_RESOLVER_1 }}
-          - {{ DNS_RESOLVER_2 }}
+{% for resolver in NETWORKING_PUBLIC_RESOLVERS %}
+          - "{{ resolver }}:53"
+{% endfor %}
 {% endif %}

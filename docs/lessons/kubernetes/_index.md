@@ -5,6 +5,7 @@ Newest first. Back to [all categories](../_index.md).
 | # | Lesson | Date |
 |---|---|---|
 | 703 | [A rolling pod must outlast its endpoint, whichever app showed the loss](lesson-703-a-rolling-pod-must-outlast-its-endpoint.md) | 2026-11-03 |
+| 701 | [A liveness probe on the only replica must outlast saturation](lesson-701-a-liveness-probe-on-the-only-replica-must-outlast-saturation.md) | 2026-11-03 |
 | 698 | [An ingress memory limit is a connection limit](lesson-698-an-ingress-memory-limit-is-a-connection-limit.md) | 2026-11-02 |
 | 696 | [A load test's limit can be one nobody declared, and the crash loop it starts reads as low capacity](lesson-696-a-load-tests-limit-can-be-a-limit-nobody-declared.md) | 2026-11-02 |
 | 494 | [An app that discovers its IdP once must start after it, and only the discovery document proves the IdP is up](lesson-494-an-app-that-discovers-its-idp-once-must-start-after-it.md) | 2026-09-30 |
