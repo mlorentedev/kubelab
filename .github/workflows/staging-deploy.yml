@@ -100,6 +100,12 @@ jobs:
       always() &&
       needs.detect-changes.result == 'success' &&
       needs.build-api.result == 'success'
+    # One writer of deploy/staging-api at a time. Not cancelled: a queued run
+    # replaced by a newer one loses nothing, since only a push that changed
+    # apps/api reaches this job and the newer sha contains the older.
+    concurrency:
+      group: staging-deploy-api
+      cancel-in-progress: false
     runs-on: ${{ fromJSON(vars.RUNNER_DOCKER || '"ubuntu-latest"') }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
@@ -120,21 +126,56 @@ jobs:
           if [ "$API_BUILT" = "success" ]; then
             poetry run toolkit deployment promote --env staging --app api --version "$SHA"
           fi
+      # The same step as product-image-receiver.yml's `open-pr`, for the same
+      # reasons, and run by the same tests (tests/test_receiver_pr_step.py).
       - name: Open staging deploy PR
+        id: open-pr
         env:
           GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
-          SHA: ${{ needs.detect-changes.outputs.sha }}
+          APP: api
+          TAG: ${{ needs.detect-changes.outputs.sha }}
         run: |
           git config user.name "kubelab-bot"
           git config user.email "bot@kubelab.live"
           git add infra/config/values/staging.yaml infra/k8s/overlays/staging/
           if git diff --staged --quiet; then
-            echo "No staging overlay changes to promote"; exit 0
+            echo "No staging changes to promote (${APP} already at ${TAG})"; exit 0
           fi
-          BRANCH="deploy/staging-${SHA}"
-          git checkout -b "$BRANCH"
-          git commit -m "chore(staging): deploy ${SHA}"
-          git push -u origin "$BRANCH" --force-with-lease
-          gh pr create --base master --head "$BRANCH" \
-            --title "chore(staging): deploy ${SHA}" \
-            --body "Automated staging promotion to \`${SHA}\` (ADR-046)."
+
+          # ONE STABLE BRANCH, not one per sha (#1681). Keyed on the sha, every
+          # api push minted a PR and the older ones were closed as superseded by
+          # hand (five on 2026-11-02 alone). One long-lived offer, force-updated
+          # to the newest sha, keeps the gate (ADR-037): merging moves staging,
+          # leaving it open keeps staging where it is.
+          BRANCH="deploy/staging-${APP}"
+          TITLE="chore(staging): deploy ${APP} ${TAG}"
+          BODY="Staging promotion of \`${APP}\` to \`${TAG}\` (ADR-046).
+
+          This pull request is long-lived: every api push force-updates it to the
+          newest \`sha-*\` and rewrites this title. Merging it moves staging;
+          leaving it open keeps staging where it is (ADR-037)."
+
+          # Asked BEFORE the push, so an API failure leaves the remote untouched
+          # and the title never names a sha the branch no longer carries.
+          PR=$(gh api \
+            "repos/${GITHUB_REPOSITORY}/pulls?state=open&head=${GITHUB_REPOSITORY%%/*}:${BRANCH}" \
+            --jq '.[0].number // ""')
+
+          git checkout -B "$BRANCH"
+          git commit -m "$TITLE"
+
+          # `--force`, not `--force-with-lease`: checkout fetched only master, so
+          # a lease has nothing to compare against (lesson-430). The job's
+          # concurrency group makes this the branch's only writer.
+          git push origin "$BRANCH" --force
+
+          # `state=open` makes a closed PR read as absent, so the next push
+          # offers again: closing means "not now", never "never again".
+          if [ -n "$PR" ]; then
+            gh api -X PATCH "repos/${GITHUB_REPOSITORY}/pulls/${PR}" \
+              -f title="$TITLE" -f body="$BODY" --jq '.html_url'
+          else
+            gh api -X POST "repos/${GITHUB_REPOSITORY}/pulls" \
+              -f title="$TITLE" -f head="$BRANCH" -f base="master" \
+              -f body="$BODY" --jq '.html_url'
+          fi
