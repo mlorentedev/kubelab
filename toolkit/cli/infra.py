@@ -2256,6 +2256,21 @@ def tf_state_bootstrap(
         raise typer.Exit(1)
 
 
+@terraform_app.command("r2-documents-token")
+def tf_r2_documents_token(
+    rotate: Annotated[bool, typer.Option("--rotate", help="Replace the token and revoke the old one")] = False,
+) -> None:
+    """Mint the product documents bucket's token into prod SOPS (STOR-002). Idempotent.
+
+    Object Read & Write on that bucket only, verified by consequence before it
+    is stored and never printed. Run after `make tf-r2-apply` has created the bucket.
+    """
+    from toolkit.features import r2_documents_token
+
+    if not r2_documents_token.mint_documents_token(rotate=rotate):
+        raise typer.Exit(1)
+
+
 @terraform_app.command("killswitch-prove")
 def tf_killswitch_prove() -> None:
     """Prove the billing kill switch fires, end to end (AC2b).

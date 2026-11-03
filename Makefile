@@ -1511,6 +1511,13 @@ tf-r2-plan:
 tf-r2-apply:
 	@$(_TF) r2 apply $(_TF_R2_SCOPE)
 
+# STOR-002: the product documents bucket's token, Object Read & Write on that
+# bucket only, minted straight into prod SOPS and never printed. Needs the
+# bucket, so run it after `make tf-r2-apply`. ROTATE=1 replaces it.
+.PHONY: r2-documents-token
+r2-documents-token:
+	@$(TOOLKIT) infra terraform r2-documents-token $(if $(filter 1,$(ROTATE)),--rotate)
+
 # The only check that can tell an APPLIED firewall from a DECLARED one. The
 # token goes into pytest's environment and nowhere else -- never printed, never
 # an argument, so it stays out of shell history and out of transcripts.

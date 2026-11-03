@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.1](https://github.com/mlorentedev/kubelab/compare/api-v1.3.0...api-v1.3.1) (2026-11-03)
+
+
+### Bug Fixes
+
+* **api:** move golang.org/x/crypto past the openpgp advisory ([#3041](https://github.com/mlorentedev/kubelab/issues/3041)) ([b4375b9](https://github.com/mlorentedev/kubelab/commit/b4375b95150d16e13fde5948d55afc77b99c7f42))
+
 ## [1.3.0](https://github.com/mlorentedev/kubelab/compare/api-v1.2.0...api-v1.3.0) (2026-11-02)
 
 

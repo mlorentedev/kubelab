@@ -16,6 +16,7 @@ can change. What this file pins, and why each matters:
 
 from __future__ import annotations
 
+import math
 import pathlib
 import re
 import subprocess
@@ -23,7 +24,7 @@ import subprocess
 import pytest
 import yaml
 
-from toolkit.features import r2_tfvars
+from toolkit.features import r2_documents_token, r2_tfvars
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 COMMON = REPO / "infra" / "config" / "values" / "common.yaml"
@@ -249,3 +250,46 @@ class TestTheScratchPairIsTornDownByTheSameScope:
         run = _make_dry_run("tf-r2-apply", "SCRATCH_DESTROY=1")
         assert run.returncode != 0
         assert "SCRATCH_DESTROY" in run.stderr
+
+
+class TestTheProductDocumentsBucket:
+    """STOR-002 (#2535): a bucket for a product's source documents, declared by
+    hand. Its lock is a 30-day `Age` rule, never `Indefinite` (operator,
+    2026-11-02): a mistake is recoverable for 30 days, and a document can still
+    be withdrawn after that, for a legal takedown."""
+
+    THIRTY_DAYS = 30 * 86400
+
+    def _blocks(self) -> dict[str, str]:
+        return TestTheRootMatchesWhatIsRendered()._resource_blocks()
+
+    def _lock(self) -> str:
+        return self._blocks()["cloudflare_r2_bucket_lock.documents"]
+
+    @pytest.mark.parametrize("address", ["cloudflare_r2_bucket.documents", "cloudflare_r2_bucket_lock.documents"])
+    def test_the_bucket_and_its_lock_cannot_be_destroyed_by_a_plan(self, address: str) -> None:
+        body = self._blocks()[address]
+        assert re.search(r"prevent_destroy\s*=\s*true", body), f"{address} lacks prevent_destroy"
+        assert not re.search(r"^\s*(for_each|count)\s*=", body, re.M), f"{address} is not declared by hand"
+
+    def test_the_bucket_name_is_the_one_the_token_is_minted_for(self) -> None:
+        body = self._blocks()["cloudflare_r2_bucket.documents"]
+        assert re.search(rf'name\s*=\s*"{r2_documents_token.DOCUMENTS_BUCKET}"', body)
+
+    def test_the_lock_has_exactly_one_rule_and_it_is_age(self) -> None:
+        lock = self._lock()
+        assert len(re.findall(r"\bcondition\s*=", lock)) == 1
+        assert re.search(r'type\s*=\s*"Age"', lock), "the documents lock is not an Age rule"
+
+    def test_the_lock_retains_for_thirty_days(self) -> None:
+        m = re.search(r"max_age_seconds\s*=\s*([\d\s*]+)\n", self._lock())
+        assert m, "the documents lock declares no max_age_seconds"
+        assert math.prod(int(f) for f in m.group(1).split("*")) == self.THIRTY_DAYS
+
+    def test_the_lock_is_never_indefinite(self) -> None:
+        """An indefinite lock would make a takedown impossible."""
+        assert "Indefinite" not in self._lock()
+
+    def test_the_lock_covers_the_sources_prefix(self) -> None:
+        """The uploader writes under sources/; a renamed prefix would leave every document unlocked."""
+        assert re.search(r'prefix\s*=\s*"sources/"', self._lock()), "the documents lock does not cover sources/"
