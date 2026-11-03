@@ -196,7 +196,9 @@ def _provision_forward(config: dict[str, Any] | None = None) -> dict[str, Any]:
     assert task_runs(task, {"group_names": ["vps"], "config": config})
     assert not task_runs(task, {"group_names": ["k3s_servers"], "config": config})
     fact = task["set_fact"]["ssh_bootstrap_forward"]
-    return {k: _eval(v, config=config, ansible_user="deployer") for k, v in fact.items()}
+    # The VPS's inventory user is the cloud SSH user (generator_ansible.py, SSOT-014a).
+    ssh_user = config["networking"]["ssh_users"]["cloud"]
+    return {k: _eval(v, config=config, ansible_user=ssh_user) for k, v in fact.items()}
 
 
 def test_sshd_and_the_keys_open_the_same_single_destination() -> None:
@@ -218,4 +220,4 @@ def test_narrow_ssh_user_narrows_the_vps_ssh_user_when_a_client_still_needs_it()
     config = copy.deepcopy(COMMON)
     config["networking"]["vps"]["ssh_bootstrap"]["narrow_ssh_user"] = True
 
-    assert _provision_forward(config)["transitional_users"] == ["deployer"]
+    assert _provision_forward(config)["transitional_users"] == [config["networking"]["ssh_users"]["cloud"]]
