@@ -257,6 +257,7 @@ networking:
     ssh_bootstrap:
       user: "hs-bootstrap"
       port: 443
+      narrow_ssh_user: false
     ansible_groups: ["vps", "docker_hosts"]  # prod.yaml adds k3s_servers
     docker_network: "kubelab"  # Migrated from "proxy" by traefik_vps role (ADR-020 Phase 2b)
     # The node's display name, read by platform_manifest. The rest of this block
