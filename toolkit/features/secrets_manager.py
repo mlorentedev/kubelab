@@ -35,6 +35,8 @@ from toolkit.features.backup_node_credentials import (
     secret_key_path,
 )
 from toolkit.features.configuration import ConfigurationManager
+from toolkit.features.r2_documents_token import ACCESS_KEY_PATH as DOCUMENTS_ACCESS_KEY_PATH
+from toolkit.features.r2_documents_token import SECRET_KEY_PATH as DOCUMENTS_SECRET_KEY_PATH
 from toolkit.features.secret_expiry import Expiry
 
 # =============================================================================
@@ -1473,6 +1475,32 @@ SECRET_CATALOG: list[SecretSpec] = [
         services=("terraform",),
         format_hint="SHA-256 of the R2 API token value; shown once, not recoverable",
         rotate_note="Rotated together with terraform.state.access_key_id: they are one credential.",
+        envs=("prod",),
+    ),
+    # STOR-002 (#2535): Object Read & Write on the product documents bucket only,
+    # so it cannot administer the bucket or lift its lock. In prod.enc.yaml; it
+    # reaches the product's operator through SOPS, never through a product's CI.
+    SecretSpec(
+        key_path=DOCUMENTS_ACCESS_KEY_PATH,
+        expiry=Expiry.NEVER,
+        description="R2 access key id, Object Read & Write on kubelab-product-documents only",
+        kind=SecretKind.EXTERNAL,
+        services=("product-documents",),
+        format_hint="R2 API token id (not the token value)",
+        rotate_note=(
+            "`make r2-documents-token ROTATE=1` mints a new token, verifies it, stores it and "
+            "revokes the old one; then hand the new pair to the product's operator."
+        ),
+        envs=("prod",),
+    ),
+    SecretSpec(
+        key_path=DOCUMENTS_SECRET_KEY_PATH,
+        expiry=Expiry.NEVER,
+        description="R2 secret access key, Object Read & Write on kubelab-product-documents only",
+        kind=SecretKind.EXTERNAL,
+        services=("product-documents",),
+        format_hint="SHA-256 of the R2 API token value; shown once, not recoverable",
+        rotate_note=f"Rotated together with {DOCUMENTS_ACCESS_KEY_PATH}: they are one credential.",
         envs=("prod",),
     ),
     # BACKUP-057 PR 3: mints the per-node and watcher R2 tokens. It holds Account
