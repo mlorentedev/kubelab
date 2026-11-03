@@ -13,13 +13,16 @@
   register: _agent_stack_search_probe
   changed_when: false
   until: >-
-    _agent_stack_search_probe.rc == 0
-    and (_agent_stack_search_probe.stdout | from_json).status == 200
-    and (_agent_stack_search_probe.stdout | from_json).results > 0
+    ansible_check_mode
+    or (_agent_stack_search_probe.rc == 0
+        and (_agent_stack_search_probe.stdout | from_json).status == 200
+        and (_agent_stack_search_probe.stdout | from_json).results > 0)
   retries: 12
   delay: 5
-  # A dry run may precede the container this probes; it asserts nothing then.
-  when: not ansible_check_mode
+  # A read runs under --check, and a dry run on a node without the container
+  # tolerates the miss (ANSIBLE-059, tests/test_ansible_reads_run_in_check_mode.py).
+  check_mode: false
+  ignore_errors: "{{ ansible_check_mode }}"
 
 # The env is what the role writes; this is what the instance serves. The export
 # holds every secret Open WebUI has, so it is read under no_log and only the
