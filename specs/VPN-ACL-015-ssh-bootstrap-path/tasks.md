@@ -63,10 +63,13 @@ declaration is `networking.vps.ssh_bootstrap: {user: hs-bootstrap, permit_open:
   `secrets.apps.services.core.headscale.bootstrap_ssh_keys` from `deploy-vps.yml`.
   The account and file exist only when `ssh_bootstrap_forward` is declared; an empty
   mapping renders an empty file (every key revoked), never a missing one. Expected: PASS.
-- [ ] [AC2] Register `apps.services.core.headscale.bootstrap_ssh_keys` in
+- [x] [AC2] Register `apps.services.core.headscale.bootstrap_ssh_keys` in
   `SECRET_CATALOG` (`toolkit/features/secrets_manager.py`, `envs=("prod",)`, kind
   EXTERNAL, neutral keys), with a test that refuses a key line carrying options or
-  more than one key. Expected: FAIL, then PASS.
+  more than one key. Expected: FAIL, then PASS. ✓ 2026-11-02: registered `optional`
+  (no machine enrolled is a decision); the line shape is refused at deploy by the
+  role's assert (`test_a_malformed_key_is_refused`), since `value_pattern` checks a
+  whole value and this entry is a mapping. 2 tests red without the entry.
 - [x] [AC5] Test that `ssh_bootstrap_forward.transitional_users` (`[deployer]` in
   `common.yaml` for now) renders a Match block per user with the same single
   `PermitOpen`, and that an empty list renders none. Expected: FAIL, then PASS. This

@@ -166,6 +166,7 @@ def test_sshd_itself_limits_each_user_to_what_was_declared(tmp_path: Path) -> No
             [sshd, "-T", "-h", str(host_key), "-f", str(config), "-C", f"user={user},host=h,addr=203.0.113.9"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
             check=True,
         ).stdout
         return dict(line.split(" ", 1) for line in out.splitlines() if " " in line)
