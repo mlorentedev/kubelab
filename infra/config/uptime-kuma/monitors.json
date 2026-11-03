@@ -76,7 +76,9 @@
     "active": true,
     "httpBodyEncoding": "json",
     "maxredirects": 10,
-    "notificationIDList": [],
+    "notificationIDList": [
+      1
+    ],
     "parent": null,
     "tags": [
       "infra",
@@ -103,7 +105,9 @@
     "active": true,
     "httpBodyEncoding": "json",
     "maxredirects": 10,
-    "notificationIDList": [],
+    "notificationIDList": [
+      1
+    ],
     "parent": null,
     "tags": [
       "infra",
@@ -959,7 +963,9 @@
     "active": true,
     "httpBodyEncoding": "json",
     "maxredirects": 10,
-    "notificationIDList": [],
+    "notificationIDList": [
+      1
+    ],
     "parent": null,
     "tags": [
       "backup",
