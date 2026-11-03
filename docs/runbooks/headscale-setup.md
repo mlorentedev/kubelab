@@ -881,8 +881,27 @@ Some networks sinkhole or TLS-inspect `vpn.kubelab.live` (measured on the office
 1. On the machine, generate a key used for nothing else: `ssh-keygen -t ed25519 -f ~/.ssh/hs-bootstrap -C "hs-bootstrap <machine>"`. Never copy or escrow the private half: one key per machine is what makes revocation per machine.
 2. Store the public line: `toolkit secrets set apps.services.core.headscale.bootstrap_ssh_keys.client-<N> --env prod --stdin`. The deploy refuses a line carrying options or more than one key.
 3. `make deploy TARGET=vps ENV=prod`.
-4. From the machine: `ts-bridge connect --bootstrap-ssh hs-bootstrap@<public_ip>` reaches `READY`. `ssh hs-bootstrap@<public_ip>` gets no shell, and a forward to any other destination is refused (`administratively prohibited`).
+4. Point the machine's OpenSSH at that key, since ts-bridge runs plain `ssh` and OpenSSH does not try a non-default filename on its own. On the operator's machines this entry belongs in the dotfiles generator of `~/.ssh/config`; elsewhere add it by hand:
+
+   ```text
+   Host hs-bootstrap
+       HostName <networking.vps.public_ip>
+       User hs-bootstrap
+       IdentityFile ~/.ssh/hs-bootstrap
+       IdentitiesOnly yes
+   ```
+
+5. From the machine: `ts-bridge connect --bootstrap-ssh hs-bootstrap` reaches `READY`. `ssh hs-bootstrap` gets no shell, and a forward to any other destination is refused (`administratively prohibited`).
 
 ### 10.3 Revoke a machine
 
 Remove its entry (`toolkit secrets` or `sops`) and `make deploy TARGET=vps ENV=prod`. The role writes the whole `authorized_keys` from SOPS, so the line is gone after that deploy; an empty mapping revokes every machine. A refused attempt shows in the VPS's `auth.log`.
+
+The deploy stops new logins only: sshd does not re-check a session that already authenticated, so a running `ssh -N -D` tunnel keeps forwarding. End the account's sessions on the VPS, then confirm none is left:
+
+```bash
+sudo pkill -u hs-bootstrap sshd        # drops every bootstrap tunnel; machines still enrolled reconnect
+pgrep -u hs-bootstrap sshd || echo none
+```
+
+Then prove the revoked machine is refused on a new connection (`Permission denied (publickey)`).

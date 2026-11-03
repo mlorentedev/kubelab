@@ -1,7 +1,7 @@
 [
   {
     "id": "VPN-ACL-015-ssh-bootstrap-path-f1",
-    "behavior": "AC1: the VPS's sshd_config forbids forwarding to every user except hs-bootstrap, whose only PermitOpen is vpn.kubelab.live:443; other nodes render their golden file",
+    "behavior": "AC1: the VPS's sshd_config forbids forwarding to every user except hs-bootstrap, whose only PermitOpen is vpn.kubelab.live:443, and, while narrow_ssh_user is set, the VPS's SSH user, limited to the same destination; other nodes render their golden file",
     "verification": "python -m pytest -o addopts= -p no:cacheprovider tests/test_ssh_hardening_bootstrap_forward.py tests/test_ssh_hardening_lan_jump.py -q",
     "state": "pending",
     "evidence": ""

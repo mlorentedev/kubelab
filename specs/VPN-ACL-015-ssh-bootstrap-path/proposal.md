@@ -82,7 +82,9 @@ included, is an open relay for any key it holds.
 - [ ] AC1: A render test proves the VPS's `sshd_config` keeps `AllowTcpForwarding no`
   for every user except `hs-bootstrap`, whose block's only `PermitOpen` is
   `vpn.kubelab.live:443` and which allows no TTY, agent, X11 or tunnel, and that every
-  other node still renders its golden file.
+  other node still renders its golden file. While `narrow_ssh_user` is set, the
+  VPS's SSH user is the one temporary exception, limited to the same single
+  destination (removed by AC5).
 - [ ] AC2: A test proves `authorized_keys` for `hs-bootstrap` is rendered only from
   SOPS, one `restrict,port-forwarding,permitopen="vpn.kubelab.live:443"` line per key,
   and printed by no task; a key absent from SOPS is absent from the file.

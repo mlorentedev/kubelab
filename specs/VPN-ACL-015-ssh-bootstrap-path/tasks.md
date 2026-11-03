@@ -108,7 +108,9 @@ derived from `apps.services.core.headscale.domain`, which the generator does not
   `ssh -N -L 9999:127.0.0.1:22 hs-bootstrap@<vps>` is refused;
   `ts-bridge connect --bootstrap-ssh hs-bootstrap@<vps>` reaches `READY` from the
   corporate network.
-- [ ] [AC3] Remove one test key from SOPS, deploy, and prove it is refused.
+- [ ] [AC3] Remove one test key from SOPS, deploy, end the account's open sessions
+  (`pkill -u hs-bootstrap sshd`: a deploy does not cut a running tunnel), and prove a
+  new connection with it is refused.
 - [ ] [AC5] Move every client to `hs-bootstrap`; second PR empties
   `transitional_users`; provision; `sshd -T -C user=deployer,...` reports
   `allowtcpforwarding no`; a second provision and deploy report `changed=0`.
