@@ -167,7 +167,7 @@ make deploy-apps              # apply Application manifests
 ```bash
 make monitoring-apply CHECK=1 # print the sync plan, write nothing
 make monitoring-apply         # push monitor config; refuses a delete without PRUNE=1
-make monitoring-export        # export current config to repo
+make monitoring-export        # export current config to repo (run monitoring-apply first: a monitor the instance lacks leaves the seed)
                               # NOTE: export never writes a push monitor's
                               # pushToken. SOPS owns it; the seed is public.
                               # See rpi3-disaster-recovery.md before restoring.

@@ -17,7 +17,7 @@
     ],
     "description": "Hetzner CAX21 VPS SSH port. SSOT: networking.vps.public_ip (162.55.57.175). Hosts Headscale, prod K3s (Pattern C).",
     "active": true,
-    "httpBodyEncoding": null,
+    "httpBodyEncoding": "json",
     "maxredirects": 10,
     "notificationIDList": [
       1
@@ -45,7 +45,7 @@
     ],
     "description": "VPS Headscale mesh connectivity. SSOT: networking.vps.tailscale_ip (100.64.0.2). Bootstrap node for all VPN clients.",
     "active": true,
-    "httpBodyEncoding": null,
+    "httpBodyEncoding": "json",
     "maxredirects": 10,
     "notificationIDList": [
       1
@@ -74,11 +74,9 @@
     ],
     "description": "Network gateway node. SSOT: networking.nodes.rpi4.tailscale_ip (100.64.0.10). Runs Pi-hole, CoreDNS, advertises LAN subnet.",
     "active": true,
-    "httpBodyEncoding": null,
+    "httpBodyEncoding": "json",
     "maxredirects": 10,
-    "notificationIDList": [
-      1
-    ],
+    "notificationIDList": [],
     "parent": null,
     "tags": [
       "infra",
@@ -104,11 +102,9 @@
     ],
     "description": "Resolution, not liveness. The rpi4 ping monitor stayed GREEN through the 2026-08-22 outage because the host was never down - Docker had restored CoreDNS before tailscaled assigned its address, the health-port bind failed, and that dropped the container's whole port publication including 5353:53. Pi-hole lost its upstream and staging stopped resolving for ~90 minutes with three green signals covering it. This asks the only question that would have failed: does rpi4 answer for a staging name? SSOT: networking.nodes.rpi4.tailscale_ip.",
     "active": true,
-    "httpBodyEncoding": null,
+    "httpBodyEncoding": "json",
     "maxredirects": 10,
-    "notificationIDList": [
-      1
-    ],
+    "notificationIDList": [],
     "parent": null,
     "tags": [
       "infra",
@@ -136,11 +132,9 @@
     ],
     "description": "K3s server node (staging). SSOT: networking.nodes.ace1.tailscale_ip (100.64.0.11). Runs all staging workloads.",
     "active": true,
-    "httpBodyEncoding": null,
+    "httpBodyEncoding": "json",
     "maxredirects": 10,
-    "notificationIDList": [
-      1
-    ],
+    "notificationIDList": [],
     "parent": null,
     "tags": [
       "infra",
@@ -166,11 +160,9 @@
     ],
     "description": "On-demand developer node / CDE (ADR-058 D1), also hosting the operator's agent tooling (ADR-068). SSOT: networking.nodes.ace2.tailscale_ip (100.64.0.5).",
     "active": true,
-    "httpBodyEncoding": null,
+    "httpBodyEncoding": "json",
     "maxredirects": 10,
-    "notificationIDList": [
-      1
-    ],
+    "notificationIDList": [],
     "parent": null,
     "tags": [
       "infra",
@@ -196,11 +188,9 @@
     ],
     "description": "On-demand platform node (ADR-028): Gitea + GH runners + Glances. SSOT: networking.nodes.beelink.tailscale_ip (100.64.0.3).",
     "active": true,
-    "httpBodyEncoding": null,
+    "httpBodyEncoding": "json",
     "maxredirects": 10,
-    "notificationIDList": [
-      1
-    ],
+    "notificationIDList": [],
     "parent": null,
     "tags": [
       "infra",
@@ -226,11 +216,9 @@
     ],
     "description": "Jetson Nano (Ubuntu 18.04). SSOT: networking.nodes.jetson.tailscale_ip (100.64.0.8). Runs Pollex (llama.cpp).",
     "active": true,
-    "httpBodyEncoding": null,
+    "httpBodyEncoding": "json",
     "maxredirects": 10,
-    "notificationIDList": [
-      1
-    ],
+    "notificationIDList": [],
     "parent": null,
     "tags": [
       "infra",
@@ -256,7 +244,7 @@
     ],
     "description": "Uptime Kuma host self-check. SSOT: networking.nodes.rpi3.tailscale_ip (100.64.0.6). Tailscale-only (no LAN).",
     "active": true,
-    "httpBodyEncoding": null,
+    "httpBodyEncoding": "json",
     "maxredirects": 10,
     "notificationIDList": [
       1
@@ -284,8 +272,8 @@
       "200-299"
     ],
     "description": "DORMANT — the t4g.small AWS hub was decommissioned 2026-08-23 (GCP-001 AC6): instance terminated, EBS gone, Spot request cancelled. Paused rather than deleted, for the same reason infra/terraform/aws/ was kept: the module still renders from networking.aws, so rebuilding an AWS hub is a `make tf-aws-apply` away and this is how you would watch it. Left active it pings 100.64.0.7 forever and pages on a machine that does not exist. Re-enable with the host, never ahead of it.",
-    "active": false,
-    "httpBodyEncoding": null,
+    "active": true,
+    "httpBodyEncoding": "json",
     "maxredirects": 10,
     "notificationIDList": [
       1
@@ -314,7 +302,7 @@
     ],
     "description": "GCP e2-small hub (Argo CD), regional MIG of size 1. Addressed by MagicDNS, NOT by IP: networking.gcp has no tailscale_ip on purpose -- the address rotates on every re-registration, and a MIG re-registers on every preemption. An IP here would go red during a recovery that succeeded.",
     "active": true,
-    "httpBodyEncoding": null,
+    "httpBodyEncoding": "json",
     "maxredirects": 10,
     "notificationIDList": [
       1
@@ -343,7 +331,7 @@
     ],
     "description": "Headscale v0.28 control server. No HTTP /health endpoint — uses TCP port check on 443. SSOT: apps.services.core.headscale.domain.",
     "active": true,
-    "httpBodyEncoding": null,
+    "httpBodyEncoding": "json",
     "maxredirects": 10,
     "notificationIDList": [
       1
@@ -381,8 +369,7 @@
     "tags": [
       "prod",
       "critical"
-    ],
-    "expiryNotification": true
+    ]
   },
   {
     "key": "prod-api-api-kubelab-live",
@@ -411,8 +398,7 @@
     "tags": [
       "prod",
       "critical"
-    ],
-    "expiryNotification": true
+    ]
   },
   {
     "key": "prod-web-kubelab-live",
@@ -442,8 +428,7 @@
     "tags": [
       "prod",
       "critical"
-    ],
-    "expiryNotification": true
+    ]
   },
   {
     "key": "services-auth-authelia-prod",
@@ -474,8 +459,7 @@
       "auth",
       "service",
       "critical"
-    ],
-    "expiryNotification": true
+    ]
   },
   {
     "key": "services-auth-argo-cd",
@@ -505,8 +489,7 @@
       "auth",
       "service",
       "critical"
-    ],
-    "expiryNotification": true
+    ]
   },
   {
     "key": "services-data-grafana-prod",
@@ -536,8 +519,7 @@
       "prod",
       "data",
       "service"
-    ],
-    "expiryNotification": true
+    ]
   },
   {
     "key": "services-data-gitea-prod",
@@ -559,17 +541,14 @@
     "active": true,
     "httpBodyEncoding": "json",
     "maxredirects": 10,
-    "notificationIDList": [
-      1
-    ],
+    "notificationIDList": [],
     "parent": null,
     "tags": [
       "prod",
       "data",
       "service",
       "on-demand"
-    ],
-    "expiryNotification": true
+    ]
   },
   {
     "key": "services-data-n8n-prod",
@@ -599,8 +578,7 @@
       "prod",
       "data",
       "service"
-    ],
-    "expiryNotification": true
+    ]
   },
   {
     "key": "services-monitoring-uptime-kuma-prod",
@@ -630,8 +608,7 @@
       "prod",
       "monitoring",
       "service"
-    ],
-    "expiryNotification": true
+    ]
   },
   {
     "key": "staging-web-staging-mlorente-dev",
@@ -653,14 +630,11 @@
     "active": true,
     "httpBodyEncoding": "json",
     "maxredirects": 10,
-    "notificationIDList": [
-      1
-    ],
+    "notificationIDList": [],
     "parent": null,
     "tags": [
       "staging"
-    ],
-    "expiryNotification": true
+    ]
   },
   {
     "key": "staging-api-api-staging-kubelab-live",
@@ -682,14 +656,11 @@
     "active": true,
     "httpBodyEncoding": "json",
     "maxredirects": 10,
-    "notificationIDList": [
-      1
-    ],
+    "notificationIDList": [],
     "parent": null,
     "tags": [
       "staging"
-    ],
-    "expiryNotification": true
+    ]
   },
   {
     "key": "services-auth-authelia-staging",
@@ -711,16 +682,13 @@
     "active": true,
     "httpBodyEncoding": "json",
     "maxredirects": 10,
-    "notificationIDList": [
-      1
-    ],
+    "notificationIDList": [],
     "parent": null,
     "tags": [
       "staging",
       "auth",
       "service"
-    ],
-    "expiryNotification": true
+    ]
   },
   {
     "key": "staging-web-grafana-staging",
@@ -742,15 +710,12 @@
     "active": true,
     "httpBodyEncoding": "json",
     "maxredirects": 10,
-    "notificationIDList": [
-      1
-    ],
+    "notificationIDList": [],
     "parent": null,
     "tags": [
       "staging",
       "data"
-    ],
-    "expiryNotification": true
+    ]
   },
   {
     "key": "staging-web-n8n-staging",
@@ -772,15 +737,12 @@
     "active": true,
     "httpBodyEncoding": "json",
     "maxredirects": 10,
-    "notificationIDList": [
-      1
-    ],
+    "notificationIDList": [],
     "parent": null,
     "tags": [
       "staging",
       "data"
-    ],
-    "expiryNotification": true
+    ]
   },
   {
     "key": "services-monitoring-pi-hole-staging",
@@ -802,16 +764,13 @@
     "active": true,
     "httpBodyEncoding": "json",
     "maxredirects": 10,
-    "notificationIDList": [
-      1
-    ],
+    "notificationIDList": [],
     "parent": null,
     "tags": [
       "staging",
       "monitoring",
       "service"
-    ],
-    "expiryNotification": true
+    ]
   },
   {
     "key": "services-ai-open-webui",
@@ -833,9 +792,7 @@
     "active": true,
     "httpBodyEncoding": "json",
     "maxredirects": 10,
-    "notificationIDList": [
-      1
-    ],
+    "notificationIDList": [],
     "parent": null,
     "tags": [
       "service",
@@ -860,7 +817,7 @@
     ],
     "description": "Moving-sale site on Cloudflare Pages (repo leaving-denver, docs/runbooks/ops.md). The keyword is the page title, so an error page or a Pages 5xx fails it. Declared here because apply removes any live monitor the seed lacks: the hand-made one was deleted that way on 2026-10-06.",
     "active": true,
-    "httpBodyEncoding": null,
+    "httpBodyEncoding": "json",
     "maxredirects": 10,
     "notificationIDList": [
       1
@@ -889,7 +846,7 @@
     ],
     "description": "Personal smart plug on home LAN (10.0.0.0/8 network). Non-infrastructure, low priority.",
     "active": true,
-    "httpBodyEncoding": null,
+    "httpBodyEncoding": "json",
     "maxredirects": 10,
     "notificationIDList": [
       1
@@ -917,7 +874,7 @@
     ],
     "description": "BACKUP-044 AC9, spec AI-009 AC7. ace2 posts here as the LAST step of a successful node-backup ship, so silence means no backup completed. Window is 6h, which is #452's ratified Tier 1 RPO rather than a margin over the 4h schedule — it fires when the GUARANTEE is at risk, and a cadence change has to confront the RPO instead of a recomputed number. maxretries 0: a retry would only delay DOWN past the boundary the interval was chosen to mark. Tagged `on-demand`, which is in muted_notification_tags: this node is powered off most of the week, so DOWN is the coverage view working rather than an incident. Visible, never paging.",
     "active": true,
-    "httpBodyEncoding": null,
+    "httpBodyEncoding": "json",
     "maxredirects": 10,
     "notificationIDList": [],
     "parent": null,
@@ -945,7 +902,7 @@
     ],
     "description": "BACKUP-044 AC9. beelink posts here as the LAST step of a successful node-backup ship, so silence means no backup completed. Window is 6h, which is #452's ratified Tier 1 RPO rather than a margin over the 4h schedule — it fires when the GUARANTEE is at risk, and a cadence change has to confront the RPO instead of a recomputed number. maxretries 0: a retry would only delay DOWN past the boundary the interval was chosen to mark. Tagged `on-demand`, which is in muted_notification_tags: this node is powered off most of the week, so DOWN is the coverage view working rather than an incident. Visible, never paging.",
     "active": true,
-    "httpBodyEncoding": null,
+    "httpBodyEncoding": "json",
     "maxredirects": 10,
     "notificationIDList": [],
     "parent": null,
@@ -973,7 +930,7 @@
     ],
     "description": "BACKUP-044 AC9. rpi3 posts here as the LAST step of a successful node-backup ship, so silence means no backup completed. Window is 6h, which is #452's ratified Tier 1 RPO rather than a margin over the 4h schedule — it fires when the GUARANTEE is at risk, and a cadence change has to confront the RPO instead of a recomputed number. maxretries 0: a retry would only delay DOWN past the boundary the interval was chosen to mark. Always-on (ADR-028), so this one pages.",
     "active": true,
-    "httpBodyEncoding": null,
+    "httpBodyEncoding": "json",
     "maxredirects": 10,
     "notificationIDList": [
       1
@@ -1002,7 +959,7 @@
     ],
     "description": "BACKUP-044 AC9. rpi4 posts here as the LAST step of a successful node-backup ship, so silence means no backup completed. Window is 6h, which is #452's ratified Tier 1 RPO rather than a margin over the 4h schedule — it fires when the GUARANTEE is at risk, and a cadence change has to confront the RPO instead of a recomputed number. maxretries 0: a retry would only delay DOWN past the boundary the interval was chosen to mark. Tagged `on-demand`, which is in muted_notification_tags: this node is powered off most of the week, so DOWN is the coverage view working rather than an incident. Visible, never paging.",
     "active": true,
-    "httpBodyEncoding": null,
+    "httpBodyEncoding": "json",
     "maxredirects": 10,
     "notificationIDList": [],
     "parent": null,
@@ -1030,7 +987,7 @@
     ],
     "description": "BACKUP-044 AC9. vps posts here as the LAST step of a successful node-backup ship, so silence means no backup completed. Window is 6h, which is #452's ratified Tier 1 RPO rather than a margin over the 4h schedule — it fires when the GUARANTEE is at risk, and a cadence change has to confront the RPO instead of a recomputed number. maxretries 0: a retry would only delay DOWN past the boundary the interval was chosen to mark. Always-on (ADR-028), so this one pages.",
     "active": true,
-    "httpBodyEncoding": null,
+    "httpBodyEncoding": "json",
     "maxredirects": 10,
     "notificationIDList": [
       1
@@ -1059,7 +1016,7 @@
     ],
     "description": "UPSIDE-DOWN: up when the check FAILS. Proves the Hetzner cloud firewall (SEC-006, #1557) is still attached. Headscale publishes 8080 on the public IP and keeps listening whether or not a firewall exists, so this port answers again within one interval if the firewall is detached or its rule edited in the console -- neither of which any other check in this repo can see (Terraform state is backend=local and gitignored). Chosen over 9000 deliberately: #1541 closed 9000 at the Traefik layer, so it stays shut with or without a firewall and would be green for the wrong reason. A canary must be a port whose LISTENER outlives the control being watched. SSOT: networking.firewall.vps_inbound -- 8080 is deliberately absent from it. If you intentionally add 8080 to the allow-list, delete this monitor in the same change.",
     "active": true,
-    "httpBodyEncoding": null,
+    "httpBodyEncoding": "json",
     "maxredirects": 10,
     "notificationIDList": [
       1

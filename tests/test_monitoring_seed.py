@@ -12,7 +12,7 @@ import json
 from pathlib import Path
 
 from toolkit.features.configuration import ConfigurationManager
-from toolkit.features.monitoring import _clean_monitor, _get_push_tokens
+from toolkit.features.monitoring import _MONITOR_EXPORT_FIELDS, _clean_monitor, _get_push_tokens, _seed_json
 from toolkit.features.monitoring_diff import embed_key, extract_key
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -52,6 +52,27 @@ class TestSeedKeys:
         seed = _seed()
         for m in seed:
             assert next(iter(m)) == "key", f"'{m.get('name')}' does not have key as its first field"
+
+
+class TestSeedIsWhatAnExportWrites:
+    """The file itself holds to the export's shape (#2291)."""
+
+    def test_the_file_is_formatted_as_the_export_formats_it(self) -> None:
+        raw = (SEED_PATH).read_text(encoding="utf-8")
+        assert raw == _seed_json(json.loads(raw))
+
+    def test_a_tag_object_comes_back_as_its_name(self) -> None:
+        live = {"name": "n", "type": "http", "tags": [{"tag_id": 3, "monitor_id": 9, "value": "", "name": "infra"}]}
+        assert _clean_monitor(live)["tags"] == ["infra"]
+
+    def test_only_a_dns_monitor_keeps_its_resolver_fields(self) -> None:
+        fields = {"dns_resolve_server": "1.1.1.1", "dns_resolve_type": "A"}
+        assert "dns_resolve_type" not in _clean_monitor({"type": "http", **fields})
+        assert _clean_monitor({"type": "dns", **fields})["dns_resolve_type"] == "A"
+
+    def test_every_seed_field_is_one_the_export_writes(self) -> None:
+        exported = {"key", *_MONITOR_EXPORT_FIELDS}
+        assert all(set(entry) <= exported for entry in _seed())
 
 
 class TestSeedCarriesNoPushToken:

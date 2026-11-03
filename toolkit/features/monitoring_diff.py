@@ -34,9 +34,8 @@ from typing import Any
 #
 # A field absent here is one the apply path never sends via `_params()`, so
 # flagging it as a difference would request an edit that cannot clear the flag.
-# Known members of that set, all observed live: `expiryNotification` (in the
-# seed but in neither `_MONITOR_EXPORT_FIELDS` nor the API payload — 20
-# monitors), `tags` (written by add/delete_monitor_tag, compared by `tag_drift`), `active` (paused/resumed at
+# Known members of that set, all observed live: `tags` (written by
+# add/delete_monitor_tag, compared by `tag_drift`), `active` (paused/resumed at
 # runtime), `id`, and `key` (ours; it travels in `description`).
 #
 # `notificationIDList` is deliberately NOT here despite the apply path writing
@@ -330,8 +329,7 @@ def _needs_edit(
     desired = _comparable(seed_entry)
     current = _comparable(live_monitor)
     # A `None` in the seed is skipped by the apply path rather than written, so it
-    # cannot be reconciled either. 11 seed entries carry `httpBodyEncoding: null`
-    # against a live `'json'`, which is Uptime Kuma's own default.
+    # cannot be reconciled either.
     return any(current.get(field) != value for field, value in desired.items() if value is not None)
 
 

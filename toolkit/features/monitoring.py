@@ -62,7 +62,12 @@ _MONITOR_EXPORT_FIELDS = [
     "notificationIDList",
     "parent",
     "tags",
+    "dns_resolve_server",
+    "dns_resolve_type",
 ]
+
+# Uptime Kuma reports these on every monitor, and only a `dns` monitor uses them.
+_DNS_ONLY_FIELDS = ("dns_resolve_server", "dns_resolve_type")
 
 _NOTIFICATION_EXPORT_FIELDS = [
     "name",
@@ -198,9 +203,14 @@ def _clean_monitor(monitor: dict[str, Any]) -> dict[str, Any]:
 
     Lifts the identity marker back out of `description` into a first-class `key`,
     so the seed stays human-readable and the round-trip is lossless: `apply`
-    embeds the marker, `export` extracts it.
+    embeds the marker, `export` extracts it. Tags go back to the names the seed
+    declares, since the API answers with objects (#2291).
     """
     clean = {k: monitor[k] for k in _MONITOR_EXPORT_FIELDS if k in monitor}
+    if clean.get("type") != "dns":
+        clean = {k: v for k, v in clean.items() if k not in _DNS_ONLY_FIELDS}
+    if "tags" in clean:
+        clean["tags"] = [tag["name"] for tag in clean["tags"]]
     key = extract_key(clean.get("description"))
     if key is not None:
         clean["description"] = strip_key(clean["description"])
@@ -213,8 +223,30 @@ def _clean_notification(notification: dict[str, Any]) -> dict[str, Any]:
     return {k: notification[k] for k in _NOTIFICATION_EXPORT_FIELDS if k in notification}
 
 
+def _seed_json(data: Any) -> str:
+    """The seed files' exact format: a `·` in a name stays a `·`."""
+    return json.dumps(data, indent=2, default=str, ensure_ascii=False) + "\n"
+
+
+def _in_seed_order(monitors: list[dict[str, Any]], seed_path: Path) -> list[dict[str, Any]]:
+    """Keep the seed's order, so an export diffs by content; a new monitor goes last.
+
+    Uptime Kuma answers in its own order, which would move every entry (#2291).
+    """
+    if not seed_path.exists():
+        return monitors
+    seed = json.loads(seed_path.read_text(encoding="utf-8"))
+    position = {entry.get("key"): index for index, entry in enumerate(seed)}
+    return sorted(monitors, key=lambda monitor: position.get(monitor.get("key"), len(position)))
+
+
 def export_monitors(project_root: Path) -> Path:
-    """Export all monitors and notifications to JSON files."""
+    """Export all monitors and notifications to JSON files.
+
+    The monitors file is written in the seed's shape, so a converged instance
+    leaves it byte-identical. A monitor the instance does not have leaves the
+    file, so converge with `make monitoring-apply` before exporting.
+    """
     api, info = _connect(project_root)
 
     try:
@@ -228,11 +260,12 @@ def export_monitors(project_root: Path) -> Path:
         export_dir.mkdir(parents=True, exist_ok=True)
 
         monitors_path = export_dir / MONITORS_FILE
-        monitors_path.write_text(json.dumps(clean_monitors, indent=2, default=str) + "\n", encoding="utf-8")
+        ordered = _in_seed_order(clean_monitors, monitors_path)
+        monitors_path.write_text(_seed_json(ordered), encoding="utf-8")
         logger.success(f"Exported {len(clean_monitors)} monitors → {monitors_path}")
 
         notifications_path = export_dir / NOTIFICATIONS_FILE
-        notifications_path.write_text(json.dumps(clean_notifications, indent=2, default=str) + "\n", encoding="utf-8")
+        notifications_path.write_text(_seed_json(clean_notifications), encoding="utf-8")
         logger.success(f"Exported {len(clean_notifications)} notifications → {notifications_path}")
 
         return monitors_path
