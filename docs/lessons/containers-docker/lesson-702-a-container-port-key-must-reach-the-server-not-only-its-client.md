@@ -1,7 +1,8 @@
 ---
-id: lesson-700-a-container-port-key-must-reach-the-server-not-only-its-client
+id: "lesson-702-a-container-port-key-must-reach-the-server-not-only-its-client"
 type: lesson
 status: active
+title: "A container port key must reach the server, not only its client"
 created: "2026-11-02"
 owner: manu
 category: containers-docker
