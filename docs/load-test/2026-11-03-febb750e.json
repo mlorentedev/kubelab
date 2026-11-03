@@ -1,0 +1,201 @@
+{
+  "facts": {
+    "k6_image": "grafana/k6@sha256:2dd4756ec6e14e62778916e1eb850108e4b499304c02df56760fa0bdb0fba0b8",
+    "traefik_image": "rancher/mirrored-library-traefik:3.6.7",
+    "k3s": "v1.34.4+k3s1",
+    "kernel": "6.8.0-147-generic",
+    "node_capacity": {
+      "cpu": "4",
+      "memory": "12023380Ki"
+    },
+    "cpu_model": {
+      "ace1": "Intel(R) N95",
+      "ace2": "Intel(R) N95"
+    },
+    "workloads": {
+      "api": {
+        "image": "docker.io/mlorentedev/kubelab-api:sha-75346a3",
+        "resources": {
+          "limits": {
+            "cpu": "500m",
+            "memory": "512Mi"
+          },
+          "requests": {
+            "cpu": "250m",
+            "memory": "256Mi"
+          }
+        }
+      },
+      "web": {
+        "image": "docker.io/mlorentedev/kubelab-web:sha-95588df",
+        "resources": {
+          "limits": {
+            "cpu": "500m",
+            "memory": "512Mi"
+          },
+          "requests": {
+            "cpu": "250m",
+            "memory": "256Mi"
+          }
+        }
+      }
+    }
+  },
+  "criteria": {
+    "max_error_rate": 0.01,
+    "max_p95_ms": 250.0,
+    "min_achieved_ratio": 0.95,
+    "max_generator_cpu": 85.0,
+    "step_seconds": 300,
+    "settle_seconds": 15
+  },
+  "baseline": [
+    {
+      "rate": 25,
+      "target": "api-health",
+      "requests": 7501.0,
+      "achieved_rps": 25.003030441871985,
+      "error_rate": 0.0,
+      "status_429": 0.0,
+      "dropped": 0.0,
+      "vus_peak": 0.0,
+      "avg_ms": 2.678707186508474,
+      "p50_ms": 2.72566,
+      "p90_ms": 3.088399,
+      "p95_ms": 3.195992,
+      "p99_ms": 3.449972,
+      "max_ms": 8.898488,
+      "node_cpu": 11.1,
+      "generator_cpu": 6.7,
+      "node_mem_available_mb": 8936,
+      "pods_top": {
+        "traefik": "65m 93Mi",
+        "api": "20m 7Mi"
+      },
+      "throttled_ms": 0.0,
+      "edge_restarts": 0,
+      "pod_replaced": false,
+      "reasons": []
+    },
+    {
+      "rate": 25,
+      "target": "web-static",
+      "requests": 7501.0,
+      "achieved_rps": 25.002986588914958,
+      "error_rate": 0.0,
+      "status_429": 0.0,
+      "dropped": 0.0,
+      "vus_peak": 0.0,
+      "avg_ms": 3.1688186355152648,
+      "p50_ms": 3.229844,
+      "p90_ms": 3.634442,
+      "p95_ms": 3.75414,
+      "p99_ms": 4.079342,
+      "max_ms": 11.399266,
+      "node_cpu": 11.4,
+      "generator_cpu": 11.0,
+      "node_mem_available_mb": 8941,
+      "pods_top": {
+        "traefik": "83m 95Mi",
+        "web": "14m 4Mi"
+      },
+      "throttled_ms": 0.0,
+      "edge_restarts": 0,
+      "pod_replaced": false,
+      "reasons": []
+    }
+  ],
+  "ramps": [
+    {
+      "target": "api-health",
+      "repeat": 1,
+      "steps": [
+        {
+          "rate": 50,
+          "target": "api-health",
+          "requests": 15000.0,
+          "achieved_rps": 49.999883769436856,
+          "error_rate": 0.0,
+          "status_429": 0.0,
+          "dropped": 0.0,
+          "vus_peak": 0.0,
+          "avg_ms": 2.6571405534666632,
+          "p50_ms": 2.6789755,
+          "p90_ms": 2.9900758,
+          "p95_ms": 3.11573925,
+          "p99_ms": 3.4900195000000003,
+          "max_ms": 11.719815,
+          "node_cpu": 13.3,
+          "generator_cpu": 4.0,
+          "node_mem_available_mb": 8940,
+          "pods_top": {
+            "traefik": "112m 95Mi",
+            "api": "32m 8Mi"
+          },
+          "throttled_ms": 0.0,
+          "edge_restarts": 0,
+          "pod_replaced": false,
+          "reasons": []
+        }
+      ],
+      "knee": {
+        "last_healthy_rps": 50,
+        "first_degraded_rps": null,
+        "reasons": [],
+        "lower_bound_only": true,
+        "vus_at_last_healthy": 0.0
+      }
+    },
+    {
+      "target": "web-static",
+      "repeat": 1,
+      "steps": [
+        {
+          "rate": 50,
+          "target": "web-static",
+          "requests": 15001.0,
+          "achieved_rps": 50.00254420101449,
+          "error_rate": 0.0,
+          "status_429": 0.0,
+          "dropped": 0.0,
+          "vus_peak": 0.0,
+          "avg_ms": 2.920039945270321,
+          "p50_ms": 2.972538,
+          "p90_ms": 3.327481,
+          "p95_ms": 3.429975,
+          "p99_ms": 3.729866,
+          "max_ms": 20.817015,
+          "node_cpu": 14.3,
+          "generator_cpu": 4.5,
+          "node_mem_available_mb": 8911,
+          "pods_top": {
+            "traefik": "144m 97Mi",
+            "web": "5m 4Mi"
+          },
+          "throttled_ms": 0.0,
+          "edge_restarts": 0,
+          "pod_replaced": true,
+          "reasons": [
+            "rollout"
+          ]
+        }
+      ],
+      "knee": {
+        "last_healthy_rps": null,
+        "first_degraded_rps": 50,
+        "reasons": [
+          "rollout"
+        ],
+        "lower_bound_only": true,
+        "vus_at_last_healthy": null
+      }
+    }
+  ],
+  "restarts_during_run": {
+    "api": 0,
+    "web": 0,
+    "traefik": 0
+  },
+  "date": "2026-11-03T06:35Z",
+  "commit": "febb750e"
+}
