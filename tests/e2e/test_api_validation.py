@@ -96,4 +96,7 @@ class TestAPIHealthStructure:
         # A degraded dependency still answers 200 and keeps the pod in rotation.
         assert data["status"] in {"ready", "degraded"}, data
         components = {c["component"] for c in data.get("checks", [])}
-        assert components == {"beehiiv", "email"}, f"/ready components: {sorted(components)}"
+        # Postgres is checked only where the API has a DSN (health.go), so it may be absent.
+        assert {"beehiiv", "email"} <= components <= {"beehiiv", "email", "postgres"}, (
+            f"/ready components: {sorted(components)}"
+        )
