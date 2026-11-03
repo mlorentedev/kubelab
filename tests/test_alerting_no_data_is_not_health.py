@@ -76,13 +76,40 @@ def _is_liveness(rule: dict) -> bool:
     return rule.get("noDataState") == "Alerting" and not re.search(r"\bby\s*\(", _queries(rule))
 
 
-def _watched_containers() -> set[str]:
-    return {c for _, _, r in _rules_over_cronjob_streams() if _is_liveness(r) for c in _containers(r)}
+def _metrics(rule: dict) -> set[str | None]:
+    """The `metric` values the rule filters on; `None` when it reads every line."""
+    return set(re.findall(r"metric=`([^`]+)`", _queries(rule))) or {None}
+
+
+def _streams(rule: dict) -> set[tuple[str, str | None]]:
+    """(container, metric) pairs. One watcher emits several metrics, and a liveness
+    rule counting one of them says nothing about the others."""
+    return {(c, m) for c in _containers(rule) for m in _metrics(rule)}
+
+
+def _watched_streams() -> set[tuple[str, str | None]]:
+    return {s for _, _, r in _rules_over_cronjob_streams() if _is_liveness(r) for s in _streams(r)}
+
+
+def _unwatched(rule: dict) -> set[tuple[str, str | None]]:
+    watched = _watched_streams()
+    return {(c, m) for c, m in _streams(rule) if (c, m) not in watched and (c, None) not in watched}
 
 
 def test_the_disk_watcher_has_a_liveness_rule() -> None:
     """Anti-vacuity for the exemption below: the split of #1668 rests on it."""
-    assert "disk-watcher" in _watched_containers()
+    assert ("disk-watcher", "disk_pvc_health") in _watched_streams()
+    assert ("disk-watcher", "disk_root_usage") in _watched_streams()
+
+
+def test_a_liveness_rule_on_one_metric_does_not_watch_another() -> None:
+    """The hole this guard had: it keyed on the container, so the PVC metric's
+    liveness rule exempted a root-usage rule whose own line could stop alone."""
+    pvc_only = {"data": [{"model": {"expr": '{container="disk-watcher"} | json | metric=`disk_pvc_health`'}}]}
+    root = {"data": [{"model": {"expr": '{container="disk-watcher"} | json | metric=`disk_root_usage`'}}]}
+    assert _streams(pvc_only) == {("disk-watcher", "disk_pvc_health")}
+    assert ("disk-watcher", "disk_root_usage") in _streams(root)
+    assert ("disk-watcher", "disk_pvc_health") not in _streams(root)
 
 
 @pytest.mark.parametrize(
@@ -104,12 +131,13 @@ def test_no_data_is_not_reported_as_health(filename: str, uid: str) -> None:
     rule = next(r for f, u, r in _rules_over_cronjob_streams() if f == filename and u == uid)
     if rule.get("noDataState") == "Alerting":
         return
-    unwatched = _containers(rule) - _watched_containers()
+    unwatched = _unwatched(rule)
     assert not unwatched, (
-        f"{uid} ({filename}) has noDataState={rule.get('noDataState')!r} and reads {sorted(unwatched)}, "
-        "which no liveness rule watches. No-data there means the watcher stopped, not that the "
-        "thing being watched is well. Add an ungrouped `noDataState: Alerting` rule for the "
-        "container (see `obs042-disk-watcher-silent`), or keep this one at Alerting."
+        f"{uid} ({filename}) has noDataState={rule.get('noDataState')!r} and reads {sorted(unwatched, key=str)} "
+        "(container, metric), which no liveness rule watches. No-data there means the watcher "
+        "stopped, not that the thing being watched is well. Add an ungrouped `noDataState: "
+        "Alerting` rule counting that metric (see `obs042-disk-watcher-silent`), or keep this one "
+        "at Alerting."
     )
 
 
