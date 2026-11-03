@@ -67,7 +67,7 @@ def _ship_interval(defaults: pathlib.Path = NODE_BACKUP_DEFAULTS) -> int:
     return _seconds(yaml.safe_load(defaults.read_text(encoding="utf-8"))["node_backup_interval"])
 
 
-THREE_HOURS = 3 * 3600
+STALE_AFTER = 12 * 3600  # three of the 4h ship intervals (#3035)
 PROBE_INTERVAL = _probe_interval()
 # The K8s node the Job ran on, as Vector labels it: a different thing from the
 # backup node a line reports on, and the reason the rules extract `backup_node`.
@@ -174,7 +174,7 @@ def case(loki: Loki, tmp_path: pathlib.Path) -> Case:
 
 
 def _over(values: dict[str, float]) -> set[str]:
-    return {node for node, v in values.items() if v > THREE_HOURS}
+    return {node for node, v in values.items() if v > STALE_AFTER}
 
 
 def _held(case: Case) -> set[str]:
@@ -199,8 +199,8 @@ def test_the_harness_reads_the_existing_health_rule_both_ways(case: Case) -> Non
 
 
 def test_a_reachable_on_demand_node_that_stopped_shipping_fires(case: Case) -> None:
-    case.probe(0, [Node("beelink", "on-demand", age=4 * 3600), Node("vps", "always-on")])
-    case.probe(PROBE_INTERVAL, [Node("beelink", "on-demand", age=10 * 3600), Node("vps", "always-on")])
+    case.probe(0, [Node("beelink", "on-demand", age=13 * 3600), Node("vps", "always-on")])
+    case.probe(PROBE_INTERVAL, [Node("beelink", "on-demand", age=20 * 3600), Node("vps", "always-on")])
     assert _held(case) == {"beelink"}
 
 
@@ -208,7 +208,7 @@ def test_each_on_demand_node_is_judged_on_its_own(case: Case) -> None:
     """Two on-demand nodes in one probe, one stale and one fresh: only the stale
     one fires. Rules that group on Vector's `node` label (the K8s node) fold both
     into one series and judge whichever line came last (lesson-512)."""
-    nodes = [Node("beelink", "on-demand", age=10 * 3600), Node("rpi4", "on-demand", age=600)]
+    nodes = [Node("beelink", "on-demand", age=20 * 3600), Node("rpi4", "on-demand", age=600)]
     case.probe(0, nodes)
     case.probe(PROBE_INTERVAL, nodes)
     assert _held(case) == {"beelink"}
@@ -223,7 +223,7 @@ def test_the_freshness_rule_stays_silent(case: Case, scenario: str) -> None:
         "off both times": (Node("beelink", "on-demand", up=False, age=30 * 3600),) * 2,
         "turned off before the second probe": (
             Node("beelink", "on-demand", age=4 * 3600),
-            Node("beelink", "on-demand", up=False, age=10 * 3600),
+            Node("beelink", "on-demand", up=False, age=20 * 3600),
         ),
         "fresh": (Node("beelink", "on-demand", age=600),) * 2,
         # Its own heartbeat is not muted; this rule is not its judge.
@@ -321,7 +321,7 @@ def test_the_freshness_rule_waits_for_two_probes_and_judges_only_on_demand_nodes
     assert expr.count("class=`on-demand`") == 2, "both operands must select the same nodes"
     assert "unwrap snapshot_age_seconds" in expr and "unwrap reachable" in expr
     (threshold,) = next(d for d in rule["data"] if d["refId"] == "C")["model"]["conditions"]
-    assert threshold["evaluator"] == {"type": "gt", "params": [THREE_HOURS]}
+    assert threshold["evaluator"] == {"type": "gt", "params": [STALE_AFTER]}
 
 
 def test_the_alert_windows_follow_the_cadences_they_depend_on() -> None:
@@ -329,7 +329,7 @@ def test_the_alert_windows_follow_the_cadences_they_depend_on() -> None:
     watcher's CronJob and the role's ship interval. A change to either must turn
     this red, never leave a rule that pages healthy nodes or sees a single probe."""
     probe, ship = _probe_interval(), _ship_interval()
-    assert THREE_HOURS >= 3 * ship, f"a healthy node ships every {ship} s; a {THREE_HOURS} s threshold pages it"
+    assert STALE_AFTER >= 3 * ship, f"a healthy node ships every {ship} s; a {STALE_AFTER} s threshold pages it"
     assert _hours(_rule(FRESHNESS)["for"]) * 3600 > probe, "for: must outlast one probe interval"
     (shrink_window,) = set(re.findall(r"\[(\d+[hms])\]", rule_expr(SHRINK)))
     assert _seconds(shrink_window) > probe, "the shrink window must hold two probes"
@@ -337,7 +337,7 @@ def test_the_alert_windows_follow_the_cadences_they_depend_on() -> None:
 
 @pytest.mark.parametrize("duration", ["1d", "1w", "", "{{ node_backup_interval }}", "0h", "1h30x"])
 def test_a_duration_the_guard_cannot_read_fails_instead_of_reading_as_zero(duration: str) -> None:
-    """A unit `_seconds` does not know must never read as 0: `THREE_HOURS >= 3 * 0`
+    """A unit `_seconds` does not know must never read as 0: `STALE_AFTER >= 3 * 0`
     holds for any threshold, so the cadence guard would pass without measuring (#2045)."""
     with pytest.raises(ValueError):
         _seconds(duration)

@@ -416,8 +416,10 @@ networking:
         gateway: "172.30.250.1"
     rpi4:
       # ADR-028 tier. Machine-readable projection of the topology the ADR
-      # narrates; consumed by the backup trigger model (BACKUP-044).
-      location: "on-demand"
+      # narrates; consumed by the backup trigger model (BACKUP-044). Always-on
+      # since ADR-075 made it the lab's edge (#3037): the backup timer, the R2
+      # watcher window, the Kuma tags and the platform manifest all read it.
+      location: "always-on"
       hostname: "rpi4"
       tailscale_ip: "100.64.0.10"
       # The lab's edge (ADR-075): lan_ip is the homelab LAN side (eth0, inside
@@ -2889,6 +2891,10 @@ backup:
         # returns only buildx state and the runner toolcache.
         path: /opt/gitea/data
         sqlite: gitea/gitea.db
+        exclude:
+          gitea/indexers:
+            reason: "search indexes (19 MB) Gitea rebuilds from gitea.db; 19 of each snapshot's 269 changed MB (#3035)"
+            tier: 3
 
     rpi3:
       uptime_kuma:
@@ -2901,11 +2907,23 @@ backup:
 
     rpi4:
       pihole:
-        # Query history only. `gravity.db` lives in the same volume and is
-        # ratified Tier 3 — regenerated in full by `pihole -g`, so it is
-        # deliberately not called out for consistency handling.
+        # `gravity.db` holds the adlists and the allow and deny lists that
+        # `pihole -g` builds from, so it is captured consistently. The query
+        # history is not backed up: it is telemetry FTL already prunes after
+        # `database.maxDBdays`, and every snapshot re-stored ~31 MB of it
+        # whatever the gap (#3035).
         volume: coredns_pihole_data
-        sqlite: pihole-FTL.db
+        sqlite: gravity.db
+        exclude:
+          pihole-FTL.db:
+            reason: "DNS query history, telemetry with no restore value; ~31 MB a snapshot (#3035)"
+            tier: 3
+          pihole-FTL.db-wal:
+            reason: "the query history's write-ahead log"
+            tier: 3
+          pihole-FTL.db-shm:
+            reason: "the query history's shared-memory index"
+            tier: 3
 
     vps:
       # BACKUP-046 / #1111, taken through the node-path pipeline rather than a
