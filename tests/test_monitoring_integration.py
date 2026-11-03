@@ -427,7 +427,7 @@ class TestApplyAgainstARealInstance:
         `active: false` entry also proves apply pauses it: nothing else writes that.
         """
         _add_default_notification(kuma_url)
-        muted = frozenset({"staging", "on-demand"})
+        muted = monitoring._get_muted_notification_tags(REPO_ROOT)
         monkeypatch.setattr(monitoring, "_get_muted_notification_tags", lambda _root: muted)
         seed = _real_seed()
         apply_seed(seed)
