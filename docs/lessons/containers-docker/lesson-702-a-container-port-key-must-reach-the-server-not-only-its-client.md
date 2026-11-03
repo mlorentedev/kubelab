@@ -1,5 +1,5 @@
 ---
-id: "lesson-702-a-container-port-key-must-reach-the-server-not-only-its-client"
+id: lesson-702-a-container-port-key-must-reach-the-server-not-only-its-client
 type: lesson
 status: active
 title: "A container port key must reach the server, not only its client"
