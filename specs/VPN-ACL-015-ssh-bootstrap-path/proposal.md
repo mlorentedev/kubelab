@@ -23,7 +23,7 @@ forward on the VPS. The `ssh_hardening` template renders `AllowTcpForwarding no`
 every user there, while the live VPS lets every account forward anywhere
 (`allowtcpforwarding yes`, `permitopen any` for `deployer` and `manu`, read by the
 operator on 2026-11-02), so
-the next `make provision NODE=vps` silently removes the only control path those
+the next `ssh_hardening` run on the VPS (base `provision.yml`) silently removes the only control path those
 clients have, and until then every account on the VPS, the Ansible one with sudo
 included, is an open relay for any key it holds.
 
@@ -59,7 +59,7 @@ included, is an open relay for any key it holds.
 
 ## Risks / open questions
 
-- [OPEN, until merged] Any `make provision NODE=vps` (tags `ssh`/`security`) run
+- [OPEN, until merged] Any run of the base `provision.yml` on the VPS (tags `ssh`/`security`)
   before this lands removes `deployer`'s forward and cuts the filtered clients off.
   Do not provision the VPS's SSH tags until the bootstrap account is deployed.
 - [OPEN, deploy-time] Control traffic may need a destination other than

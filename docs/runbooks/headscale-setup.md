@@ -870,7 +870,7 @@ Some networks sinkhole or TLS-inspect `vpn.kubelab.live` (measured on the office
 | Piece | Where | Owner |
 |---|---|---|
 | Account name, port, `narrow_ssh_user` | `networking.vps.ssh_bootstrap` in `common.yaml` | both roles read it |
-| `Match User hs-bootstrap`: `AllowTcpForwarding local`, `PermitOpen <headscale domain>:<port>`, no TTY, agent, X11, tunnel or stream-local forwarding, `ForceCommand /usr/sbin/nologin` | `ssh_hardening` template, handed to the VPS by `provision.yml` | `make provision NODE=vps ENV=prod TAGS=ssh` |
+| `Match User hs-bootstrap`: `AllowTcpForwarding local`, `PermitOpen <headscale domain>:<port>`, no TTY, agent, X11, tunnel or stream-local forwarding, `ForceCommand /usr/sbin/nologin` | `ssh_hardening` template, handed to the VPS by `provision.yml` | `toolkit infra ansible run -p provision -e prod -l kubelab-vps -t ssh --require-fresh` (base `provision.yml`; `make provision NODE=vps` is K3s and never touches sshd) |
 | The account (`/usr/sbin/nologin`, no password) and its root-owned `authorized_keys`, one `restrict,port-forwarding,permitopen="<same destination>"` line per key | `headscale` role (`tasks/bootstrap_identity.yml`) | `make deploy TARGET=vps ENV=prod` |
 | The public keys, one per machine under a neutral key | `apps.services.core.headscale.bootstrap_ssh_keys.<client-N>` in `prod.enc.yaml` | operator |
 

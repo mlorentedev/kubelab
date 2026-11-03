@@ -98,10 +98,11 @@ derived from `apps.services.core.headscale.domain`, which the generator does not
 - [ ] [AC3] Write each enrolled machine's public key to SOPS, then
   `make deploy TARGET=vps ENV=prod`: creates `hs-bootstrap` and its keys. No sshd
   change yet.
-- [ ] [AC3] `make provision NODE=vps ENV=prod TAGS=ssh` in check mode with `--diff`
+- [ ] [AC3] `ANSIBLE_DIFF_ALWAYS=1 toolkit infra ansible run -p provision -e prod -l kubelab-vps -t ssh --require-fresh --check`
+  (not `make provision NODE=vps`, which runs `provision-vps.yml`, K3s only)
   first: the live file is not the template's, so record every difference and settle
   each before applying.
-- [ ] [AC3] `make provision NODE=vps ENV=prod TAGS=ssh`: renders the `hs-bootstrap`
+- [ ] [AC3] `toolkit infra ansible run -p provision -e prod -l kubelab-vps -t ssh --require-fresh`: renders the `hs-bootstrap`
   block and narrows `deployer` to `vpn.kubelab.live:443`, so existing clients keep
   working. Read `sshd -T` for both users.
 - [ ] [AC3] Live: `ssh hs-bootstrap@<vps>` gets no shell and no PTY;
