@@ -81,15 +81,15 @@ func (r *Reconciler) readSource(ctx context.Context, src Source) error {
 // and 11-03), and waiting a full period for the next one left the source unread.
 const RetryPeriod = time.Minute
 
-// Run reconciles every source at start and then every period, until ctx ends.
+// Run reconciles every source at start and then a period after each cycle, until ctx ends.
 // A source that failed is read again after retry, alone, until the next full
 // cycle: a forge that stays down must not multiply the calls to the others.
 func (r *Reconciler) Run(ctx context.Context, period, retry time.Duration) {
-	next := time.Now()
-	var failed []Source
 	for {
-		failed = r.Once(ctx)
-		next = next.Add(period)
+		failed := r.Once(ctx)
+		// Counted from the end of the cycle, so a cycle slower than the period
+		// still leaves a full period before the next one.
+		next := time.Now().Add(period)
 		for len(failed) > 0 && retry < time.Until(next) {
 			if !sleep(ctx, retry) {
 				return
