@@ -16,11 +16,14 @@ groups:
         condition: C
         for: 15m
         # `OK`, and only because `obs042-disk-watcher-silent` below watches the
-        # watcher (#1668). This rule groups `by (namespace, pvc)`, so a claim
-        # that is deleted takes its label set with it: under `Alerting` Grafana
-        # could not tell "the problem went away" from "the observer went away",
-        # and a deleted claim stayed FIRING for ~90 minutes (staging,
-        # 2026-09-05). Silence of the whole stream is the other rule's question.
+        # watcher (#1668). Silence of the whole stream is the other rule's question.
+        #
+        # `OK` did NOT shorten how long a deleted claim stays FIRING: ~90 minutes
+        # under `Alerting` (staging, 2026-09-05) and 89.5 minutes under `OK`
+        # (staging, 2026-11-03). Other claims keep the result non-empty, so
+        # noDataState never applies. The deleted claim's series goes missing
+        # instead: it leaves the `[30m]` window, then Grafana resolves it after
+        # its missing-series evaluations at the 15m interval (#1668).
         noDataState: OK
         execErrState: Alerting
         annotations:
