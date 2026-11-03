@@ -1,4 +1,23 @@
 ---
+# VPN-ACL-015: a declaration sshd would read differently, or that would take the
+# Ansible account's shell away, stops the run before sshd_config is written.
+- name: Refuse a malformed bootstrap forward
+  assert:
+    that:
+      - ssh_bootstrap_forward.user is string
+      - ssh_bootstrap_forward.user is regex('[a-z_][a-z0-9_-]{0,31}', match_type='fullmatch')
+      - ssh_bootstrap_forward.user != ansible_user
+      - ssh_bootstrap_forward.permit_open is string
+      - ssh_bootstrap_forward.permit_open is regex('[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?:[0-9]{1,5}', match_type='fullmatch')
+      - (ssh_bootstrap_forward.transitional_users | default([])) is not string
+      - ssh_bootstrap_forward.user not in (ssh_bootstrap_forward.transitional_users | default([]))
+      - >-
+        (ssh_bootstrap_forward.transitional_users | default([]))
+        | reject('regex', '[a-z_][a-z0-9_-]{0,31}', match_type='fullmatch') | list | length == 0
+    fail_msg: "ssh_bootstrap_forward is malformed (networking.vps.ssh_bootstrap in common.yaml)"
+    quiet: true
+  when: ssh_bootstrap_forward | length > 0
+
 - name: Deploy hardened sshd_config
   template:
     src: sshd_config.j2

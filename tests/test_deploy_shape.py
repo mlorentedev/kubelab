@@ -196,6 +196,19 @@ class TestOverlay:
         shape = classify_diff(changes(VALUES, OVERLAY), before, after, apps, decl)
         assert shape.verdict == "not-mechanical"
 
+    def test_the_moved_image_must_belong_to_the_bumped_app(self, decl, apps) -> None:
+        """#2983: with api and web on one tag (a joint deploy), an api bump must not move web.
+
+        Same repository on both sides and the same old -> new, so only the container the
+        image belongs to tells the two apart."""
+        old = current_version("api")
+        before, after = bump("api", NEW)
+        collided = re.sub(r"kubelab-web:\S+", f"kubelab-web:{old}", before[OVERLAY])
+        before[OVERLAY] = collided
+        after[OVERLAY] = collided.replace(f"kubelab-web:{old}", f"kubelab-web:{NEW}")
+        shape = classify_diff(changes(VALUES, OVERLAY), before, after, apps, decl)
+        assert shape.verdict == "not-mechanical" and "web" in shape.reason, shape.reason
+
     def test_an_overlay_that_did_not_move_ends_it(self, decl, apps) -> None:
         """The values moved and nothing deploys it: the drift gate's case, not a deploy."""
         before, after = bump("web", NEW)

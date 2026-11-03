@@ -44,9 +44,31 @@ UsePAM yes
 
 # LAN jump host: the operator's `*-lan` SSH aliases reach the inner-LAN nodes
 # through this node (ProxyJump), which needs a TCP forward. Only the SSH port of
-# the declared nodes is open to it; agent forwarding stays off. Match blocks
-# apply to the end of the file, so this one must stay last.
+# the declared nodes is open to it; agent forwarding stays off. A Match block runs
+# to the next Match or the end of the file, so the Match blocks stay last.
 Match User {{ ansible_user }}
     AllowTcpForwarding yes
     PermitOpen {% for target in ssh_lan_jump_targets %}{{ target }}:{{ ssh_port }}{{ ' ' if not loop.last else '\n' }}{% endfor %}
+{% endif %}
+{% if ssh_bootstrap_forward %}
+
+# Control-plane bootstrap (VPN-ACL-015): clients on networks that block or inspect
+# the control plane reach Headscale through an SSH forward to it. This account may
+# forward there and nowhere else, and gets no shell. Transitional users keep the same
+# single destination until their clients move to it.
+Match User {{ ssh_bootstrap_forward.user }}
+    AllowTcpForwarding local
+    PermitOpen {{ ssh_bootstrap_forward.permit_open }}
+    AllowStreamLocalForwarding no
+    AllowAgentForwarding no
+    X11Forwarding no
+    PermitTunnel no
+    PermitTTY no
+    ForceCommand /usr/sbin/nologin
+{% for user in ssh_bootstrap_forward.transitional_users | default([]) %}
+Match User {{ user }}
+    AllowTcpForwarding local
+    PermitOpen {{ ssh_bootstrap_forward.permit_open }}
+    AllowStreamLocalForwarding no
+{% endfor %}
 {% endif %}
