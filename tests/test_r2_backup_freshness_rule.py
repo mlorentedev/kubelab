@@ -199,8 +199,8 @@ def test_the_harness_reads_the_existing_health_rule_both_ways(case: Case) -> Non
 
 
 def test_a_reachable_on_demand_node_that_stopped_shipping_fires(case: Case) -> None:
-    case.probe(0, [Node("beelink", "on-demand", age=4 * 3600), Node("vps", "always-on")])
-    case.probe(PROBE_INTERVAL, [Node("beelink", "on-demand", age=10 * 3600), Node("vps", "always-on")])
+    case.probe(0, [Node("beelink", "on-demand", age=13 * 3600), Node("vps", "always-on")])
+    case.probe(PROBE_INTERVAL, [Node("beelink", "on-demand", age=20 * 3600), Node("vps", "always-on")])
     assert _held(case) == {"beelink"}
 
 
@@ -208,7 +208,7 @@ def test_each_on_demand_node_is_judged_on_its_own(case: Case) -> None:
     """Two on-demand nodes in one probe, one stale and one fresh: only the stale
     one fires. Rules that group on Vector's `node` label (the K8s node) fold both
     into one series and judge whichever line came last (lesson-512)."""
-    nodes = [Node("beelink", "on-demand", age=10 * 3600), Node("rpi4", "on-demand", age=600)]
+    nodes = [Node("beelink", "on-demand", age=20 * 3600), Node("rpi4", "on-demand", age=600)]
     case.probe(0, nodes)
     case.probe(PROBE_INTERVAL, nodes)
     assert _held(case) == {"beelink"}
@@ -223,7 +223,7 @@ def test_the_freshness_rule_stays_silent(case: Case, scenario: str) -> None:
         "off both times": (Node("beelink", "on-demand", up=False, age=30 * 3600),) * 2,
         "turned off before the second probe": (
             Node("beelink", "on-demand", age=4 * 3600),
-            Node("beelink", "on-demand", up=False, age=10 * 3600),
+            Node("beelink", "on-demand", up=False, age=20 * 3600),
         ),
         "fresh": (Node("beelink", "on-demand", age=600),) * 2,
         # Its own heartbeat is not muted; this rule is not its judge.
