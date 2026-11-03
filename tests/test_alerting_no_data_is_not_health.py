@@ -26,7 +26,6 @@ family alerted on a stopped watcher for a day and a half.
 
 from __future__ import annotations
 
-import pathlib
 import re
 
 import pytest
