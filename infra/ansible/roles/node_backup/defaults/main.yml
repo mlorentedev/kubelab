@@ -325,8 +325,12 @@ node_backup_memory_swap_max: "0"
 # #452's Tier 1 RPO < 6h; hourly over-delivered at 119k ops/month to do it).
 node_backup_schedule: "*-*-* 0/4:00:00"
 
-# On-demand: hourly while the node is up, ratified in the same table.
-node_backup_interval: "1h"
+# On-demand: every 4h while the node is up, as the always-on nodes. Ratified as
+# hourly in the same table, which assumed dedup made snapshots nearly free; it
+# does not for a live SQLite source, where each snapshot costs about the same
+# whatever the gap (#3035, lesson-700). The boot snapshot and the shutdown
+# snapshot (node-backup-shutdown.service) still bound a short session.
+node_backup_interval: "4h"
 
 # The remaining two knobs are NOT in the ratified table -- proposed here,
 # not decided; flag before treating them as settled.
