@@ -1932,7 +1932,7 @@ apps:
         # ADR028-004: config promotes as ConfigMaps; session store is disposable.
         state_promotion: dual
         location: always-on
-        image: authelia/authelia:4.39.15
+        image: authelia/authelia:4.39.28
         redis_image: redis:7-alpine
         enable_auth: false
         domain: auth.kubelab.live

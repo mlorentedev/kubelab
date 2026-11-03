@@ -195,7 +195,7 @@ images:
   - name: timberio/vector
     newTag: 0.43.1-alpine
   - name: authelia/authelia
-    newTag: 4.39.15
+    newTag: 4.39.28
   - name: redis
     newTag: 7-alpine
   - name: crowdsecurity/crowdsec
