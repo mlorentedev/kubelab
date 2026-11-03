@@ -4,6 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 702 | [A container port key must reach the server, not only its client](lesson-702-a-container-port-key-must-reach-the-server-not-only-its-client.md) | 2026-11-02 |
 | 692 | [Open WebUI's Pyodide runs get 60 seconds, including the package download](lesson-692-open-webuis-pyodide-runs-get-60-seconds-including-the-package-download.md) | 2026-11-01 |
 | 690 | [Measure the model before tuning Open WebUI's background calls](lesson-690-measure-the-model-before-tuning-open-webuis-background-calls.md) | 2026-11-01 |
 | 687 | [An Open WebUI feature toggle decides which tools the model gets](lesson-687-an-open-webui-feature-toggle-decides-which-tools-the-model-gets.md) | 2026-11-01 |

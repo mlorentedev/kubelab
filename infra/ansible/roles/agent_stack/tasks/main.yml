@@ -464,6 +464,12 @@
   ansible.builtin.import_tasks: mcp_bridge.yml
   tags: [agent_stack]
 
+# After Open WebUI is up, which needs its OIDC secret and break-glass password.
+- name: Verify Open WebUI's search engine and effective config
+  ansible.builtin.import_tasks: webui_checks.yml
+  when: agent_stack_webui_configured | bool
+  tags: [agent_stack]
+
 # After the sync, and before Hermes (whose gateway mounts what this creates): it reads the clone the sync keeps and writes into the zone the sync commits.
 - name: Provision the curator's analyzer
   ansible.builtin.import_tasks: curator.yml
