@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.2](https://github.com/mlorentedev/kubelab/compare/api-v1.3.1...api-v1.3.2) (2026-11-03)
+
+
+### Bug Fixes
+
+* **api:** retry a failed forge reconcile within a minute ([#3039](https://github.com/mlorentedev/kubelab/issues/3039)) ([9e600b5](https://github.com/mlorentedev/kubelab/commit/9e600b5cc563895e068042612615578a422d69ef))
+
 ## [1.3.1](https://github.com/mlorentedev/kubelab/compare/api-v1.3.0...api-v1.3.1) (2026-11-03)
 
 
