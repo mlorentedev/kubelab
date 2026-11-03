@@ -36,10 +36,11 @@ def _values() -> dict:
 
 def test_liveness_waits_out_saturation_and_still_catches_a_stuck_process() -> None:
     probe = _values()["livenessProbe"]
-    # The kubelet probes on a ticker, so a probe that runs to its timeout delays the
-    # next one: the shortest restart is one period per failure, the longest one
-    # period plus one timeout per failure.
-    fastest = probe["periodSeconds"] * probe["failureThreshold"]
+    # The kubelet probes on a ticker and restarts on the threshold-th consecutive
+    # failure: from the first failure that is at least one period per further
+    # failure, and a probe that runs to its timeout delays the next one, so a hang
+    # is caught within one period plus one timeout per failure.
+    fastest = probe["periodSeconds"] * (probe["failureThreshold"] - 1)
     slowest = (probe["periodSeconds"] + probe["timeoutSeconds"]) * probe["failureThreshold"]
     assert probe["timeoutSeconds"] >= MIN_TIMEOUT_SECONDS
     assert MIN_SECONDS_TO_RESTART <= fastest, f"restarts after {fastest}s of failures"
