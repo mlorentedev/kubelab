@@ -1846,6 +1846,26 @@ SECRET_CATALOG: list[SecretSpec] = [
         rotate_note="apply-secrets for postgres-secrets; ALTER USER + restart postgres (and api once it connects).",
         envs=("staging", "prod"),
     ),
+    # What the forges sign webhook deliveries to the API with (CONSOLE-004). Prod only:
+    # staging is VPN-only, so no forge can reach it.
+    SecretSpec(
+        key_path="apps.platform.api.forge_github_webhook_secret",
+        description="HMAC secret GitHub signs webhook deliveries to the API with",
+        kind=SecretKind.RANDOM_HEX,
+        length=32,
+        services=("api",),
+        rotate_note="apply-secrets for api-secrets, restart api, then update the GitHub webhook's secret.",
+        envs=("prod",),
+    ),
+    SecretSpec(
+        key_path="apps.platform.api.forge_gitea_webhook_secret",
+        description="HMAC secret Gitea signs webhook deliveries to the API with",
+        kind=SecretKind.RANDOM_HEX,
+        length=32,
+        services=("api", "gitea"),
+        rotate_note="apply-secrets for api-secrets, restart api, then update the Gitea webhook's secret.",
+        envs=("prod",),
+    ),
     SecretSpec(
         key_path="apps.platform.api.db_password",
         description="PostgreSQL password for the api tenant role (DATA-007)",

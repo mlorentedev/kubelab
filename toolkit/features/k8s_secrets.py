@@ -148,6 +148,9 @@ SECRET_DEFINITIONS: list[SecretMapping] = [
             # The API's Postgres tenant (DATA-007). Optional for the same reason: without it the
             # API omits the check and starts.
             "POSTGRES_TENANT_PASSWORD": "APPS_PLATFORM_API_DB_PASSWORD",
+            # Optional: the receiver answers 401 to every delivery without them.
+            "FORGE_GITHUB_WEBHOOK_SECRET": "APPS_PLATFORM_API_FORGE_GITHUB_WEBHOOK_SECRET",
+            "FORGE_GITEA_WEBHOOK_SECRET": "APPS_PLATFORM_API_FORGE_GITEA_WEBHOOK_SECRET",
         },
     ),
     SecretMapping(
