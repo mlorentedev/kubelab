@@ -38,20 +38,24 @@ type Reconciler struct {
 }
 
 // Once reads every source. One failing source neither stops the others nor
-// fails the cycle: the failure is recorded on that source. It reports whether
-// every source was read.
-func (r *Reconciler) Once(ctx context.Context) bool {
-	ok := true
-	for _, src := range r.Sources {
+// fails the cycle: the failure is recorded on that source. It returns the
+// sources it could not read.
+func (r *Reconciler) Once(ctx context.Context) []Source {
+	return r.read(ctx, r.Sources)
+}
+
+func (r *Reconciler) read(ctx context.Context, sources []Source) []Source {
+	var failed []Source
+	for _, src := range sources {
 		if err := r.readSource(ctx, src); err != nil {
-			ok = false
+			failed = append(failed, src)
 			log.Printf("forge reconcile: %s: %v", src, err)
 			if mark := r.Model.MarkUnreachable(ctx, src, r.now()); mark != nil {
 				log.Printf("forge reconcile: %s: record unreachable: %v", src, mark)
 			}
 		}
 	}
-	return ok
+	return failed
 }
 
 func (r *Reconciler) readSource(ctx context.Context, src Source) error {
@@ -77,19 +81,34 @@ func (r *Reconciler) readSource(ctx context.Context, src Source) error {
 // and 11-03), and waiting a full period for the next one left the source unread.
 const RetryPeriod = time.Minute
 
-// Run reconciles once at start and then every period, until ctx ends. A cycle
-// with a failed source runs again after retry, if that is sooner.
+// Run reconciles every source at start and then every period, until ctx ends.
+// A source that failed is read again after retry, alone, until the next full
+// cycle: a forge that stays down must not multiply the calls to the others.
 func (r *Reconciler) Run(ctx context.Context, period, retry time.Duration) {
+	next := time.Now()
+	var failed []Source
 	for {
-		wait := period
-		if !r.Once(ctx) && retry < period {
-			wait = retry
+		failed = r.Once(ctx)
+		next = next.Add(period)
+		for len(failed) > 0 && retry < time.Until(next) {
+			if !sleep(ctx, retry) {
+				return
+			}
+			failed = r.read(ctx, failed)
 		}
-		select {
-		case <-ctx.Done():
+		if !sleep(ctx, time.Until(next)) {
 			return
-		case <-time.After(wait):
 		}
+	}
+}
+
+// sleep waits for d, and reports false if ctx ended first.
+func sleep(ctx context.Context, d time.Duration) bool {
+	select {
+	case <-ctx.Done():
+		return false
+	case <-time.After(d):
+		return true
 	}
 }
 

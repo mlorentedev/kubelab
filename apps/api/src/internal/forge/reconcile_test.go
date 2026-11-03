@@ -142,11 +142,13 @@ func TestReconcileStaysUnderTheHourlyCeiling(t *testing.T) {
 	}
 }
 
-// flakyReader fails its first call, as the database did for a new pod.
+// flakyReader fails its first call, as the database did for a new pod, and
+// signals its first success.
 type flakyReader struct {
 	mu    sync.Mutex
 	calls int
 	read  chan struct{}
+	once  sync.Once
 }
 
 func (f *flakyReader) ListItems(_ context.Context, s forge.Source, _ time.Time) ([]forge.Item, error) {
@@ -156,8 +158,40 @@ func (f *flakyReader) ListItems(_ context.Context, s forge.Source, _ time.Time) 
 	if f.calls == 1 {
 		return nil, &forge.SourceError{Source: s, Err: errors.New("connection refused")}
 	}
-	close(f.read)
+	f.once.Do(func() { close(f.read) })
 	return nil, nil
+}
+
+// countingReader counts its calls and never fails.
+type countingReader struct {
+	mu    sync.Mutex
+	calls int
+}
+
+func (c *countingReader) ListItems(context.Context, forge.Source, time.Time) ([]forge.Item, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.calls++
+	return nil, nil
+}
+
+func TestADownSourceIsRetriedAloneUntilTheNextCycle(t *testing.T) {
+	up := forge.Source{Forge: "github", Owner: "o", Repo: "up"}
+	down := forge.Source{Forge: "gitea", Owner: "o", Repo: "down"}
+	healthy := &countingReader{}
+	r := forge.Reconciler{
+		Readers: map[string]forge.Reader{"github": healthy, "gitea": &fakeReader{err: errors.New("down")}},
+		Sources: []forge.Source{up, down},
+		Model:   newModel(),
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	r.Run(ctx, time.Hour, 5*time.Millisecond)
+	healthy.mu.Lock()
+	defer healthy.mu.Unlock()
+	if healthy.calls != 1 {
+		t.Fatalf("the healthy source was read %d times while the other was retried", healthy.calls)
+	}
 }
 
 func TestFailedCycleRetriesBeforeThePeriod(t *testing.T) {
