@@ -1,5 +1,5 @@
 ---
-id: lesson-700-a-rolling-pod-must-outlast-its-endpoint
+id: lesson-703-a-rolling-pod-must-outlast-its-endpoint
 type: lesson
 status: active
 title: "A rolling pod must outlast its endpoint, whichever app showed the loss"
