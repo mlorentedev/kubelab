@@ -17,7 +17,7 @@ owner: manu
 make load-test ENV=staging
 ```
 
-Needs ace1 and ace2 powered on, SSH to both and the staging kubeconfig. Takes up to an hour. Writes `docs/load-test/<date>-<commit>.json` (raw) and `.md` (tables). `REPEATS=`, `SECONDS=` and `MAX_RATE=` shorten it; a short run is a smoke test, so do not quote it. Any `ENV` other than `staging` is refused, and no option takes a URL.
+Needs ace1 and ace2 powered on, SSH to both and the staging kubeconfig. Takes up to an hour. Writes `docs/load-test/<date>-<commit>.json` (raw) and `.md` (tables). `REPEATS=`, `SECONDS=` and `MAX_RATE=` shorten it, and `MIN_RATE=` starts the ramp at a step, to rerun past a knee the ramp would otherwise stop at; a short run is a smoke test, so do not quote it. Any `ENV` other than `staging` is refused, and no option takes a URL.
 
 Before it starts, avoid a staging deploy window: a pod replaced during a step marks the step `rollout`, and that ramp measures nothing. Rerun it.
 

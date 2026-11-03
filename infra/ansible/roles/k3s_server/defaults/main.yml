@@ -30,6 +30,10 @@ k3s_configure_traefik: true
 # 1536Mi had no OOMKill in eight ramps, highest sample 973Mi at 2,800 VUs (2026-11-02-4da6811b.md).
 k3s_traefik_memory_request: 128Mi
 k3s_traefik_memory_limit: 1536Mi
+# Restarted only after 90 s without a 5-second answer: a stuck process, not a busy one.
+k3s_traefik_liveness_timeout_seconds: 5
+k3s_traefik_liveness_period_seconds: 15
+k3s_traefik_liveness_failure_threshold: 6
 k3s_traefik_http_port: 80
 k3s_traefik_https_port: 443
 

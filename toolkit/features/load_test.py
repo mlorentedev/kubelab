@@ -373,10 +373,15 @@ def _runtime_facts(lab: Lab, image: str) -> dict[str, Any]:
     }
 
 
-def refuse_empty_run(repeats: int, seconds: int, max_rate: int) -> None:
+def select_steps(min_rate: int, max_rate: int) -> tuple[int, ...]:
+    """The ramp's steps from `min_rate` to `max_rate`, both inclusive."""
+    return tuple(rate for rate in STEPS if min_rate <= rate <= max_rate)
+
+
+def refuse_empty_run(repeats: int, seconds: int, max_rate: int, min_rate: int = 0) -> None:
     """A run that would measure nothing must not write a report that looks like one."""
-    if repeats < 1 or seconds < 1 or max_rate < STEPS[0]:
-        raise LoadTestRefused(f"repeats and seconds must be at least 1, and max rate at least {STEPS[0]}")
+    if repeats < 1 or seconds < 1 or not select_steps(min_rate, max_rate):
+        raise LoadTestRefused(f"repeats and seconds must be at least 1, and the rates must include a step of {STEPS}")
 
 
 def run(
@@ -388,6 +393,7 @@ def run(
     seconds: int,
     max_rate: int,
     checkpoint: Any = lambda _result: None,
+    min_rate: int = 0,
 ) -> dict[str, Any]:
     """Baseline under the limiter, then `repeats` ramps past it. Always removes the route.
 
@@ -396,11 +402,11 @@ def run(
     """
     import time
 
-    refuse_empty_run(repeats, seconds, max_rate)
+    refuse_empty_run(repeats, seconds, max_rate, min_rate)
     lab.assert_cluster()
     script = (lab.root / SCRIPT).read_text(encoding="utf-8")
     facts = _runtime_facts(lab, image)
-    steps = tuple(rate for rate in STEPS if rate <= max_rate)
+    steps = select_steps(min_rate, max_rate)
     restarts = {t.workload: lab.restarts(t.workload) for t in targets}
     edge_at_start = lab.edge_state()
 
