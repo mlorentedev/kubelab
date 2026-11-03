@@ -44,7 +44,10 @@ TOKEN_ENDPOINT_AUTH_METHODS = ("client_secret_basic", "client_secret_post", "cli
 #: Fields a client may declare and Authelia's default covers when it does not.
 #: `access_token_signed_response_alg` other than `none` issues RFC 9068 JWT access
 #: tokens; the `grafana` client needs it so Grafana stops logging opaque ones (SEC-021).
-OPTIONAL_FIELDS = ("access_token_signed_response_alg",)
+#: Such a token needs an `aud` claim, and `audience` alone does not grant one: a client
+#: that requests none, as Grafana does, gets it only with `requested_audience_mode:
+#: implicit` (#1845).
+OPTIONAL_FIELDS = ("access_token_signed_response_alg", "audience", "requested_audience_mode")
 
 _AUTHELIA = "apps.services.security.authelia"
 

@@ -84,8 +84,8 @@ def test_the_runbook_shows_the_compose_the_role_renders() -> None:
     assert _runbook_compose() == _rendered()
 
 
-def _rendered_split_dns() -> dict[str, Any]:
-    """`dns.nameservers.split` of `config.yaml.j2` as the VPS play renders it."""
+def _rendered_nameservers() -> dict[str, Any]:
+    """`dns.nameservers` of `config.yaml.j2` as the VPS play renders it."""
     config = _prod_config()
     headscale = config["apps"]["services"]["core"]["headscale"]
     rpi4 = config["networking"]["nodes"]["rpi4"]["tailscale_ip"]
@@ -95,12 +95,22 @@ def _rendered_split_dns() -> dict[str, Any]:
             "headscale_domain": headscale["domain"],
             "headscale_listen_port": headscale["default_port"],
             "tailscale_cidr": config["networking"]["tailscale_cidr"],
+            "headscale_dns_global": config["networking"]["public_resolvers"],
             # The "Build Headscale split DNS from staging zones" task in deploy-vps.yml.
             "headscale_dns_split": {zone: [rpi4] for zone in config["networking"]["staging_zones"]},
         }
     )
     env = ansible_env(str(TEMPLATES), trim_blocks=True)
-    return yaml.safe_load(env.get_template("config.yaml.j2").render(**variables))["dns"]["nameservers"]["split"]
+    return yaml.safe_load(env.get_template("config.yaml.j2").render(**variables))["dns"]["nameservers"]
+
+
+def _rendered_split_dns() -> dict[str, Any]:
+    """`dns.nameservers.split` of `config.yaml.j2` as the VPS play renders it."""
+    return _rendered_nameservers()["split"]
+
+
+def test_headscale_renders_the_declared_public_resolvers() -> None:
+    assert _rendered_nameservers()["global"] == _prod_config()["networking"]["public_resolvers"]
 
 
 def _runbook_split_dns() -> dict[str, Any]:

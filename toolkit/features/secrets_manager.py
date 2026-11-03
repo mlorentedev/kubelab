@@ -1309,6 +1309,28 @@ SECRET_CATALOG: list[SecretSpec] = [
         # Same reasoning as `audit_sources`: the VPS is prod-only.
         envs=("prod",),
     ),
+    SecretSpec(
+        # The whole subtree, for the reason the segments entry gives: each enrolled
+        # machine's key sits under a neutral key (`client-1`), so this entry must never
+        # name one (VPN-ACL-015).
+        key_path="apps.services.core.headscale.bootstrap_ssh_keys",
+        expiry=Expiry.NEVER,
+        description=(
+            "Public SSH keys allowed to forward to the control plane through the VPS's "
+            "bootstrap account (ts-bridge --bootstrap-ssh). Not credentials: inventory of "
+            "enrolled machines, kept out of the public tree."
+        ),
+        kind=SecretKind.EXTERNAL,
+        services=("headscale",),
+        format_hint="mapping of neutral key -> one public key line (no options)",
+        rotate_note=(
+            "Revoke by removing the entry, enrol by adding one, then "
+            "`make deploy TARGET=vps ENV=prod`. The deploy refuses a line with options."
+        ),
+        # Absent is a decision (no machine enrolled), not a gap.
+        optional=True,
+        envs=("prod",),
+    ),
     # =========================================================================
     # GCP hub (ADR-063) — read by cloud-init from Secret Manager, not by a human
     # =========================================================================
@@ -1845,6 +1867,26 @@ SECRET_CATALOG: list[SecretSpec] = [
         services=("postgres",),
         rotate_note="apply-secrets for postgres-secrets; ALTER USER + restart postgres (and api once it connects).",
         envs=("staging", "prod"),
+    ),
+    # What the forges sign webhook deliveries to the API with (CONSOLE-004). Prod only:
+    # staging is VPN-only, so no forge can reach it.
+    SecretSpec(
+        key_path="apps.platform.api.forge_github_webhook_secret",
+        description="HMAC secret GitHub signs webhook deliveries to the API with",
+        kind=SecretKind.RANDOM_HEX,
+        length=32,
+        services=("api",),
+        rotate_note="apply-secrets for api-secrets, restart api, then update the GitHub webhook's secret.",
+        envs=("prod",),
+    ),
+    SecretSpec(
+        key_path="apps.platform.api.forge_gitea_webhook_secret",
+        description="HMAC secret Gitea signs webhook deliveries to the API with",
+        kind=SecretKind.RANDOM_HEX,
+        length=32,
+        services=("api", "gitea"),
+        rotate_note="apply-secrets for api-secrets, restart api, then update the Gitea webhook's secret.",
+        envs=("prod",),
     ),
     SecretSpec(
         key_path="apps.platform.api.db_password",
