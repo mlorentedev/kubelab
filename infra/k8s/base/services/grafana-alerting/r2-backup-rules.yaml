@@ -174,7 +174,7 @@ groups:
         annotations:
           summary: >-
             An on-demand node answered the watcher on two consecutive probes and its newest
-            snapshot in R2 is older than 3 hours, three times its hourly schedule: it is up and
+            snapshot in R2 is older than 12 hours, three times its 4h schedule: it is up and
             not shipping. If every node is quiet and this still fires, it is "no data": the
             watcher stopped, or no node is on-demand, and the health rule is paging too.
           runbook_url: >-
@@ -242,7 +242,7 @@ groups:
                 - evaluator:
                     type: gt
                     # 3 x node_backup_interval (1 h), in seconds.
-                    params: [10800]
+                    params: [43200]
               datasource:
                 type: __expr__
                 uid: __expr__
