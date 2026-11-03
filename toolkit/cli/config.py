@@ -1,5 +1,6 @@
 """Configuration management commands."""
 
+from collections.abc import Callable
 from typing import Annotated
 
 import typer
@@ -8,6 +9,7 @@ from toolkit.config.constants import MESSAGES
 from toolkit.core.logging import logger
 from toolkit.features.generator_ansible import AnsibleGenerator
 from toolkit.features.generator_authelia import AutheliaGenerator
+from toolkit.features.generator_base import BaseGenerator
 from toolkit.features.generator_k8s import K8sGenerator
 from toolkit.features.generator_terraform import TerraformGenerator
 from toolkit.features.generator_traefik import TraefikGenerator
@@ -27,6 +29,27 @@ app = typer.Typer(
 # =============================================================================
 # General Configuration
 # =============================================================================
+
+
+def services_for(env: str) -> list[str]:
+    """What `config generate` runs for an env with no --service: the one list, so a test can render it all."""
+    if env == "dev":
+        return ["traefik", "wiki", "authelia"]
+    return ["terraform", "traefik", "ansible", "wiki", "authelia", "k8s"]
+
+
+def generator_for(service: str) -> BaseGenerator | None:
+    """The generator for a service name, looked up at call time so tests can swap one."""
+    generators: dict[str, Callable[[], BaseGenerator]] = {
+        "terraform": TerraformGenerator,
+        "traefik": TraefikGenerator,
+        "ansible": AnsibleGenerator,
+        "wiki": WikiGenerator,
+        "authelia": AutheliaGenerator,
+        "k8s": K8sGenerator,
+    }
+    factory = generators.get(service)
+    return factory() if factory else None
 
 
 @app.command()
@@ -62,33 +85,18 @@ def generate(
         success_count = 0
         total_count = 0
 
-        if env == "dev":
-            services_to_generate = [service] if service else ["traefik", "wiki", "authelia"]
-        else:
-            services_to_generate = (
-                [service] if service else ["terraform", "traefik", "ansible", "wiki", "authelia", "k8s"]
-            )
+        services_to_generate = [service] if service else services_for(env)
 
         for svc in services_to_generate:
             total_count += 1
             logger.info(f"Generating {svc} configuration...")
 
             try:
-                if svc == "terraform":
-                    result = TerraformGenerator().generate(env)
-                elif svc == "traefik":
-                    result = TraefikGenerator().generate(env)
-                elif svc == "ansible":
-                    result = AnsibleGenerator().generate(env)
-                elif svc == "wiki":
-                    result = WikiGenerator().generate(env)
-                elif svc == "authelia":
-                    result = AutheliaGenerator().generate(env)
-                elif svc == "k8s":
-                    result = K8sGenerator().generate(env)
-                else:
+                generator = generator_for(svc)
+                if generator is None:
                     logger.error(MESSAGES.ERROR_INVALID.format("service", svc))
                     continue
+                result = generator.generate(env)
 
                 # Every generator returns {"success": bool, ...}; the dict itself is always truthy (#2273).
                 if result.get("success"):
