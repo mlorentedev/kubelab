@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -138,5 +139,37 @@ func TestReconcileStaysUnderTheHourlyCeiling(t *testing.T) {
 	r.Once(context.Background())
 	if len(model.unreachable) != 1 {
 		t.Fatalf("past the ceiling the source must read as unreachable: %v", model.unreachable)
+	}
+}
+
+// flakyReader fails its first call, as the database did for a new pod.
+type flakyReader struct {
+	mu    sync.Mutex
+	calls int
+	read  chan struct{}
+}
+
+func (f *flakyReader) ListItems(_ context.Context, s forge.Source, _ time.Time) ([]forge.Item, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls++
+	if f.calls == 1 {
+		return nil, &forge.SourceError{Source: s, Err: errors.New("connection refused")}
+	}
+	close(f.read)
+	return nil, nil
+}
+
+func TestFailedCycleRetriesBeforeThePeriod(t *testing.T) {
+	src := forge.Source{Forge: "github", Owner: "o", Repo: "r"}
+	reader := &flakyReader{read: make(chan struct{})}
+	r := forge.Reconciler{Readers: map[string]forge.Reader{"github": reader}, Sources: []forge.Source{src}, Model: newModel()}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go r.Run(ctx, time.Hour, 10*time.Millisecond)
+	select {
+	case <-reader.read:
+	case <-time.After(2 * time.Second):
+		t.Fatal("a failed first read waited for the full period")
 	}
 }

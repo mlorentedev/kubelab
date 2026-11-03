@@ -38,16 +38,20 @@ type Reconciler struct {
 }
 
 // Once reads every source. One failing source neither stops the others nor
-// fails the cycle: the failure is recorded on that source.
-func (r *Reconciler) Once(ctx context.Context) {
+// fails the cycle: the failure is recorded on that source. It reports whether
+// every source was read.
+func (r *Reconciler) Once(ctx context.Context) bool {
+	ok := true
 	for _, src := range r.Sources {
 		if err := r.readSource(ctx, src); err != nil {
+			ok = false
 			log.Printf("forge reconcile: %s: %v", src, err)
 			if mark := r.Model.MarkUnreachable(ctx, src, r.now()); mark != nil {
 				log.Printf("forge reconcile: %s: record unreachable: %v", src, mark)
 			}
 		}
 	}
+	return ok
 }
 
 func (r *Reconciler) readSource(ctx context.Context, src Source) error {
@@ -68,16 +72,23 @@ func (r *Reconciler) readSource(ctx context.Context, src Source) error {
 	return r.Model.SaveRead(ctx, src, items, started)
 }
 
-// Run reconciles once at start and then every period, until ctx ends.
-func (r *Reconciler) Run(ctx context.Context, period time.Duration) {
-	ticker := time.NewTicker(period)
-	defer ticker.Stop()
+// RetryPeriod is how soon a failed cycle runs again. A new pod's first read
+// fails with the database refusing it, seen twice (staging and prod, 2026-11-02
+// and 11-03), and waiting a full period for the next one left the source unread.
+const RetryPeriod = time.Minute
+
+// Run reconciles once at start and then every period, until ctx ends. A cycle
+// with a failed source runs again after retry, if that is sooner.
+func (r *Reconciler) Run(ctx context.Context, period, retry time.Duration) {
 	for {
-		r.Once(ctx)
+		wait := period
+		if !r.Once(ctx) && retry < period {
+			wait = retry
+		}
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
+		case <-time.After(wait):
 		}
 	}
 }
