@@ -38,7 +38,7 @@ from pathlib import Path
 
 import pytest
 import yaml
-from uptime_kuma_api import UptimeKumaApi
+from uptime_kuma_api import UptimeKumaApi, UptimeKumaException
 
 from toolkit.features import monitoring
 from toolkit.features.monitoring_diff import PushTokenError, diff_monitors, extract_key
@@ -196,10 +196,28 @@ def fresh_kuma_url():
         subprocess.run(["docker", "rm", "-f", name], capture_output=True)
 
 
+LOGIN_ATTEMPTS = 5
+LOGIN_LIMIT_WAIT_SECONDS = 20
+
+
 def _client(url: str):
-    api = monitoring.GreetedKumaApi(url, timeout=60)
-    api.login(ADMIN_USER, ADMIN_PASS)
-    return api
+    """Log in, waiting out Kuma's login limit.
+
+    Each test here logs in several times on one instance, and the limit answers
+    `Too frequently` on whichever test the clock lands on, which a slower or
+    faster run moves around.
+    """
+    for attempt in range(LOGIN_ATTEMPTS):
+        api = monitoring.GreetedKumaApi(url, timeout=60)
+        try:
+            api.login(ADMIN_USER, ADMIN_PASS)
+            return api
+        except UptimeKumaException as e:
+            api.disconnect()
+            if "Too frequently" not in str(e) or attempt == LOGIN_ATTEMPTS - 1:
+                raise
+            time.sleep(LOGIN_LIMIT_WAIT_SECONDS)
+    raise AssertionError("unreachable: the last attempt returns or raises")
 
 
 @pytest.fixture
