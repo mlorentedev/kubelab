@@ -205,7 +205,7 @@ since BACKUP-057 PR 4a; PR 5 revokes it.
 
 ## On-demand backup stale
 
-`backup032-on-demand-freshness` fires when an **on-demand** node (beelink, rpi4)
+`backup032-on-demand-freshness` fires when an **on-demand** node (ace2, beelink)
 answered the watcher on two consecutive probes and its newest snapshot is older
 than 12 hours. Such a node ships every 4 hours while it is up, so it is up and not
 shipping. Nothing else catches that: the ship's failure hook needs the ship to
