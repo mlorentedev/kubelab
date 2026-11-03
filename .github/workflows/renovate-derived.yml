@@ -1,0 +1,68 @@
+name: Renovate derived files
+
+# Renovate edits the image tag in common.yaml and nothing else, so every image
+# bump arrives with base/kustomization.yaml and platform.json stale and fails
+# Tests, Drift and Sync check until someone regenerates them by hand (#3021).
+# This commits that output to the Renovate branch.
+#
+# Not a Renovate postUpgradeTasks: those run inside the Renovate container, which
+# has no Poetry and no toolkit.
+#
+# The toolkit is run with no credential on disk: it comes from the pushed branch.
+# RELEASE_PLEASE_TOKEN appears only in the push step, and is a PAT because a push
+# made with GITHUB_TOKEN triggers no workflow, so the PR would keep the red checks
+# of the commit before it.
+#
+# Only the two paths below are staged, and the regeneration is deterministic for
+# a given common.yaml, so the push this makes finds nothing to do and ends here.
+# The branch name decides where a commit may land, never whether it may merge.
+
+on:
+  push:
+    branches: ["renovate/**"]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  regenerate:
+    name: Regenerate derived files
+    runs-on: ${{ fromJSON(vars.RUNNER_DOCKER || '["ubuntu-latest"]') }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7
+        with:
+          python-version: '3.12'
+
+      - name: Install the toolkit
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "poetry>=1.8,<2.0"
+          poetry install --only main
+
+      - name: Regenerate
+        run: |
+          poetry run toolkit sync images
+          poetry run toolkit sync platform-json
+
+      - name: Commit the output to the branch
+        env:
+          TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+        run: |
+          git add infra/k8s/base/kustomization.yaml infra/config/platform.json
+          if git diff --cached --quiet; then
+            echo "Derived files already match common.yaml."
+            exit 0
+          fi
+          git config user.name "kubelab-bot"
+          git config user.email "bot@kubelab.live"
+          git commit -m "fix(deps): regenerate the files derived from common.yaml"
+          git push "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:${GITHUB_REF_NAME}"

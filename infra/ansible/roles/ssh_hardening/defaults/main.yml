@@ -13,3 +13,9 @@ ssh_client_alive_count_max: 2
 # trailing `Match` block. Empty everywhere else, so every other node renders
 # exactly the file it did before the jump host existed.
 ssh_lan_jump_targets: []
+
+# The control-plane bootstrap forward (networking.vps.ssh_bootstrap in common.yaml,
+# VPN-ACL-015). The inventory generator sets it on the VPS alone, as
+# {user, permit_open, transitional_users}; a non-empty mapping renders a trailing
+# `Match User` block that lets that account forward to permit_open and nothing else.
+ssh_bootstrap_forward: {}

@@ -305,7 +305,7 @@ def test_a_jwt_access_token_client_is_granted_its_audience() -> None:
     """Declaring `audience` is not enough: a client that requests none gets no `aud` (#1845)."""
     common = yaml.safe_load((PROJECT_ROOT / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
     clients = common["apps"]["services"]["security"]["authelia"]["oidc_clients"]
-    jwt_clients = [c for c in clients if c.get("access_token_signed_response_alg")]
+    jwt_clients = [c for c in clients if c.get("access_token_signed_response_alg") not in (None, "none")]
     assert jwt_clients
     for client in jwt_clients:
         assert client.get("audience"), client["client_id"]
