@@ -198,7 +198,8 @@ func TestADownSourceIsRetriedAloneUntilTheNextCycle(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 	r.Run(ctx, time.Hour, 5*time.Millisecond)
-	if n := broken.count(); n < 3 {
+	// About 40 retries fit in 200ms at 5ms each: fewer means no retry, far more means no pause.
+	if n := broken.count(); n < 3 || n > 60 {
 		t.Fatalf("the down source was read %d times in 200ms with a 5ms retry", n)
 	}
 	if n := healthy.count(); n != 1 {
