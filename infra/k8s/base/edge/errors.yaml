@@ -40,6 +40,11 @@ spec:
               port: http
             initialDelaySeconds: 3
             periodSeconds: 10
+          # Drain before stopping: SIGTERM and endpoint removal race (DELIVERY-012).
+          lifecycle:
+            preStop:
+              sleep:
+                seconds: 5
           resources:
             limits:
               memory: 64Mi
