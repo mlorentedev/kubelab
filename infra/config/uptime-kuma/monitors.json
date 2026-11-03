@@ -80,8 +80,7 @@
     "parent": null,
     "tags": [
       "infra",
-      "vpn",
-      "on-demand"
+      "vpn"
     ]
   },
   {
@@ -108,8 +107,7 @@
     "parent": null,
     "tags": [
       "infra",
-      "dns",
-      "on-demand"
+      "dns"
     ],
     "dns_resolve_server": "100.64.0.10",
     "dns_resolve_type": "A"
@@ -965,8 +963,7 @@
     "parent": null,
     "tags": [
       "backup",
-      "prod",
-      "on-demand"
+      "prod"
     ]
   },
   {

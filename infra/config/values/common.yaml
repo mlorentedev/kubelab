@@ -415,8 +415,10 @@ networking:
         gateway: "172.30.250.1"
     rpi4:
       # ADR-028 tier. Machine-readable projection of the topology the ADR
-      # narrates; consumed by the backup trigger model (BACKUP-044).
-      location: "on-demand"
+      # narrates; consumed by the backup trigger model (BACKUP-044). Always-on
+      # since ADR-075 made it the lab's edge (#3037): the backup timer, the R2
+      # watcher window, the Kuma tags and the platform manifest all read it.
+      location: "always-on"
       hostname: "rpi4"
       tailscale_ip: "100.64.0.10"
       # The lab's edge (ADR-075): lan_ip is the homelab LAN side (eth0, inside
