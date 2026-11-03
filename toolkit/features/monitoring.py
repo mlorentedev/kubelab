@@ -20,6 +20,7 @@ from toolkit.features.monitoring_diff import (
     embed_key,
     extract_key,
     hydrate_push_tokens,
+    monitors_to_pause,
     strip_key,
     tag_drift,
     wants_notifications,
@@ -62,7 +63,12 @@ _MONITOR_EXPORT_FIELDS = [
     "notificationIDList",
     "parent",
     "tags",
+    "dns_resolve_server",
+    "dns_resolve_type",
 ]
+
+# Uptime Kuma reports these on every monitor, and only a `dns` monitor uses them.
+_DNS_ONLY_FIELDS = ("dns_resolve_server", "dns_resolve_type")
 
 _NOTIFICATION_EXPORT_FIELDS = [
     "name",
@@ -198,9 +204,14 @@ def _clean_monitor(monitor: dict[str, Any]) -> dict[str, Any]:
 
     Lifts the identity marker back out of `description` into a first-class `key`,
     so the seed stays human-readable and the round-trip is lossless: `apply`
-    embeds the marker, `export` extracts it.
+    embeds the marker, `export` extracts it. Tags go back to the names the seed
+    declares, since the API answers with objects (#2291).
     """
     clean = {k: monitor[k] for k in _MONITOR_EXPORT_FIELDS if k in monitor}
+    if clean.get("type") != "dns":
+        clean = {k: v for k, v in clean.items() if k not in _DNS_ONLY_FIELDS}
+    if "tags" in clean:
+        clean["tags"] = [tag["name"] for tag in clean["tags"]]
     key = extract_key(clean.get("description"))
     if key is not None:
         clean["description"] = strip_key(clean["description"])
@@ -213,8 +224,41 @@ def _clean_notification(notification: dict[str, Any]) -> dict[str, Any]:
     return {k: notification[k] for k in _NOTIFICATION_EXPORT_FIELDS if k in notification}
 
 
+def _seed_json(data: Any) -> str:
+    """The seed files' exact format: a `·` in a name stays a `·`."""
+    return json.dumps(data, indent=2, default=str, ensure_ascii=False) + "\n"
+
+
+def _in_seed_order(monitors: list[dict[str, Any]], seed_path: Path) -> list[dict[str, Any]]:
+    """Keep the seed's order, so an export diffs by content; a new monitor goes last.
+
+    Uptime Kuma answers in its own order, which would move every entry (#2291).
+    """
+    if not seed_path.exists():
+        return monitors
+    seed = json.loads(seed_path.read_text(encoding="utf-8"))
+    position = {entry.get("key"): index for index, entry in enumerate(seed)}
+    return sorted(monitors, key=lambda monitor: position.get(monitor.get("key"), len(position)))
+
+
+def _keys_the_export_would_drop(monitors: list[dict[str, Any]], seed_path: Path) -> list[str]:
+    """Seed keys with no live monitor: writing the export would un-declare them."""
+    if not seed_path.exists():
+        return []
+    seed = json.loads(seed_path.read_text(encoding="utf-8"))
+    exported = {monitor.get("key") for monitor in monitors}
+    declared = {entry["key"] for entry in seed if entry.get("key")}
+    return sorted(declared - exported)
+
+
 def export_monitors(project_root: Path) -> Path:
-    """Export all monitors and notifications to JSON files."""
+    """Export all monitors and notifications to JSON files.
+
+    The monitors file is written in the seed's shape, so a converged instance
+    leaves it byte-identical. An instance missing a monitor the seed declares is
+    refused, and nothing is written: the seed is the source of truth, and an
+    entry dropped here would have a later `PRUNE=1` delete the monitor (#2291).
+    """
     api, info = _connect(project_root)
 
     try:
@@ -228,11 +272,20 @@ def export_monitors(project_root: Path) -> Path:
         export_dir.mkdir(parents=True, exist_ok=True)
 
         monitors_path = export_dir / MONITORS_FILE
-        monitors_path.write_text(json.dumps(clean_monitors, indent=2, default=str) + "\n", encoding="utf-8")
+        dropped = _keys_the_export_would_drop(clean_monitors, monitors_path)
+        if dropped:
+            logger.error(
+                f"Refusing to export: the instance has no monitor for {', '.join(dropped)}, which the seed "
+                "declares. Run 'make monitoring-apply' first, or remove them from the seed."
+            )
+            raise SystemExit(1)
+
+        ordered = _in_seed_order(clean_monitors, monitors_path)
+        monitors_path.write_text(_seed_json(ordered), encoding="utf-8")
         logger.success(f"Exported {len(clean_monitors)} monitors → {monitors_path}")
 
         notifications_path = export_dir / NOTIFICATIONS_FILE
-        notifications_path.write_text(json.dumps(clean_notifications, indent=2, default=str) + "\n", encoding="utf-8")
+        notifications_path.write_text(_seed_json(clean_notifications), encoding="utf-8")
         logger.success(f"Exported {len(clean_notifications)} notifications → {notifications_path}")
 
         return monitors_path
@@ -373,6 +426,8 @@ def apply_monitors(project_root: Path, *, check: bool = False, prune: bool = Fal
             logger.info(f"  edit   '{m.get('name')}' (id={m['id']})")
         for m in to_delete:
             logger.info(f"  delete '{m.get('name')}' (id={m['id']})")
+        for m in monitors_to_pause(seed_monitors, live):
+            logger.info(f"  pause  '{m.get('name')}' (id={m['id']})")
 
         if check:
             logger.info("CHECK: nothing written")
@@ -498,6 +553,15 @@ def apply_monitors(project_root: Path, *, check: bool = False, prune: bool = Fal
             except Exception as e:
                 failed.append(f"create '{m['name']}'")
                 logger.error(f"Failed to create '{m['name']}': {type(e).__name__}: {e!r}")
+
+        # After the writes, so a monitor created just now is paused too.
+        for m in monitors_to_pause(seed_monitors, api.get_monitors()):
+            try:
+                api.pause_monitor(m["id"])
+                logger.info(f"Paused '{m.get('name')}' (id={m['id']})")
+            except Exception as e:
+                failed.append(f"pause '{m.get('name')}'")
+                logger.error(f"Failed to pause '{m.get('name')}': {type(e).__name__}: {e!r}")
 
         summary = f"{created}/{len(to_create)} created, {edited}/{len(to_edit)} edited, {len(to_delete)} deleted"
         if failed:
