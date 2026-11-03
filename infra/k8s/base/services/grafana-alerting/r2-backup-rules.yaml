@@ -241,7 +241,7 @@ groups:
               conditions:
                 - evaluator:
                     type: gt
-                    # 3 x node_backup_interval (1 h), in seconds.
+                    # 3 x node_backup_interval (4 h, node_backup role defaults), in seconds.
                     params: [43200]
               datasource:
                 type: __expr__
