@@ -26,9 +26,20 @@ created: "2026-09-03"
   and #2910 (accept `unstable` when every required context is green, after #2883 was skipped as `unstable`).
   #2910 is proven by `test_an_unstable_pr_with_every_required_context_green_merges` and
   `test_unstable_does_not_excuse_a_red_required_context`. The widening test pins `MERGE_STATES_OK`.
-- Dry-run evidence (switch off, operator N = 3), logged on #1619: #2948 and #2949 were judged `merge` at their
-  heads, merged by hand at 05:50Z on 2026-11-02, and deploy-verify run 41396476626 passed on 3752be80. Third case
-  pending.
+- Dry-run evidence (switch off, operator N = 3, four cases), logged on #1619 (issuecomment-6591928848):
+
+  | PR | Bump | Judged `merge` at | Merged by hand | Deploy-verify |
+  |---|---|---|---|---|
+  | #2948 | api sha-80171ff | 62549f5a | 898ede99 | 41396476626 (shared with #2949) |
+  | #2949 | web sha-4b395ac | af6992aa | 3752be80 | 41396476626 success |
+  | #3007 | api sha-75346a3 | 990a6c42 | dc979461 | 41477835222 success |
+  | #2967 | web sha-95588df | cabf5469 | 5d43b172 | 41496856210 success |
+
+  No false positives; #2967 was judged `skip` at three earlier heads while a required context was not green.
+- #2983 (review Major 2, #3022): `unstable` excuses only `ALLOWED_UNSTABLE = {"add-to-project"}`, and the moved
+  image must belong to the container named after the bumped app. All four cases stay `mechanical` under it.
+- AC7 (PR 4): `mechanical.merge` flipped to `true`; the widening test's `APPROVED` and
+  `TestSwitch.test_the_committed_switch_is_on` move with it. `make mutate` back to `false`: RED.
 - Review finding Major 1 (#2982): pins the merge and close feeds, the triggers and the token scope of
   `deploy-merge.yml`. Each of these edits goes RED under `make mutate`: `select(.action == "merge")` ->
   `!= "skip"`; `.head_sha` -> `.pr`; `contents: read` -> `write`; the cron changed. The review's two untested guards

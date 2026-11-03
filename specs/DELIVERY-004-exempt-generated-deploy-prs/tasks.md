@@ -72,7 +72,7 @@ empty deploy PRs instead of merging them, and pin the merge to the judged head s
 
 ## PR 4 — the flip (AC7)
 
-- [ ] Preconditions linked on #1619, then flip. Rollback = revert.
+- [x] Preconditions linked on #1619 (issuecomment-6591928848), then flip. Rollback = revert. ✓ 2026-11-03
 
 ## Closing
 

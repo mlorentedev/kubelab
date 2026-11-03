@@ -38,9 +38,9 @@ APPROVED = {
     "overlay_files": ["infra/k8s/overlays/staging/generated/deployments.yaml"],
     "version_path": ["apps", "platform", "{app}", "version"],
     "tag_pattern": "^sha-[0-9a-f]{7,40}$",
-    # The merge step's switch, OFF as PR 3 shipped it. Flipping it here and in
-    # the registry is PR 4, one reviewed diff, never a test fix.
-    "merge": False,
+    # The merge step's switch, ON since PR 4 (2026-11-03, evidence on #1619).
+    # Changing it here and in the registry is one reviewed diff, never a test fix.
+    "merge": True,
 }
 
 # Every way a workflow can merge a pull request. Auto-merge has its own guard

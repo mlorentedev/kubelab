@@ -231,9 +231,9 @@ class TestSwitch:
         path.write_text("{not json", encoding="utf-8")
         assert merge_enabled(path) is False
 
-    def test_the_committed_switch_is_off(self) -> None:
-        """PR 4 flips it, with the test in tests/test_deploy_shape_widening.py."""
-        assert merge_enabled(REGISTRY_PATH) is False
+    def test_the_committed_switch_is_on(self) -> None:
+        """PR 4 flipped it, together with tests/test_deploy_shape_widening.py."""
+        assert merge_enabled(REGISTRY_PATH) is True
 
 
 class TestRequiredContexts:
