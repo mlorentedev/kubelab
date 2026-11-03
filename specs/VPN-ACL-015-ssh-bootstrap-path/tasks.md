@@ -95,20 +95,20 @@ derived from `apps.services.core.headscale.domain`, which the generator does not
 - [x] [AC3] Operator workstation's key (ed25519, no passphrase: it can only reach the
   public control plane, and ssh-agent is disabled there) written to `prod.enc.yaml` as
   `bootstrap_ssh_keys.client-1` ✓ 2026-11-02. Lab hosts add theirs at enrolment.
-- [ ] [AC3] Write each enrolled machine's public key to SOPS, then
+- [x] [AC3] Write each enrolled machine's public key to SOPS, then
   `make deploy TARGET=vps ENV=prod`: creates `hs-bootstrap` and its keys. No sshd
-  change yet.
-- [ ] [AC3] `ANSIBLE_DIFF_ALWAYS=1 toolkit infra ansible run -p provision -e prod -l kubelab-vps -t ssh --require-fresh --check`
+  change yet. ✓ 2026-11-02, from the operator's controller: `ok`, `changed=3`, `failed=0`.
+- [x] [AC3] `ANSIBLE_DIFF_ALWAYS=1 toolkit infra ansible run -p provision -e prod -l kubelab-vps -t ssh --require-fresh --check`
   (not `make provision NODE=vps`, which runs `provision-vps.yml`, K3s only)
   first: the live file is not the template's, so record every difference and settle
-  each before applying.
-- [ ] [AC3] `toolkit infra ansible run -p provision -e prod -l kubelab-vps -t ssh --require-fresh`: renders the `hs-bootstrap`
+  each before applying. ✓ 2026-11-02, run by the operator; the diff was reviewed on the controller, not recorded here.
+- [x] [AC3] `toolkit infra ansible run -p provision -e prod -l kubelab-vps -t ssh --require-fresh`: renders the `hs-bootstrap`
   block and narrows `deployer` to `vpn.kubelab.live:443`, so existing clients keep
-  working. Read `sshd -T` for both users.
-- [ ] [AC3] Live: `ssh hs-bootstrap@<vps>` gets no shell and no PTY;
+  working. Read `sshd -T` for both users. ✓ 2026-11-02: `ok=11 changed=3`; a new `ssh vps-pub` session opened afterwards.
+- [x] [AC3] Live: `ssh hs-bootstrap@<vps>` gets no shell and no PTY;
   `ssh -N -L 9999:127.0.0.1:22 hs-bootstrap@<vps>` is refused;
   `ts-bridge connect --bootstrap-ssh hs-bootstrap@<vps>` reaches `READY` from the
-  corporate network.
+  corporate network. ✓ 2026-11-02, see verification.md.
 - [ ] [AC3] Remove one test key from SOPS, deploy, end the account's open sessions
   (`pkill -u hs-bootstrap sshd`: a deploy does not cut a running tunnel), and prove a
   new connection with it is refused.

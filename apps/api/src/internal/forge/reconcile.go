@@ -38,16 +38,24 @@ type Reconciler struct {
 }
 
 // Once reads every source. One failing source neither stops the others nor
-// fails the cycle: the failure is recorded on that source.
-func (r *Reconciler) Once(ctx context.Context) {
-	for _, src := range r.Sources {
+// fails the cycle: the failure is recorded on that source. It returns the
+// sources it could not read.
+func (r *Reconciler) Once(ctx context.Context) []Source {
+	return r.read(ctx, r.Sources)
+}
+
+func (r *Reconciler) read(ctx context.Context, sources []Source) []Source {
+	var failed []Source
+	for _, src := range sources {
 		if err := r.readSource(ctx, src); err != nil {
+			failed = append(failed, src)
 			log.Printf("forge reconcile: %s: %v", src, err)
 			if mark := r.Model.MarkUnreachable(ctx, src, r.now()); mark != nil {
 				log.Printf("forge reconcile: %s: record unreachable: %v", src, mark)
 			}
 		}
 	}
+	return failed
 }
 
 func (r *Reconciler) readSource(ctx context.Context, src Source) error {
@@ -68,17 +76,39 @@ func (r *Reconciler) readSource(ctx context.Context, src Source) error {
 	return r.Model.SaveRead(ctx, src, items, started)
 }
 
-// Run reconciles once at start and then every period, until ctx ends.
-func (r *Reconciler) Run(ctx context.Context, period time.Duration) {
-	ticker := time.NewTicker(period)
-	defer ticker.Stop()
+// RetryPeriod is how soon a failed cycle runs again. A new pod's first read
+// fails with the database refusing it, seen twice (staging and prod, 2026-11-02
+// and 11-03), and waiting a full period for the next one left the source unread.
+const RetryPeriod = time.Minute
+
+// Run reconciles every source at start and then a period after each cycle, until ctx ends.
+// A source that failed is read again after retry, alone, until the next full
+// cycle: a forge that stays down must not multiply the calls to the others.
+func (r *Reconciler) Run(ctx context.Context, period, retry time.Duration) {
 	for {
-		r.Once(ctx)
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
+		failed := r.Once(ctx)
+		// Counted from the end of the cycle, so a cycle slower than the period
+		// still leaves a full period before the next one.
+		next := time.Now().Add(period)
+		for len(failed) > 0 && retry < time.Until(next) {
+			if !sleep(ctx, retry) {
+				return
+			}
+			failed = r.read(ctx, failed)
 		}
+		if !sleep(ctx, time.Until(next)) {
+			return
+		}
+	}
+}
+
+// sleep waits for d, and reports false if ctx ended first.
+func sleep(ctx context.Context, d time.Duration) bool {
+	select {
+	case <-ctx.Done():
+		return false
+	case <-time.After(d):
+		return true
 	}
 }
 

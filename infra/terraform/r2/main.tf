@@ -11,6 +11,8 @@
 # - Node buckets and locks carry prevent_destroy. Removing a node from the SSOT
 #   therefore fails the plan instead of deleting its backups; take it out of
 #   state deliberately, after its data is no longer needed.
+# - The product documents bucket (STOR-002) is declared by hand below: it is
+#   not a backup, so it stays out of the rendered node map.
 # - The scratch pair exists only for the PR 2 measurement and is destroyable.
 #   prevent_destroy cannot depend on a variable, so it lives outside the map.
 # - A separate root from infra/terraform/dns/ because R2 bucket locks need
@@ -73,6 +75,49 @@ resource "cloudflare_r2_bucket_lock" "node" {
   account_id  = var.account_id
   bucket_name = cloudflare_r2_bucket.node[each.key].name
   rules       = local.lock_rules
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+# ---------------------------------------------------------------------------
+# Product documents (STOR-002, #2535): private copies of the public documents
+# a product cites, kept as evidence and never served.
+#
+# - The lock is an Age rule, never Indefinite (operator, 2026-11-02). It
+#   refuses a delete or overwrite under sources/ for 30 days, so a mistake is
+#   recoverable, and a document can still be withdrawn after that (takedown).
+# - Writes are create-only by convention of the uploader, which keys objects
+#   by their sha256; nothing here enforces it.
+# - The name is mirrored by DOCUMENTS_BUCKET in
+#   toolkit/features/r2_documents_token.py, whose token is minted outside
+#   Terraform so that no state file holds a copy of it.
+# ---------------------------------------------------------------------------
+
+resource "cloudflare_r2_bucket" "documents" {
+  account_id = var.account_id
+  name       = "kubelab-product-documents"
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "cloudflare_r2_bucket_lock" "documents" {
+  account_id  = var.account_id
+  bucket_name = cloudflare_r2_bucket.documents.name
+  rules = [
+    {
+      id      = "retain-sources"
+      enabled = true
+      prefix  = "sources/"
+      condition = {
+        type            = "Age"
+        max_age_seconds = 30 * 86400
+      }
+    }
+  ]
 
   lifecycle {
     prevent_destroy = true
