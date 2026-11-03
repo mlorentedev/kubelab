@@ -2,14 +2,14 @@
 id: lesson-700-a-rolling-pod-must-outlast-its-endpoint
 type: lesson
 status: active
-title: "A rolling pod must outlast its endpoint, and a probe at rest cannot show it"
+title: "A rolling pod must outlast its endpoint, whichever app showed the loss"
 created: "2026-11-03"
 owner: manu
 category: kubernetes
 tags: [kubelab, kubernetes, traefik, rollout]
 ---
 
-# A rolling pod must outlast its endpoint, and a probe at rest cannot show it
+# A rolling pod must outlast its endpoint, whichever app showed the loss
 
 **Context**: A 15-second smoke run of the load test at 50 requests/s happened to overlap a `web` deploy in staging. 7.16% of its requests failed (#2977).
 
