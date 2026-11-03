@@ -45,7 +45,7 @@ def _placeholder_secrets(_manager: object, path: Path) -> dict[str, Any]:
     """
     if not path.exists():
         return {}
-    tree = yaml.safe_load(path.read_text()) or {}
+    tree = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     tree.pop("sops", None)
     return _placeholders(tree)
 
@@ -79,6 +79,6 @@ def test_traefik_resolvers_are_the_ssot_list(env: str, repo_copy: Path, monkeypa
     resolvers = configuration.ConfigurationManager(env, project_root=repo_copy).get_merged_config()["networking"][
         "public_resolvers"
     ]
-    rendered = yaml.safe_load((repo_copy / PATH_STRUCTURES.TRAEFIK_CONFIG_OUTPUT_DIR / env / "traefik.yml").read_text())
+    rendered = yaml.safe_load((repo_copy / PATH_STRUCTURES.TRAEFIK_CONFIG_OUTPUT_DIR / env / "traefik.yml").read_text(encoding="utf-8"))
     found = [r["acme"]["dnsChallenge"]["resolvers"] for r in rendered["certificatesResolvers"].values()]
     assert found and all(f == [f"{ip}:53" for ip in resolvers] for f in found)
