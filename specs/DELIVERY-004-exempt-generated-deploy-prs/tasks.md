@@ -44,7 +44,11 @@ empty deploy PRs instead of merging them, and pin the merge to the judged head s
     latest run of a check) and none missing;
   - `mergeable_state` is `clean` or `unstable` (amended 2026-11-01 on #1619: `unstable` means only a
     context that is not required fails, and the line above checks every required one; #2883 waited
-    6.5h on `add-to-project` hitting a rate limit).
+    6.5h on `add-to-project` hitting a rate limit);
+  - every other reported context passes too, still running counts as not passing, except those in
+    `ALLOWED_UNSTABLE` (`add-to-project` only). Amended 2026-11-03 for #2983: `unstable` alone had
+    stopped enforcing Drift, GitGuardian and the rest. The changed overlay image must also belong to
+    the container named after the bumped app.
   The switch is `mechanical.merge`; only the boolean `true` is on, and `load_declaration` ignores
   the key, so a malformed switch never turns deploy-shape red. Deviation from the design: the
   command enumerates the open PRs itself (REST, not GraphQL) instead of taking `--pr N`, since every
