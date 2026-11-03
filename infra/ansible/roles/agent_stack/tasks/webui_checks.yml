@@ -13,14 +13,13 @@
   register: _agent_stack_search_probe
   changed_when: false
   until: >-
-    ansible_check_mode
-    or (_agent_stack_search_probe.rc == 0
-        and (_agent_stack_search_probe.stdout | from_json).status == 200
-        and (_agent_stack_search_probe.stdout | from_json).results > 0)
+    _agent_stack_search_probe.rc == 0
+    and (_agent_stack_search_probe.stdout | from_json).status == 200
+    and (_agent_stack_search_probe.stdout | from_json).results > 0
   retries: 12
   delay: 5
-  check_mode: false
-  ignore_errors: "{{ ansible_check_mode }}"
+  # A dry run may precede the container this probes; it asserts nothing then.
+  when: not ansible_check_mode
 
 # The env is what the role writes; this is what the instance serves. The export
 # holds every secret Open WebUI has, so it is read under no_log and only the
@@ -51,20 +50,21 @@
 - name: Keep only the checked keys
   ansible.builtin.set_fact:
     _agent_stack_effective:
-      review: "{{ _agent_stack_config_export.json['memories.background_review.enable'] | default('absent') }}"
-      interval: "{{ _agent_stack_config_export.json['memories.review_interval_turns'] | default('absent') }}"
-      engine: "{{ _agent_stack_config_export.json['code_interpreter.engine'] | default('absent') }}"
+      memories.background_review.enable: "{{ _export['memories.background_review.enable'] | default('absent') }}"
+      memories.review_interval_turns: "{{ _export['memories.review_interval_turns'] | default('absent') }}"
+      code_interpreter.engine: "{{ _export['code_interpreter.engine'] | default('absent') }}"
+  vars:
+    _export: "{{ _agent_stack_config_export.json }}"
   when: not ansible_check_mode
 
 - name: Verify the instance serves the memory and code settings its env declares
   ansible.builtin.assert:
     that:
-      - (_agent_stack_effective.review | string | lower) == 'true'
-      - (_agent_stack_effective.interval | string) == (agent_stack_webui.memory.review_interval_turns | string)
-      - _agent_stack_effective.engine == 'pyodide'
-    fail_msg: >-
-      Open WebUI serves memories.background_review.enable={{ _agent_stack_effective.review }},
-      memories.review_interval_turns={{ _agent_stack_effective.interval }},
-      code_interpreter.engine={{ _agent_stack_effective.engine }}
+      - (_agent_stack_effective['memories.background_review.enable'] | string | lower) == 'true'
+      - >-
+        (_agent_stack_effective['memories.review_interval_turns'] | string)
+        == (agent_stack_webui.memory.review_interval_turns | string)
+      - _agent_stack_effective['code_interpreter.engine'] == 'pyodide'
+    fail_msg: "Open WebUI serves {{ _agent_stack_effective }}"
     success_msg: "Open WebUI serves the declared memory and code settings: {{ _agent_stack_effective }}"
   when: not ansible_check_mode

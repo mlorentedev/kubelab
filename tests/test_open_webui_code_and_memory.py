@@ -61,7 +61,7 @@ def test_the_running_instance_is_read_not_only_its_env() -> None:
     [read] = _effective_config_tasks()
     assert read.get("no_log") is True
     assert "Bearer" in str(read["ansible.builtin.uri"]["headers"]["Authorization"])
-    checks = " ".join(str(t.get("ansible.builtin.assert", {})) for t in _tasks())
+    checks = " ".join(str(t.get("ansible.builtin.assert", {}).get("that", "")) for t in _tasks())
     for key in (
         "memories.background_review.enable",
         "memories.review_interval_turns",
