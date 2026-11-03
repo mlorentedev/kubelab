@@ -22,8 +22,9 @@ CI cannot exercise it on the branch that changes it — "CI green" is not the cl
 anyone needs here.
 
 IDP-042 PR 7 moved them here and ran them against both receivers while web was cut
-over; PR 8 deleted the old one, so `RECEIVERS` holds the generic `open-pr` step of
-`product-image-receiver.yml` alone. A receiver added later gets an entry, not a copy.
+over; PR 8 deleted the old one, so `RECEIVERS` held the generic `open-pr` step of
+`product-image-receiver.yml` alone. A receiver added later gets an entry, not a copy:
+#1681 added api's in-tree lane, `staging-deploy.yml`, which still minted a branch per sha.
 """
 
 from __future__ import annotations
@@ -57,6 +58,12 @@ def _generic_step() -> dict:
     return next(s for s in steps if s.get("id") == "open-pr")
 
 
+def _api_step() -> dict:
+    """api's in-tree lane, `staging-deploy.yml` (#1681)."""
+    steps = _workflow("staging-deploy.yml")["jobs"]["open-pr"]["steps"]
+    return next(s for s in steps if s.get("id") == "open-pr")
+
+
 @dataclasses.dataclass(frozen=True)
 class Receiver:
     step: Callable[[], dict]
@@ -74,6 +81,9 @@ RECEIVERS = {
         {"APP": "web", "REPOSITORY": "mlorentedev/web"},
         ("infra/config/products/contracts/web.yaml",),
     ),
+    # The job sets APP itself, but the step reads it from env like the
+    # generic one, so the stub hands it the same way.
+    "api": Receiver(_api_step, "deploy/staging-api", {"APP": "api"}),
 }
 
 
