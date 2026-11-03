@@ -94,12 +94,36 @@ def test_an_existing_pair_is_kept_and_nothing_is_minted() -> None:
     assert api.created() == [] and store.writes == []
 
 
+class _OrderedApi(FakeApi):
+    def __init__(self, events: list[str]) -> None:
+        super().__init__()
+        self.events = events
+
+    def __call__(self, method: str, path: str, body: Optional[dict[str, Any]] = None) -> Any:
+        if method == "DELETE":
+            self.events.append("revoke")
+        return super().__call__(method, path, body)
+
+
+class _OrderedStore(FakeStore):
+    def __init__(self, events: list[str], values: dict[str, str]) -> None:
+        super().__init__(values)
+        self.events = events
+
+    def write(self, data: dict[str, str]) -> bool:
+        self.events.append("store")
+        return super().write(data)
+
+
 def test_rotate_stores_the_new_pair_then_revokes_the_old_token() -> None:
-    api = FakeApi()
-    store = FakeStore({rdt.ACCESS_KEY_PATH: "old", rdt.SECRET_KEY_PATH: "s"})
+    """Revoking first would leave the bucket with no working credential if the store failed."""
+    events: list[str] = []
+    api = _OrderedApi(events)
+    store = _OrderedStore(events, {rdt.ACCESS_KEY_PATH: "old", rdt.SECRET_KEY_PATH: "s"})
     assert _mint(api, store, rotate=True) == "rotated"
     assert api.deleted() == ["old"]
     assert store.values[rdt.ACCESS_KEY_PATH] != "old"
+    assert events.index("store") < events.index("revoke")
 
 
 def test_a_token_that_reaches_the_refused_bucket_is_revoked_and_nothing_is_stored() -> None:

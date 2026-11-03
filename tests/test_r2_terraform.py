@@ -289,3 +289,7 @@ class TestTheProductDocumentsBucket:
     def test_the_lock_is_never_indefinite(self) -> None:
         """An indefinite lock would make a takedown impossible."""
         assert "Indefinite" not in self._lock()
+
+    def test_the_lock_covers_the_sources_prefix(self) -> None:
+        """The uploader writes under sources/; a renamed prefix would leave every document unlocked."""
+        assert re.search(r'prefix\s*=\s*"sources/"', self._lock()), "the documents lock does not cover sources/"
