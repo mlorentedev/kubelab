@@ -13,6 +13,7 @@ renderer is strict, so a template that reads an undeclared name fails here.
 
 from __future__ import annotations
 
+import ipaddress
 import shutil
 from pathlib import Path
 from typing import Any
@@ -70,7 +71,7 @@ def test_the_generator_renders(env: str, service: str, repo_copy: Path, monkeypa
 
 @pytest.mark.parametrize("env", ["staging", "prod"])
 def test_traefik_resolvers_are_the_ssot_list(env: str, repo_copy: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """A port inside an entry, or a scalar Jinja iterates by character, still renders."""
+    """Each SSOT resolver renders once, as a bare address with Traefik's `:53`."""
     monkeypatch.setattr(configuration.ConfigurationManager, "_decrypt_sops", _placeholder_secrets)
     generator = generator_for("traefik")
     assert generator is not None
@@ -79,6 +80,13 @@ def test_traefik_resolvers_are_the_ssot_list(env: str, repo_copy: Path, monkeypa
     resolvers = configuration.ConfigurationManager(env, project_root=repo_copy).get_merged_config()["networking"][
         "public_resolvers"
     ]
-    rendered = yaml.safe_load((repo_copy / PATH_STRUCTURES.TRAEFIK_CONFIG_OUTPUT_DIR / env / "traefik.yml").read_text(encoding="utf-8"))
+    rendered = yaml.safe_load(
+        (repo_copy / PATH_STRUCTURES.TRAEFIK_CONFIG_OUTPUT_DIR / env / "traefik.yml").read_text(encoding="utf-8")
+    )
     found = [r["acme"]["dnsChallenge"]["resolvers"] for r in rendered["certificatesResolvers"].values()]
+    # The SSOT's own shape, checked apart from the template: a scalar or an entry
+    # with a port would render malformed resolvers that this list comparison mirrors.
+    assert isinstance(resolvers, list) and resolvers, resolvers
+    for ip in resolvers:
+        ipaddress.ip_address(ip)
     assert found and all(f == [f"{ip}:53" for ip in resolvers] for f in found)
