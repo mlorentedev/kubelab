@@ -322,7 +322,8 @@ def test_every_play_names_hosts_the_inventory_emits():
     """A name that resolved to nothing used to count as outside the edge, unchecked."""
     for _name, play in _plays():
         _nodes(play["hosts"])
-    assert _nodes("node_backup:&on_demand") == {"ace2", "beelink", "rpi4"}
+    assert _nodes("node_backup:&on_demand") == {"ace2", "beelink"}
+    assert "rpi4" in _nodes("node_backup:&always_on"), "the edge is always-on (#3037)"
     assert _nodes("node_backup:!rpi3") == {"ace2", "beelink", "kubelab-vps", "rpi4"}
     assert _nodes("aws1") == set(), "retired: emitted by no inventory"
     with pytest.raises(AssertionError, match="no host or group"):
