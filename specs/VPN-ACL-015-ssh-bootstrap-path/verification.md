@@ -23,7 +23,8 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
   `test_the_file_is_root_owned_and_its_render_is_never_printed`,
   `test_keys_reach_the_role_only_from_sops`; catalog in
   `tests/test_secrets_headscale_catalog.py`.
-- [ ] AC3 -> live check `<date>`
+- [x] AC3 -> live, 2026-11-02 (below). The revocation half (a removed key refused after a
+  deploy) is held by `test_a_key_absent_from_sops_is_absent_from_the_file`; not exercised live.
 - [x] AC4 -> drift read on 2026-11-02, before any change (below).
 - [ ] AC5 -> live check `<date>`
 
@@ -57,7 +58,32 @@ bootstrap path the filtered clients use.
   216 passed.
 - Mutations (`toolkit tools mutate`), all RED: `restrict` removed from the key line;
   `PermitOpen *` in provision.yml; `PermitTTY yes`; the same-user check removed.
-- Live checks (AC3, AC5): pending rollout.
+- Live checks: see "Rollout evidence".
+
+## Rollout evidence
+
+All on 2026-11-02. The deploy and the provision ran on the operator's controller (this
+workstation has no Ansible); the checks below ran from the corporate workstation, a
+filtered network where `vpn.kubelab.live` resolves to the Palo Alto sinkhole.
+
+- `make deploy TARGET=vps ENV=prod`: `changed=3`, `failed=0` (account, `.ssh`, keys).
+- Base `provision.yml` limited to the VPS, `-t ssh`: `ok=11 changed=3`. A fresh
+  `ssh vps-pub` session opened afterwards, with the previous one kept as fallback.
+- `ssh hs-bootstrap id` -> `This account is currently not available.` (exit 1).
+- `ssh -W 127.0.0.1:22 hs-bootstrap` -> `administratively prohibited` (exit 255).
+- `ssh -W vpn.kubelab.live:443 hs-bootstrap` -> channel opened, the ingress answered.
+- The operator's `projects-toolkit-gitea` ts-bridge profile moved from `deployer@` to
+  `hs-bootstrap`: `READY local=127.0.0.1:1081`, its `ssh` child is
+  `ssh -N -D 127.0.0.1:1056 ... hs-bootstrap`, and `gitea.kubelab.live/api/healthz`
+  through it answered HTTP 200 three times.
+- A fresh tsnet node through `hs-bootstrap` reached Headscale, which answered
+  `authkey expired` (the workstation's `TS_AUTHKEY` had lapsed): the control path
+  works independently of node state.
+- Each bridge start logs one `channel 2: open failed: administratively prohibited`.
+  The bridge reaches READY and serves traffic regardless. The embedded DERP region
+  (999) failed the same way before the change (`CONNECT dial to vpn.kubelab.live:443:
+  unexpected EOF`, 29 times on 2026-11-02 while still on `deployer@`), and the data
+  plane runs over Tailscale's public DERP; the refused destination is not logged.
 
 ## Decisions made during implementation
 
