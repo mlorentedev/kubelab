@@ -166,7 +166,9 @@ The operator's (a)-(d) are the contract; each AC names which it proves.
   #2591 (`verify-product` exits 4 when a later merge supersedes the tag); `toolkit infra
   argo wait-status` landed with #2590. #2594 merged (`a1bfce39`) and is deployed to the hub: Argo CD
   posts `argocd/<app>` commit statuses (`argocd/kubelab-prod: success` seen on master
-  `45702f5e`). Still missing: `deploy-verify.yml` (GITOPS-003 PR 2b).
+  `45702f5e`). Still missing: `deploy-verify.yml` (GITOPS-003 PR 2b). State on 2026-11-03:
+  `deploy-verify.yml` is on master and green on every run since; four dry-run cases are logged
+  on #1619; #2983's narrowing landed in #3022. The switch is flipped in its own PR.
 - [ ] **AC8** — Measurement, not promise: whether CodeRabbit and Codex still spend quota
   on deploy PRs, reported on #1619.
 
