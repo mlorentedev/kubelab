@@ -54,7 +54,10 @@ MERGE_CALLS = {
 # Workflow files allowed to merge, with the exact merge line each may run. The
 # sha pin is the condition: without it, a head pushed after the judging merges.
 MERGERS: dict[str, str] = {
-    "deploy-merge.yml": 'if gh pr merge "$n" --squash --match-head-commit "$sha"; then',
+    # The squash message is the judge's, built from what it judged (#3062 F6).
+    "deploy-merge.yml": (
+        'if gh pr merge "$n" --squash --match-head-commit "$sha" --subject "$subject" --body "$body"; then'
+    ),
 }
 
 
@@ -126,6 +129,39 @@ class TestMergingActorDoesNotWiden:
             f"workflows that merge pull requests: {found}; declared: {sorted(MERGERS)}. A new merger is {DECIDED}."
         )
 
+    def test_the_pause_reads_deploy_verify(self) -> None:
+        """#3062 F11: a red deploy-verify on master pauses every merge. Pointing the
+        pause at another workflow would silently stop it."""
+        import yaml
+
+        from toolkit.features.deploy_merge import CONTEXT_PREFIX, DEPLOY_VERIFY, VERDICT_WINDOW
+
+        assert DEPLOY_VERIFY == "deploy-verify.yml", f"the pause reads {DEPLOY_VERIFY}: {DECIDED}"
+        assert VERDICT_WINDOW == 100, f"the pause reads {VERDICT_WINDOW} runs for a verdict: {DECIDED}"
+        text = (WORKFLOWS / DEPLOY_VERIFY).read_text(encoding="utf-8")
+        # The prefix the judge matches is the one deploy-verify reacts to.
+        assert f"startsWith(github.event.context, '{CONTEXT_PREFIX}')" in text, f"{CONTEXT_PREFIX}: {DECIDED}"
+        # Every job names the context it judged, or the judge cannot tell staging from prod.
+        jobs = yaml.safe_load(text)["jobs"]
+        for job_id, job in jobs.items():
+            name = job.get("name", "")
+            assert name.endswith(")") and f"({CONTEXT_PREFIX}" in name or "(${{ github.event.context }})" in name, (
+                f"deploy-verify job {job_id} is named {name!r}, which does not carry its context: {DECIDED}"
+            )
+
+    def test_a_refused_close_does_not_stop_the_merges(self) -> None:
+        """#3062 F7: under `set -e` one refused close stopped the job before the merge
+        step, on every run while it kept failing."""
+        import yaml
+
+        steps = yaml.safe_load((WORKFLOWS / "deploy-merge.yml").read_text(encoding="utf-8"))["jobs"]["merge"]["steps"]
+        close = next(s for s in steps if s.get("id") == "close")
+        # The default shell is `bash -e`; only an explicit `set +e` clears it.
+        assert re.search(r"^set \+e$", close["run"], re.M), "the close step stops at its first failure"
+        assert not re.search(r"^\s*set -\w*e", close["run"], re.M), "the close step stops at its first failure"
+        names = [s.get("name") for s in steps]
+        assert names.index("Fail on a refused close") > names.index("Merge mechanical deploys at the judged sha")
+
     def test_the_contexts_unstable_may_excuse_are_the_approved_ones(self) -> None:
         """#2983: option B on #1619 was approved for `add-to-project` only. Each added name
         is a context the merger stops enforcing."""
@@ -163,14 +199,15 @@ class TestMergingActorDoesNotWiden:
     # `!= "skip"`) or feeding anything but `.head_sha` as the sha leaves the merge line
     # above intact and still widens what merges (adversarial review of #1619).
     FEEDS = {
-        "merge": """done < <(jq -r '.decisions[] | select(.action == "merge") | "\\(.pr) \\(.head_sha)"' """
+        "merge": """done < <(jq -r '.decisions[] | select(.action == "merge") | [.pr, .head_sha, .subject, .body] | """
+        """@tsv' "$RUNNER_TEMP/decisions.json")""",
+        "close": """done < <(jq -r '.decisions[] | select(.action == "close") | "\\(.pr) \\(.head_sha)"' """
         """"$RUNNER_TEMP/decisions.json")""",
-        "close": """jq -r '.decisions[] | select(.action == "close") | "\\(.pr) \\(.head_sha)"' """
-        """"$RUNNER_TEMP/decisions.json" |""",
     }
 
     def test_the_merge_and_close_loops_read_only_their_own_decisions_and_the_judged_sha(self) -> None:
-        text = (WORKFLOWS / "deploy-merge.yml").read_text(encoding="utf-8")
+        # A continued line is one shell line.
+        text = re.sub(r"\\\n\s*", "", (WORKFLOWS / "deploy-merge.yml").read_text(encoding="utf-8"))
         feeds = [line.strip() for line in text.splitlines() if "decisions.json" in line and "select(" in line]
         writers = [line for line in feeds if "would " not in line]
         assert sorted(writers) == sorted(self.FEEDS.values()), (
@@ -194,6 +231,7 @@ class TestMergingActorDoesNotWiden:
             "pull-requests": "write",
             "checks": "read",
             "statuses": "read",
+            "actions": "read",
         }, f"deploy-merge.yml's token scope is {wf['permissions']}: {DECIDED}"
         granted = sorted(name for name, job in wf["jobs"].items() if "permissions" in job)
         assert not granted, f"jobs {granted} carry their own grant, which overrides the pinned one: {DECIDED}"
