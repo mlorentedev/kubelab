@@ -88,6 +88,10 @@ def test_the_redirect_outranks_the_passthrough_and_keeps_every_guard(prod: list[
     guards = {"secure-headers", "rate-limit", "crowdsec-bouncer"}
     assert guards <= {m["name"] for m in redirect["middlewares"]}
     assert guards <= {m["name"] for m in passthrough[0]["middlewares"]}
+    redirecting = {m["name"] for m in redirect["middlewares"]} - guards
+    assert not redirecting & {m["name"] for m in passthrough[0]["middlewares"]}, (
+        "the redirect regex matches every URL, so only the root rule may carry it"
+    )
 
 
 def test_the_redirect_goes_to_argo_cds_own_sign_in_and_is_temporary(prod: list[dict]) -> None:
