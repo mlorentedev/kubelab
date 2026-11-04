@@ -7,7 +7,7 @@ SPA's own paths, and any request that already holds a session.
 
 Measured on traefik:v3.6 (3.6.25, 2026-11-03) with the rule below and a stub backend: `/` with
 no cookie, with only other cookies, with `xargocd.token=` and with a query string got 302 to
-`/auth/login`; `/` with `argocd.token` (alone, after another cookie, split into `.1`, or in a
+`/auth/login`; `/` with `argocd.token` (alone, after another cookie, split into chunks, or in a
 second Cookie header) and `/applications`, `/login`, `/auth/login`, `/api/version`,
 POST `/api/webhook` and a gRPC-web POST reached the backend. A first `redirectRegex` anchored on
 `/$` let `/?x=1` through unredirected, which is why the regex now matches anything: the router,
@@ -67,13 +67,15 @@ def test_only_the_root_path_is_redirected(prod: list[dict]) -> None:
 
 @pytest.mark.parametrize(
     "cookie",
-    ["argocd.token=x", "a=1; argocd.token=x", "argocd.token=x; argocd.token.1=y", "a=1;argocd.token=x"],
+    ["argocd.token=x", "a=1; argocd.token=x", "argocd.token=2:x; argocd.token-1=y", "a=1;argocd.token=x"],
 )
 def test_a_session_cookie_skips_the_redirect(prod: list[dict], cookie: str) -> None:
     assert re.search(_cookie_regexp(prod), cookie)
 
 
-@pytest.mark.parametrize("cookie", ["", "other=1", "xargocd.token=x", "authelia_session=s"])
+# Argo CD splits a long token as `argocd.token=<n>:<chunk>; argocd.token-1=...` and always names
+# the first chunk bare (util/http/http.go splitCookie, v3.4.1), so a lone `-1` chunk is no session.
+@pytest.mark.parametrize("cookie", ["", "other=1", "xargocd.token=x", "authelia_session=s", "argocd.token-1=y"])
 def test_no_session_cookie_is_redirected(prod: list[dict], cookie: str) -> None:
     assert not re.search(_cookie_regexp(prod), cookie)
 
