@@ -20,12 +20,12 @@ EXACT = re.compile(r"^\d+\.\d+\.\d+$")
 
 
 def _node_pin() -> str:
-    config = yaml.safe_load(PRE_COMMIT.read_text())
+    config = yaml.safe_load(PRE_COMMIT.read_text(encoding="utf-8"))
     return str(config["default_language_version"]["node"])
 
 
 def _node_manager() -> dict:
-    managers = json.loads(RENOVATE.read_text())["customManagers"]
+    managers = json.loads(RENOVATE.read_text(encoding="utf-8"))["customManagers"]
     matches = [m for m in managers if m.get("datasourceTemplate") == "node-version"]
     assert len(matches) == 1, "exactly one Renovate manager tracks the pre-commit Node pin"
     return matches[0]
@@ -43,11 +43,13 @@ def test_renovate_manager_reads_the_pin():
         m.group("currentValue")
         for pattern in manager["matchStrings"]
         # Renovate uses RE2's `(?<name>)`; Python needs `(?P<name>)`.
-        for m in re.finditer(re.sub(r"\(\?<([a-zA-Z]\w*)>", r"(?P<\1>", pattern), PRE_COMMIT.read_text())
+        for m in re.finditer(re.sub(r"\(\?<([a-zA-Z]\w*)>", r"(?P<\1>", pattern), PRE_COMMIT.read_text(encoding="utf-8"))
     ]
     assert found == [_node_pin()]
 
 
 def test_renovate_runs_custom_managers():
-    enabled = json.loads(RENOVATE.read_text()).get("enabledManagers")
-    assert enabled is None or "custom.regex" in enabled
+    # renovate.json declares an explicit allow-list, so a custom manager only runs
+    # while `custom.regex` is on it.
+    enabled = json.loads(RENOVATE.read_text(encoding="utf-8"))["enabledManagers"]
+    assert "custom.regex" in enabled
