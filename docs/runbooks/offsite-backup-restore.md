@@ -200,6 +200,29 @@ the mint revoke the old token. A `"healthy":1` line per node and a fleet
 `"healthy":1` mean the cluster has it. The token can be re-minted, so it has no
 Bitwarden escrow: losing it loses no data.
 
+### Retiring a pair nothing reads
+
+An R2 pair's Access Key ID is its token's id, and that id is stored only in
+SOPS. Unsetting the keys first leaves a live token that nobody can name any
+more. So a pair is retired with one command, which revokes the token, checks
+that the account no longer knows it, and only then unsets both keys from every
+SOPS file that holds them:
+
+```bash
+make backup-revoke-r2-pair PAIR=backup.r2.readonly_            # report only
+make backup-revoke-r2-pair PAIR=backup.r2.readonly_ APPLY=1    # revoke, then unset
+```
+
+`PAIR` is the key prefix. A prefix that ends in `_` is joined as written
+(`backup.r2.readonly_access_key_id`); any other is joined with a dot
+(`backup.r2` gives `backup.r2.access_key_id`). The command refuses a pair that
+still has a `SECRET_CATALOG` entry, because something reads it. Remove the
+consumer and the entry first. If the account has no token with that id, the
+command unsets nothing. That happens when the token was already revoked, or
+when it is a user token the minter cannot see. Confirm in the dashboard that it
+is gone, then rerun with `FORGET=1`. Commit the changed `*.enc.yaml` in the
+same PR. Retired so far: `backup.r2.readonly_*` (2026-11-04).
+
 ## On-demand backup stale
 
 `backup032-on-demand-freshness` fires when an **on-demand** node (ace2, beelink)

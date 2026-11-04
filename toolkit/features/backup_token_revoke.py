@@ -1,0 +1,261 @@
+"""Retire an R2 S3 pair: revoke its token, prove it is gone, then forget the pair.
+
+An R2 pair's Access Key ID is the id of the Cloudflare token behind it, and that
+id is stored nowhere but SOPS. So the order is the whole contract: unsetting the
+keys first leaves a live token that nobody can name any more, which is the one
+outcome this exists to prevent. Revocation goes through the minter, the same
+credential and endpoint `backup_node_credentials` revokes with.
+
+Only a pair that SECRET_CATALOG no longer owns may be retired: a catalogued key
+is one something still reads, and revoking it is an outage, not a cleanup.
+
+Nothing here prints a value or a token id. The token's name, which Cloudflare
+returns and is not a secret, is what the operator sees.
+"""
+
+from __future__ import annotations
+
+import subprocess
+from pathlib import Path
+from typing import Any, Callable, Optional, Protocol
+
+import yaml
+
+from toolkit.core.logging import logger
+from toolkit.core.sops import age_key_env
+from toolkit.features.backup_node_credentials import MINTER_KEY, SECRETS_ENV, HttpFn, MintError, cloudflare_http
+
+# The SOPS files a pair can live in, read file by file: a copy in one file that
+# the merged view hides behind another would survive an unset of the visible one.
+SOPS_FILES = ("common", "staging", "prod")
+
+
+class RevokeError(RuntimeError):
+    """A retirement did not complete. The message never contains a value or a token id."""
+
+
+class PairStore(Protocol):
+    def files_holding(self, path: str) -> list[str]: ...
+
+    def show(self, env: str, path: str) -> Optional[str]: ...
+
+    def unset(self, env: str, path: str) -> bool: ...
+
+
+def pair_paths(prefix: str) -> tuple[str, str]:
+    """The pair's two key paths. A prefix ending in `_` is joined as is, any other with a dot.
+
+    Both spellings exist: `backup.r2.access_key_id` (prefix `backup.r2`) and
+    `backup.r2.readonly_access_key_id` (prefix `backup.r2.readonly_`).
+    """
+    sep = "" if prefix.endswith(("_", ".")) else "."
+    return f"{prefix}{sep}access_key_id", f"{prefix}{sep}secret_access_key"
+
+
+def _failure(exc: MintError) -> str:
+    """What went wrong, without the request path (it carries the token id)."""
+    return f"the API answered HTTP {exc.status}" if exc.status else "the API could not be reached"
+
+
+def _other_spelling(prefix: str) -> str:
+    """The prefix in the spelling `prefix` did not use: `a.b` <-> `a.b_`."""
+    bare = prefix.rstrip("._")
+    return bare if prefix.endswith("_") else f"{bare}_"
+
+
+def _token_name(http: HttpFn, account_id: str, token_id: str) -> Optional[str]:
+    """The token's name, or None when the account has no token with that id."""
+    try:
+        result = http("GET", f"/accounts/{account_id}/tokens/{token_id}", None) or {}
+    except MintError as exc:
+        if exc.status == 404:
+            return None
+        raise RevokeError(f"reading the token failed: {_failure(exc)}") from None
+    return str(result.get("name") or "(unnamed)")
+
+
+def revoke_pair(
+    prefix: str,
+    *,
+    account_id: str,
+    http: HttpFn,
+    store: PairStore,
+    catalog: frozenset[str],
+    apply: bool = False,
+    forget: bool = False,
+) -> str:
+    """Retire `<prefix>.access_key_id` / `.secret_access_key`. Returns absent/planned/revoked/forgotten.
+
+    `forget` unsets a pair whose token the account no longer has (revoked by an
+    earlier run that failed before its unset, or in the dashboard). It never
+    skips revoking a token that still exists.
+    """
+    access, secret = pair_paths(prefix)
+    owned = sorted({access, secret} & catalog)
+    if owned:
+        raise RevokeError(
+            f"{', '.join(owned)} is in SECRET_CATALOG, so something still reads it. "
+            "Remove the consumer and its entry first."
+        )
+
+    holding = {path: store.files_holding(path) for path in (access, secret)}
+    if not holding[access] and not holding[secret]:
+        # A prefix in the wrong spelling finds nothing, and "nothing to do" would
+        # then read as done while the real pair and its token stay live.
+        other = _other_spelling(prefix)
+        if any(store.files_holding(path) for path in pair_paths(other)):
+            raise RevokeError(f"no key of this pair is in SOPS, but the pair spelled {other!r} is: pass PAIR={other}")
+        return "absent"
+    if not holding[access]:
+        raise RevokeError(
+            f"{secret} is in SOPS without {access}: the token id is gone, so it cannot be revoked from here. "
+            f"Find the token in the Cloudflare dashboard, revoke it there, then unset {secret}."
+        )
+
+    ids = {store.show(env, access) for env in holding[access]}
+    if len(ids) != 1 or not next(iter(ids)):
+        raise RevokeError(f"{access} differs between {', '.join(holding[access])}; refusing to pick one")
+    token_id = str(ids.pop())
+
+    name = _token_name(http, account_id, token_id)
+    if name is None and not forget:
+        raise RevokeError(
+            f"the account has no token with the id in {access}: it was revoked already, or it is a user token "
+            "this endpoint cannot see. Nothing was unset. Confirm in the dashboard that it is gone, then pass --forget."
+        )
+
+    where = ", ".join(sorted({env for envs in holding.values() for env in envs}))
+    if not apply:
+        action = f"revoke token {name!r} and unset" if name else "unset (token already gone)"
+        logger.info(f"{prefix}: would {action} both keys from {where}. Pass --apply to do it.")
+        return "planned"
+
+    if name is not None:
+        try:
+            http("DELETE", f"/accounts/{account_id}/tokens/{token_id}", None)
+        except MintError as exc:
+            landed = (
+                ""
+                if exc.status
+                else " The DELETE may have landed: rerun, and if the token is gone it asks for --forget."
+            )
+            raise RevokeError(f"revoking token {name!r} failed: {_failure(exc)}; nothing was unset.{landed}") from None
+        # By consequence: the account must no longer know the id. Until then the
+        # id is the only handle on a live token, so it stays in SOPS.
+        try:
+            still_there = _token_name(http, account_id, token_id) is not None
+        except RevokeError as exc:
+            raise RevokeError(
+                f"token {name!r} was sent its DELETE, but checking that it is gone failed ({exc}); nothing was unset. "
+                "Rerun: if the token is gone, it asks for --forget."
+            ) from None
+        if still_there:
+            raise RevokeError(f"token {name!r} still exists after DELETE; nothing was unset")
+        logger.success(f"{prefix}: token {name!r} revoked")
+
+    # The secret goes first and the id last, so a failure part-way leaves the id
+    # behind: the rerun with --forget can then still read it and finish, where a
+    # secret left without its id is refused above.
+    for path in (secret, access):
+        for env in holding[path]:
+            if not store.unset(env, path):
+                raise RevokeError(f"unset of {path} from {env}.enc.yaml failed; rerun with --forget to finish")
+    left = [path for path in (access, secret) if store.files_holding(path)]
+    if left:
+        raise RevokeError(f"{', '.join(left)} is still in SOPS after its unset")
+    logger.success(f"{prefix}: both keys unset from {where}")
+    return "revoked" if name is not None else "forgotten"
+
+
+DecryptFn = Callable[[str], Optional[dict[str, Any]]]
+UnsetFn = Callable[[str, str], bool]
+
+
+class SopsPairStore:
+    """Every SOPS file decrypted up front, so an unreadable one stops the run.
+
+    `SecretsManager.show_secret` answers None both for a missing key and for a
+    file `sops -d` cannot open, and read that way an unreadable file holding the
+    pair would make it look absent, or keep a copy past the final check, while
+    its token stayed live. `decrypt` returns None only for a file that does not
+    exist and raises RevokeError for one that cannot be read.
+    """
+
+    def __init__(self, decrypt: Optional[DecryptFn] = None, unset: Optional[UnsetFn] = None) -> None:
+        if decrypt is None or unset is None:
+            from toolkit.features.secrets_manager import SecretsManager
+
+            sm = SecretsManager()
+            decrypt = decrypt or _sops_decrypt(Path(sm.project_root) / "infra" / "config" / "secrets")
+            unset = unset or sm.unset_secret
+        self._decrypt, self._unset = decrypt, unset
+        self._data: dict[str, dict[str, Any]] = {}
+        for env in SOPS_FILES:
+            self._load(env)
+
+    def _load(self, env: str) -> None:
+        data = self._decrypt(env)
+        if data is None:
+            self._data.pop(env, None)
+        else:
+            self._data[env] = data
+
+    def files_holding(self, path: str) -> list[str]:
+        return [env for env in SOPS_FILES if env in self._data and self.show(env, path)]
+
+    def show(self, env: str, path: str) -> Optional[str]:
+        value: Any = self._data.get(env)
+        for key in path.split("."):
+            value = value.get(key) if isinstance(value, dict) else None
+        return str(value) if value else None
+
+    def unset(self, env: str, path: str) -> bool:
+        ok = self._unset(env, path)
+        self._load(env)  # the final check reads the file as it is now, not as it was
+        return ok
+
+
+def _sops_decrypt(secrets_dir: Path) -> DecryptFn:
+    def decrypt(env: str) -> Optional[dict[str, Any]]:
+        sops_file = secrets_dir / f"{env}.enc.yaml"
+        if not sops_file.exists():
+            return None
+        result = subprocess.run(["sops", "-d", str(sops_file)], capture_output=True, text=True, env=age_key_env())
+        if result.returncode != 0:
+            raise RevokeError(
+                f"{env}.enc.yaml exists but sops could not decrypt it; refusing to read it as holding no key"
+            )
+        return yaml.safe_load(result.stdout) or {}
+
+    return decrypt
+
+
+def revoke_pair_cmd(prefix: str, *, apply: bool, forget: bool) -> bool:
+    """The CLI entry point: real SOPS, the real minter, the real catalog. True iff it completed."""
+    from toolkit.features.configuration import ConfigurationManager
+    from toolkit.features.secrets_manager import SECRET_CATALOG
+
+    cm = ConfigurationManager(SECRETS_ENV)
+    account_id = str(((cm.get_merged_config().get("backup") or {}).get("r2") or {}).get("account_id") or "")
+    minter = cm.get_secret_by_path(MINTER_KEY)
+    if not account_id or not minter:
+        logger.error(f"backup.r2.account_id and {MINTER_KEY} are both needed to revoke a token")
+        return False
+    try:
+        store = SopsPairStore()
+        outcome = revoke_pair(
+            prefix,
+            account_id=account_id,
+            http=cloudflare_http(str(minter)),
+            store=store,
+            catalog=frozenset(s.key_path for s in SECRET_CATALOG),
+            apply=apply,
+            forget=forget,
+        )
+    except RevokeError as exc:
+        logger.error(f"{prefix}: {exc}")
+        return False
+    if outcome == "absent":
+        access, secret = pair_paths(prefix)
+        logger.success(f"neither {access} nor {secret} is in any SOPS file; nothing to do")
+    return True
