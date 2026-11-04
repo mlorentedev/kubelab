@@ -4,6 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 704 | [A time budget measured on a young repository expires as the repository grows](lesson-704-a-time-budget-measured-on-a-young-repository-expires-as-it-grows.md) | 2026-11-04 |
 | 700 | [A snapshot of a live SQLite file costs about the same whatever the gap](lesson-700-a-sqlite-snapshot-costs-the-same-whatever-the-gap.md) | 2026-11-03 |
 | 688 | [A migration leaves the old store answering, so a stale restore step succeeds](lesson-688-a-migration-leaves-the-old-store-answering-so-a-stale-restore-step-succeeds.md) | 2026-11-01 |
 | 628 | [A copied restic snapshot keeps its time, but a bucket lock ages it from the copy](lesson-628-a-copied-snapshot-keeps-its-time-but-a-bucket-lock-ages-it-from-the-copy.md) | 2026-10-26 |
