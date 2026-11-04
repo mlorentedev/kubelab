@@ -205,38 +205,57 @@ class TestTheJudgeIsMasters:
     (review-2 F1). Pinned per checkout and per invocation."""
 
     MASTER = "${{ github.event.repository.default_branch }}"
+    CHECKOUT = {"ref": MASTER, "fetch-depth": 1}
+    # The whole `run:` of each judge step, so nothing can be prepended to it.
     JUDGES = {
-        "deploy-merge.yml": 'poetry run toolkit tools deploy-merge --out "$RUNNER_TEMP/decisions.json"',
+        "deploy-merge.yml": (
+            "set -euo pipefail\n"
+            'poetry run toolkit tools deploy-merge --out "$RUNNER_TEMP/decisions.json"\n'
+            'echo "enabled=$(jq -r .enabled "$RUNNER_TEMP/decisions.json")" >> "$GITHUB_OUTPUT"\n'
+        ),
         "deploy-shape.yml": (
-            'poetry run toolkit tools deploy-shape --pr "$NUMBER" --out "$RUNNER_TEMP/deploy-shape.json"'
+            "set +e\n"
+            'poetry run toolkit tools deploy-shape --pr "$NUMBER" --out "$RUNNER_TEMP/deploy-shape.json"\n'
+            'echo "code=$?" >> "$GITHUB_OUTPUT"\n'
         ),
         "review-attestation.yml": (
-            'poetry run toolkit tools deploy-shape --pr "$NUMBER" --out "$RUNNER_TEMP/deploy-shape.json" || true'
+            'poetry run toolkit tools deploy-shape --pr "$NUMBER" --out "$RUNNER_TEMP/deploy-shape.json" || true\n'
         ),
     }
+    # Commands that would swap the checked-out code after the checkout step.
+    RESWAP = ("git checkout", "git switch", "git fetch", "git reset", "git worktree", "PYTHONPATH")
 
-    @pytest.mark.parametrize("workflow", sorted(JUDGES))
-    def test_every_checkout_is_the_default_branch(self, workflow: str) -> None:
+    @staticmethod
+    def _steps(workflow: str) -> list[dict]:
         import yaml
 
         wf = yaml.safe_load((WORKFLOWS / workflow).read_text(encoding="utf-8"))
-        checkouts = [
-            step
-            for job in wf["jobs"].values()
-            for step in job.get("steps", [])
-            if str(step.get("uses", "")).startswith("actions/checkout@")
-        ]
+        return [step for job in wf["jobs"].values() for step in job.get("steps", [])]
+
+    @pytest.mark.parametrize("workflow", sorted(JUDGES))
+    def test_every_checkout_is_the_default_branch(self, workflow: str) -> None:
+        """The whole `with:`, so no `repository:`, `token:` or `ssh-key:` can sit
+        beside a pinned `ref` and check out a fork's branch of the same name."""
+        checkouts = [s for s in self._steps(workflow) if str(s.get("uses", "")).startswith("actions/checkout@")]
         assert checkouts, f"{workflow} has no checkout; this test lost its subject"
         for step in checkouts:
-            ref = step.get("with", {}).get("ref")
-            assert ref == self.MASTER, f"{workflow} checks out {step.get('with')}: {DECIDED}"
+            assert step.get("with") == self.CHECKOUT, f"{workflow} checks out {step.get('with')}: {DECIDED}"
 
     @pytest.mark.parametrize("workflow", sorted(JUDGES))
     def test_the_judge_runs_with_its_declared_arguments(self, workflow: str) -> None:
-        text = (WORKFLOWS / workflow).read_text(encoding="utf-8")
         tool = "deploy-merge" if workflow == "deploy-merge.yml" else "deploy-shape"
-        lines = [line.strip() for line in text.splitlines() if f"poetry run toolkit tools {tool}" in line]
-        assert lines == [self.JUDGES[workflow]], f"{workflow} runs {lines}: {DECIDED}"
+        runs = [s["run"] for s in self._steps(workflow) if f"poetry run toolkit tools {tool}" in s.get("run", "")]
+        assert runs == [self.JUDGES[workflow]], f"{workflow} runs {runs}: {DECIDED}"
+
+    @pytest.mark.parametrize("workflow", sorted(JUDGES))
+    def test_no_step_swaps_the_checked_out_code(self, workflow: str) -> None:
+        swaps = [
+            (step.get("name") or step.get("id"), cmd)
+            for step in self._steps(workflow)
+            for cmd in self.RESWAP
+            if cmd in step.get("run", "")
+        ]
+        assert not swaps, f"{workflow} swaps master's code after checkout: {swaps}: {DECIDED}"
 
 
 # Who opened a PR, or what its branch is called, is something anyone with push
