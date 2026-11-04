@@ -28,7 +28,6 @@ NODES = sorted(COMMON["backup"]["sources"])
 _ENV = {
     "BACKUP_R2_WATCHER_ACCESS_KEY_ID": "not-a-real-value-fixture-id",
     "BACKUP_R2_WATCHER_SECRET_ACCESS_KEY": "not-a-real-value-fixture-secret",
-    "BACKUP_RESTIC_PASSWORD": "not-a-real-value-fixture-password",
 }
 
 
@@ -36,9 +35,8 @@ def _env_var(path: str) -> str:
     return path.upper().replace(".", "_")
 
 
-# Each node's password as the Secret reads it: its own once it is in its own
-# bucket, the shared one before.
-PASSWORDS = {node: _env_var(node_secret_paths(COMMON, node)[2]) for node in NODES}
+# Each node's password as the Secret reads it: the node's own, never a shared one.
+PASSWORDS = {node: _env_var(node_secret_paths(node)[2]) for node in NODES}
 _ENV |= {var: f"not-a-real-value-fixture-{var.lower()}" for var in PASSWORDS.values()}
 
 
@@ -51,19 +49,18 @@ def _spec(key_path: str):
 
 
 def test_the_secret_carries_exactly_what_restic_reads() -> None:
-    """The watcher pair, and each node's password: the shared one until the node moves.
+    """The watcher pair and each node's own password, and no shared `RESTIC_PASSWORD`.
 
-    The shared `RESTIC_PASSWORD` stays until BACKUP-057 PR 5. The probe before
-    PR 4a refuses to start without it, and `apply-secrets` and Argo CD's sync of
-    the probe happen in either order, so dropping it would fail the whole fleet.
+    The probe reads no shared key (BACKUP-057 PR 5): a Secret that carried one
+    would hand the cluster a password that opens `kubelab-backups` for nothing.
     """
     assert _mapping().keys == {
         "AWS_ACCESS_KEY_ID": "BACKUP_R2_WATCHER_ACCESS_KEY_ID",
         "AWS_SECRET_ACCESS_KEY": "BACKUP_R2_WATCHER_SECRET_ACCESS_KEY",
-        "RESTIC_PASSWORD": "BACKUP_RESTIC_PASSWORD",
         **{f"RESTIC_PASSWORD_{node.upper()}": PASSWORDS[node] for node in NODES},
     }
     assert not _mapping().optional_keys
+    assert "BACKUP_RESTIC_PASSWORD" not in {*_mapping().keys.values(), *_mapping().optional_keys.values()}
 
 
 def test_no_write_credential_ever_reaches_the_cluster() -> None:
@@ -102,5 +99,6 @@ def test_both_clusters_are_audited_for_every_value() -> None:
         assert spec.kind is SecretKind.EXTERNAL
         assert set(spec.envs) == {"staging", "prod"}
         assert "r2-backup-watcher" in spec.services
-    assert {"staging", "prod"} <= set(_spec("backup.restic_password").envs)
-    assert "r2-backup-watcher" in _spec("backup.restic_password").services
+    # The shared password is read by no watcher any more; claiming it is would
+    # make a rotation of it look like it needs an `apply-secrets`.
+    assert "r2-backup-watcher" not in _spec("backup.restic_password").services

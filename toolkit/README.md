@@ -54,7 +54,6 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit backup generate-password` | Generate the restic repository password and store it in SOPS. |
 | `toolkit backup health-check` | Run the isolation probe and the fleet coverage check, and notify Slack. |
 | `toolkit backup isolation-probe` | Fail on any R2 request a stolen node credential should be refused (BACKUP-057). |
-| `toolkit backup migrate` | Move one node's restic history into its own bucket (BACKUP-057 AC4). |
 | `toolkit backup mint-node-tokens` | Mint each node's own R2 token and restic password into SOPS (BACKUP-057). |
 | `toolkit backup restore-window` | Pause an env's Argo CD auto-sync and stop one app, so its data can be replaced (BACKUP-070). |
 | `toolkit board` | Bitácora board governance: keep the Stream field true to the registry. |

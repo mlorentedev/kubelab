@@ -11,6 +11,8 @@ import yaml
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
 from tests.test_agent_stack_role import ROLE, _common, _render, _resolved
+from toolkit.features.backup_destination import node_repository
+from toolkit.features.r2_tfvars import node_bucket
 
 
 def _sources() -> dict:
@@ -34,4 +36,4 @@ def test_hermes_is_captured_from_its_home_and_not_from_its_env_file() -> None:
 
 def test_ace2_ships_to_its_own_bucket_from_its_first_snapshot() -> None:
     """Born on the per-node model: it never had a copy in the shared bucket to migrate."""
-    assert "ace2" in _common()["backup"]["r2"]["own_bucket_nodes"]
+    assert node_repository(_common(), "ace2").endswith(f"/{node_bucket('ace2')}")
