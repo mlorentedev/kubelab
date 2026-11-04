@@ -34,7 +34,7 @@ owner: manu
 
 ## Closing
 
-- [x] ADR-062 amendment, lesson-704, runbook line
+- [x] ADR-062 amendment, lesson-707, runbook line
 - [ ] `verification.md` filled in with live evidence
 - [ ] PR opened referencing this spec folder
 

@@ -1,7 +1,8 @@
 ---
-id: lesson-704-gitea-permission-endpoint-misses-team-units
+id: "lesson-707-gitea-permission-endpoint-misses-team-units"
 type: lesson
 status: active
+title: "Gitea's collaborator permission endpoint answers `read` for an account a team grants write to"
 created: "2026-11-03"
 owner: manu
 category: identity-secrets

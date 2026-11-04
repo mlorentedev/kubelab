@@ -32,7 +32,7 @@ Agents author on the Gitea forge as its superadmin. The `toolkit services gitea`
 
 ## Risks / open questions
 
-- The permission endpoint reports the coarse mode, so it reads `read` for an unrelated account on a public repository (lesson-704). Resolved: the plan reads the collaborator row as well as the mode.
+- The permission endpoint reports the coarse mode, so it reads `read` for an unrelated account on a public repository (lesson-707). Resolved: the plan reads the collaborator row as well as the mode.
 - Provisioning from the branch writes a real token into prod SOPS before merge. This is the same as TOOL-080, and the SOPS change is committed on this branch.
 
 ## Acceptance criteria
