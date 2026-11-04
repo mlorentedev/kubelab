@@ -149,6 +149,7 @@ help:
 # setup-certs makes the dev stack's certs, whatever ENV the shell exports, so
 # it runs pinned to dev rather than as a prerequisite that refuses another ENV.
 setup: setup-python setup-poetry setup-dependencies setup-sops setup-ansible
+	@test "$(ENV)" = dev || echo "setup-certs makes the dev stack's certs; ENV=$(ENV) does not apply to it." >&2
 	@$(MAKE) --no-print-directory setup-certs ENV=dev
 	@echo "✓ Setup complete. Run 'toolkit --help' to see available commands"
 

@@ -98,3 +98,10 @@ def test_smoke_test_with_prod_fails_and_names_the_check_to_run() -> None:
     )
     assert done.returncode != 0
     assert "make test-e2e ENV=prod" in done.stderr
+
+
+def test_setup_says_which_env_it_ignores() -> None:
+    """`setup` pins its cert step to dev; with another ENV it says so instead of ignoring it silently."""
+    lines = _recipes()["setup"]
+    pin = next(i for i, line in enumerate(lines) if "setup-certs ENV=dev" in line)
+    assert any('test "$(ENV)" = dev ||' in line and "does not apply" in line for line in lines[:pin]), lines
