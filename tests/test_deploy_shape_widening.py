@@ -77,7 +77,16 @@ class TestDefinitionDoesNotWiden:
         pattern = load_declaration(REGISTRY_PATH).tag_pattern
         for tag in ("sha-9d79e52", "sha-" + "a" * 40):
             assert pattern.fullmatch(tag), tag
-        for tag in ("1.4.0", "v1.4.0", "latest", "main", "sha-9d79e5", "sha-9D79E52", "xsha-9d79e52", "sha-" + "a" * 41):
+        for tag in (
+            "1.4.0",
+            "v1.4.0",
+            "latest",
+            "main",
+            "sha-9d79e5",
+            "sha-9D79E52",
+            "xsha-9d79e52",
+            "sha-" + "a" * 41,
+        ):
             assert not pattern.fullmatch(tag), f"{tag!r} admitted: {DECIDED}"
 
 
@@ -114,8 +123,7 @@ class TestMergingActorDoesNotWiden:
                 found[wf.name] = hits
         # Exact kinds, not just names: a REST merge in a declared merger would skip the head pin.
         assert found == {workflow: ["gh pr merge"] for workflow in MERGERS}, (
-            f"workflows that merge pull requests: {found}; declared: {sorted(MERGERS)}. A new merger is "
-            f"{DECIDED}."
+            f"workflows that merge pull requests: {found}; declared: {sorted(MERGERS)}. A new merger is {DECIDED}."
         )
 
     def test_the_contexts_unstable_may_excuse_are_the_approved_ones(self) -> None:
@@ -126,7 +134,9 @@ class TestMergingActorDoesNotWiden:
     def test_the_merge_states_the_judge_accepts_are_the_approved_ones(self) -> None:
         """`unstable` was added on #1619 (2026-11-01): only contexts that are not required fail
         there, and the judge checks every required one itself. Anything else here is a widening."""
-        assert MERGE_STATES_OK == frozenset({"clean", "unstable"}), f"the judge accepts {set(MERGE_STATES_OK)}: {DECIDED}"
+        assert MERGE_STATES_OK == frozenset({"clean", "unstable"}), (
+            f"the judge accepts {set(MERGE_STATES_OK)}: {DECIDED}"
+        )
 
     @pytest.mark.parametrize("workflow", sorted(MERGERS))
     def test_each_merger_runs_exactly_its_declared_line(self, workflow: str) -> None:
@@ -187,3 +197,204 @@ class TestMergingActorDoesNotWiden:
         }, f"deploy-merge.yml's token scope is {wf['permissions']}: {DECIDED}"
         granted = sorted(name for name, job in wf["jobs"].items() if "permissions" in job)
         assert not granted, f"jobs {granted} carry their own grant, which overrides the pinned one: {DECIDED}"
+
+
+class TestTheJudgeIsMasters:
+    """Every workflow that decides on the class runs master's code and declarations,
+    never a PR's head: a PR that could choose its judge could choose its verdict
+    (review-2 F1). Pinned per checkout and per invocation."""
+
+    MASTER = "${{ github.event.repository.default_branch }}"
+    CHECKOUT = {"ref": MASTER, "fetch-depth": 1}
+    # The whole `run:` of each judge step, so nothing can be prepended to it.
+    JUDGES = {
+        "deploy-merge.yml": (
+            "set -euo pipefail\n"
+            'poetry run toolkit tools deploy-merge --out "$RUNNER_TEMP/decisions.json"\n'
+            'echo "enabled=$(jq -r .enabled "$RUNNER_TEMP/decisions.json")" >> "$GITHUB_OUTPUT"\n'
+        ),
+        "deploy-shape.yml": (
+            "set +e\n"
+            'poetry run toolkit tools deploy-shape --pr "$NUMBER" --out "$RUNNER_TEMP/deploy-shape.json"\n'
+            'echo "code=$?" >> "$GITHUB_OUTPUT"\n'
+        ),
+        "review-attestation.yml": (
+            'poetry run toolkit tools deploy-shape --pr "$NUMBER" --out "$RUNNER_TEMP/deploy-shape.json" || true\n'
+        ),
+    }
+    # Commands that would swap the checked-out code after the checkout step.
+    RESWAP = ("git checkout", "git switch", "git fetch", "git reset", "git worktree", "PYTHONPATH")
+
+    @staticmethod
+    def _steps(workflow: str) -> list[dict]:
+        import yaml
+
+        wf = yaml.safe_load((WORKFLOWS / workflow).read_text(encoding="utf-8"))
+        return [step for job in wf["jobs"].values() for step in job.get("steps", [])]
+
+    @pytest.mark.parametrize("workflow", sorted(JUDGES))
+    def test_every_checkout_is_the_default_branch(self, workflow: str) -> None:
+        """The whole `with:`, so no `repository:`, `token:` or `ssh-key:` can sit
+        beside a pinned `ref` and check out a fork's branch of the same name."""
+        checkouts = [s for s in self._steps(workflow) if str(s.get("uses", "")).startswith("actions/checkout@")]
+        assert checkouts, f"{workflow} has no checkout; this test lost its subject"
+        for step in checkouts:
+            assert step.get("with") == self.CHECKOUT, f"{workflow} checks out {step.get('with')}: {DECIDED}"
+
+    @pytest.mark.parametrize("workflow", sorted(JUDGES))
+    def test_the_judge_runs_with_its_declared_arguments(self, workflow: str) -> None:
+        tool = "deploy-merge" if workflow == "deploy-merge.yml" else "deploy-shape"
+        runs = [s["run"] for s in self._steps(workflow) if f"poetry run toolkit tools {tool}" in s.get("run", "")]
+        assert runs == [self.JUDGES[workflow]], f"{workflow} runs {runs}: {DECIDED}"
+
+    @pytest.mark.parametrize("workflow", sorted(JUDGES))
+    def test_no_step_swaps_the_checked_out_code(self, workflow: str) -> None:
+        swaps = [
+            (step.get("name") or step.get("id"), cmd)
+            for step in self._steps(workflow)
+            for cmd in self.RESWAP
+            if cmd in step.get("run", "")
+        ]
+        assert not swaps, f"{workflow} swaps master's code after checkout: {swaps}: {DECIDED}"
+
+
+# Who opened a PR, or what its branch is called, is something anyone with push
+# access can choose. The granting side therefore reads neither (global rule:
+# never match a branch name to GRANT). pr-agent.yml may FORFEIT a review by
+# branch name; that direction is safe, and is not scanned here (review-2 F2).
+#
+# Read from the AST, not by regex, so every access form counts: `["ref"]`,
+# `.get("ref")`, a constant bound to a name first. `review_attestation.py` reads
+# authors to recognise REVIEWS, which is its job, so only the code that decides
+# the exemption is scanned there: `exempt_signature` and `classify`'s exempt block.
+NAME_KEYS = frozenset({"login", "user", "actor", "author", "head_ref", "headRefName", "sender"})
+
+
+def _granting_code() -> dict[str, list]:
+    import ast
+
+    def parse(rel: str):
+        return ast.parse((REPO_ROOT / rel).read_text(encoding="utf-8"))
+
+    attestation = parse("toolkit/features/review_attestation.py")
+    exempt_fn = next(n for n in attestation.body if isinstance(n, ast.FunctionDef) and n.name == "exempt_signature")
+    classify_fn = next(n for n in attestation.body if isinstance(n, ast.FunctionDef) and n.name == "classify")
+    # The exempt block: every `if` in classify whose body returns an "exempt" verdict.
+    exempt_ifs = [
+        node
+        for node in ast.walk(classify_fn)
+        if isinstance(node, ast.If)
+        and any(isinstance(c, ast.Constant) and c.value == "exempt" for c in ast.walk(ast.Module(node.body, [])))
+    ]
+    assert exempt_ifs, "classify's exempt block was not found; this test lost its subject"
+    # A helper the exempt block delegates to decides the exemption too: follow
+    # calls to module-level functions, transitively.
+    functions = {n.name: n for n in attestation.body if isinstance(n, ast.FunctionDef)}
+    scanned, pending = [exempt_fn, *exempt_ifs], [exempt_fn, *exempt_ifs]
+    while pending:
+        for node in ast.walk(pending.pop()):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+                helper = functions.get(node.func.id)
+                if helper is not None and helper not in scanned and helper is not classify_fn:
+                    scanned.append(helper)
+                    pending.append(helper)
+    return {
+        "toolkit/features/deploy_merge.py": [parse("toolkit/features/deploy_merge.py")],
+        "toolkit/features/deploy_shape.py": [parse("toolkit/features/deploy_shape.py")],
+        "toolkit/features/review_attestation.py (exemption)": scanned,
+    }
+
+
+def test_every_exempt_verdict_is_inside_the_scanned_code() -> None:
+    """The scan above covers only the exemption's code, so an "exempt" verdict
+    produced anywhere else, or through a constant bound to a name, would never be
+    scanned. Both are refused here."""
+    import ast
+
+    tree = ast.parse((REPO_ROOT / "toolkit/features/review_attestation.py").read_text(encoding="utf-8"))
+
+    def at(n) -> tuple:  # _granting_code parses its own tree, so nodes compare by position
+        return (getattr(n, "lineno", None), getattr(n, "col_offset", None))
+
+    inside = {
+        at(n) for root in _granting_code()["toolkit/features/review_attestation.py (exemption)"] for n in ast.walk(root)
+    }
+    outside = [
+        n.lineno for n in ast.walk(tree) if isinstance(n, ast.Constant) and n.value == "exempt" and at(n) not in inside
+    ]
+    assert not outside, f'"exempt" outside the scanned exemption code, line(s) {outside}: {DECIDED}'
+    aliases = [
+        n.lineno
+        for n in ast.walk(tree)
+        if isinstance(n, (ast.Assign, ast.AnnAssign))
+        and isinstance(n.value, ast.Constant)
+        and n.value.value == "exempt"
+    ]
+    assert not aliases, f'"exempt" bound to a name at line(s) {aliases}; the scan cannot follow it: {DECIDED}'
+
+
+def _name_reads(roots: list) -> list[str]:
+    """String constants that name an author or a branch. `"ref"` is allowed only
+    under `"base"` (which branch a PR targets is not chosen by its author)."""
+    import ast
+
+    hits = []
+    for root in roots:
+        parents = {child: node for node in ast.walk(root) for child in ast.iter_child_nodes(node)}
+        for node in ast.walk(root):
+            if not (isinstance(node, ast.Constant) and isinstance(node.value, str)):
+                continue
+            value = node.value
+            if value in NAME_KEYS or value.startswith("deploy/"):
+                hits.append(value)
+            elif value == "ref":
+                holder = parents.get(node)
+                if isinstance(holder, ast.Call):  # x.get("ref")
+                    holder = holder.func
+                target = ast.unparse(getattr(holder, "value", holder))
+                if not target.endswith("['base']"):
+                    hits.append(f"ref of {target}")
+    return hits
+
+
+@pytest.mark.parametrize("module", sorted(_granting_code()))
+def test_the_granting_side_reads_no_branch_name_or_author(module: str) -> None:
+    hits = _name_reads(_granting_code()[module])
+    assert not hits, f"{module} reads {hits}; a grant keyed on a name anyone can mint: {DECIDED}"
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        'pr["head"].get("ref")',
+        'pr["head"]["ref"]',
+        'pr["user"]["login"]',
+        'pr.get("headRefName")',
+        'event["sender"]',
+        'ref.startswith("deploy/")',
+    ],
+)
+def test_the_name_detector_fires(source: str) -> None:
+    """Positive control: a detector that silently returned nothing would keep
+    every scan above green."""
+    import ast
+
+    assert _name_reads([ast.parse(source)]), f"{source} was not detected"
+
+
+def test_the_name_detector_allows_the_base_ref() -> None:
+    import ast
+
+    assert not _name_reads([ast.parse('pr["base"]["ref"]; pr["base"].get("ref")')])
+
+
+def test_the_required_contexts_are_the_approved_ones() -> None:
+    """The judge refuses unless every required context passes, so the set is part of
+    the merging actor's condition. Dropping `Tests` from it would merge with tests
+    red (review-2 F4)."""
+    from toolkit.features.deploy_merge import required_contexts
+
+    found = required_contexts(REPO_ROOT / "infra/config/values/common.yaml", "mlorentedev/kubelab", "master")
+    assert set(found) == {"Validate", "Detect Changes", "review-attestation", "Tests", "deploy-shape"}, (
+        f"master's required contexts are {found}: {DECIDED}"
+    )
