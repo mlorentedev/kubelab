@@ -40,6 +40,18 @@ created: "2026-09-03"
   image must belong to the container named after the bumped app. All four cases stay `mechanical` under it.
 - AC7 (PR 4): `mechanical.merge` flipped to `true`; the widening test's `APPROVED` and
   `TestSwitch.test_the_committed_switch_is_on` move with it. `make mutate` back to `false`: RED.
+- First unattended merge (#1619 issuecomment-6620340511): deploy-merge run 41673134991 judged `#3056 merge at 497c50da`
+  (api sha-b392e87) and merged it as f3478fab; deploy-verify 41673297336 and 41673422777 passed on it. The same run
+  skipped #3055 as `not-mechanical`. All 30 deploy-verify runs since the flip succeeded.
+- Review-2 (`review-2.md`, FAIL on three Majors, no Blocker), fixed in one PR. Each mutation RED:
+  - F1: every checkout in deploy-merge, deploy-shape and review-attestation pinned to the default branch
+    (deploy-merge's made explicit), and each judge invocation pinned. Mutants: `workflow_run.head_sha` ref,
+    `pull_request.head.sha` ref on both others, `--registry /dev/null`.
+  - F2: the granting modules read no head ref, author or `deploy/` prefix (code only, AST); a `deploy/staging-web`
+    PR by the bot with a non-mechanical diff is skipped. Mutant: a `deploy/` ref bypass in `judge()`.
+  - F4: master's `required_contexts` pinned. Mutant: dropping `Tests`.
+  - F3: the PR bodies and headers no longer say an open PR holds staging; the runbook
+    (`docs/runbooks/gitops-delivery-promotion.md`) documents the hold (draft) and the stop (disable, then revert).
 - Review finding Major 1 (#2982): pins the merge and close feeds, the triggers and the token scope of
   `deploy-merge.yml`. Each of these edits goes RED under `make mutate`: `select(.action == "merge")` ->
   `!= "skip"`; `.head_sha` -> `.pr`; `contents: read` -> `write`; the cron changed. The review's two untested guards
@@ -48,7 +60,8 @@ created: "2026-09-03"
 
 ## Test status
 
-- `make test`: 6406 passed, 2 failed before fixes (pinned `gh pr view` field list, stale toolkit README); both fixed, targeted rerun green.
+- PR 1: `make test` 6406 passed, 2 failed before fixes (pinned `gh pr view` field list, stale toolkit README); both fixed, targeted rerun green.
+- Review-2 fixes (2026-11-03): the DELIVERY-004 suites plus the receiver tests, 247 passed.
 
 ## Decisions made during implementation
 
@@ -60,9 +73,9 @@ created: "2026-09-03"
 
 Before archiving, flag what (if anything) should be promoted to the vault. If all three are "no", archive in repo is the only persistence.
 
-- [ ] Lesson for the repo's `docs/lessons/`? <yes / no - one line of what>
-- [ ] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? <yes / no - one line of what>
-- [ ] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. <yes / no - one line>
+- [x] Lesson for the repo's `docs/lessons/`? yes, already written: lesson-613 (check-run vs status) and lesson-699 (`unstable`).
+- [x] ADR-worthy decision? yes: ADR-037's "leaving the PR open holds staging" no longer holds for staging. Amended in this PR.
+- [x] New pattern candidate? no: the "diff nobody wrote" rule already lives in the global harness.
 
 ## Archive checklist
 
