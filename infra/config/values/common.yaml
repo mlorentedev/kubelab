@@ -2696,7 +2696,8 @@ backup:
     # the old shared bucket, with the per-node repository name appended. No node
     # ships there any more: every node in `backup.sources` has a bucket of its own,
     # `kubelab-backup-<node>`, written with its own pair and restic password.
-    # Still read by `coverage()` while the old bucket holds history (#2920).
+    # Nothing reads it through restic; it stays, checked against the derived
+    # URL by tests/test_backup_destination.py, until that bucket is deleted (#1920).
     repo_prefix: "s3:https://76967f5ede1ce50efce34d90b7e94958.r2.cloudflarestorage.com/kubelab-backups"
     # Pinned static binary (BACKUP-044 Part 2), same idiom as k3s_version:
     # get_url + a checksum verified against upstream's own SHA256SUMS, not a

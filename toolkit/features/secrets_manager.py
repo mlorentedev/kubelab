@@ -1633,8 +1633,10 @@ SECRET_CATALOG: list[SecretSpec] = [
             "the Bitwarden escrow copy in the same pass, or recovery silently regresses."
         ),
         # Read by no node and no cluster workload since BACKUP-057: each node has
-        # its own password (`backup.nodes.<node>.restic_password`). It stays
-        # while `kubelab-backups` holds history it opens (#2920).
+        # its own password (`backup.nodes.<node>.restic_password`). It is the
+        # only key to the history still in `kubelab-backups`, so the escrow check
+        # (`backup_escrow.py`) still reads it, and it stays until that bucket is
+        # deleted (#1920).
         services=("backup",),
         envs=("staging", "prod"),
     ),
