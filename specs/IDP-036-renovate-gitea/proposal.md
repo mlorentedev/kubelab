@@ -27,7 +27,7 @@ A Renovate run on the Beelink node opens dependency PRs on every declared Gitea 
 
 Owner decision 2026-11-03, on #1384. Everything lives in the `beelink_services` Ansible role, so there is one home and no repository to create:
 
-- **Trigger.** A systemd timer runs a oneshot service that starts the Renovate container. It is set to `OnCalendar=hourly` with `Persistent=true`: it runs every hour while the node is up, and once at boot when a run was missed while it was off. That one setting covers both the hourly cron and the dispatch at boot. The service starts after the forge's compose unit and waits until Gitea answers. systemd never starts a oneshot unit that is already running, so a slow run cannot overlap the next one.
+- **Trigger.** A systemd timer runs a oneshot service that starts the Renovate container. It is set to `OnCalendar=hourly` with `Persistent=true`: it runs every hour while the node is up, and once at boot when a run was missed while it was off. That one setting covers both the hourly cron and the dispatch at boot. The service is ordered after the forge's compose unit, but `After=` only orders units started together, so it does not guarantee Gitea is up when the timer fires. The service therefore probes Gitea first. If Gitea does not answer within a bounded wait, the service logs a skip and exits 0 without starting Renovate. A forge that is stopped while the node is up then fails nothing either. systemd never starts a oneshot unit that is already running, so a slow run cannot overlap the next one.
 - **Repositories.** `RENOVATE_REPOSITORIES` is rendered from `apps.services.core.gitea.organizations`, so it is never a second list.
 - **Shared config.** One global config file, rendered by Ansible, carries the repository settings that `renovate.json` holds on GitHub, with `onboarding: false` and `requireConfig: optional`. Renovate documents that combination as "repository is processed regardless of config file presence" (self-hosted configuration, `requireConfig`). So no repository holds a copy, there is no preset repository, and no preset has to be readable across organizations. A repository may still add a `renovate.json` to override the shared config.
 
@@ -50,12 +50,13 @@ This deviates from the ticket's K3s CronJob, and from this spec's first draft, w
 - **Timed or triggered: resolved.** It is both, through `OnCalendar=hourly` and `Persistent=true` (see Design).
 - **Home of the workflow and preset: resolved.** It is the `beelink_services` role, with no workflow or preset repository (see Design).
 - **Reach across organizations: resolved.** There is no preset to reach. The bot's organization membership is declared alongside the other identities.
+- **The PRs land with no CI on the forge.** Gitea Actions CI for these repositories is #504, out of scope here. Until it exists, a person reviews each Renovate PR, which the no-automerge rule already requires. #504 bounds how much a PR is worth, not whether this mechanism works.
 - **Open: run length on the 8 GB node.** One run covers five repositories next to the forge and its runners. The memory limit on the container and the measured duration of a full run go on #1384 after the first run.
 
 ## Acceptance criteria
 
 - [ ] The repository list is derived from `apps.services.core.gitea.organizations`, never hand-listed. A test renders the role's template and compares it against the SSOT.
-- [ ] A systemd timer in `beelink_services` (`OnCalendar=hourly`, `Persistent=true`) starts the run after Gitea is ready. A powered-off forge fires nothing and fails nothing, and the second provision run reports `changed=0`.
+- [ ] A systemd timer in `beelink_services` (`OnCalendar=hourly`, `Persistent=true`) starts the run only once Gitea answers, and skips with exit 0 when it does not. A powered-off node fires nothing, a stopped forge on a running node fails nothing, and the second provision run reports `changed=0`.
 - [ ] One shared config, rendered by Ansible, with `onboarding: false`, `requireConfig: optional`, `vulnerabilityAlerts` on its own schedule, `groupName` per ecosystem, and no automerge. No Gitea repository holds a copy.
 - [ ] The Renovate engine version lives only in the `common.yaml` image key. `.github/workflows/renovate.yml` reads it from there, and a test fails if the workflow carries a literal `renovate-version`.
 - [ ] The Dependency Dashboard is on, and PR volume over the first two cycles is recorded on #1384.
