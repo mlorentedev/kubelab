@@ -167,6 +167,14 @@ setup-poetry:
 setup-dependencies:
 	@$(POETRY) install
 
+# Dev-only targets run the Docker Compose stack with --env dev whatever ENV says, and make
+# never rejects a variable a recipe does not read: `make smoke-test ENV=prod` once read dev,
+# found nothing and exited 0 (#3069). Each one starts with this; the argument names the
+# target to use for a cluster env, if there is one.
+define require_dev_env
+	@test "$(ENV)" = dev || { echo "$@ runs the dev Compose stack only, and ENV=$(ENV) was given.$(if $(1), Use: $(1))" >&2; exit 2; }
+endef
+
 .PHONY: setup-sops
 setup-sops:
 	@if ! command -v sops >/dev/null 2>&1; then \
@@ -176,6 +184,7 @@ setup-sops:
 
 .PHONY: setup-certs
 setup-certs:
+	$(call require_dev_env)
 	@$(TOOLKIT) tools certs generate --env dev
 
 .PHONY: setup-ansible
@@ -190,6 +199,7 @@ setup-ansible:
 
 .PHONY: regen-certs
 regen-certs:
+	$(call require_dev_env)
 	@echo "Regenerating dev TLS certificates..."
 	@$(TOOLKIT) tools certs generate --env dev
 	@mkcert -install >/dev/null 2>&1 || true
@@ -433,12 +443,14 @@ config-check-drift:
 
 .PHONY: build-dev
 build-dev:
+	$(call require_dev_env)
 	@$(TOOLKIT) services build api --env dev --no-cache
 	@$(TOOLKIT) services build errors --env dev --no-cache
 	@echo "✓ Development services built"
 
 .PHONY: up-dev
 up-dev:
+	$(call require_dev_env)
 	@$(TOOLKIT) services up \
 		api errors gitea n8n uptime loki grafana authelia crowdsec github-runner traefik \
 		--env dev
@@ -446,6 +458,7 @@ up-dev:
 
 .PHONY: down-dev
 down-dev:
+	$(call require_dev_env)
 	@echo "--- Bringing down ALL development services and removing volumes ---"
 	@$(TOOLKIT) services down \
 		api errors gitea n8n uptime loki grafana authelia crowdsec github-runner traefik \
@@ -478,6 +491,7 @@ dev-full-reset: dev-full-clean credentials-generate
 # non-TTY caller (CI, an agent session, `make -j`) with no output explaining why.
 # A target boundary is the honest way to express "a human has to act here".
 dev-full-reset-resume:
+	$(call require_dev_env)
 	@$(TOOLKIT) config generate --env dev # Regenerate config with updated secrets
 	@echo "--- Starting all services ---"
 	@$(TOOLKIT) services up crowdsec authelia traefik gitea n8n uptime loki grafana api errors github-runner --env dev
@@ -2053,6 +2067,7 @@ bootstrap-k8s:
 # -----------------------------------------------------------------------------
 .PHONY: smoke-test
 smoke-test:
+	$(call require_dev_env,make test-e2e ENV=$(ENV))
 	@$(TOOLKIT) services health --env dev
 
 .PHONY: validate
