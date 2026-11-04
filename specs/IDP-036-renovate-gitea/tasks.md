@@ -19,11 +19,11 @@ created: "2026-11-01"
 
 ## Implementation
 
-- [ ] [P] [AC4] Failing test: the Renovate image in `common.yaml` matches `renovate-version` in `.github/workflows/renovate.yml`
-- [ ] [AC4] Declare the image pin in `common.yaml` and make Renovate's own bump update both
+- [ ] [P] [AC4] Failing test: `.github/workflows/renovate.yml` carries no literal `renovate-version`, and the step that sets it reads the `common.yaml` image key
+- [ ] [AC4] Declare `ghcr.io/renovatebot/renovate:<version>` in `common.yaml` and make the workflow read the tag from it (a `.github/**` change, so the owner merges it)
 - [ ] [P] [AC1] Failing test: the rendered repository list equals the repositories in `apps.services.core.gitea.organizations`
 - [ ] [AC1] [AC3] Template the global config (`onboarding: false`, `requireConfig: optional`, the shared repository settings) and the repository list in `beelink_services`
-- [ ] [AC6] Declare the bot identity and its organization membership; mint and record its token with the role's existing mint-then-record pair; register it in `SECRET_CATALOG`
+- [ ] [AC6] Declare the bot identity and its organization membership; mint and record its token with the role's existing mint-then-record pair, the mint gated on the SOPS entry being absent; register it in `SECRET_CATALOG`
 - [ ] [AC2] Timer and oneshot service (`OnCalendar=hourly`, `Persistent=true`, after the forge's compose unit and a Gitea readiness wait, a container memory limit)
 - [ ] [AC2] Provision Beelink twice: first run applies, second reports `changed=0`
 - [ ] [AC5] First run: a dashboard issue on each repository; record PR volume over two cycles on #1384
