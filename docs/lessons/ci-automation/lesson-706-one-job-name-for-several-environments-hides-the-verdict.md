@@ -1,5 +1,5 @@
 ---
-id: lesson-706-latest-run-of-an-on-status-workflow-is-noise
+id: lesson-706-one-job-name-for-several-environments-hides-the-verdict
 type: lesson
 status: active
 created: "2026-11-04"
@@ -8,23 +8,29 @@ category: ci-automation
 tags: [kubelab, ci-automation, github, deploy-merge]
 ---
 
-# The latest run of an `on: status` workflow is almost never its verdict
+# One job name for several environments hides which environment a run judged
 
 **Context**: #3062 F11 decided that deploy-merge (DELIVERY-004, #1619) pauses every unattended merge while "the latest
 completed deploy-verify run on master" is not green.
 
-**Problem**: `on: status` cannot be filtered by context. Every commit status anywhere in the repository (review-attestation,
-pr-agent, deploy-shape) starts a deploy-verify run whose only job is skipped by its `if:`. A run whose jobs all skipped
-concludes `success`. The last 100 completed master runs were all `success`. Read literally, a red run is buried within
-minutes by the next unrelated status, so the pause would last one status interval, not until staging is fixed.
+**Problem**: deploy-verify's `Argo CD status` job ran for both `argocd/kubelab-staging` and `argocd/kubelab-prod`
+under that one name. Every merge to master gets both statuses within seconds, so a staging sync failure was a red run
+followed ten seconds later by prod's green run. "The latest run" is whichever landed last, so the pause would almost
+never hold for the staging failure it exists for. The run list carries nothing else that says which environment a run
+was about.
 
-**Solution**: `pause_reason` in `toolkit/features/deploy_merge.py` walks the runs newest first, reads each run's jobs,
-and takes the first run with a job that did not skip as the verdict. A run with no jobs at all (a startup failure)
-counts as a verdict too. It fails closed: an unreadable run or job list, or no such run in the page, pauses.
-Reading jobs needs `actions: read` on the token, without which the read fails closed and pauses every merge.
+A first design assumed the opposite problem. The workflow's header said every status in the repository starts a
+skipped run on master, so the judge was written to step over "noise". Measured, all of the last 100 completed master
+runs had a job that ran. The header was corrected in the same PR. The design had trusted a comment over a measurement,
+and a pr-agent finding about page size was what prompted the measurement.
 
-**Rule**: before keying on "the latest run" of a workflow, ask what starts it. When a trigger cannot be filtered
-(`status`, `check_run`, `workflow_run` on a busy workflow), the run list is mostly skipped jobs concluding `success`.
-The verdict is the latest run whose job actually ran.
+**Solution**: every deploy-verify job name now ends with the context it judged, `(argocd/kubelab-<env>)`.
+`pause_reason` in `toolkit/features/deploy_merge.py` reads the newest run that holds a job for `staging` that ran, and
+that job's conclusion decides. `tests/test_deploy_shape_widening.py` requires every deploy-verify job name to carry
+its context, and the prefix to match the workflow's `startsWith`.
+
+**Rule**: when something downstream keys on a workflow's runs, the job name is the only label the run list gives it.
+A job that serves several environments or targets must name the one it ran for. Before designing around what a
+comment says a run list contains, list it.
 
 **Tags**: `#deploy-verify` `#deploy-merge` `#issue-3062`
