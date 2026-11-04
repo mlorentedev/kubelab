@@ -21,10 +21,9 @@ import json
 import os
 import pathlib
 import re
+import shutil
 import subprocess
 import time
-
-import shutil
 
 import pytest
 
@@ -130,6 +129,11 @@ SIZES = {"rpi3": 123_456_789, "vps": 2_345_678_901}
 BUCKET_BYTES = sum(SIZES.values()) + 1_000_000
 
 
+def _node_passwords(**by_node: str) -> dict[str, str]:
+    """The probe's per-node variables, keyed RESTIC_PASSWORD_<NODE>."""
+    return {f"RESTIC_PASSWORD_{node.upper()}": value for node, value in by_node.items()}
+
+
 def _sizes(**overrides: str) -> str:
     """The sizes file, one `<kind> <name> <bytes|null> <seconds>` per line."""
     entries = {("bucket", "kubelab-backups"): str(BUCKET_BYTES), **{("node", n): str(b) for n, b in SIZES.items()}}
@@ -225,8 +229,7 @@ def fleet(tmp_path: pathlib.Path, request):
         "NC": str(nc),
         "PROBE_NOW": str(NOW),
         # One per node (BACKUP-057); the probe reads no shared RESTIC_PASSWORD.
-        "RESTIC_PASSWORD_RPI3": "not-a-real-value-fixture",
-        "RESTIC_PASSWORD_VPS": "not-a-real-value-fixture",
+        **_node_passwords(rpi3="not-a-real-value-fixture", vps="not-a-real-value-fixture"),
         "AWS_ACCESS_KEY_ID": "not-a-real-value-fixture",
         "AWS_SECRET_ACCESS_KEY": "not-a-real-value-fixture",
         "PROBE_SHELL": " ".join(request.param),
@@ -375,7 +378,7 @@ def test_each_node_opens_with_its_own_password(fleet) -> None:
     fake, _, env = fleet
     (fake / "rpi3.password").write_text("fixture-rpi3", encoding="utf-8")
     (fake / "kubelab-vps.password").write_text("fixture-vps", encoding="utf-8")
-    env = {**env, "RESTIC_PASSWORD_RPI3": "fixture-rpi3", "RESTIC_PASSWORD_VPS": "fixture-vps"}
+    env = {**env, **_node_passwords(rpi3="fixture-rpi3", vps="fixture-vps")}
     rc, nodes, (summary,) = _run(env)
     assert rc == 0 and summary["healthy"] == 1, nodes
 
@@ -384,7 +387,7 @@ def test_a_node_given_another_nodes_password_is_unreadable(fleet) -> None:
     fake, _, env = fleet
     (fake / "rpi3.password").write_text("fixture-rpi3", encoding="utf-8")
     (fake / "kubelab-vps.password").write_text("fixture-vps", encoding="utf-8")
-    env = {**env, "RESTIC_PASSWORD_RPI3": "fixture-vps", "RESTIC_PASSWORD_VPS": "fixture-vps"}
+    env = {**env, **_node_passwords(rpi3="fixture-vps", vps="fixture-vps")}
     rc, nodes, (summary,) = _run(env)
     assert _node(nodes, "rpi3")["healthy"] == 0 and "wrong password" in _node(nodes, "rpi3")["reason"]
     assert _node(nodes, "vps")["healthy"] == 1
