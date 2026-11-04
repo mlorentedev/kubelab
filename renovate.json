@@ -44,6 +44,19 @@
       ],
       "datasourceTemplate": "github-releases",
       "versioningTemplate": "loose"
+    },
+    {
+      "customType": "regex",
+      "description": "The Node version pre-commit's node hooks run on. Pinned so a hook environment never depends on the Node index of the day (#3070).",
+      "managerFilePatterns": [
+        "/^\\.pre-commit-config\\.yaml$/"
+      ],
+      "matchStrings": [
+        "(?m)^\\s+node:\\s+\"(?<currentValue>\\d+\\.\\d+\\.\\d+)\"\\s*$"
+      ],
+      "depNameTemplate": "node",
+      "datasourceTemplate": "node-version",
+      "versioningTemplate": "node"
     }
   ],
   "packageRules": [
