@@ -77,7 +77,16 @@ class TestDefinitionDoesNotWiden:
         pattern = load_declaration(REGISTRY_PATH).tag_pattern
         for tag in ("sha-9d79e52", "sha-" + "a" * 40):
             assert pattern.fullmatch(tag), tag
-        for tag in ("1.4.0", "v1.4.0", "latest", "main", "sha-9d79e5", "sha-9D79E52", "xsha-9d79e52", "sha-" + "a" * 41):
+        for tag in (
+            "1.4.0",
+            "v1.4.0",
+            "latest",
+            "main",
+            "sha-9d79e5",
+            "sha-9D79E52",
+            "xsha-9d79e52",
+            "sha-" + "a" * 41,
+        ):
             assert not pattern.fullmatch(tag), f"{tag!r} admitted: {DECIDED}"
 
 
@@ -114,8 +123,7 @@ class TestMergingActorDoesNotWiden:
                 found[wf.name] = hits
         # Exact kinds, not just names: a REST merge in a declared merger would skip the head pin.
         assert found == {workflow: ["gh pr merge"] for workflow in MERGERS}, (
-            f"workflows that merge pull requests: {found}; declared: {sorted(MERGERS)}. A new merger is "
-            f"{DECIDED}."
+            f"workflows that merge pull requests: {found}; declared: {sorted(MERGERS)}. A new merger is {DECIDED}."
         )
 
     def test_the_contexts_unstable_may_excuse_are_the_approved_ones(self) -> None:
@@ -126,7 +134,9 @@ class TestMergingActorDoesNotWiden:
     def test_the_merge_states_the_judge_accepts_are_the_approved_ones(self) -> None:
         """`unstable` was added on #1619 (2026-11-01): only contexts that are not required fail
         there, and the judge checks every required one itself. Anything else here is a widening."""
-        assert MERGE_STATES_OK == frozenset({"clean", "unstable"}), f"the judge accepts {set(MERGE_STATES_OK)}: {DECIDED}"
+        assert MERGE_STATES_OK == frozenset({"clean", "unstable"}), (
+            f"the judge accepts {set(MERGE_STATES_OK)}: {DECIDED}"
+        )
 
     @pytest.mark.parametrize("workflow", sorted(MERGERS))
     def test_each_merger_runs_exactly_its_declared_line(self, workflow: str) -> None:
@@ -187,3 +197,87 @@ class TestMergingActorDoesNotWiden:
         }, f"deploy-merge.yml's token scope is {wf['permissions']}: {DECIDED}"
         granted = sorted(name for name, job in wf["jobs"].items() if "permissions" in job)
         assert not granted, f"jobs {granted} carry their own grant, which overrides the pinned one: {DECIDED}"
+
+
+class TestTheJudgeIsMasters:
+    """Every workflow that decides on the class runs master's code and declarations,
+    never a PR's head: a PR that could choose its judge could choose its verdict
+    (review-2 F1). Pinned per checkout and per invocation."""
+
+    MASTER = "${{ github.event.repository.default_branch }}"
+    JUDGES = {
+        "deploy-merge.yml": 'poetry run toolkit tools deploy-merge --out "$RUNNER_TEMP/decisions.json"',
+        "deploy-shape.yml": (
+            'poetry run toolkit tools deploy-shape --pr "$NUMBER" --out "$RUNNER_TEMP/deploy-shape.json"'
+        ),
+        "review-attestation.yml": (
+            'poetry run toolkit tools deploy-shape --pr "$NUMBER" --out "$RUNNER_TEMP/deploy-shape.json" || true'
+        ),
+    }
+
+    @pytest.mark.parametrize("workflow", sorted(JUDGES))
+    def test_every_checkout_is_the_default_branch(self, workflow: str) -> None:
+        import yaml
+
+        wf = yaml.safe_load((WORKFLOWS / workflow).read_text(encoding="utf-8"))
+        checkouts = [
+            step
+            for job in wf["jobs"].values()
+            for step in job.get("steps", [])
+            if str(step.get("uses", "")).startswith("actions/checkout@")
+        ]
+        assert checkouts, f"{workflow} has no checkout; this test lost its subject"
+        for step in checkouts:
+            ref = step.get("with", {}).get("ref")
+            assert ref == self.MASTER, f"{workflow} checks out {step.get('with')}: {DECIDED}"
+
+    @pytest.mark.parametrize("workflow", sorted(JUDGES))
+    def test_the_judge_runs_with_its_declared_arguments(self, workflow: str) -> None:
+        text = (WORKFLOWS / workflow).read_text(encoding="utf-8")
+        tool = "deploy-merge" if workflow == "deploy-merge.yml" else "deploy-shape"
+        lines = [line.strip() for line in text.splitlines() if f"poetry run toolkit tools {tool}" in line]
+        assert lines == [self.JUDGES[workflow]], f"{workflow} runs {lines}: {DECIDED}"
+
+
+# Who opened a PR, or what its branch is called, is something anyone with push
+# access can choose. The granting side therefore reads neither (global rule:
+# never match a branch name to GRANT). pr-agent.yml may FORFEIT a review by
+# branch name; that direction is safe, and is not scanned here (review-2 F2).
+GRANTING_MODULES = ("toolkit/features/deploy_merge.py", "toolkit/features/deploy_shape.py")
+NAME_RULES = {
+    "head ref": re.compile(r"""\[\s*["']head["']\s*\]\s*\[\s*["']ref["']\s*\]|head_ref|headRefName"""),
+    "author": re.compile(r"""\[\s*["']user["']\s*\]|["']login["']|\bauthor\b"""),
+    "branch prefix": re.compile(r"""["']deploy/"""),
+}
+
+
+def _code_only(path: pathlib.Path) -> str:
+    """The module without comments or docstrings, which may name what the code never reads."""
+    import ast
+
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        body = getattr(node, "body", None)
+        if isinstance(body, list) and body and isinstance(body[0], ast.Expr):
+            if isinstance(body[0].value, ast.Constant) and isinstance(body[0].value.value, str):
+                node.body = body[1:] or [ast.Pass()]
+    return ast.unparse(tree)
+
+
+@pytest.mark.parametrize("module", GRANTING_MODULES)
+def test_the_granting_side_reads_no_branch_name_or_author(module: str) -> None:
+    text = _code_only(REPO_ROOT / module)
+    hits = {name for name, rx in NAME_RULES.items() if rx.search(text)}
+    assert not hits, f"{module} reads {sorted(hits)}; a grant keyed on a name anyone can mint: {DECIDED}"
+
+
+def test_the_required_contexts_are_the_approved_ones() -> None:
+    """The judge refuses unless every required context passes, so the set is part of
+    the merging actor's condition. Dropping `Tests` from it would merge with tests
+    red (review-2 F4)."""
+    from toolkit.features.deploy_merge import required_contexts
+
+    found = required_contexts(REPO_ROOT / "infra/config/values/common.yaml", "mlorentedev/kubelab", "master")
+    assert set(found) == {"Validate", "Detect Changes", "review-attestation", "Tests", "deploy-shape"}, (
+        f"master's required contexts are {found}: {DECIDED}"
+    )
