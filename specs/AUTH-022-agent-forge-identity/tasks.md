@@ -17,30 +17,25 @@ owner: manu
 
 ## Setup
 
-- [ ] Branch created from main: `feat/AUTH-022-agent-forge-identity`
-- [ ] `proposal.md` is complete and acceptance criteria are testable
-- [ ] No open questions left in `proposal.md` "Risks / open questions"
+- [x] Branch `feat/agent-forge-identity`, worktree initialised
+- [x] Owner decisions: name `agent: dedalo`, new Bitwarden id, per-repository collaborator (2026-11-03)
 
 ## Implementation
 
-> Replace these with the actual steps for this feature. Keep them small (one commit each) and in TDD order.
-> The `[P]` / `[AC<n>]` markers are optional — see the legend above. Behaviors 1 and 2 below are independent, so their *first* test task carries `[P]`.
-
-- [ ] [P] [AC1] Write failing test for <behavior 1>
-- [ ] [AC1] Implement <module/function> to make it pass
-- [ ] Refactor for clarity (extract, rename, dedupe)
-- [ ] [P] [AC2] Write failing test for <behavior 2>
-- [ ] [AC2] Implement to make it pass
-- [ ] ...
+- [x] [AC1] Identity, scopes, compose env, bootstrap, playbook vars, mint/record/revoke/assert tasks
+- [x] [AC1] `ROTATABLE_TOKENS["agent"]`, `AGENT_SCOPES`, `SECRET_CATALOG` entry
+- [x] [AC3] `writers:` in the loader, `collaborators_to_grant` in the plan, `ensure_collaborator` with read-back, CLI reads
+- [x] [AC1] [AC3] `tests/test_gitea_agent_identity.py`
+- [x] [AC4] `make secrets-copy-gitea-agent-token`; dotfiles registry entry (mlorentedev/dotfiles#3152)
+- [ ] [AC2] Provision twice, second `changed=0`
+- [ ] [AC3] Reconcile apply, then plan no-op
+- [ ] [AC4] Copy into Bitwarden after dotfiles#3152 merges; `dotf secrets verify`
+- [ ] [AC5] Open one PR on `personal/imagesensortool` with the agent token; check its author
 
 ## Closing
 
-- [ ] Every acceptance criterion from `proposal.md` is covered by at least one test
-- [ ] Every acceptance criterion has a matching entry in `features.json` (see below) with a non-vacuous verification command
-- [ ] Type checks pass
-- [ ] Lint passes
-- [ ] No unrelated changes in the diff (no scope creep)
-- [ ] `verification.md` filled in
+- [x] ADR-062 amendment, lesson-704, runbook line
+- [ ] `verification.md` filled in with live evidence
 - [ ] PR opened referencing this spec folder
 
 ## Machine-readable features

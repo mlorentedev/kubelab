@@ -25,10 +25,26 @@ Amended 2026-10-17: session policy (S1–S3). See the amendment below.
 Amended 2026-10-18: edge perimeter for Uptime Kuma (P1). See the amendment below.
 Amended 2026-10-22: Uptime Kuma keeps its own login (P2). See the amendment below.
 Amended 2026-11-02: sign-in starts at Authelia for every app reached by people (P3). See the amendment below.
+Amended 2026-11-03: D1's machine class gains a third exception, the agents' authoring account. See the amendment below.
 
 Complements [ADR-016](adr-016-oidc-centralized-auth.md), which decides *how* authentication is delivered (OIDC / forward-auth / bypass tiers) but never decides *who* the identities are or what privilege each one carries. This ADR fills that gap and does not supersede it.
 
 Supersedes the single-identity decision recorded on #1013 earlier the same day — see [D0](#d0--what-this-reverses-and-why).
+
+## Amendment — 2026-11-03 (D1: a third machine exception, the agents' authoring account)
+
+Tracks [#2577](https://github.com/mlorentedev/kubelab/issues/2577) (AUTH-022). Decided by the operator on 2026-10-20 on [#2296](https://github.com/mlorentedev/kubelab/issues/2296); the account name and the grant mechanism on 2026-11-03.
+
+Before this amendment, agents wrote on the forge as the superadmin: `toolkit services gitea git/pr/issue create` resolve its break-glass password, and `dotf forge` uses a PAT on `manu`. Every agent write was attributed to a person, and the superadmin credential was in agent hands for routine work.
+
+**4. Exception: the agents' authoring account (`apps.auth.identities.agent`, `dedalo`).** One machine identity opens branches, pull requests and comments for agents.
+- **Grant: a collaborator, per repository.** It is in no organization team. Each repository that an agent may write to lists the identity under `writers:` in `gitea.organizations`. The reconciler then makes the account a collaborator at `write` there and reads the grant back. `write`, never `admin`: admin edits settings and hooks and deletes the repository. The first such repository is `personal/imagesensortool`.
+- **Token:** exactly `write:issue` + `write:repository`, pinned by equality. `write:repository` reads wide, and the grant is what bounds it: with no team, the token writes only where a collaborator row exists. On the others it is a reader where the repository is public to signed-in accounts, and sees nothing where it is private.
+- **Login prohibited**, in the sense of point 1. Minted into prod SOPS by Ansible like the other machine tokens, and copied to the workstation's Bitwarden (`GITEA_KUBELAB_AGENT_TOKEN`) for `dotf`.
+- **Separate from the bot and the reviewer.** The bot writes to every `personal/` repository through `reconcilers`. The reviewer is contained by read access. Authoring needs write on few repositories, and the author field is the point.
+- **Expiry.** `Expiry.NEVER`, as the bot and the reviewer, because Gitea tokens carry no expiry. Rotation is `make gitea-rotate-token TOKEN=agent`.
+
+Not decided here: retiring the agent use of the break-glass wrapper, and which token `dotf pr` uses on Gitea (mlorentedev/dotfiles#1622).
 
 ## Amendment — 2026-10-18 (P1: Uptime Kuma signs in at the edge)
 
@@ -145,7 +161,7 @@ The original diagnosis survives intact and is what D3 fixes: the defect was neve
 |---|---|---|---|
 | **Named human** | `manu` | `admins` | Superadmin, per service |
 | **Role account** | `operator` | `users` | Day-to-day operation; no administrative rights |
-| **Machine** | `<agent>-bot` | none | Scoped token only; login prohibited (as defined in the 2026-09-24 amendment, which also adds two exceptions) |
+| **Machine** | `<agent>-bot` | none | Scoped token only; login prohibited (as defined in the 2026-09-24 amendment, which also adds two exceptions; a third since 2026-11-03) |
 | **Break-glass** | (see D4) | none | The IdP-unavailable path, and no other |
 
 A named human account is personal and carries accountability: actions attributable to a person belong to an account named after that person. A role account is impersonal by design and therefore must not hold administrative power, because power without attribution is what makes a shared account dangerous.
