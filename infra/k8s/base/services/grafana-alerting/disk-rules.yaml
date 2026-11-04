@@ -30,6 +30,11 @@ groups:
         # deleted claim resolves at the first evaluation after its last line
         # leaves `[30m]`. Snake_case is the only spelling Grafana 13.0.2's file
         # provisioning reads; the camelCase API name is ignored silently (#1668).
+        #
+        # Measured with both changes (staging, 2026-11-04): 30 minutes from the
+        # drill's removal to resolved, two intervals. The bound for a claim
+        # deleted at any moment is three (45m): its last line can be up to one
+        # interval older than the deletion.
         noDataState: OK
         execErrState: Alerting
         missing_series_evals_to_resolve: 1
