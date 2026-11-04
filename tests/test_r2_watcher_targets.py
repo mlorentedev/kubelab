@@ -20,7 +20,7 @@ import pathlib
 import pytest
 import yaml
 
-from toolkit.features.backup_destination import WATCHER_TARGETS_PATH, own_bucket_nodes, render_watcher_targets
+from toolkit.features.backup_destination import WATCHER_TARGETS_PATH, render_watcher_targets
 from toolkit.features.r2_tfvars import node_bucket
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
@@ -52,23 +52,13 @@ def test_every_declared_node_and_source_is_a_target() -> None:
         assert sorted(rows[node][5:]) == sorted(declared), node
 
 
-def test_the_vps_targets_its_real_repository() -> None:
-    """Its shared-bucket prefix is `kubelab-vps`, not its key; its own bucket is keyed."""
-    undeclared = yaml.safe_load(yaml.safe_dump(COMMON))
-    undeclared["backup"]["r2"]["own_bucket_nodes"] = []
-    assert _rows(render_watcher_targets(undeclared))["vps"][0] == COMMON["backup"]["r2"]["repo_prefix"] + "/kubelab-vps"
-    assert _rows(render_watcher_targets(COMMON))["vps"][0].endswith(f"/{node_bucket('vps')}")
-
-
-def test_every_repository_is_a_restic_s3_url_in_the_backup_bucket() -> None:
-    """In the shared bucket, or at the root of the node's own once it is there."""
-    own = own_bucket_nodes(COMMON)
-    for node, row in _rows(render_watcher_targets(COMMON)).items():
+def test_every_node_targets_the_root_of_its_own_bucket() -> None:
+    """The VPS included: its bucket is keyed `vps`, not by its inventory name `kubelab-vps`."""
+    rows = _rows(render_watcher_targets(COMMON))
+    for node, row in rows.items():
         assert row[0].startswith("s3:https://"), node
-        if node in own:
-            assert row[0].endswith(f"/{node_bucket(node)}"), node
-        else:
-            assert f"/{COMMON['backup']['r2']['bucket']}/" in row[0], node
+        assert row[0].endswith(f"/{node_bucket(node)}"), node
+        assert f"/{COMMON['backup']['r2']['bucket']}/" not in row[0], f"{node} still targets the shared bucket"
 
 
 def test_a_new_source_changes_the_render() -> None:

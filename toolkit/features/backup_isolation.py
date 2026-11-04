@@ -102,7 +102,6 @@ def _refused(rc: int, err: str, reason: str) -> bool:
 def probe(
     nodes: list[str],
     *,
-    declared: list[str] | frozenset[str],
     endpoint: str,
     secret: Callable[[str], Optional[str]],
     run: RunFn,
@@ -117,9 +116,6 @@ def probe(
         # As with an empty `data/`: no request sent is no isolation measured.
         logger.error("backup.sources is empty, so there is no node to probe")
         return False
-    for node in nodes:
-        if node not in declared:
-            problems.append(f"{node} is not in backup.r2.own_bucket_nodes: it still ships to the shared bucket")
 
     pairs: dict[str, dict[str, str]] = {}
     for node in nodes:
@@ -196,7 +192,7 @@ def probe_fleet(env: str, *, cm: Any = None, run: Optional[RunFn] = None) -> boo
         from toolkit.features.configuration import ConfigurationManager
 
         cm = ConfigurationManager(env)
-    from toolkit.features.backup_destination import _default_run, own_bucket_nodes
+    from toolkit.features.backup_destination import _default_run
     from toolkit.features.backup_node_credentials import cloudflare_http
 
     config = cm.get_merged_config()
@@ -210,7 +206,6 @@ def probe_fleet(env: str, *, cm: Any = None, run: Optional[RunFn] = None) -> boo
     account = str(r2["account_id"])
     return probe(
         sorted(backup.get("sources", {}) or {}),
-        declared=own_bucket_nodes(config),
         endpoint=str(r2["endpoint"]).rstrip("/"),
         secret=cm.get_secret_by_path,
         run=run or _default_run,

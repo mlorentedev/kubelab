@@ -186,37 +186,22 @@ def _reachability(config: dict[str, Any], node: str) -> list[str]:
     return [str(entry["tailscale_ip"]), str(port), str(entry["location"])]
 
 
-# ── per-node buckets (BACKUP-057 PR 4) ──────────────────────────────────────
+# ── per-node buckets (BACKUP-057) ───────────────────────────────────────────
 #
-# A node moves from the shared bucket to its own by being listed in
-# `backup.r2.own_bucket_nodes`, never by a merge: the list is edited at the
-# migration sitting, once that node's copy is verified. Every consumer below
-# asks these three functions, so no consumer can move a node on its own.
-
-
-def own_bucket_nodes(config: dict[str, Any]) -> frozenset[str]:
-    """The nodes already in a bucket of their own. Raises on a name that backs nothing up."""
-    backup = config.get("backup", {}) or {}
-    declared = (backup.get("r2", {}) or {}).get("own_bucket_nodes") or []
-    unknown = sorted(set(declared) - set(backup.get("sources", {}) or {}))
-    if unknown:
-        raise ValueError(f"backup.r2.own_bucket_nodes names {', '.join(unknown)}, which is not in backup.sources")
-    return frozenset(declared)
+# Every node in `backup.sources` ships to a bucket of its own, with its own pair
+# and its own restic password. Every consumer below asks these two functions, so
+# no consumer can resolve a node to anything else.
 
 
 def node_repository(config: dict[str, Any], node: str) -> str:
-    """The restic repository URL `node` ships to: its own bucket's root, or its prefix in the shared one."""
+    """The restic repository URL `node` ships to: the root of its own bucket."""
     r2 = (config.get("backup", {}) or {}).get("r2", {}) or {}
-    if node in own_bucket_nodes(config):
-        return f"s3:{str(r2['endpoint']).rstrip('/')}/{node_bucket(node)}"
-    return f"{str(r2['repo_prefix']).rstrip('/')}/{_repository_name_in(config, node)}"
+    return f"s3:{str(r2['endpoint']).rstrip('/')}/{node_bucket(node)}"
 
 
-def node_secret_paths(config: dict[str, Any], node: str) -> tuple[str, str, str]:
+def node_secret_paths(node: str) -> tuple[str, str, str]:
     """SOPS paths of `node`'s access key, secret key and restic password."""
-    if node in own_bucket_nodes(config):
-        return access_key_path(node), secret_key_path(node), restic_password_path(node)
-    return _ACCESS_KEY_SECRET, _SECRET_KEY_SECRET, _RESTIC_PASSWORD_SECRET
+    return access_key_path(node), secret_key_path(node), restic_password_path(node)
 
 
 def watcher_password_paths(config: dict[str, Any]) -> dict[str, str]:
@@ -230,7 +215,7 @@ def watcher_password_paths(config: dict[str, Any]) -> dict[str, str]:
     for node in sorted(sources):
         if not node.isidentifier():
             raise ValueError(f"backup node {node!r} cannot name an environment variable")
-        paths[f"RESTIC_PASSWORD_{node.upper()}"] = node_secret_paths(config, node)[2]
+        paths[f"RESTIC_PASSWORD_{node.upper()}"] = node_secret_paths(node)[2]
     return paths
 
 
@@ -334,13 +319,13 @@ def write_edge_watcher_targets(project_root: Path, config: dict[str, Any]) -> bo
 def node_restic(cm: ConfigurationManager, node: str) -> tuple[str, dict[str, str]]:
     """One node's repository URL and the env restic needs to read it. Values are never logged.
 
-    Resolved through `node_repository` and `node_secret_paths`, so a node in its
-    own bucket is read with its own pair and password, never the shared ones.
+    Resolved through `node_repository` and `node_secret_paths`, so a node is read
+    with its own pair and password.
     """
     config = cm.get_merged_config()
     try:
         repo = node_repository(config, node)
-        access, secret, password_path = node_secret_paths(config, node)
+        access, secret, password_path = node_secret_paths(node)
     except (KeyError, ValueError) as exc:
         raise DestinationError(f"backup.r2 cannot resolve {node}'s repository: {exc}") from exc
     credentials = load_credentials(cm, access, secret)

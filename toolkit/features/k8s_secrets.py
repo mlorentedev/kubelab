@@ -204,7 +204,7 @@ SECRET_DEFINITIONS: list[SecretMapping] = [
     # BACKUP-055: the in-cluster R2 watcher. restic reads the S3 credential from
     # AWS_*: the watcher's own read pair (BACKUP-057), never a node's read-write
     # one (tests/test_k8s_secrets_r2_watcher.py). Its restic passwords, one
-    # RESTIC_PASSWORD_<NODE> per node, follow `backup.r2.own_bucket_nodes`, so
+    # RESTIC_PASSWORD_<NODE> per node in `backup.sources`, so
     # `_resolve_config_keys` adds them at apply time.
     # No `optional_keys`: without any of them a run reports nodes unreadable,
     # so the apply refuses instead.
@@ -213,10 +213,6 @@ SECRET_DEFINITIONS: list[SecretMapping] = [
         keys={
             "AWS_ACCESS_KEY_ID": "BACKUP_R2_WATCHER_ACCESS_KEY_ID",
             "AWS_SECRET_ACCESS_KEY": "BACKUP_R2_WATCHER_SECRET_ACCESS_KEY",
-            # Until BACKUP-057 PR 5: the probe before PR 4a refuses to start
-            # without it, and this apply and Argo CD's probe sync land in
-            # either order. The current probe reads it only as a fallback.
-            "RESTIC_PASSWORD": "BACKUP_RESTIC_PASSWORD",
         },
     ),
 ]
@@ -392,8 +388,7 @@ def _resolve_config_keys(mapping: SecretMapping, config: dict[str, Any]) -> Secr
     """A mapping whose source keys depend on the config, resolved against it.
 
     Only the watcher has one: each node's restic password comes from that node's
-    own key once it is in `backup.r2.own_bucket_nodes`, and from the shared key
-    before (BACKUP-057 PR 4). Resolved into ordinary `keys`, so a missing one is
+    own key (BACKUP-057). Resolved into ordinary `keys`, so a missing one is
     refused exactly as any other required key is.
     """
     if mapping.name != WATCHER_SECRET:
