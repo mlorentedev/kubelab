@@ -146,7 +146,10 @@ help:
 # Bootstrap
 # -----------------------------------------------------------------------------
 .PHONY: setup
-setup: setup-python setup-poetry setup-dependencies setup-sops setup-certs setup-ansible
+# setup-certs makes the dev stack's certs, whatever ENV the shell exports, so
+# it runs pinned to dev rather than as a prerequisite that refuses another ENV.
+setup: setup-python setup-poetry setup-dependencies setup-sops setup-ansible
+	@$(MAKE) --no-print-directory setup-certs ENV=dev
 	@echo "✓ Setup complete. Run 'toolkit --help' to see available commands"
 
 .PHONY: setup-python
@@ -467,13 +470,18 @@ down-dev:
 
 .PHONY: dev-full-clean
 dev-full-clean: down-dev
+	$(call require_dev_env)
 	@echo "--- Ensuring all Docker containers and volumes are removed ---"
 	@docker volume prune -f || true
 	@docker container prune -f || true
 	@echo "✓ Docker environment cleaned"
 
 .PHONY: dev-full-reset dev-full-reset-resume
-dev-full-reset: dev-full-clean credentials-generate
+# credentials-generate runs from the recipe, after the guard, never as a
+# prerequisite: under `make -j` a prerequisite runs alongside the guard (#3069).
+dev-full-reset: dev-full-clean
+	$(call require_dev_env)
+	@$(MAKE) --no-print-directory credentials-generate ENV=dev
 	@echo "============================================================"
 	@echo "--- MANUAL STEP REQUIRED ---"
 	@echo "After 'make credentials-generate' finished (output above this message),"
@@ -504,6 +512,7 @@ dev-full-reset-resume:
 
 .PHONY: restart-dev
 restart-dev: down-dev up-dev
+	$(call require_dev_env)
 	@echo "✓ Development environment restarted"
 
 .PHONY: secrets
