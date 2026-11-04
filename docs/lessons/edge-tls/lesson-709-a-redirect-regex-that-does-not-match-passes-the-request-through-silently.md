@@ -1,5 +1,5 @@
 ---
-id: lesson-704-a-redirect-regex-that-does-not-match-passes-the-request-through-silently
+id: lesson-709-a-redirect-regex-that-does-not-match-passes-the-request-through-silently
 type: lesson
 status: active
 created: "2026-11-03"
