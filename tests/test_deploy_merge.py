@@ -13,8 +13,16 @@ from typing import Any
 
 import pytest
 
-from tests.test_deploy_shape import HEAD, REPO, FakeApi, routes_for
-from toolkit.features.deploy_merge import CLOSE, MERGE, SKIP, judge, merge_enabled, required_contexts
+from tests.test_deploy_shape import HEAD, NEW, REPO, FakeApi, routes_for
+from toolkit.features.deploy_merge import (
+    CLOSE,
+    MERGE,
+    SKIP,
+    judge,
+    merge_enabled,
+    pause_reason,
+    required_contexts,
+)
 from toolkit.features.deploy_shape import load_declaration
 from toolkit.features.product_registry import load_registry as load_products
 from toolkit.features.review_attestation import DEFAULT_REGISTRY
@@ -71,8 +79,8 @@ def products():
     return load_products(REPO_ROOT / "infra/config/products.yaml").products
 
 
-def run(api: MergeApi, decl, products):
-    return judge(7, REPO, api, decl, products, REQUIRED)
+def run(api: MergeApi, decl, products, paused: str | None = None):
+    return judge(7, REPO, api, decl, products, REQUIRED, paused=paused)
 
 
 class TestMerge:
@@ -275,3 +283,80 @@ class TestWorkflowTriggers:
         assert wf["jobs"]["merge"].get("if") == (
             "github.event_name != 'workflow_dispatch' || github.ref_name == github.event.repository.default_branch"
         )
+
+
+RUNS = f"repos/{REPO}/actions/workflows/deploy-verify.yml/runs?branch=master&status=completed&per_page=50"
+
+
+def verify_runs(*runs: tuple[int, str, list[str]]) -> dict[str, Any]:
+    """Routes for deploy-verify's runs, newest first: (id, run conclusion, job conclusions)."""
+    routes: dict[str, Any] = {
+        RUNS: {
+            "workflow_runs": [
+                {"id": i, "conclusion": c, "html_url": f"https://example.invalid/runs/{i}"} for i, c, _ in runs
+            ]
+        }
+    }
+    for i, _, jobs in runs:
+        routes[f"repos/{REPO}/actions/runs/{i}/jobs?per_page=100"] = {
+            "jobs": [{"name": f"job{n}", "conclusion": j} for n, j in enumerate(jobs)]
+        }
+    return routes
+
+
+class TestDeployVerifyPause:
+    """#3062 F11 option A: while deploy-verify is red on master, nothing merges
+    unattended. Its noise runs (a skipped job, concluded `success`) are not a verdict."""
+
+    def test_the_latest_real_run_green_does_not_pause(self) -> None:
+        api = FakeApi(verify_runs((3, "success", ["skipped"]), (2, "success", ["success", "skipped"])))
+        assert pause_reason(api, REPO, "master") is None
+
+    def test_a_red_run_under_noise_pauses_and_names_it(self) -> None:
+        api = FakeApi(verify_runs((3, "success", ["skipped"]), (2, "failure", ["failure", "skipped"])))
+        reason = pause_reason(api, REPO, "master")
+        assert reason is not None and "https://example.invalid/runs/2" in reason
+
+    def test_a_green_run_after_a_red_one_clears_it(self) -> None:
+        api = FakeApi(verify_runs((3, "success", ["success"]), (2, "failure", ["failure"])))
+        assert pause_reason(api, REPO, "master") is None
+
+    def test_only_noise_in_the_page_fails_closed(self) -> None:
+        api = FakeApi(verify_runs((3, "success", ["skipped"]), (2, "success", ["skipped"])))
+        assert pause_reason(api, REPO, "master") is not None
+
+    def test_no_runs_fails_closed(self) -> None:
+        assert pause_reason(FakeApi({RUNS: {"workflow_runs": []}}), REPO, "master") is not None
+
+    def test_unreadable_runs_fail_closed(self) -> None:
+        assert pause_reason(FakeApi({RUNS: RuntimeError("403")}), REPO, "master") is not None
+
+    def test_unreadable_jobs_fail_closed(self) -> None:
+        routes = verify_runs((3, "success", ["success"]))
+        routes[f"repos/{REPO}/actions/runs/3/jobs?per_page=100"] = RuntimeError("403")
+        assert pause_reason(FakeApi(routes), REPO, "master") is not None
+
+    def test_a_pause_skips_a_mergeable_pr(self, decl, products) -> None:
+        decision = run(MergeApi(mergeable()), decl, products, paused="deploy-verify is red")
+        assert decision.action == SKIP and "deploy-verify is red" in decision.reason, decision.reason
+
+    def test_a_pause_skips_even_an_empty_pr(self, decl, products) -> None:
+        """The decision on #3062 is "skips every PR"; an empty one is closed a run later."""
+        routes = mergeable()
+        routes[f"repos/{REPO}/pulls/7/files?per_page=100"] = []
+        assert run(MergeApi(routes), decl, products, paused="red").action == SKIP
+
+
+class TestSquashMessage:
+    """#3062 F6: the squash message comes from what was judged, never from the PR's
+    title or body, which the judge does not read (`[skip ci]`, `feat!:`)."""
+
+    def test_a_merge_carries_a_subject_and_body_from_the_judged_app_and_tag(self, decl, products) -> None:
+        decision = run(MergeApi(mergeable()), decl, products)
+        assert decision.action == MERGE, decision.reason
+        assert decision.subject == f"chore(staging): deploy web {NEW} (#7)"
+        assert decision.body == f"Staging promotion of web to {NEW}, merged as a mechanical deploy (#1619)."
+
+    def test_a_skip_carries_no_message(self, decl, products) -> None:
+        decision = run(MergeApi(mergeable()), decl, products, paused="red")
+        assert decision.subject is None and decision.body is None

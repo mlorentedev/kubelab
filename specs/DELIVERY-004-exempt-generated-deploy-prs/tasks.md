@@ -74,6 +74,16 @@ empty deploy PRs instead of merging them, and pin the merge to the judged head s
 
 - [x] Preconditions linked on #1619 (issuecomment-6591928848), then flip. Rollback = revert. ✓ 2026-11-03
 
+## Review-2 minors (#3062)
+
+- [x] F11 option A: the judge skips every PR while the latest deploy-verify run on master whose job
+  ran is not green, and fails closed on a read it cannot make. Noise runs (a skipped job) are not a
+  verdict (#3062 issuecomment-6624501517). `deploy-merge.yml` gains `actions: read`. ✓ 2026-11-04
+- [x] F6: the squash subject and body come from the judged app and tag (`--subject`, `--body`); the
+  pinned merge line moved in the same diff. ✓ 2026-11-04
+- [x] F7: each close stands alone; a refused close fails the job only after the merges ran. ✓ 2026-11-04
+- [ ] F5 and F9, in the next PR.
+
 ## Closing
 
 - [x] [AC8] Reviewer quota measured 2026-10-21: on #2576 and #2581 CodeRabbit ran a full review ("No actionable comments"), and Codex attempted one and hit its usage limit. Both still spend quota on deploy PRs. pr-agent skips them. Posted on #1619.

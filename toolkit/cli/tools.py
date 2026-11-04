@@ -455,7 +455,10 @@ def deploy_merge_cmd(
         raise typer.Exit(2) from exc
 
     enabled = dm.merge_enabled(registry)
-    decisions = [dm.judge(pr["number"], repo, api, decl, admitted, required) for pr in open_prs]
+    paused = dm.pause_reason(api, repo, default_branch)
+    if paused is not None:
+        logger.warning(f"deploy-merge: every PR waits: {paused}")
+    decisions = [dm.judge(pr["number"], repo, api, decl, admitted, required, paused=paused) for pr in open_prs]
     try:
         payload = {"enabled": enabled, "decisions": [d.as_dict() for d in decisions]}
         out.write_text(json.dumps(payload) + "\n", encoding="utf-8")

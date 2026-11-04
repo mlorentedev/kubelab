@@ -14,6 +14,11 @@ A PR is merged only when all of these hold at one head sha:
     (ALLOWED_UNSTABLE): `unstable` says something not required is failing, and
     only a context named there may be that something
     the head is still that sha at the end of the judging
+    deploy-verify is green on master (pause_reason): while it is red, every PR
+    is skipped, so nothing merges on top of a staging that did not sync
+
+The squash message is built from the judged app and tag, never from the PR's
+title or body, which nothing here reads.
 
 A PR is closed only when it has no changed files: there is nothing to merge,
 and reopening it undoes the close. That is a content rule, so it applies to any
@@ -54,6 +59,10 @@ MERGE_STATES_OK = frozenset({"clean", "unstable"})
 # above all (ADR-027), refuses (#2983). tests/test_deploy_shape_widening.py pins it.
 ALLOWED_UNSTABLE = frozenset({"add-to-project"})
 
+# The workflow whose red run on master pauses every merge (#3062 F11, option A).
+# tests/test_deploy_shape_widening.py pins it.
+DEPLOY_VERIFY = "deploy-verify.yml"
+
 
 @dataclass(frozen=True)
 class Decision:
@@ -61,6 +70,8 @@ class Decision:
     action: str
     reason: str
     head_sha: str | None = None
+    subject: str | None = None
+    body: str | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return dict(self.__dict__)
@@ -110,6 +121,30 @@ def _failing_contexts(api: Api, repo: str, sha: str, required: Iterable[str]) ->
     return failing, [f for c in others for f in not_passing(c)]
 
 
+def pause_reason(api: Api, repo: str, branch: str) -> str | None:
+    """Why every merge waits, or None when deploy-verify's latest verdict on `branch` is green.
+
+    `on: status` cannot filter by context, so most deploy-verify runs only skip
+    their job and conclude `success` (its header). Those are not a verdict: the
+    latest run with a job that ran is. Fails closed: a read that fails, or no such
+    run in the page, pauses.
+    """
+    try:
+        runs = api.json(
+            f"repos/{repo}/actions/workflows/{DEPLOY_VERIFY}/runs?branch={branch}&status=completed&per_page=50"
+        )["workflow_runs"]
+        for run in runs:
+            jobs = api.json(f"repos/{repo}/actions/runs/{run['id']}/jobs?per_page=100")["jobs"]
+            if jobs and all(job["conclusion"] == "skipped" for job in jobs):
+                continue
+            if run["conclusion"] == "success":
+                return None
+            return f"{DEPLOY_VERIFY} is {run['conclusion']} on {branch}: {run['html_url']}"
+    except Exception as exc:  # noqa: BLE001 — a verdict that cannot be read is not green
+        return f"cannot read {DEPLOY_VERIFY} on {branch}: {exc!r}"
+    return f"no {DEPLOY_VERIFY} run on {branch} with a job that ran, among the latest {len(runs)}"
+
+
 def judge(
     number: int,
     repo: str,
@@ -117,8 +152,12 @@ def judge(
     decl: Declaration,
     products: Mapping[str, Product],
     required: Iterable[str],
+    *,
+    paused: str | None,
 ) -> Decision:
-    """Merge, close or skip PR `number`. Any failure to read is a skip."""
+    """Merge, close or skip PR `number`. Any failure to read is a skip, and so is a pause."""
+    if paused is not None:
+        return Decision(number, SKIP, f"paused: {paused}")
     try:
         pr = api.json(f"repos/{repo}/pulls/{number}")
         head = pr["head"]["sha"]
@@ -146,4 +185,11 @@ def judge(
             return Decision(number, SKIP, f"merge state is {state!r}, not one of {sorted(MERGE_STATES_OK)}", head)
     except Exception as exc:  # noqa: BLE001 — a PR that cannot be read is not merged
         return Decision(number, SKIP, f"cannot judge: {exc!r}")
-    return Decision(number, MERGE, f"{shape.reason}; every context passing or excused; {state}", head)
+    return Decision(
+        number,
+        MERGE,
+        f"{shape.reason}; every context passing or excused; {state}",
+        head,
+        subject=f"chore(staging): deploy {shape.app} {shape.new} (#{number})",
+        body=f"Staging promotion of {shape.app} to {shape.new}, merged as a mechanical deploy (#1619).",
+    )

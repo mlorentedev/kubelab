@@ -31,6 +31,7 @@ Leaving a staging deploy PR open no longer holds staging: the next deploy-merge 
 
 - **Hold one app:** convert its deploy PR to a draft (`gh pr ready <N> --undo`). The judge skips drafts, and the next image force-updates the branch without changing the draft state. Mark it ready to release the hold. Closing the PR is not a hold, because the next image opens a new one.
 - **Stop every unattended merge now:** `gh workflow disable deploy-merge.yml --repo mlorentedev/kubelab`. This takes effect immediately and needs no PR. Re-enable it with `gh workflow enable`.
+- **Paused by itself:** while the latest deploy-verify run on master whose job ran is not green, deploy-merge skips every PR, and its log says `paused:` with that run's URL. Runs that only skipped their job (any unrelated status starts one) do not clear the pause; a later run whose job ran green does. Fix the failed sync first ([deploy-verify is red](#deploy-verify-is-red)). A read of deploy-verify that fails also pauses.
 - **Stop it durably:** open a PR setting `mechanical.merge` to `false` in `harness/review-attestation.json` (reverting the PR that flipped it). The widening test requires `tests/test_deploy_shape_widening.py`'s `APPROVED` and `TestSwitch` to move in the same diff. With the switch off, deploy-merge only reports what it would do.
 
 Pre-merge preview (optional): a feature-branch CI build also produces `sha-<pr-short>`; deploy it to staging out-of-band with `make deploy-k8s ENV=staging` (selfHeal:false tolerates it until the next sync).
