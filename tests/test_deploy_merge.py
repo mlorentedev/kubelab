@@ -130,9 +130,12 @@ class TestEachConditionRefusesAlone:
         routes[f"repos/{REPO}/pulls/7/files?per_page=100"] = [{"filename": "README.md", "status": "modified"}]
         assert run(MergeApi(routes), decl, products).action == SKIP
 
-    def test_a_deploy_branch_and_bot_author_grant_nothing(self, decl, products) -> None:
+    # The receivers open deploy PRs with RELEASE_PLEASE_TOKEN, the operator's PAT, so
+    # the author GitHub shows is the operator; the bot name is what the commits carry.
+    @pytest.mark.parametrize("login", ["mlorentedev", "kubelab-bot"])
+    def test_a_deploy_branch_and_author_grant_nothing(self, decl, products, login: str) -> None:
         """review-2 F2: the name and the author are what anyone can mint. A PR from
-        `deploy/staging-web` by the bot with a non-mechanical diff is still skipped."""
+        `deploy/staging-web` by either identity with a non-mechanical diff is skipped."""
         routes = mergeable()
         routes[f"repos/{REPO}/pulls/7/files?per_page=100"] = [{"filename": "README.md", "status": "modified"}]
 
@@ -141,7 +144,7 @@ class TestEachConditionRefusesAlone:
                 value = super().json(path)
                 if path == f"repos/{REPO}/pulls/7":
                     head = {**value["head"], "ref": "deploy/staging-web"}
-                    value = {**value, "head": head, "user": {"login": "kubelab-bot"}}
+                    value = {**value, "head": head, "user": {"login": login}}
                 return value
 
         assert run(Named(routes), decl, products).action == SKIP

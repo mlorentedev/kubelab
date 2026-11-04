@@ -243,32 +243,66 @@ class TestTheJudgeIsMasters:
 # access can choose. The granting side therefore reads neither (global rule:
 # never match a branch name to GRANT). pr-agent.yml may FORFEIT a review by
 # branch name; that direction is safe, and is not scanned here (review-2 F2).
-GRANTING_MODULES = ("toolkit/features/deploy_merge.py", "toolkit/features/deploy_shape.py")
-NAME_RULES = {
-    "head ref": re.compile(r"""\[\s*["']head["']\s*\]\s*\[\s*["']ref["']\s*\]|head_ref|headRefName"""),
-    "author": re.compile(r"""\[\s*["']user["']\s*\]|["']login["']|\bauthor\b"""),
-    "branch prefix": re.compile(r"""["']deploy/"""),
-}
+#
+# Read from the AST, not by regex, so every access form counts: `["ref"]`,
+# `.get("ref")`, a constant bound to a name first. `review_attestation.py` reads
+# authors to recognise REVIEWS, which is its job, so only the code that decides
+# the exemption is scanned there: `exempt_signature` and `classify`'s exempt block.
+NAME_KEYS = frozenset({"login", "user", "actor", "author", "head_ref", "headRefName", "sender"})
 
 
-def _code_only(path: pathlib.Path) -> str:
-    """The module without comments or docstrings, which may name what the code never reads."""
+def _granting_code() -> dict[str, list]:
     import ast
 
-    tree = ast.parse(path.read_text(encoding="utf-8"))
-    for node in ast.walk(tree):
-        body = getattr(node, "body", None)
-        if isinstance(body, list) and body and isinstance(body[0], ast.Expr):
-            if isinstance(body[0].value, ast.Constant) and isinstance(body[0].value.value, str):
-                node.body = body[1:] or [ast.Pass()]
-    return ast.unparse(tree)
+    def parse(rel: str):
+        return ast.parse((REPO_ROOT / rel).read_text(encoding="utf-8"))
+
+    attestation = parse("toolkit/features/review_attestation.py")
+    exempt_fn = next(n for n in attestation.body if isinstance(n, ast.FunctionDef) and n.name == "exempt_signature")
+    classify_fn = next(n for n in attestation.body if isinstance(n, ast.FunctionDef) and n.name == "classify")
+    # The exempt block: every `if` in classify whose body returns an "exempt" verdict.
+    exempt_ifs = [
+        node
+        for node in ast.walk(classify_fn)
+        if isinstance(node, ast.If)
+        and any(isinstance(c, ast.Constant) and c.value == "exempt" for c in ast.walk(ast.Module(node.body, [])))
+    ]
+    assert exempt_ifs, "classify's exempt block was not found; this test lost its subject"
+    return {
+        "toolkit/features/deploy_merge.py": [parse("toolkit/features/deploy_merge.py")],
+        "toolkit/features/deploy_shape.py": [parse("toolkit/features/deploy_shape.py")],
+        "toolkit/features/review_attestation.py (exemption)": [exempt_fn, *exempt_ifs],
+    }
 
 
-@pytest.mark.parametrize("module", GRANTING_MODULES)
+def _name_reads(roots: list) -> list[str]:
+    """String constants that name an author or a branch. `"ref"` is allowed only
+    under `"base"` (which branch a PR targets is not chosen by its author)."""
+    import ast
+
+    hits = []
+    for root in roots:
+        parents = {child: node for node in ast.walk(root) for child in ast.iter_child_nodes(node)}
+        for node in ast.walk(root):
+            if not (isinstance(node, ast.Constant) and isinstance(node.value, str)):
+                continue
+            value = node.value
+            if value in NAME_KEYS or value.startswith("deploy/"):
+                hits.append(value)
+            elif value == "ref":
+                holder = parents.get(node)
+                if isinstance(holder, ast.Call):  # x.get("ref")
+                    holder = holder.func
+                target = ast.unparse(getattr(holder, "value", holder))
+                if not target.endswith("['base']"):
+                    hits.append(f"ref of {target}")
+    return hits
+
+
+@pytest.mark.parametrize("module", sorted(_granting_code()))
 def test_the_granting_side_reads_no_branch_name_or_author(module: str) -> None:
-    text = _code_only(REPO_ROOT / module)
-    hits = {name for name, rx in NAME_RULES.items() if rx.search(text)}
-    assert not hits, f"{module} reads {sorted(hits)}; a grant keyed on a name anyone can mint: {DECIDED}"
+    hits = _name_reads(_granting_code()[module])
+    assert not hits, f"{module} reads {hits}; a grant keyed on a name anyone can mint: {DECIDED}"
 
 
 def test_the_required_contexts_are_the_approved_ones() -> None:
