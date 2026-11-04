@@ -45,7 +45,7 @@ def mint_node_tokens_cmd(
 
 @app.command("revoke-r2-pair")
 def revoke_r2_pair_cmd(
-    pair: Annotated[str, typer.Option("--pair", help="Key prefix, e.g. backup.r2.readonly")],
+    pair: Annotated[str, typer.Option("--pair", help="Key prefix: backup.r2.readonly_ or backup.r2")],
     apply: Annotated[bool, typer.Option("--apply", help="Revoke and unset; without it, only report")] = False,
     forget: Annotated[
         bool, typer.Option("--forget", help="Unset a pair whose token the account no longer has")

@@ -60,7 +60,11 @@ RunFn = Callable[[list[str], dict[str, str]], "tuple[int, str, str]"]
 
 
 class MintError(RuntimeError):
-    """A mint did not complete. The message never contains a secret.
+    """A mint did not complete. The message never contains a secret value.
+
+    It can name the request path, and on a token call that path carries the
+    token id (an S3 Access Key ID), so a caller that must not print the id
+    builds its own message from `status` instead of passing this one on.
 
     `status` is the HTTP status when the API answered with one, so a caller
     can tell "no such token" (404) from a refusal without parsing the message.

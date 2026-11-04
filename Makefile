@@ -1794,7 +1794,7 @@ backup-mint-node-tokens:
 # FORGET=1 unsets a pair whose token is already gone.
 .PHONY: backup-revoke-r2-pair
 backup-revoke-r2-pair:
-	@test -n "$(PAIR)" || (echo "Usage: make backup-revoke-r2-pair PAIR=backup.r2.<name> [APPLY=1] [FORGET=1]" && exit 1)
+	@test -n "$(PAIR)" || (echo "Usage: make backup-revoke-r2-pair PAIR=<prefix> (backup.r2.readonly_ or backup.r2) [APPLY=1] [FORGET=1]" && exit 1)
 	@$(TOOLKIT) backup revoke-r2-pair --pair $(PAIR) $(if $(filter 1,$(APPLY)),--apply) $(if $(filter 1,$(FORGET)),--forget)
 
 .PHONY: sync-terraform-backend

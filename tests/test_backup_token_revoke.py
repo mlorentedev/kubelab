@@ -151,3 +151,37 @@ def test_the_readonly_pair_is_no_longer_catalogued() -> None:
 def test_both_spellings_of_a_pair_resolve_to_the_keys_in_sops() -> None:
     assert pair_paths("backup.r2.readonly_") == (ACCESS, SECRET)
     assert pair_paths("backup.r2") == ("backup.r2.access_key_id", "backup.r2.secret_access_key")
+
+
+def test_a_prefix_in_the_wrong_spelling_is_refused_not_reported_done() -> None:
+    """`backup.r2.readonly` finds nothing; the pair is `backup.r2.readonly_*` and must not stay live silently."""
+    store, cf = _store(), FakeCloudflare({"tok-1": "x"})
+    with pytest.raises(RevokeError, match="PAIR=backup.r2.readonly_"):
+        revoke_pair("backup.r2.readonly", account_id=ACCOUNT, http=cf, store=store, catalog=frozenset(), apply=True)
+    assert cf.calls == [] and store.unset_calls == []
+
+
+class _Unreachable(FakeCloudflare):
+    def __init__(self, tokens: dict[str, str], fail_on: str, after: int = 0) -> None:
+        super().__init__(tokens)
+        self.fail_on, self.after = fail_on, after
+
+    def __call__(self, method: str, path: str, body: Optional[dict[str, Any]] = None) -> Any:
+        if method == self.fail_on and sum(m == method for m, _ in self.calls) >= self.after:
+            self.calls.append((method, path))
+            raise MintError(f"{method} {path} failed: timed out")
+        return super().__call__(method, path, body)
+
+
+def test_an_unreachable_api_on_delete_says_the_revoke_may_have_landed() -> None:
+    store = _store()
+    with pytest.raises(RevokeError, match="could not be reached.*may have landed") as exc:
+        _run(store, _Unreachable({"tok-1": "x"}, "DELETE"), apply=True)
+    assert "HTTP None" not in str(exc.value) and store.unset_calls == []
+
+
+def test_a_failed_check_after_delete_keeps_the_keys_and_says_how_to_finish() -> None:
+    store = _store()
+    with pytest.raises(RevokeError, match="--forget"):
+        _run(store, _Unreachable({"tok-1": "x"}, "GET", after=1), apply=True)
+    assert store.unset_calls == []

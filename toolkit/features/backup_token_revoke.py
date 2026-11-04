@@ -47,6 +47,17 @@ def pair_paths(prefix: str) -> tuple[str, str]:
     return f"{prefix}{sep}access_key_id", f"{prefix}{sep}secret_access_key"
 
 
+def _failure(exc: MintError) -> str:
+    """What went wrong, without the request path (it carries the token id)."""
+    return f"the API answered HTTP {exc.status}" if exc.status else "the API could not be reached"
+
+
+def _other_spelling(prefix: str) -> str:
+    """The prefix in the spelling `prefix` did not use: `a.b` <-> `a.b_`."""
+    bare = prefix.rstrip("._")
+    return bare if prefix.endswith("_") else f"{bare}_"
+
+
 def _token_name(http: HttpFn, account_id: str, token_id: str) -> Optional[str]:
     """The token's name, or None when the account has no token with that id."""
     try:
@@ -54,7 +65,7 @@ def _token_name(http: HttpFn, account_id: str, token_id: str) -> Optional[str]:
     except MintError as exc:
         if exc.status == 404:
             return None
-        raise RevokeError(f"reading the token failed with HTTP {exc.status}") from None
+        raise RevokeError(f"reading the token failed: {_failure(exc)}") from None
     return str(result.get("name") or "(unnamed)")
 
 
@@ -84,6 +95,11 @@ def revoke_pair(
 
     holding = {path: store.files_holding(path) for path in (access, secret)}
     if not holding[access] and not holding[secret]:
+        # A prefix in the wrong spelling finds nothing, and "nothing to do" would
+        # then read as done while the real pair and its token stay live.
+        other = _other_spelling(prefix)
+        if any(store.files_holding(path) for path in pair_paths(other)):
+            raise RevokeError(f"no key of this pair is in SOPS, but the pair spelled {other!r} is: pass PAIR={other}")
         return "absent"
     if not holding[access]:
         raise RevokeError(
@@ -113,10 +129,22 @@ def revoke_pair(
         try:
             http("DELETE", f"/accounts/{account_id}/tokens/{token_id}", None)
         except MintError as exc:
-            raise RevokeError(f"revoking token {name!r} failed with HTTP {exc.status}; nothing was unset") from None
+            landed = (
+                ""
+                if exc.status
+                else " The DELETE may have landed: rerun, and if the token is gone it asks for --forget."
+            )
+            raise RevokeError(f"revoking token {name!r} failed: {_failure(exc)}; nothing was unset.{landed}") from None
         # By consequence: the account must no longer know the id. Until then the
         # id is the only handle on a live token, so it stays in SOPS.
-        if _token_name(http, account_id, token_id) is not None:
+        try:
+            still_there = _token_name(http, account_id, token_id) is not None
+        except RevokeError as exc:
+            raise RevokeError(
+                f"token {name!r} was sent its DELETE, but checking that it is gone failed ({exc}); nothing was unset. "
+                "Rerun: if the token is gone, it asks for --forget."
+            ) from None
+        if still_there:
             raise RevokeError(f"token {name!r} still exists after DELETE; nothing was unset")
         logger.success(f"{prefix}: token {name!r} revoked")
 
