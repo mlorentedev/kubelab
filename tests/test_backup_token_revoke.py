@@ -185,3 +185,21 @@ def test_a_failed_check_after_delete_keeps_the_keys_and_says_how_to_finish() -> 
     with pytest.raises(RevokeError, match="--forget"):
         _run(store, _Unreachable({"tok-1": "x"}, "GET", after=1), apply=True)
     assert store.unset_calls == []
+
+
+def test_a_partial_unset_leaves_the_id_so_forget_can_finish() -> None:
+    store = FakeStore({"common": {ACCESS: "tok-1", SECRET: "s"}})
+    real_unset = store.unset
+
+    def unset_secret_only(env: str, path: str) -> bool:
+        return path != ACCESS and real_unset(env, path)
+
+    store.unset = unset_secret_only  # type: ignore[method-assign]
+    cf = FakeCloudflare({"tok-1": "x"})
+    with pytest.raises(RevokeError, match="--forget"):
+        _run(store, cf, apply=True)
+    assert store.files["common"] == {ACCESS: "tok-1"}
+
+    store.unset = real_unset  # type: ignore[method-assign]
+    assert _run(store, cf, apply=True, forget=True) == "forgotten"
+    assert store.files["common"] == {}

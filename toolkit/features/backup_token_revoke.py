@@ -148,8 +148,11 @@ def revoke_pair(
             raise RevokeError(f"token {name!r} still exists after DELETE; nothing was unset")
         logger.success(f"{prefix}: token {name!r} revoked")
 
-    for path, envs in holding.items():
-        for env in envs:
+    # The secret goes first and the id last, so a failure part-way leaves the id
+    # behind: the rerun with --forget can then still read it and finish, where a
+    # secret left without its id is refused above.
+    for path in (secret, access):
+        for env in holding[path]:
             if not store.unset(env, path):
                 raise RevokeError(f"unset of {path} from {env}.enc.yaml failed; rerun with --forget to finish")
     left = [path for path in (access, secret) if store.files_holding(path)]
