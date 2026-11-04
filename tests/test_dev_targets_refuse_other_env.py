@@ -19,7 +19,8 @@ import pytest
 REPO = pathlib.Path(__file__).resolve().parent.parent
 MAKEFILE = REPO / "Makefile"
 
-_TARGET = re.compile(r"^([A-Za-z0-9_.-]+):(?!=)")
+# A rule line; special targets such as `.PHONY` start with a dot and are not rules to scan.
+_TARGET = re.compile(r"^([A-Za-z0-9_-][A-Za-z0-9_.-]*):(?!=)")
 
 
 def _recipes() -> dict[str, list[str]]:
@@ -60,6 +61,23 @@ def _dev_only() -> dict[str, list[str]]:
     return {name: recipes.get(name, []) for name in found}
 
 
+def _runs_the_guard(line: str) -> bool:
+    """The line invokes the guard; a comment or an echo that mentions it does not."""
+    return line.strip().startswith("$(call require_dev_env")
+
+
+def test_the_guard_check_is_not_satisfied_by_a_mention() -> None:
+    assert _runs_the_guard("\t$(call require_dev_env)")
+    assert _runs_the_guard("\t$(call require_dev_env,make test-e2e ENV=$(ENV))")
+    assert not _runs_the_guard("\t# $(call require_dev_env)")
+    assert not _runs_the_guard("\t@echo 'run $(call require_dev_env)'")
+
+
+def test_special_targets_are_not_scanned_as_rules() -> None:
+    assert ".PHONY" not in _prerequisites()
+    assert ".PHONY" not in _recipes()
+
+
 def test_the_scan_finds_the_dev_only_targets() -> None:
     """A reformatted recipe must not reduce this suite to zero assertions."""
     direct = {"smoke-test", "up-dev", "down-dev", "build-dev", "setup-certs"}
@@ -68,7 +86,7 @@ def test_the_scan_finds_the_dev_only_targets() -> None:
 
 
 def test_every_dev_only_target_refuses_another_env() -> None:
-    unguarded = [name for name, lines in _dev_only().items() if not lines or "$(call require_dev_env" not in lines[0]]
+    unguarded = [name for name, lines in _dev_only().items() if not lines or not _runs_the_guard(lines[0])]
     assert not unguarded, f"runs --env dev without $(call require_dev_env,...) first: {unguarded}"
 
 
