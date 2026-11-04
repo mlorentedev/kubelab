@@ -126,8 +126,8 @@ def pause_reason(api: Api, repo: str, branch: str) -> str | None:
 
     `on: status` cannot filter by context, so most deploy-verify runs only skip
     their job and conclude `success` (its header). Those are not a verdict: the
-    latest run with a job that ran is. Fails closed: a read that fails, or no such
-    run in the page, pauses.
+    latest run that is not green-with-no-job-run is. Fails closed: a read that
+    fails, or no such run in the page, pauses.
     """
     try:
         runs = api.json(
@@ -135,7 +135,9 @@ def pause_reason(api: Api, repo: str, branch: str) -> str | None:
         )["workflow_runs"]
         for run in runs:
             jobs = api.json(f"repos/{repo}/actions/runs/{run['id']}/jobs?per_page=100")["jobs"]
-            if jobs and all(job["conclusion"] == "skipped" for job in jobs):
+            # Noise: green with no job that ran. Anything else is the verdict, a
+            # startup failure (no jobs, not green) included.
+            if run["conclusion"] == "success" and all(job["conclusion"] == "skipped" for job in jobs):
                 continue
             if run["conclusion"] == "success":
                 return None

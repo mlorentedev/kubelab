@@ -325,6 +325,14 @@ class TestDeployVerifyPause:
         api = FakeApi(verify_runs((3, "success", ["skipped"]), (2, "success", ["skipped"])))
         assert pause_reason(api, REPO, "master") is not None
 
+    def test_a_green_run_with_no_jobs_is_not_a_verdict(self) -> None:
+        api = FakeApi(verify_runs((3, "success", []), (2, "failure", ["failure"])))
+        assert pause_reason(api, REPO, "master") is not None
+
+    def test_a_run_that_failed_to_start_pauses(self) -> None:
+        api = FakeApi(verify_runs((3, "startup_failure", []), (2, "success", ["success"])))
+        assert pause_reason(api, REPO, "master") is not None
+
     def test_no_runs_fails_closed(self) -> None:
         assert pause_reason(FakeApi({RUNS: {"workflow_runs": []}}), REPO, "master") is not None
 
@@ -337,6 +345,7 @@ class TestDeployVerifyPause:
         assert pause_reason(FakeApi(routes), REPO, "master") is not None
 
     def test_a_pause_skips_a_mergeable_pr(self, decl, products) -> None:
+        assert run(MergeApi(mergeable()), decl, products).action == MERGE, "the fixture must merge unpaused"
         decision = run(MergeApi(mergeable()), decl, products, paused="deploy-verify is red")
         assert decision.action == SKIP and "deploy-verify is red" in decision.reason, decision.reason
 
