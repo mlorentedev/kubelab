@@ -26,7 +26,7 @@ created: "2026-11-01"
 
 - [x] Split the PVC rule into PVC health (`noDataState: OK`) and watcher liveness; single-cause summaries (#2991)
 - [x] Guard enumerating every `noDataState: Alerting` rule against its emitter period, floor 2 samples (#2991)
-- [ ] Daytime: #1668's resolve trace and silence drill in staging
+- [x] Daytime: #1668's resolve trace and silence drill in staging ✓ 2026-11-04 (resolve 89.5m -> 30.1m in #3082; both liveness rules fired with the watcher suspended, reported on #1668)
 
 ## PR 4: node notices (AC5)
 
