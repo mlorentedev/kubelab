@@ -227,12 +227,13 @@ repos:
 # Global configuration
 default_language_version:
   python: python3.12
-  # An exact version, never `default`: without one, nodeenv takes the latest
-  # release from the Node index whenever a hook environment is created, so the
-  # environment depends on what was published that day. A `27.0.0-alpha` in the
-  # index broke every new worktree on 2026-11-03 (#3070). Renovate bumps this
-  # line (the `node-version` custom manager in renovate.json).
-  node: "26.13.0"
+  # Pinned, never "latest": unpinned, nodeenv resolves the newest entry in the
+  # nodejs.org index, and on 2026-11-03 that entry was v27.0.0-alpha.0.0.0,
+  # which nodeenv cannot parse, so every hook needing node (markdownlint) failed
+  # to install. A local node does not help: pre-commit ignores one installed
+  # under the home directory (mise, nvm) and falls back to nodeenv. Renovate
+  # bumps this line (the `node-version` custom manager in renovate.json, #3070).
+  node: 24.22.1
 
 # Files to exclude
 exclude: |

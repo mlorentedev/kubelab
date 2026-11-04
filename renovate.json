@@ -52,7 +52,7 @@
         "/^\\.pre-commit-config\\.yaml$/"
       ],
       "matchStrings": [
-        "(?m)^\\s+node:\\s+\"(?<currentValue>\\d+\\.\\d+\\.\\d+)\"\\s*$"
+        "(?m)^\\s+node:\\s+\"?(?<currentValue>\\d+\\.\\d+\\.\\d+)\"?\\s*$"
       ],
       "depNameTemplate": "node",
       "datasourceTemplate": "node-version",

@@ -130,6 +130,25 @@ class TestEachConditionRefusesAlone:
         routes[f"repos/{REPO}/pulls/7/files?per_page=100"] = [{"filename": "README.md", "status": "modified"}]
         assert run(MergeApi(routes), decl, products).action == SKIP
 
+    # The receivers open deploy PRs with RELEASE_PLEASE_TOKEN, the operator's PAT, so
+    # the author GitHub shows is the operator; the bot name is what the commits carry.
+    @pytest.mark.parametrize("login", ["mlorentedev", "kubelab-bot"])
+    def test_a_deploy_branch_and_author_grant_nothing(self, decl, products, login: str) -> None:
+        """review-2 F2: the name and the author are what anyone can mint. A PR from
+        `deploy/staging-web` by either identity with a non-mechanical diff is skipped."""
+        routes = mergeable()
+        routes[f"repos/{REPO}/pulls/7/files?per_page=100"] = [{"filename": "README.md", "status": "modified"}]
+
+        class Named(MergeApi):
+            def json(self, path: str) -> Any:
+                value = super().json(path)
+                if path == f"repos/{REPO}/pulls/7":
+                    head = {**value["head"], "ref": "deploy/staging-web"}
+                    value = {**value, "head": head, "user": {"login": login}}
+                return value
+
+        assert run(Named(routes), decl, products).action == SKIP
+
     def test_unknown(self, decl, products) -> None:
         routes = mergeable()
         routes["repos/mlorentedev/web/commits/0ddba11"] = RuntimeError("HTTP 502")

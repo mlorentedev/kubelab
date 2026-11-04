@@ -388,6 +388,10 @@ envelope = {
         if kind == 'recovered'
         else f'{unit} still failing on {{ inventory_hostname }} ({count} failures since the first page)'
         if kind == 'again'
+        # A kill by the unit's own timeout found nothing wrong with what it was
+        # checking, so it does not say `failed` (#2920).
+        else f'{unit} timed out on {{ inventory_hostname }}'
+        if raw == 'timeout'
         else f'{unit} failed on {{ inventory_hostname }}'
         if failed
         # No alarming word anywhere in this branch, deliberately: a phone shows
