@@ -35,6 +35,11 @@ groups:
         # drill's removal to resolved, two intervals. The bound for a claim
         # deleted at any moment is three (45m): its last line can be up to one
         # interval older than the deletion.
+        #
+        # The cost: a claim that is still unbound resolves if its series goes
+        # missing for one evaluation, then re-fires after `for: 15m`. That takes
+        # two missed watcher runs in a row, because `[30m]` spans two 15m runs
+        # (the floor of #1320), so a single late run changes nothing.
         noDataState: OK
         execErrState: Alerting
         missing_series_evals_to_resolve: 1

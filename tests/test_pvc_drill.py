@@ -14,6 +14,7 @@ that produced the incident.
 from __future__ import annotations
 
 import pathlib
+import re
 
 import pytest
 import yaml
@@ -353,6 +354,21 @@ class TestADeletedClaimResolvesPromptly:
     def test_the_query_is_instant(self) -> None:
         query = next(d for d in self._rule()["data"] if d["refId"] == "A")
         assert query["model"]["queryType"] == "instant"
+
+    def test_the_advised_latency_follows_from_the_rule(self) -> None:
+        """The drill removes its claim right after FIRING, so the instance
+        resolves once the last line leaves the lookback, plus one interval per
+        extra missing evaluation (measured 30m07s at one). The constant must sit
+        inside that window, so changing the lookback, the interval or the
+        evaluation count without re-measuring turns this red."""
+        doc = yaml.safe_load(DISK_RULES.read_text(encoding="utf-8"))
+        group = next(g for g in doc["groups"] if any(r["uid"] == "obs015-pvc-unbound-failure" for r in g["rules"]))
+        interval = int(re.fullmatch(r"(\d+)m", group["interval"]).group(1))
+        expr = next(d for d in self._rule()["data"] if d["refId"] == "A")["model"]["expr"]
+        lookback = int(re.search(r"\[(\d+)m\]", expr).group(1))
+        evals = self._rule()["missing_series_evals_to_resolve"]
+        earliest = lookback + (evals - 1) * interval
+        assert earliest <= pvc_drill.RESOLVE_LATENCY_MIN < earliest + interval
 
 
 class TestTheAdviceMatchesWhatWasMeasured:

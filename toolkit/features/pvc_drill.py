@@ -88,7 +88,11 @@ DRILL_NAMESPACE = "kubelab"
 #: that drops it. A claim deleted by hand at another moment can take up to 45m
 #: (the rule's comment in disk-rules.yaml); this constant answers the drill's
 #: own re-run advice only.
-RESOLVE_LATENCY_MIN = 30
+#:
+#: 35, not 30: the measurement was 30m07s, and advice that equals it sends
+#: the operator back seconds before the alert list drops the instance, into
+#: exactly the second refusal this constant exists to prevent.
+RESOLVE_LATENCY_MIN = 35
 
 #: A storage class that cannot exist is what makes the claim *stay* Pending.
 #: A claim on a real class would bind as soon as anything consumed it, and a
