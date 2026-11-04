@@ -4,6 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 708 | [An ingress memory ceiling, measured, turned out to be CPU](lesson-708-an-ingress-memory-ceiling-measured-turned-out-to-be-cpu.md) | 2026-11-04 |
 | 703 | [A rolling pod must outlast its endpoint, whichever app showed the loss](lesson-703-a-rolling-pod-must-outlast-its-endpoint.md) | 2026-11-03 |
 | 701 | [A liveness probe on the only replica must outlast saturation](lesson-701-a-liveness-probe-on-the-only-replica-must-outlast-saturation.md) | 2026-11-03 |
 | 698 | [An ingress memory limit is a connection limit](lesson-698-an-ingress-memory-limit-is-a-connection-limit.md) | 2026-11-02 |
