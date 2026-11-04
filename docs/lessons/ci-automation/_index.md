@@ -4,7 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
-| 706 | [The latest run of an `on: status` workflow is almost never its verdict](lesson-706-latest-run-of-an-on-status-workflow-is-noise.md) | 2026-11-04 |
+| 706 | [One job name for several environments hides which environment a run judged](lesson-706-one-job-name-for-several-environments-hides-the-verdict.md) | 2026-11-04 |
 | 699 | [Accepting `mergeable_state: unstable` stops enforcing every check that is not required](lesson-699-unstable-stops-enforcing-every-check-not-required.md) | 2026-11-03 |
 | 691 | [A Renovate regex that ends in a dollar sign matches nothing and reports success](lesson-691-a-renovate-regex-that-ends-in-a-dollar-sign-matches-nothing-and-reports-success.md) | 2026-11-02 |
 | 686 | [A claim about a GitHub event payload is a prediction until a run of that event shows it](lesson-686-a-payload-shape-prediction-is-not-a-measurement.md) | 2026-11-01 |

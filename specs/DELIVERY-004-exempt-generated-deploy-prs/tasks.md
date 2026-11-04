@@ -76,9 +76,11 @@ empty deploy PRs instead of merging them, and pin the merge to the judged head s
 
 ## Review-2 minors (#3062)
 
-- [x] F11 option A: the judge skips every PR while the latest deploy-verify run on master whose job
-  ran is not green, and fails closed on a read it cannot make. Noise runs (a skipped job) are not a
-  verdict (#3062 issuecomment-6624501517). `deploy-merge.yml` gains `actions: read`. ✓ 2026-11-04
+- [x] F11 option A: the judge skips every PR while staging's latest deploy-verify verdict on master is
+  not green, and fails closed on a read it cannot make or no verdict among the latest 100 runs. Each
+  deploy-verify job name now ends with its context, so prod's run for the same commit no longer
+  clears a staging failure (#3062 issuecomment-6624501517 and its correction). `deploy-merge.yml`
+  gains `actions: read`. ✓ 2026-11-04
 - [x] F6: the squash subject and body come from the judged app and tag (`--subject`, `--body`); the
   pinned merge line moved in the same diff. ✓ 2026-11-04
 - [x] F7: each close stands alone; a refused close fails the job only after the merges ran. ✓ 2026-11-04

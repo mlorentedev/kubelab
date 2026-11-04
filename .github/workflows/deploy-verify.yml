@@ -26,11 +26,15 @@ name: Deploy Verify
 #   `make verify-product APP=<app> ENV=staging`.
 # - `workflow_dispatch`: replay one commit, e.g. a known failure.
 #
-# `on: status` cannot be filtered by context, so every status in the repository
-# (review-attestation, PR-Agent, CodeRabbit) starts a run whose job is skipped.
-# GitHub makes a status event's run against the default branch tip, so those
-# skipped runs show on master, not on the PR that caused them. They are noise,
-# not failures.
+# `on: status` cannot be filtered by context, so a status from any other
+# reporter could start a run whose job is skipped. Measured 2026-11-04: all of
+# the last 100 completed master runs had a job that ran, so on master such runs
+# are rare or absent.
+#
+# Every job name ends with the context it judges, `(argocd/kubelab-<env>)`.
+# Staging and prod report the same commit seconds apart, and the run list says
+# nothing else about which environment a run was for. deploy-merge pauses on
+# staging's latest verdict and finds it by that suffix (#3062 F11).
 #
 # Red here means "go read the runbook", which says what to do:
 # docs/runbooks/gitops-delivery-promotion.md#deploy-verify-is-red
@@ -68,7 +72,7 @@ jobs:
   # through `env:`: the description is Argo's message, written by whatever made
   # the sync fail.
   on-status:
-    name: Argo CD status
+    name: Argo CD status (${{ github.event.context }})
     if: github.event_name == 'status' && startsWith(github.event.context, 'argocd/kubelab-')
     runs-on: ubuntu-latest
     steps:
@@ -87,7 +91,7 @@ jobs:
           esac
 
   sweep:
-    name: Status arrived (${{ matrix.env }})
+    name: Status arrived (argocd/kubelab-${{ matrix.env }})
     # Prod only: see the header.
     if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
@@ -129,7 +133,7 @@ jobs:
             || { echo "::error title=$CONTEXT has no success on ${SHA:0:7}::Runbook: $RUNBOOK"; exit 1; }
 
   replay:
-    name: Replay one commit
+    name: Replay one commit (argocd/kubelab-${{ inputs.env }})
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:

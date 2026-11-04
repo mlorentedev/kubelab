@@ -285,11 +285,13 @@ class TestWorkflowTriggers:
         )
 
 
-RUNS = f"repos/{REPO}/actions/workflows/deploy-verify.yml/runs?branch=master&status=completed&per_page=50"
+RUNS = f"repos/{REPO}/actions/workflows/deploy-verify.yml/runs?branch=master&status=completed&per_page=100"
+STAGING, PROD = "Argo CD status (argocd/kubelab-staging)", "Argo CD status (argocd/kubelab-prod)"
+SWEEP = "Status arrived (argocd/kubelab-prod)"
 
 
-def verify_runs(*runs: tuple[int, str, list[str]]) -> dict[str, Any]:
-    """Routes for deploy-verify's runs, newest first: (id, run conclusion, job conclusions)."""
+def verify_runs(*runs: tuple[int, str, list[tuple[str, str]]]) -> dict[str, Any]:
+    """Routes for deploy-verify's runs, newest first: (id, run conclusion, [(job name, conclusion)])."""
     routes: dict[str, Any] = {
         RUNS: {
             "workflow_runs": [
@@ -299,50 +301,62 @@ def verify_runs(*runs: tuple[int, str, list[str]]) -> dict[str, Any]:
     }
     for i, _, jobs in runs:
         routes[f"repos/{REPO}/actions/runs/{i}/jobs?per_page=100"] = {
-            "jobs": [{"name": f"job{n}", "conclusion": j} for n, j in enumerate(jobs)]
+            "jobs": [{"name": n, "conclusion": j} for n, j in jobs]
         }
     return routes
 
 
+def paused(*runs: tuple[int, str, list[tuple[str, str]]]) -> str | None:
+    return pause_reason(FakeApi(verify_runs(*runs)), REPO, "master", "staging")
+
+
 class TestDeployVerifyPause:
-    """#3062 F11 option A: while deploy-verify is red on master, nothing merges
-    unattended. Its noise runs (a skipped job, concluded `success`) are not a verdict."""
+    """#3062 F11 option A: while staging's latest deploy-verify verdict on master is
+    red, nothing merges unattended. Prod reports the same commit seconds later under
+    the same job, so only a job named for staging is staging's verdict."""
 
-    def test_the_latest_real_run_green_does_not_pause(self) -> None:
-        api = FakeApi(verify_runs((3, "success", ["skipped"]), (2, "success", ["success", "skipped"])))
-        assert pause_reason(api, REPO, "master") is None
+    def test_staging_green_does_not_pause(self) -> None:
+        assert paused((2, "success", [(STAGING, "success")])) is None
 
-    def test_a_red_run_under_noise_pauses_and_names_it(self) -> None:
-        api = FakeApi(verify_runs((3, "success", ["skipped"]), (2, "failure", ["failure", "skipped"])))
-        reason = pause_reason(api, REPO, "master")
-        assert reason is not None and "https://example.invalid/runs/2" in reason
+    def test_staging_red_pauses_and_names_the_run(self) -> None:
+        reason = paused((2, "failure", [(STAGING, "failure")]))
+        assert reason is not None and "https://example.invalid/runs/2" in reason and "staging" in reason
 
-    def test_a_green_run_after_a_red_one_clears_it(self) -> None:
-        api = FakeApi(verify_runs((3, "success", ["success"]), (2, "failure", ["failure"])))
-        assert pause_reason(api, REPO, "master") is None
+    def test_prod_green_after_staging_red_still_pauses(self) -> None:
+        assert paused((3, "success", [(PROD, "success")]), (2, "failure", [(STAGING, "failure")])) is not None
 
-    def test_only_noise_in_the_page_fails_closed(self) -> None:
-        api = FakeApi(verify_runs((3, "success", ["skipped"]), (2, "success", ["skipped"])))
-        assert pause_reason(api, REPO, "master") is not None
+    def test_a_prod_sweep_green_after_staging_red_still_pauses(self) -> None:
+        assert paused((3, "success", [(SWEEP, "success")]), (2, "failure", [(STAGING, "failure")])) is not None
 
-    def test_a_green_run_with_no_jobs_is_not_a_verdict(self) -> None:
-        api = FakeApi(verify_runs((3, "success", []), (2, "failure", ["failure"])))
-        assert pause_reason(api, REPO, "master") is not None
+    def test_prod_red_after_staging_green_does_not_pause(self) -> None:
+        assert paused((3, "failure", [(PROD, "failure")]), (2, "success", [(STAGING, "success")])) is None
+
+    def test_staging_green_after_staging_red_clears_it(self) -> None:
+        assert paused((3, "success", [(STAGING, "success")]), (2, "failure", [(STAGING, "failure")])) is None
+
+    def test_a_skipped_staging_job_is_not_a_verdict(self) -> None:
+        assert paused((3, "success", [(STAGING, "skipped")]), (2, "failure", [(STAGING, "failure")])) is not None
+
+    def test_a_job_name_without_the_context_is_not_a_verdict(self) -> None:
+        """Runs from before the jobs carried their context are not read as staging's."""
+        assert paused((2, "success", [("Argo CD status", "success")])) is not None
 
     def test_a_run_that_failed_to_start_pauses(self) -> None:
-        api = FakeApi(verify_runs((3, "startup_failure", []), (2, "success", ["success"])))
-        assert pause_reason(api, REPO, "master") is not None
+        assert paused((3, "startup_failure", []), (2, "success", [(STAGING, "success")])) is not None
+
+    def test_no_staging_verdict_in_the_window_fails_closed(self) -> None:
+        assert paused((3, "success", [(PROD, "success")]), (2, "success", [(SWEEP, "success")])) is not None
 
     def test_no_runs_fails_closed(self) -> None:
-        assert pause_reason(FakeApi({RUNS: {"workflow_runs": []}}), REPO, "master") is not None
+        assert pause_reason(FakeApi({RUNS: {"workflow_runs": []}}), REPO, "master", "staging") is not None
 
     def test_unreadable_runs_fail_closed(self) -> None:
-        assert pause_reason(FakeApi({RUNS: RuntimeError("403")}), REPO, "master") is not None
+        assert pause_reason(FakeApi({RUNS: RuntimeError("403")}), REPO, "master", "staging") is not None
 
     def test_unreadable_jobs_fail_closed(self) -> None:
-        routes = verify_runs((3, "success", ["success"]))
+        routes = verify_runs((3, "success", [(STAGING, "success")]))
         routes[f"repos/{REPO}/actions/runs/3/jobs?per_page=100"] = RuntimeError("403")
-        assert pause_reason(FakeApi(routes), REPO, "master") is not None
+        assert pause_reason(FakeApi(routes), REPO, "master", "staging") is not None
 
     def test_a_pause_skips_a_mergeable_pr(self, decl, products) -> None:
         assert run(MergeApi(mergeable()), decl, products).action == MERGE, "the fixture must merge unpaused"
@@ -382,7 +396,7 @@ def test_the_cli_writes_the_pause_into_the_decisions(tmp_path, monkeypatch) -> N
     routes = {
         f"repos/{REPO}": {"default_branch": "master"},
         f"repos/{REPO}/pulls?state=open&base=master&per_page=100&page=1": [],
-        **verify_runs((2, "failure", ["failure"])),
+        **verify_runs((2, "failure", [(STAGING, "failure")])),
     }
     monkeypatch.setattr(deploy_shape, "GhApi", lambda: FakeApi(routes))
     out = tmp_path / "decisions.json"

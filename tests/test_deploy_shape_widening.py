@@ -132,10 +132,22 @@ class TestMergingActorDoesNotWiden:
     def test_the_pause_reads_deploy_verify(self) -> None:
         """#3062 F11: a red deploy-verify on master pauses every merge. Pointing the
         pause at another workflow would silently stop it."""
-        from toolkit.features.deploy_merge import DEPLOY_VERIFY
+        import yaml
+
+        from toolkit.features.deploy_merge import CONTEXT_PREFIX, DEPLOY_VERIFY, VERDICT_WINDOW
 
         assert DEPLOY_VERIFY == "deploy-verify.yml", f"the pause reads {DEPLOY_VERIFY}: {DECIDED}"
-        assert (WORKFLOWS / DEPLOY_VERIFY).is_file(), f"{DEPLOY_VERIFY} does not exist: {DECIDED}"
+        assert VERDICT_WINDOW == 100, f"the pause reads {VERDICT_WINDOW} runs for a verdict: {DECIDED}"
+        text = (WORKFLOWS / DEPLOY_VERIFY).read_text(encoding="utf-8")
+        # The prefix the judge matches is the one deploy-verify reacts to.
+        assert f"startsWith(github.event.context, '{CONTEXT_PREFIX}')" in text, f"{CONTEXT_PREFIX}: {DECIDED}"
+        # Every job names the context it judged, or the judge cannot tell staging from prod.
+        jobs = yaml.safe_load(text)["jobs"]
+        for job_id, job in jobs.items():
+            name = job.get("name", "")
+            assert name.endswith(")") and f"({CONTEXT_PREFIX}" in name or "(${{ github.event.context }})" in name, (
+                f"deploy-verify job {job_id} is named {name!r}, which does not carry its context: {DECIDED}"
+            )
 
     def test_a_refused_close_does_not_stop_the_merges(self) -> None:
         """#3062 F7: under `set -e` one refused close stopped the job before the merge
@@ -144,6 +156,8 @@ class TestMergingActorDoesNotWiden:
 
         steps = yaml.safe_load((WORKFLOWS / "deploy-merge.yml").read_text(encoding="utf-8"))["jobs"]["merge"]["steps"]
         close = next(s for s in steps if s.get("id") == "close")
+        # The default shell is `bash -e`; only an explicit `set +e` clears it.
+        assert re.search(r"^set \+e$", close["run"], re.M), "the close step stops at its first failure"
         assert not re.search(r"^\s*set -\w*e", close["run"], re.M), "the close step stops at its first failure"
         names = [s.get("name") for s in steps]
         assert names.index("Fail on a refused close") > names.index("Merge mechanical deploys at the judged sha")

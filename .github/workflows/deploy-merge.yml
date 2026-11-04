@@ -110,13 +110,15 @@ jobs:
 
       # Each close stands alone: one that fails is reported and the loop goes on,
       # and the merges below still run. `Fail on a refused close` turns the job red
-      # afterwards (#3062 F7). No `set -e` here: it would stop at the first failure.
+      # afterwards (#3062 F7). The default shell runs `bash -e`, which would stop at
+      # the first failure, so `set +e` clears it.
       - name: Close pull requests with nothing to merge
         id: close
         if: steps.judge.outputs.enabled == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set +e
           set -uo pipefail
           failed=false
           while read -r n sha; do

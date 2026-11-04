@@ -62,6 +62,12 @@ ALLOWED_UNSTABLE = frozenset({"add-to-project"})
 # The workflow whose red run on master pauses every merge (#3062 F11, option A).
 # tests/test_deploy_shape_widening.py pins it.
 DEPLOY_VERIFY = "deploy-verify.yml"
+# deploy-verify's job names end with `(<CONTEXT_PREFIX><env>)`, the Argo CD status
+# context they judged. The same prefix is in that workflow's `startsWith`.
+CONTEXT_PREFIX = "argocd/kubelab-"
+# Runs read for a verdict. With staging off, prod's runs and sweeps fill it in
+# about two days, and then the absent verdict pauses (runbook: replay one).
+VERDICT_WINDOW = 100
 
 
 @dataclass(frozen=True)
@@ -121,30 +127,37 @@ def _failing_contexts(api: Api, repo: str, sha: str, required: Iterable[str]) ->
     return failing, [f for c in others for f in not_passing(c)]
 
 
-def pause_reason(api: Api, repo: str, branch: str) -> str | None:
-    """Why every merge waits, or None when deploy-verify's latest verdict on `branch` is green.
+def pause_reason(api: Api, repo: str, branch: str, env: str) -> str | None:
+    """Why every merge waits, or None when deploy-verify's latest verdict for `env` on `branch` is green.
 
-    `on: status` cannot filter by context, so most deploy-verify runs only skip
-    their job and conclude `success` (its header). Those are not a verdict: the
-    latest run that is not green-with-no-job-run is. Fails closed: a read that
-    fails, or no such run in the page, pauses.
+    One job name serves several environments, and staging and prod report the
+    same commit seconds apart, so the run list cannot tell them apart. Each job
+    name ends with the context it judged (deploy-verify.yml's header): the latest
+    run holding a job for `env` that ran is the verdict, and that job's conclusion
+    decides. A run that failed to start (no jobs, not green) pauses too, since it
+    may have been the verdict. Fails closed: a read that fails, or no verdict for
+    `env` among the latest VERDICT_WINDOW runs, pauses.
     """
+    suffix = f"({CONTEXT_PREFIX}{env})"
     try:
         runs = api.json(
-            f"repos/{repo}/actions/workflows/{DEPLOY_VERIFY}/runs?branch={branch}&status=completed&per_page=50"
+            f"repos/{repo}/actions/workflows/{DEPLOY_VERIFY}/runs"
+            f"?branch={branch}&status=completed&per_page={VERDICT_WINDOW}"
         )["workflow_runs"]
         for run in runs:
             jobs = api.json(f"repos/{repo}/actions/runs/{run['id']}/jobs?per_page=100")["jobs"]
-            # Noise: green with no job that ran. Anything else is the verdict, a
-            # startup failure (no jobs, not green) included.
-            if run["conclusion"] == "success" and all(job["conclusion"] == "skipped" for job in jobs):
+            if not jobs and run["conclusion"] != "success":
+                return f"{DEPLOY_VERIFY} failed to start ({run['conclusion']}) on {branch}: {run['html_url']}"
+            verdicts = [j for j in jobs if j["name"].endswith(suffix) and j["conclusion"] != "skipped"]
+            if not verdicts:
                 continue
-            if run["conclusion"] == "success":
+            red = [j["conclusion"] for j in verdicts if j["conclusion"] != "success"]
+            if not red:
                 return None
-            return f"{DEPLOY_VERIFY} is {run['conclusion']} on {branch}: {run['html_url']}"
+            return f"{DEPLOY_VERIFY} is {red[0]} for {env} on {branch}: {run['html_url']}"
     except Exception as exc:  # noqa: BLE001 — a verdict that cannot be read is not green
         return f"cannot read {DEPLOY_VERIFY} on {branch}: {exc!r}"
-    return f"no {DEPLOY_VERIFY} run on {branch} with a job that ran, among the latest {len(runs)}"
+    return f"no {DEPLOY_VERIFY} verdict for {env} on {branch} among the latest {len(runs)} runs"
 
 
 def judge(

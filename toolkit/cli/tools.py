@@ -455,7 +455,7 @@ def deploy_merge_cmd(
         raise typer.Exit(2) from exc
 
     enabled = dm.merge_enabled(registry)
-    paused = dm.pause_reason(api, repo, default_branch)
+    paused = dm.pause_reason(api, repo, default_branch, decl.env)
     if paused is not None:
         logger.warning(f"deploy-merge: every PR waits: {paused}")
     decisions = [dm.judge(pr["number"], repo, api, decl, admitted, required, paused=paused) for pr in open_prs]
