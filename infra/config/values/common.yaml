@@ -1014,6 +1014,12 @@ apps:
       # forge. Separate from `machine` on purpose -- that account writes to every
       # `personal/` repository, and read access is what contains this one.
       reviewer: mentor
+      # The agents' authoring account (AUTH-022, #2577, ADR-062 D1 amendment of
+      # 2026-11-03): a machine identity that opens issues and pull requests, so an
+      # agent's writes are attributed to an agent and not to `superadmin`. In no
+      # organization team: its write reaches only the repositories that name it
+      # under `writers:` in `gitea.organizations`, as a collaborator.
+      agent: dedalo
 
   # SSOT-014c: operator contact email. Single declaration site.
   # The toolkit config loader (configuration.py:get_merged_config) auto-fills
@@ -1261,6 +1267,13 @@ apps:
           # organization's read team; `tests/test_gitea_issue_reader_token.py`
           # ties it to `ISSUE_READER_SCOPES`.
           issue_reader: "read:issue"
+          # The agents' authoring account (AUTH-022), pinned by EQUALITY: an agent
+          # opens pull requests (`write:repository`, for the branch and the PR) and
+          # comments on issues and PRs (`write:issue`), and nothing reads `/user`.
+          # What contains it is not the scope but the grant: it is in no team, so
+          # `write:repository` reaches only the repositories that list it under
+          # `writers:`. `tests/test_gitea_agent_identity.py` ties it to `AGENT_SCOPES`.
+          agent: "write:issue,write:repository"
         # Repository organization (ADR-065, TOOL-035 #1076). Reconciled by
         # `toolkit.features.gitea_repos`: declared-and-missing is created,
         # existing-and-undeclared is REPORTED and never removed.
@@ -1513,6 +1526,11 @@ apps:
             - name: imagesensortool
               origin: native
               private: false
+              # Keys of `apps.auth.identities` given write here as collaborators
+              # (AUTH-022). Per repository by construction, so an account listed
+              # here reaches this repository and no other.
+              writers:
+                - agent
           kubelab:
             repositories: []
         # Mirrors the limits the K8s Deployment carried, so the move is not also a

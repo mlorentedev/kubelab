@@ -811,6 +811,25 @@ SECRET_CATALOG: list[SecretSpec] = [
         envs=("prod",),
     ),
     SecretSpec(
+        key_path="apps.services.core.gitea.agent_token",
+        description=(
+            "Gitea API token of the agents' authoring account (apps.auth.identities.agent); "
+            "write:issue + write:repository, copied to the workstation's Bitwarden for dotf (AUTH-022)"
+        ),
+        # EXTERNAL for the reason `bot_token` gives: only Gitea honours what it mints.
+        kind=SecretKind.EXTERNAL,
+        services=("gitea",),
+        rotate_note=(
+            "`make gitea-rotate-token TOKEN=agent ENV=prod APPLY=1` (revoke, then unset), then "
+            "`make provision NODE=bee ENV=prod TAGS=gitea` to re-mint, then `make "
+            "secrets-copy-gitea-agent-token` so the Bitwarden copy dotf reads carries the new value. "
+            "The mint task is gated on this key being absent; never mint a second token by hand."
+        ),
+        # NEVER, for the reason measured on `bot_token`: Gitea's token API has no expiry field.
+        expiry=Expiry.NEVER,
+        envs=("prod",),
+    ),
+    SecretSpec(
         key_path="apps.services.core.github_app.private_key",
         description=(
             "Private key (PEM) of the `kubelab-console` GitHub App, read-only on Issues and Pull requests; "

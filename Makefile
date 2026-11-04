@@ -518,6 +518,16 @@ secrets-hash:
 secrets-copy-nan-key: ## Copy NAN_API_KEY from Bitwarden into prod SOPS for PR-Agent (re-run after each rotation)
 	@dotf secrets run --only NAN_API_KEY -- $(TOOLKIT) secrets set apps.services.automation.pr_agent.nan_api_key --env prod --from-env NAN_API_KEY
 
+# The reverse direction (AUTH-022): Ansible mints the agents' forge token into prod
+# SOPS, and `dotf` reads it from Bitwarden. Re-run after each re-mint. The value is
+# held in a shell variable and handed over by `printf`, a builtin, so it reaches no
+# argv and no stdout; the length test refuses to write an empty value over a good one.
+.PHONY: secrets-copy-gitea-agent-token
+secrets-copy-gitea-agent-token: ## Copy the agents' Gitea token from prod SOPS into Bitwarden for dotf (re-run after each re-mint)
+	@V=$$(ENV=dev $(TOOLKIT) secrets show apps.services.core.gitea.agent_token --env prod 2>/dev/null | tail -1) && \
+		test -n "$$V" && test "$${#V}" -ge 40 || { echo "agent_token absent from prod SOPS; provision first" >&2; exit 1; }; \
+		printf %s "$$V" | dotf secrets set GITEA_KUBELAB_AGENT_TOKEN
+
 # -----------------------------------------------------------------------------
 # Monitoring (Uptime Kuma)
 # -----------------------------------------------------------------------------

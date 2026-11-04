@@ -92,6 +92,13 @@ ROTATABLE_TOKENS: dict[str, RotatableToken] = {
         token_name="kubelab-issue-reader",
         identity="reviewer",
     ),
+    # The agents' authoring account (AUTH-022, #2577): its own account, not a token on
+    # the reviewer's, because what it writes carries an author.
+    "agent": RotatableToken(
+        secret_key="apps.services.core.gitea.agent_token",
+        token_name="kubelab-agent",
+        identity="agent",
+    ),
 }
 
 #: What the reviewer's token must hold -- exactly, not at least. The requirement is a
@@ -114,6 +121,13 @@ REVIEW_NOTICE_SCOPES: frozenset[str] = frozenset({"write:issue"})
 #: requests with `type=pulls`, so no repository scope is asked for. Not yet measured
 #: against a live Gitea; the first read is, and a 403 widens this deliberately.
 ISSUE_READER_SCOPES: frozenset[str] = frozenset({"read:issue"})
+
+#: What the agents' authoring token must hold -- exactly. A decision (owner, 2026-10-20
+#: on #2296): issue and repository write, so an agent can push a branch, open a pull
+#: request and comment, and nothing else. `write:repository` is a wide scope, and what
+#: bounds it is that the account is in no team: it reaches only the repositories that
+#: declare it under `writers:` (AUTH-022).
+AGENT_SCOPES: frozenset[str] = frozenset({"write:issue", "write:repository"})
 
 
 @dataclass(frozen=True)

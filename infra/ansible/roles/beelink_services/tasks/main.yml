@@ -446,6 +446,7 @@
     or (gitea_reviewer_user | length > 0
         and (not gitea_reviewer_token or not gitea_review_notice_token
              or not gitea_issue_reader_token))
+    or (gitea_agent_user | length > 0 and not gitea_agent_token)
   failed_when: not _gitea_record_tool.stat.executable | default(false)
   tags: [gitea]
 
@@ -467,6 +468,7 @@
     - {name: kubelab-reviewer, user: "{{ gitea_reviewer_user }}", recorded: "{{ gitea_reviewer_token | length > 0 }}"}
     - {name: kubelab-review-notice, user: "{{ gitea_reviewer_user }}", recorded: "{{ gitea_review_notice_token | length > 0 }}"}
     - {name: kubelab-issue-reader, user: "{{ gitea_reviewer_user }}", recorded: "{{ gitea_issue_reader_token | length > 0 }}"}
+    - {name: kubelab-agent, user: "{{ gitea_agent_user }}", recorded: "{{ gitea_agent_token | length > 0 }}"}
     - {name: kubelab-reconciler, user: "{{ gitea_admin_user }}", recorded: "{{ gitea_admin_token | length > 0 }}"}
   loop_control:
     label: "{{ item.name }}"
@@ -656,6 +658,48 @@
   delegate_to: localhost
   become: false
   when: gitea_reviewer_user | length > 0 and not gitea_issue_reader_token
+  changed_when: true
+  no_log: true
+  tags: [gitea]
+
+# --- Agents' authoring account: the token (AUTH-022, #2577) --------------------
+# The same two steps as the reviewer's, for the third machine account. Its grant is
+# `write:issue,write:repository`, and its reach is narrower than the scope reads:
+# it is in no team, so it writes only where the reconciler made it a collaborator
+# (`writers:` on a repository in `gitea.organizations`). Skipped entirely while
+# `apps.auth.identities.agent` is undeclared.
+
+- name: Mint the agent account's scoped token
+  # Gated on the recorded secret being absent and `argv`, for the reasons the
+  # machine token's mint task records.
+  command:
+    argv:
+      - docker
+      - exec
+      - gitea
+      - su
+      - git
+      - -c
+      - >-
+        gitea admin user generate-access-token
+        --username {{ gitea_agent_user }}
+        --token-name kubelab-agent
+        --scopes {{ gitea_agent_scopes }}
+        --raw
+  register: _gitea_agent_token
+  when: gitea_agent_user | length > 0 and not gitea_agent_token
+  changed_when: _gitea_agent_token.rc == 0
+  no_log: true
+  tags: [gitea]
+
+- name: Record the agent token in SOPS
+  # Controller-side, over STDIN, never argv -- as the machine token's record task.
+  command: "{{ playbook_dir }}/../../../.venv/bin/toolkit secrets set apps.services.core.gitea.agent_token --env {{ gitea_identity_env }} --stdin"
+  args:
+    stdin: "{{ _gitea_agent_token.stdout }}"
+  delegate_to: localhost
+  become: false
+  when: gitea_agent_user | length > 0 and not gitea_agent_token
   changed_when: true
   no_log: true
   tags: [gitea]
