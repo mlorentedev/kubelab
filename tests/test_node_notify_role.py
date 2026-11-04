@@ -970,3 +970,13 @@ def test_the_cleanup_resets_each_unit_the_listing_names() -> None:
         node_notify_failed_notifiers={"stdout_lines": listed}
     )
     assert argv == ["systemctl", "reset-failed", *units]
+
+
+def test_a_unit_killed_by_its_timeout_says_it_timed_out():
+    """BACKUP-078 (#2920): a weekly check that ran out of time read in #ops-log
+    as a repository fault. systemd's `timeout` result is not a finding, so the
+    title says what happened instead of `failed`."""
+    timed_out = _encode_via_rendered_script(b"start operation timed out. Terminating.", result="timeout")
+    assert timed_out["title"] == "node-backup-ship.service timed out on rpi3"
+    failed = _encode_via_rendered_script(b"Fatal: repository contains errors", result="exit-code")
+    assert failed["title"] == "node-backup-ship.service failed on rpi3"

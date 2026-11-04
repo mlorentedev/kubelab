@@ -15,7 +15,8 @@ OnCalendar=weekly
 # node's actual up-time -- the same #1090 reasoning that shaped the main
 # timer's on-demand branch, applied where it was previously missing.
 Persistent=true
-RandomizedDelaySec={{ node_backup_randomized_delay }}
+# Its own spread, not the ship's (#2920): see node_backup_check_randomized_delay.
+RandomizedDelaySec={{ node_backup_check_randomized_delay }}
 
 [Install]
 WantedBy=timers.target
