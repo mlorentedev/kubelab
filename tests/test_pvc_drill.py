@@ -368,7 +368,9 @@ class TestADeletedClaimResolvesPromptly:
         lookback = int(re.search(r"\[(\d+)m\]", expr).group(1))
         evals = self._rule()["missing_series_evals_to_resolve"]
         earliest = lookback + (evals - 1) * interval
-        assert earliest <= pvc_drill.RESOLVE_LATENCY_MIN < earliest + interval
+        # Strictly above `earliest`: advice equal to the measurement sends the
+        # operator back before the alert list has dropped the instance.
+        assert earliest < pvc_drill.RESOLVE_LATENCY_MIN < earliest + interval
 
 
 class TestTheAdviceMatchesWhatWasMeasured:

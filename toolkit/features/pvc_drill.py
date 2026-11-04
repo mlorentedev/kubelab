@@ -72,8 +72,9 @@ DRILL_NAMESPACE = "kubelab"
 #: last one that exists. Only once the whole range is past that final point does
 #: Grafana's staleness handling start counting its intervals.
 #:
-#: The number matters because the advice is acted on: told 45m, the operator
-#: re-runs into a second refusal and concludes the drill is broken.
+#: The number matters because the advice is acted on: told 45m when the
+#: latency was 90m, the operator re-ran into a second refusal and concluded the
+#: drill was broken. Advice must never be shorter than the latency.
 #:
 #: Both effects were then removed from the rule (#1668): the query is `instant`
 #: and one missing evaluation resolves the instance. Measured on staging
