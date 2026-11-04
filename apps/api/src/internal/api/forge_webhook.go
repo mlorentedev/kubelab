@@ -25,8 +25,15 @@ func ForgeWebhookHandler(c *gin.Context) {
 		c.Status(503)
 		return
 	}
+	// The reconcile's sources, so a delivery is kept only for a repository it reads.
+	// A declaration that does not parse leaves none, and nothing is stored.
+	sources, err := forge.ParseSources(conf.Forge.Sources)
+	if err != nil {
+		log.Printf("forge webhook: sources: %v", err)
+	}
 	rc := forge.Receiver{
 		Secrets: map[string]string{"github": conf.Forge.GitHubWebhookSecret, "gitea": conf.Forge.GiteaWebhookSecret},
+		Sources: sources,
 		Store:   pgEvents{conf: conf.Postgres},
 	}
 	c.Status(rc.Handle(c.Request.Context(), c.Param("forge"), c.Request.Header, c.Request.Body))
