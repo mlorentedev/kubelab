@@ -15,9 +15,14 @@ returns and is not a secret, is what the operator sees.
 
 from __future__ import annotations
 
-from typing import Optional, Protocol
+import subprocess
+from pathlib import Path
+from typing import Any, Callable, Optional, Protocol
+
+import yaml
 
 from toolkit.core.logging import logger
+from toolkit.core.sops import age_key_env
 from toolkit.features.backup_node_credentials import MINTER_KEY, SECRETS_ENV, HttpFn, MintError, cloudflare_http
 
 # The SOPS files a pair can live in, read file by file: a copy in one file that
@@ -162,22 +167,67 @@ def revoke_pair(
     return "revoked" if name is not None else "forgotten"
 
 
+DecryptFn = Callable[[str], Optional[dict[str, Any]]]
+UnsetFn = Callable[[str, str], bool]
+
+
 class SopsPairStore:
-    """Reads and unsets one key in one SOPS file at a time, through SecretsManager."""
+    """Every SOPS file decrypted up front, so an unreadable one stops the run.
 
-    def __init__(self) -> None:
-        from toolkit.features.secrets_manager import SecretsManager
+    `SecretsManager.show_secret` answers None both for a missing key and for a
+    file `sops -d` cannot open, and read that way an unreadable file holding the
+    pair would make it look absent, or keep a copy past the final check, while
+    its token stayed live. `decrypt` returns None only for a file that does not
+    exist and raises RevokeError for one that cannot be read.
+    """
 
-        self._sm = SecretsManager()
+    def __init__(self, decrypt: Optional[DecryptFn] = None, unset: Optional[UnsetFn] = None) -> None:
+        if decrypt is None or unset is None:
+            from toolkit.features.secrets_manager import SecretsManager
+
+            sm = SecretsManager()
+            decrypt = decrypt or _sops_decrypt(Path(sm.project_root) / "infra" / "config" / "secrets")
+            unset = unset or sm.unset_secret
+        self._decrypt, self._unset = decrypt, unset
+        self._data: dict[str, dict[str, Any]] = {}
+        for env in SOPS_FILES:
+            self._load(env)
+
+    def _load(self, env: str) -> None:
+        data = self._decrypt(env)
+        if data is None:
+            self._data.pop(env, None)
+        else:
+            self._data[env] = data
 
     def files_holding(self, path: str) -> list[str]:
-        return [env for env in SOPS_FILES if self._sm.show_secret(env, path)]
+        return [env for env in SOPS_FILES if env in self._data and self.show(env, path)]
 
     def show(self, env: str, path: str) -> Optional[str]:
-        return self._sm.show_secret(env, path)
+        value: Any = self._data.get(env)
+        for key in path.split("."):
+            value = value.get(key) if isinstance(value, dict) else None
+        return str(value) if value else None
 
     def unset(self, env: str, path: str) -> bool:
-        return self._sm.unset_secret(env, path)
+        ok = self._unset(env, path)
+        self._load(env)  # the final check reads the file as it is now, not as it was
+        return ok
+
+
+def _sops_decrypt(secrets_dir: Path) -> DecryptFn:
+    def decrypt(env: str) -> Optional[dict[str, Any]]:
+        sops_file = secrets_dir / f"{env}.enc.yaml"
+        if not sops_file.exists():
+            return None
+        result = subprocess.run(["sops", "-d", str(sops_file)], capture_output=True, text=True, env=age_key_env())
+        if result.returncode != 0:
+            raise RevokeError(
+                f"{env}.enc.yaml exists but sops could not decrypt it; refusing to read it as holding no key"
+            )
+        return yaml.safe_load(result.stdout) or {}
+
+    return decrypt
 
 
 def revoke_pair_cmd(prefix: str, *, apply: bool, forget: bool) -> bool:
@@ -192,11 +242,12 @@ def revoke_pair_cmd(prefix: str, *, apply: bool, forget: bool) -> bool:
         logger.error(f"backup.r2.account_id and {MINTER_KEY} are both needed to revoke a token")
         return False
     try:
+        store = SopsPairStore()
         outcome = revoke_pair(
             prefix,
             account_id=account_id,
             http=cloudflare_http(str(minter)),
-            store=SopsPairStore(),
+            store=store,
             catalog=frozenset(s.key_path for s in SECRET_CATALOG),
             apply=apply,
             forget=forget,

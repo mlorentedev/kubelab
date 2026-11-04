@@ -203,3 +203,31 @@ def test_a_partial_unset_leaves_the_id_so_forget_can_finish() -> None:
     store.unset = real_unset  # type: ignore[method-assign]
     assert _run(store, cf, apply=True, forget=True) == "forgotten"
     assert store.files["common"] == {}
+
+
+def test_an_undecryptable_sops_file_stops_the_run_before_anything_is_read() -> None:
+    """`show_secret` reads an unreadable file as a missing key; this store must not."""
+    from toolkit.features.backup_token_revoke import SopsPairStore
+
+    def decrypt(env: str) -> Optional[dict[str, Any]]:
+        if env == "prod":
+            raise RevokeError("prod.enc.yaml exists but sops could not decrypt it")
+        return {"backup": {"r2": {"readonly_access_key_id": "tok-1"}}} if env == "common" else None
+
+    with pytest.raises(RevokeError, match="prod.enc.yaml"):
+        SopsPairStore(decrypt=decrypt, unset=lambda env, path: True)
+
+
+def test_the_sops_store_rereads_a_file_after_its_unset() -> None:
+    from toolkit.features.backup_token_revoke import SopsPairStore
+
+    files: dict[str, dict[str, Any]] = {"common": {"backup": {"r2": {"readonly_access_key_id": "tok-1"}}}}
+
+    def unset(env: str, path: str) -> bool:
+        files[env]["backup"]["r2"].pop(path.rsplit(".", 1)[-1], None)
+        return True
+
+    store = SopsPairStore(decrypt=lambda env: files.get(env), unset=unset)
+    assert store.files_holding(ACCESS) == ["common"]
+    assert store.unset("common", ACCESS)
+    assert store.files_holding(ACCESS) == []
