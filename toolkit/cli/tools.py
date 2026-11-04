@@ -460,7 +460,7 @@ def deploy_merge_cmd(
         logger.warning(f"deploy-merge: every PR waits: {paused}")
     decisions = [dm.judge(pr["number"], repo, api, decl, admitted, required, paused=paused) for pr in open_prs]
     try:
-        payload = {"enabled": enabled, "decisions": [d.as_dict() for d in decisions]}
+        payload = {"enabled": enabled, "paused": paused, "decisions": [d.as_dict() for d in decisions]}
         out.write_text(json.dumps(payload) + "\n", encoding="utf-8")
     except OSError as exc:
         logger.error(f"deploy-merge: cannot write {out}: {exc}")

@@ -96,6 +96,12 @@ jobs:
           poetry run toolkit tools deploy-merge --out "$RUNNER_TEMP/decisions.json"
           echo "enabled=$(jq -r .enabled "$RUNNER_TEMP/decisions.json")" >> "$GITHUB_OUTPUT"
 
+      # A pause makes every decision a skip, so no other line would say why.
+      - name: Report a pause
+        run: |
+          jq -r 'if .paused then "every PR waits: \(.paused)" else empty end' "$RUNNER_TEMP/decisions.json" |
+            tee -a "$GITHUB_STEP_SUMMARY"
+
       - name: Report what an enabled switch would do
         if: steps.judge.outputs.enabled != 'true'
         run: |

@@ -369,3 +369,23 @@ class TestSquashMessage:
     def test_a_skip_carries_no_message(self, decl, products) -> None:
         decision = run(MergeApi(mergeable()), decl, products, paused="red")
         assert decision.subject is None and decision.body is None
+
+
+def test_the_cli_writes_the_pause_into_the_decisions(tmp_path, monkeypatch) -> None:
+    """The workflow's `Report a pause` step reads it: a pause makes every decision a
+    skip, so without it a paused run explains nothing (#3086 review)."""
+    from typer.testing import CliRunner
+
+    from toolkit.cli.tools import app
+    from toolkit.features import deploy_shape
+
+    routes = {
+        f"repos/{REPO}": {"default_branch": "master"},
+        f"repos/{REPO}/pulls?state=open&base=master&per_page=100&page=1": [],
+        **verify_runs((2, "failure", ["failure"])),
+    }
+    monkeypatch.setattr(deploy_shape, "GhApi", lambda: FakeApi(routes))
+    out = tmp_path / "decisions.json"
+    result = CliRunner().invoke(app, ["deploy-merge", "--repo", REPO, "--out", str(out)])
+    assert result.exit_code == 0, result.output
+    assert "https://example.invalid/runs/2" in json.loads(out.read_text())["paused"]
