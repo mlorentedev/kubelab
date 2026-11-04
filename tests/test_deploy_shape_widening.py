@@ -268,11 +268,50 @@ def _granting_code() -> dict[str, list]:
         and any(isinstance(c, ast.Constant) and c.value == "exempt" for c in ast.walk(ast.Module(node.body, [])))
     ]
     assert exempt_ifs, "classify's exempt block was not found; this test lost its subject"
+    # A helper the exempt block delegates to decides the exemption too: follow
+    # calls to module-level functions, transitively.
+    functions = {n.name: n for n in attestation.body if isinstance(n, ast.FunctionDef)}
+    scanned, pending = [exempt_fn, *exempt_ifs], [exempt_fn, *exempt_ifs]
+    while pending:
+        for node in ast.walk(pending.pop()):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+                helper = functions.get(node.func.id)
+                if helper is not None and helper not in scanned and helper is not classify_fn:
+                    scanned.append(helper)
+                    pending.append(helper)
     return {
         "toolkit/features/deploy_merge.py": [parse("toolkit/features/deploy_merge.py")],
         "toolkit/features/deploy_shape.py": [parse("toolkit/features/deploy_shape.py")],
-        "toolkit/features/review_attestation.py (exemption)": [exempt_fn, *exempt_ifs],
+        "toolkit/features/review_attestation.py (exemption)": scanned,
     }
+
+
+def test_every_exempt_verdict_is_inside_the_scanned_code() -> None:
+    """The scan above covers only the exemption's code, so an "exempt" verdict
+    produced anywhere else, or through a constant bound to a name, would never be
+    scanned. Both are refused here."""
+    import ast
+
+    tree = ast.parse((REPO_ROOT / "toolkit/features/review_attestation.py").read_text(encoding="utf-8"))
+
+    def at(n) -> tuple:  # _granting_code parses its own tree, so nodes compare by position
+        return (getattr(n, "lineno", None), getattr(n, "col_offset", None))
+
+    inside = {
+        at(n) for root in _granting_code()["toolkit/features/review_attestation.py (exemption)"] for n in ast.walk(root)
+    }
+    outside = [
+        n.lineno for n in ast.walk(tree) if isinstance(n, ast.Constant) and n.value == "exempt" and at(n) not in inside
+    ]
+    assert not outside, f'"exempt" outside the scanned exemption code, line(s) {outside}: {DECIDED}'
+    aliases = [
+        n.lineno
+        for n in ast.walk(tree)
+        if isinstance(n, (ast.Assign, ast.AnnAssign))
+        and isinstance(n.value, ast.Constant)
+        and n.value.value == "exempt"
+    ]
+    assert not aliases, f'"exempt" bound to a name at line(s) {aliases}; the scan cannot follow it: {DECIDED}'
 
 
 def _name_reads(roots: list) -> list[str]:
@@ -303,6 +342,31 @@ def _name_reads(roots: list) -> list[str]:
 def test_the_granting_side_reads_no_branch_name_or_author(module: str) -> None:
     hits = _name_reads(_granting_code()[module])
     assert not hits, f"{module} reads {hits}; a grant keyed on a name anyone can mint: {DECIDED}"
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        'pr["head"].get("ref")',
+        'pr["head"]["ref"]',
+        'pr["user"]["login"]',
+        'pr.get("headRefName")',
+        'event["sender"]',
+        'ref.startswith("deploy/")',
+    ],
+)
+def test_the_name_detector_fires(source: str) -> None:
+    """Positive control: a detector that silently returned nothing would keep
+    every scan above green."""
+    import ast
+
+    assert _name_reads([ast.parse(source)]), f"{source} was not detected"
+
+
+def test_the_name_detector_allows_the_base_ref() -> None:
+    import ast
+
+    assert not _name_reads([ast.parse('pr["base"]["ref"]; pr["base"].get("ref")')])
 
 
 def test_the_required_contexts_are_the_approved_ones() -> None:
