@@ -326,6 +326,35 @@ class TestTheDrillWatchesTheRuleThatExists:
         assert by_title[pvc_drill.DRILL_ALERT_NAME] == "obs015-pvc-unbound-failure"
 
 
+class TestADeletedClaimResolvesPromptly:
+    """The two settings that bound how long a deleted claim keeps firing (#1668 AC1).
+
+    Measured 89.5m under `noDataState: OK` (staging, 2026-11-03), and noDataState
+    was never the lever: other claims keep the result non-empty, so the deleted
+    claim's series goes MISSING. Two things held it: a `range` query over 30m,
+    whose last point keeps a series alive 30m past its `[30m]` lookback, and
+    Grafana's default of two missing-series evaluations at the 15m interval.
+    """
+
+    def _rule(self) -> dict:
+        doc = yaml.safe_load(DISK_RULES.read_text(encoding="utf-8"))
+        rules = {rule["uid"]: rule for group in doc["groups"] for rule in group["rules"]}
+        return rules["obs015-pvc-unbound-failure"]
+
+    def test_one_missing_evaluation_resolves_the_instance(self) -> None:
+        assert self._rule().get("missing_series_evals_to_resolve") == 1
+
+    def test_the_setting_uses_the_key_grafana_reads(self) -> None:
+        """Grafana 13.0.2's provisioning struct reads only the snake_case key
+        (`rules_types.go`); the camelCase spelling of the API is ignored with no
+        error, and the drill would then measure 90m again."""
+        assert "missingSeriesEvalsToResolve" not in self._rule()
+
+    def test_the_query_is_instant(self) -> None:
+        query = next(d for d in self._rule()["data"] if d["refId"] == "A")
+        assert query["model"]["queryType"] == "instant"
+
+
 class TestTheAdviceMatchesWhatWasMeasured:
     """Every message that tells the operator when to come back must quote the
     one measured constant.
