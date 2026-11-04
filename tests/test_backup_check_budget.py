@@ -17,8 +17,8 @@ import yaml
 
 REPO = Path(__file__).resolve().parents[1]
 ROLE = REPO / "infra/ansible/roles/node_backup"
-DEFAULTS = yaml.safe_load((ROLE / "defaults/main.yml").read_text())
-COMMON = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text())
+DEFAULTS = yaml.safe_load((ROLE / "defaults/main.yml").read_text(encoding="utf-8"))
+COMMON = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
 
 _UNITS = {"s": 1, "sec": 1, "min": 60, "m": 60, "h": 3600, "hr": 3600}
 
@@ -30,7 +30,7 @@ def _seconds(value: str) -> int:
 
 
 def _ship_timeout() -> int:
-    unit = (ROLE / "templates/node-backup-ship.service.j2").read_text()
+    unit = (ROLE / "templates/node-backup-ship.service.j2").read_text(encoding="utf-8")
     match = re.search(r"^TimeoutStartSec=(\d+)$", unit, re.MULTILINE)
     assert match, "the ship unit declares no literal TimeoutStartSec"
     return int(match.group(1))
@@ -42,7 +42,7 @@ def _on_demand_backup_nodes() -> list[str]:
 
 
 def test_the_check_timer_uses_its_own_spread():
-    timer = (ROLE / "templates/node-backup-ship-check.timer.j2").read_text()
+    timer = (ROLE / "templates/node-backup-ship-check.timer.j2").read_text(encoding="utf-8")
     assert "RandomizedDelaySec={{ node_backup_check_randomized_delay }}" in timer
 
 
