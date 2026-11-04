@@ -388,4 +388,4 @@ def test_the_cli_writes_the_pause_into_the_decisions(tmp_path, monkeypatch) -> N
     out = tmp_path / "decisions.json"
     result = CliRunner().invoke(app, ["deploy-merge", "--repo", REPO, "--out", str(out)])
     assert result.exit_code == 0, result.output
-    assert "https://example.invalid/runs/2" in json.loads(out.read_text())["paused"]
+    assert "https://example.invalid/runs/2" in json.loads(out.read_text(encoding="utf-8"))["paused"]
