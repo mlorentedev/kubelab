@@ -43,6 +43,27 @@ def mint_node_tokens_cmd(
         raise typer.Exit(code=1)
 
 
+@app.command("revoke-r2-pair")
+def revoke_r2_pair_cmd(
+    pair: Annotated[str, typer.Option("--pair", help="Key prefix, e.g. backup.r2.readonly")],
+    apply: Annotated[bool, typer.Option("--apply", help="Revoke and unset; without it, only report")] = False,
+    forget: Annotated[
+        bool, typer.Option("--forget", help="Unset a pair whose token the account no longer has")
+    ] = False,
+) -> None:
+    """Retire an R2 pair no catalog entry owns: revoke its token, prove it gone, then unset it (BACKUP-057).
+
+    The token id is the pair's Access Key ID and is stored only in SOPS, so the
+    keys are unset only after the account stops knowing the id. A pair still in
+    SECRET_CATALOG is refused: something reads it. Nothing is printed but the
+    token's name.
+    """
+    from toolkit.features.backup_token_revoke import revoke_pair_cmd
+
+    if not revoke_pair_cmd(pair, apply=apply, forget=forget):
+        raise typer.Exit(code=1)
+
+
 @app.command("generate-password")
 def generate_password_cmd(
     env: Annotated[str, typer.Option("--env", "-e", help="SOPS file to write to")] = "common",

@@ -1788,6 +1788,15 @@ n8n-probe:
 backup-mint-node-tokens:
 	@$(TOOLKIT) backup mint-node-tokens --env $(or $(filter staging prod,$(ENV)),prod) $(if $(NODE),--node $(NODE)) $(if $(filter 1,$(ROTATE)),--rotate) $(if $(filter 1,$(WATCHER)),--watcher-only)
 
+# Retires an R2 pair no SECRET_CATALOG entry owns (BACKUP-057 PR 5): revokes its
+# token through the minter, proves the account no longer knows it, then unsets
+# both keys from every SOPS file holding them. Reports only, unless APPLY=1.
+# FORGET=1 unsets a pair whose token is already gone.
+.PHONY: backup-revoke-r2-pair
+backup-revoke-r2-pair:
+	@test -n "$(PAIR)" || (echo "Usage: make backup-revoke-r2-pair PAIR=backup.r2.<name> [APPLY=1] [FORGET=1]" && exit 1)
+	@$(TOOLKIT) backup revoke-r2-pair --pair $(PAIR) $(if $(filter 1,$(APPLY)),--apply) $(if $(filter 1,$(FORGET)),--forget)
+
 .PHONY: sync-terraform-backend
 sync-terraform-backend: ## Render infra/terraform/backend.s3.tfbackend from terraform.state (TF-007)
 	@$(TOOLKIT) sync terraform-backend

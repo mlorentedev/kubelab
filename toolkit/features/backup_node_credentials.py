@@ -60,7 +60,15 @@ RunFn = Callable[[list[str], dict[str, str]], "tuple[int, str, str]"]
 
 
 class MintError(RuntimeError):
-    """A mint did not complete. The message never contains a secret."""
+    """A mint did not complete. The message never contains a secret.
+
+    `status` is the HTTP status when the API answered with one, so a caller
+    can tell "no such token" (404) from a refusal without parsing the message.
+    """
+
+    def __init__(self, message: str, status: Optional[int] = None) -> None:
+        super().__init__(message)
+        self.status = status
 
 
 class Store(Protocol):
@@ -167,7 +175,7 @@ def cloudflare_http(token: str) -> HttpFn:
             with urllib.request.urlopen(req, timeout=_TIMEOUT) as resp:  # noqa: S310 - fixed https host
                 payload = json.loads(resp.read().decode())
         except urllib.error.HTTPError as exc:
-            raise MintError(f"{method} {path} returned HTTP {exc.code}") from None
+            raise MintError(f"{method} {path} returned HTTP {exc.code}", status=exc.code) from None
         except (urllib.error.URLError, TimeoutError) as exc:
             raise MintError(f"{method} {path} failed: {exc}") from None
         if not payload.get("success"):
