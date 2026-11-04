@@ -133,7 +133,7 @@ The size decides whether R = 30 fits the free tier. It is measured by the watche
   - it no longer claims a single shared bucket.
 
   The test fails on today's runbook.
-- [ ] Remove what PR 4a kept for the transition, once every node is in `own_bucket_nodes`:
+- [x] (✓ 2026-11-04, PR #3067. `backup-migrate` went with the shared branch, since its source was that branch; the SOPS keys of the read-only pair and its Cloudflare token are removed by the operator after merge, which the PR body lists) Remove what PR 4a kept for the transition, once every node is in `own_bucket_nodes`:
   - the shared `RESTIC_PASSWORD`, in both directions: the probe's fallback to it (`probe.sh`, `test_a_secret_from_before_per_node_passwords_still_opens_the_fleet`) and its key in the watcher Secret (`k8s_secrets.py`, `test_the_secret_carries_exactly_what_restic_reads`). Argo CD syncs the probe at merge, while `apply-secrets` rewrites the Secret by hand, and the two land in either order;
   - the shared branch of `node_secret_paths`, `node_repository` and `backup.yml`, with `own_bucket_nodes` itself once no node can be outside it;
   - the read-only pair `backup.r2.readonly_*`: revoke the token in Cloudflare, delete both keys from SOPS and both `SECRET_CATALOG` entries (read by nothing since PR 4a).
