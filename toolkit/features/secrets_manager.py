@@ -1630,50 +1630,18 @@ SECRET_CATALOG: list[SecretSpec] = [
         rotate_note=(
             "Use `restic key add` on every repository BEFORE changing this value — a "
             "rotation that replaces it first locks you out of existing snapshots. Update "
-            "the Bitwarden escrow copy in the same pass, or recovery silently regresses. "
-            "Then `make apply-secrets` in staging and prod for the R2 watcher."
+            "the Bitwarden escrow copy in the same pass, or recovery silently regresses."
         ),
-        # Staging too since BACKUP-055: the R2 watcher lives in base/ and reads
-        # every repository from both clusters.
-        services=("backup", "r2-backup-watcher"),
-        envs=("staging", "prod"),
-    ),
-    # BACKUP-055: the R2 watcher's credential. Object Read only on the
-    # kubelab-backups bucket, measured refusing a PutObject and a restic lock.
-    # Deliberately a second token rather than the nodes' read-write one above:
-    # the cluster must never hold anything that can `forget --prune`
-    # (tests/test_k8s_secrets_r2_watcher.py). Throwaway by nature — losing it
-    # loses no data — so it has no escrow copy.
-    # Read by nothing since BACKUP-057 PR 4, which moved the watcher onto
-    # backup.r2.watcher.*. The token stays live until PR 5 revokes it and
-    # deletes both keys, so the audit keeps them until then.
-    SecretSpec(
-        key_path="backup.r2.readonly_access_key_id",
-        expiry=Expiry.NEVER,
-        description="Cloudflare R2 read-only access key id — the backup watcher's until BACKUP-057 PR 4",
-        kind=SecretKind.EXTERNAL,
-        services=(),
-        format_hint="R2 API token Access Key ID (Object Read only, kubelab-backups)",
-        rotate_note=(
-            "R2 > Manage R2 API Tokens: create a new account token, Object Read only, "
-            "bucket kubelab-backups; set both halves with `toolkit secrets set ... --stdin`; "
-            "`make apply-secrets` in staging and prod; then revoke the old token. No restart: "
-            "the next watcher Job reads the new Secret."
-        ),
-        envs=("staging", "prod"),
-    ),
-    SecretSpec(
-        key_path="backup.r2.readonly_secret_access_key",
-        expiry=Expiry.NEVER,
-        description="Cloudflare R2 read-only secret access key — the backup watcher's until BACKUP-057 PR 4",
-        kind=SecretKind.EXTERNAL,
-        services=(),
-        format_hint="R2 API token Secret Access Key; shown once, not recoverable",
-        rotate_note="Rotated together with backup.r2.readonly_access_key_id — they are one credential.",
+        # Read by no node and no cluster workload since BACKUP-057: each node has
+        # its own password (`backup.nodes.<node>.restic_password`). It stays
+        # while `kubelab-backups` holds history it opens (#2920).
+        services=("backup",),
         envs=("staging", "prod"),
     ),
     # BACKUP-057: the watcher's read pair, on every node bucket and the shared
-    # one. It replaced the readonly pair above in PR 4.
+    # one. Deliberately not a node's read-write pair: the cluster must never hold
+    # anything that can `forget --prune` (tests/test_k8s_secrets_r2_watcher.py).
+    # Throwaway by nature, so it has no escrow copy.
     SecretSpec(
         key_path=WATCHER_ACCESS_KEY_PATH,
         expiry=Expiry.NEVER,

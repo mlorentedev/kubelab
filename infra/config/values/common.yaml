@@ -2692,20 +2692,12 @@ backup:
     lock_retention_days: 30
     bucket: kubelab-backups
     endpoint: "https://76967f5ede1ce50efce34d90b7e94958.r2.cloudflarestorage.com"
-    # restic addresses R2 through its S3 backend; this is the repository prefix,
-    # with the per-node repository name appended (one repository per node, so a
-    # compromised node cannot rewrite another's history).
+    # restic addresses R2 through its S3 backend; this is the repository prefix of
+    # the old shared bucket, with the per-node repository name appended. No node
+    # ships there any more: every node in `backup.sources` has a bucket of its own,
+    # `kubelab-backup-<node>`, written with its own pair and restic password.
+    # Still read by `coverage()` while the old bucket holds history (#2920).
     repo_prefix: "s3:https://76967f5ede1ce50efce34d90b7e94958.r2.cloudflarestorage.com/kubelab-backups"
-    # The nodes already moved to a bucket of their own (BACKUP-057), named
-    # `kubelab-backup-<node>` and written with that node's own pair and restic
-    # password. An existing node joins only at the migration sitting, after its
-    # copy is verified, in the same change that updates its `repository_ids`
-    # entry. A new node is born here instead (ace2, 2026-10-07): it never had a
-    # copy in the shared bucket, so there is nothing to migrate.
-    # Every consumer resolves through this list (backup_destination.node_repository,
-    # backup.yml), so no other edit moves a node. Absent from it: the shared
-    # bucket above, with the shared pair and password.
-    own_bucket_nodes: [ace2, beelink, rpi3, rpi4, vps]
     # Pinned static binary (BACKUP-044 Part 2), same idiom as k3s_version:
     # get_url + a checksum verified against upstream's own SHA256SUMS, not a
     # floating "latest" download. Arch is resolved per node at Ansible run

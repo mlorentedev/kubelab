@@ -1764,20 +1764,6 @@ n8n-probe:
 backup-mint-node-tokens:
 	@$(TOOLKIT) backup mint-node-tokens --env $(or $(filter staging prod,$(ENV)),prod) $(if $(NODE),--node $(NODE)) $(if $(filter 1,$(ROTATE)),--rotate) $(if $(filter 1,$(WATCHER)),--watcher-only)
 
-# Move ONE node into its own bucket (BACKUP-057 AC4): copy its history under a
-# temporary token, compare snapshot by snapshot, then declare, deploy,
-# re-initialise, ship and pin it. Stops at the first failure. Prod only, and ENV
-# is required, never defaulted. CHECK=1 lists the source and changes nothing.
-# Leaves common.yaml and targets.txt changed: commit them in a PR.
-# Runbook: docs/runbooks/offsite-backup-restore.md.
-.PHONY: backup-migrate
-backup-migrate:
-	@test -n "$(NODE)" || (echo "Usage: make backup-migrate NODE=<node> ENV=prod [CHECK=1]" && exit 1)
-	@test "$(NODE)" != "all" || (echo "backup-migrate takes exactly one node, never NODE=all" && exit 1)
-	@test "$(ENV)" = prod || (echo "backup-migrate needs ENV=prod, got '$(ENV)'" && exit 1)
-	@test -z "$(CHECK)" -o "$(CHECK)" = 1 || (echo "CHECK takes 1 or nothing, got '$(CHECK)'" && exit 1)
-	@$(TOOLKIT) backup migrate --node $(NODE) --env $(ENV) $(if $(CHECK),--check)
-
 .PHONY: sync-terraform-backend
 sync-terraform-backend: ## Render infra/terraform/backend.s3.tfbackend from terraform.state (TF-007)
 	@$(TOOLKIT) sync terraform-backend

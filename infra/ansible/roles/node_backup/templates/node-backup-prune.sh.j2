@@ -31,13 +31,14 @@ RESTIC="{{ node_backup_restic_install_path }} --repo $REPO --stuck-request-timeo
 
 # --- copied history (#1920) -------------------------------------------------
 # A snapshot `restic copy` brought in when this node moved to its own bucket
-# (toolkit/features/backup_migrate.py) keeps its own time, but every object it
-# brought was written here at the copy, and the lock ages objects. So `forget`
-# judges it weeks older than the lock does, asks to delete snapshots the lock
-# still refuses, and exits 3 every day for R days. restic marks a copy with
-# `original` (the field unmatched_snapshots() reads). The migration copies
-# before this node's first ship here, so once the oldest snapshot WITHOUT
-# `original` is older than R, everything copied is older than R too.
+# (the one-off `backup-migrate`, removed once every node had moved) keeps its
+# own time, but every object it brought was written here at the copy, and the
+# lock ages objects. So `forget` judges it weeks older than the lock does, asks
+# to delete snapshots the lock still refuses, and exits 3 every day for R days.
+# restic marks a copy with `original` (the field unmatched_snapshots() reads).
+# The migration copies before this node's first ship here, so once the oldest
+# snapshot WITHOUT `original` is older than R, everything copied is older than R
+# too.
 #
 # That order is the assumption. A later `restic copy` or `restic rewrite` would
 # break it; the lock still refuses the delete, so the failure is a loud exit 3,

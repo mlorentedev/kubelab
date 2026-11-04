@@ -7,18 +7,16 @@ policy each mint requests from the Cloudflare API: exactly one resource, the
 node's own bucket, with Object Read & Write and nothing more. The watcher's read
 token names the backup buckets and nothing else.
 
-AC1, the consumers: every consumer uses a node's own bucket, pair and password
-once the node is declared in `backup.r2.own_bucket_nodes`, and the shared ones
-before that, so the switch happens by declaration and never by the timing of a
-merge. Checked against a fixture that declares every node migrated, not against
-the live `common.yaml`, which lists none until the migration sitting. The
-watcher is the declared exception: one read pair spans every bucket, by design
+AC1, the consumers: every consumer uses a node's own bucket, pair and password,
+unconditionally. The shared bucket's pair and password are not even offered to
+the playbook's render, so a consumer that fell back to them would fail on an
+undefined variable instead of quietly shipping to the wrong bucket. The watcher
+is the declared exception: one read pair spans every bucket, by design
 (proposal *What* §4), so for it the test asserts the opposite of the rule.
 """
 
 from __future__ import annotations
 
-import copy
 import pathlib
 import re
 from typing import Any
@@ -32,7 +30,6 @@ from toolkit.features.backup_destination import (
     node_repository,
     node_restic,
     node_secret_paths,
-    own_bucket_nodes,
     render_watcher_targets,
     watcher_password_paths,
 )
@@ -53,15 +50,6 @@ NODES = sorted(COMMON["backup"]["sources"])
 R2 = COMMON["backup"]["r2"]
 LEGACY = R2["bucket"]
 SHARED_PATHS = ("backup.r2.access_key_id", "backup.r2.secret_access_key", "backup.restic_password")
-
-
-def _declared(nodes: list[str]) -> dict[str, Any]:
-    config = copy.deepcopy(COMMON)
-    config["backup"]["r2"]["own_bucket_nodes"] = list(nodes)
-    return config
-
-
-MIGRATED = _declared(NODES)
 
 
 # ── AC3: what each mint requests ──────────────────────────────────────────────
@@ -120,84 +108,69 @@ def test_the_watcher_policy_names_exactly_the_backup_buckets_read_only() -> None
 # ── the declaration ───────────────────────────────────────────────────────────
 
 
-def test_after_the_migration_sitting_every_node_is_in_its_own_bucket() -> None:
-    """AC4: each node was declared only once its copy was verified, and all were.
+def test_no_node_is_declared_in_or_out_of_its_own_bucket() -> None:
+    """Every node in `backup.sources` ships to its own bucket; there is no list that says which.
 
-    ace2 got there by birth (spec AI-009 AC7); the other four by `make
-    backup-migrate`, each declaration committed after its comparison passed.
-    A node added to `backup.sources` later must be born declared, as ace2 was.
+    ace2 was born there (spec AI-009 AC7) and the other four moved on 2026-10-08.
+    A list that can leave a node out is a branch that can ship it to the old
+    bucket again, which is the thing this guards.
     """
-    assert own_bucket_nodes(COMMON) == frozenset(NODES)
-
-
-def test_a_declared_node_that_backs_nothing_up_is_refused() -> None:
-    with pytest.raises(ValueError, match="phantom"):
-        own_bucket_nodes(_declared(["phantom"]))
+    assert "own_bucket_nodes" not in R2
 
 
 # ── backup_destination: the repository and the secrets each node uses ─────────
 
 
-def test_every_migrated_node_has_a_bucket_of_its_own() -> None:
-    repos = {node: node_repository(MIGRATED, node) for node in NODES}
+def test_every_node_has_a_bucket_of_its_own() -> None:
+    repos = {node: node_repository(COMMON, node) for node in NODES}
     for node, repo in repos.items():
         assert repo == f"s3:{R2['endpoint']}/{node_bucket(node)}", node
         assert f"/{LEGACY}" not in repo, node
     assert len(set(repos.values())) == len(NODES)
 
 
-def test_an_undeclared_node_keeps_its_shared_repository() -> None:
-    """The VPS is the node whose repository name differs from its key: `kubelab-vps`."""
-    undeclared = _declared([])
-    assert node_repository(undeclared, "vps") == f"{R2['repo_prefix']}/kubelab-vps"
-    assert node_repository(undeclared, "rpi3") == f"{R2['repo_prefix']}/rpi3"
-
-
-def test_every_migrated_node_reads_its_own_pair_and_password() -> None:
-    paths = {node: node_secret_paths(MIGRATED, node) for node in NODES}
+def test_every_node_reads_its_own_pair_and_password() -> None:
+    paths = {node: node_secret_paths(node) for node in NODES}
     for node, (access, secret, password) in paths.items():
         assert (access, secret, password) == (access_key_path(node), secret_key_path(node), restic_password_path(node))
     for kind in range(3):
         assert len({p[kind] for p in paths.values()}) == len(NODES), f"two nodes share secret #{kind}"
 
 
-def test_an_undeclared_node_reads_the_shared_secrets() -> None:
-    config = _declared(["rpi3"])
-    assert node_secret_paths(config, "vps") == SHARED_PATHS
-    assert node_secret_paths(config, "rpi3") != SHARED_PATHS
+def test_no_node_reads_the_shared_secrets() -> None:
+    for node in NODES:
+        assert not set(node_secret_paths(node)) & set(SHARED_PATHS), node
 
 
 # ── the watcher: targets, Secret and token ────────────────────────────────────
 
 
-def test_the_watcher_targets_follow_the_declaration() -> None:
+def test_the_watcher_targets_name_each_nodes_own_bucket() -> None:
     rows = {
         line.split()[0]: line.split()[1]
-        for line in render_watcher_targets(_declared(["rpi3"])).splitlines()
+        for line in render_watcher_targets(COMMON).splitlines()
         if line.strip() and not line.startswith("#")
     }
-    assert rows["rpi3"] == f"s3:{R2['endpoint']}/{node_bucket('rpi3')}"
-    assert rows["vps"] == f"{R2['repo_prefix']}/kubelab-vps"
+    assert rows == {node: f"s3:{R2['endpoint']}/{node_bucket(node)}" for node in NODES}
 
 
-def test_the_watcher_gets_each_nodes_own_password_once_it_has_moved() -> None:
-    paths = watcher_password_paths(_declared(["rpi3"]))
-    assert set(paths) == {f"RESTIC_PASSWORD_{node.upper()}" for node in NODES}
-    assert paths["RESTIC_PASSWORD_RPI3"] == restic_password_path("rpi3")
-    assert paths["RESTIC_PASSWORD_VPS"] == "backup.restic_password"
+def test_the_watcher_gets_each_nodes_own_password() -> None:
+    paths = watcher_password_paths(COMMON)
+    assert paths == {f"RESTIC_PASSWORD_{node.upper()}": restic_password_path(node) for node in NODES}
+    assert "backup.restic_password" not in paths.values()
 
 
-def test_every_migrated_password_the_watcher_carries_is_that_nodes_own_key() -> None:
+def test_every_password_the_watcher_carries_is_that_nodes_own_key() -> None:
     """Never a copy: the watcher reads the node's SOPS key, so a rotation reaches both."""
-    for node, path in ((n, watcher_password_paths(MIGRATED)[f"RESTIC_PASSWORD_{n.upper()}"]) for n in NODES):
+    for node, path in ((n, watcher_password_paths(COMMON)[f"RESTIC_PASSWORD_{n.upper()}"]) for n in NODES):
         assert path == restic_password_path(node)
 
 
-def test_the_watcher_secret_maps_each_migrated_node_to_its_own_password() -> None:
+def test_the_watcher_secret_maps_each_node_to_its_own_password() -> None:
     from toolkit.features.k8s_secrets import SECRET_DEFINITIONS, WATCHER_SECRET, _resolve_config_keys
 
     (mapping,) = [m for m in SECRET_DEFINITIONS if m.name == WATCHER_SECRET]
-    keys = _resolve_config_keys(mapping, MIGRATED).keys
+    keys = _resolve_config_keys(mapping, COMMON).keys
     for node in NODES:
         assert keys[f"RESTIC_PASSWORD_{node.upper()}"] == restic_password_path(node).upper().replace(".", "_")
     assert (keys["AWS_ACCESS_KEY_ID"], keys["AWS_SECRET_ACCESS_KEY"]) == (
@@ -207,7 +180,7 @@ def test_the_watcher_secret_maps_each_migrated_node_to_its_own_password() -> Non
 
 
 def test_the_watcher_pair_is_none_of_the_nodes_pairs() -> None:
-    node_paths = {p for node in NODES for p in node_secret_paths(MIGRATED, node)[:2]}
+    node_paths = {p for node in NODES for p in node_secret_paths(node)[:2]}
     assert {WATCHER_ACCESS_KEY_PATH, WATCHER_SECRET_KEY_PATH}.isdisjoint(node_paths)
 
 
@@ -242,21 +215,18 @@ def _role_vars(config: dict[str, Any], inventory_hostname: str) -> dict[str, str
     (role,) = [r for r in play["roles"] if str(r.get("role", "")).endswith("node_backup")]
     env = jinja2.Environment(undefined=jinja2.StrictUndefined)
     env.filters["regex_replace"] = _regex_replace
-    env.filters["bool"] = lambda value: str(value).strip().lower() in ("true", "yes", "1")
     # Built from the toolkit's own key paths, so a key the toolkit moves is a
     # key the playbook no longer finds, and this test goes red.
     secrets: dict[str, Any] = {}
-    _put(secrets, "backup.restic_password", "fixture-shared")
-    _put(secrets, "backup.r2.access_key_id", "shared-access")
-    _put(secrets, "backup.r2.secret_access_key", "shared-secret")
+    # The shared pair and password are deliberately absent: StrictUndefined then
+    # fails the render of any var that reads them.
     for n in NODES:
         _put(secrets, access_key_path(n), f"{n}-access")
         _put(secrets, secret_key_path(n), f"{n}-secret")
         _put(secrets, restic_password_path(n), f"fixture-{n}")
     context: dict[str, Any] = {"config": config, "secrets": secrets, "inventory_hostname": inventory_hostname}
-    for name in ("node_short_name", "node_own_bucket"):
-        # Rendered to a string, as Ansible may hand it over: the role vars must survive "False".
-        context[name] = env.from_string(play["vars"][name]).render(context)
+    assert "node_own_bucket" not in play["vars"]
+    context["node_short_name"] = env.from_string(play["vars"]["node_short_name"]).render(context)
     keys = (
         "node_backup_r2_repository",
         "node_backup_restic_password",
@@ -266,11 +236,11 @@ def _role_vars(config: dict[str, Any], inventory_hostname: str) -> dict[str, str
     return {k: env.from_string(role["vars"][k]).render(context).strip() for k in keys}
 
 
-HOSTS = {"beelink": "beelink", "rpi3": "rpi3", "rpi4": "rpi4", "vps": "kubelab-vps"}
+HOSTS = {"ace2": "ace2", "beelink": "beelink", "rpi3": "rpi3", "rpi4": "rpi4", "vps": "kubelab-vps"}
 
 
-def test_the_playbook_gives_every_migrated_node_its_own_bucket_pair_and_password() -> None:
-    rendered = {node: _role_vars(MIGRATED, host) for node, host in HOSTS.items()}
+def test_the_playbook_gives_every_node_its_own_bucket_pair_and_password() -> None:
+    rendered = {node: _role_vars(COMMON, host) for node, host in HOSTS.items()}
     for node, values in rendered.items():
         assert values["node_backup_r2_repository"] == f"s3:{R2['endpoint']}/{NODE_BUCKET_PREFIX}{node}", node
         assert values["node_backup_restic_password"] == f"fixture-{node}", node
@@ -278,14 +248,8 @@ def test_the_playbook_gives_every_migrated_node_its_own_bucket_pair_and_password
         assert values["node_backup_r2_secret_key"] == f"{node}-secret", node
 
 
-def test_the_playbook_keeps_an_undeclared_node_on_the_shared_bucket() -> None:
-    values = _role_vars(_declared(["rpi3"]), "kubelab-vps")
-    assert values == {
-        "node_backup_r2_repository": f"{R2['repo_prefix']}/kubelab-vps",
-        "node_backup_restic_password": "fixture-shared",
-        "node_backup_r2_access_key": "shared-access",
-        "node_backup_r2_secret_key": "shared-secret",
-    }
+def test_the_hosts_this_test_renders_are_every_node_that_backs_up() -> None:
+    assert {node for node in HOSTS} == set(NODES)
 
 
 # ── the drills and the coverage report: what they read R2 with ────────────────
@@ -305,17 +269,10 @@ class _CM:
         return f"value-of-{path}"
 
 
-def test_a_drill_reads_a_migrated_node_with_its_own_pair_and_password() -> None:
-    cm = _CM(MIGRATED)
+def test_a_drill_reads_a_node_with_its_own_pair_and_password() -> None:
+    cm = _CM(COMMON)
     repo, env = node_restic(cm, "rpi3")
     assert repo == f"s3:{R2['endpoint']}/{node_bucket('rpi3')}"
     assert set(cm.asked) == {access_key_path("rpi3"), secret_key_path("rpi3"), restic_password_path("rpi3")}
     assert env["RESTIC_PASSWORD"] == f"value-of-{restic_password_path('rpi3')}"
     assert env["AWS_ACCESS_KEY_ID"] == f"value-of-{access_key_path('rpi3')}"
-
-
-def test_a_drill_reads_an_undeclared_node_with_the_shared_secrets() -> None:
-    cm = _CM(_declared([]))
-    repo, env = node_restic(cm, "vps")
-    assert repo == f"{R2['repo_prefix']}/kubelab-vps"
-    assert set(cm.asked) == set(SHARED_PATHS)
