@@ -17,6 +17,7 @@
   .label { display: inline-block; margin: 0 .25rem .15rem 0; padding: 0 .4rem; border-radius: 9px; background: #eaeef2; font-size: 12px; }
   .muted { color: #59636e; }
   #error { color: #cf222e; }
+  tbody.stale { opacity: .55; }
 </style>
 </head>
 <body>
@@ -32,7 +33,7 @@
 // Every forge value is written with textContent, never as HTML: titles and labels are user input.
 const el = (tag, text, cls) => { const e = document.createElement(tag); if (text !== undefined) e.textContent = text; if (cls) e.className = cls; return e; };
 const ago = (iso) => { const m = Math.round((Date.now() - new Date(iso)) / 60000); return m < 60 ? m + " min" : m < 2880 ? Math.round(m / 60) + " h" : Math.round(m / 1440) + " d"; };
-let items = [];
+let items = [], readAt = null;
 
 function render() {
   const q = document.getElementById("filter").value.toLowerCase();
@@ -64,10 +65,15 @@ async function load() {
       box.append(el("span", s.source + " - " + when + (s.reachable ? "" : " - unreachable"), s.reachable ? "source" : "source down"));
     }
     items = data.items;
+    readAt = new Date();
     document.getElementById("error").textContent = "";
+    document.getElementById("items").classList.remove("stale");
     render();
   } catch (e) {
-    document.getElementById("error").textContent = "Could not load the queue: " + e.message;
+    // The rows stay, dimmed and dated, so a failed read never passes for a current one.
+    const last = readAt ? " The rows below are the last good read, " + ago(readAt) + " ago." : "";
+    document.getElementById("error").textContent = "Could not load the queue: " + e.message + "." + last;
+    document.getElementById("items").classList.add("stale");
   }
 }
 

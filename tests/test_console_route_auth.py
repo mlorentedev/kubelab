@@ -39,7 +39,7 @@ AUTHELIA = {
 @cache
 def _rendered(env: str) -> str:
     out = subprocess.run(
-        ["kubectl", "kustomize", str(ROOT / "infra/k8s/overlays" / env)], capture_output=True, text=True
+        ["kubectl", "kustomize", str(ROOT / "infra/k8s/overlays" / env)], capture_output=True, text=True, encoding="utf-8"
     )
     assert out.returncode == 0, out.stderr
     return out.stdout
@@ -82,7 +82,7 @@ def test_console_host_goes_through_authelia_to_the_api(env: str) -> None:
 @pytest.mark.parametrize("env", OVERLAYS)
 def test_authelia_requires_a_login_on_the_console_host(env: str) -> None:
     domain = _console_domain(env)
-    rules = yaml.safe_load(AUTHELIA[env].read_text())["access_control"]["rules"]
+    rules = yaml.safe_load(AUTHELIA[env].read_text(encoding="utf-8"))["access_control"]["rules"]
 
     def matches(rule: dict) -> bool:
         domains = rule.get("domain")
@@ -104,7 +104,7 @@ def _declared_middlewares(env: str) -> set[str]:
 @pytest.mark.parametrize("env", OVERLAYS)
 def test_generated_routes_name_middlewares_that_exist(env: str) -> None:
     declared = _declared_middlewares(env)
-    docs = yaml.safe_load_all((ROOT / f"infra/k8s/overlays/{env}/generated/ingress.yaml").read_text())
+    docs = yaml.safe_load_all((ROOT / f"infra/k8s/overlays/{env}/generated/ingress.yaml").read_text(encoding="utf-8"))
     missing = {
         m["name"]
         for doc in docs
