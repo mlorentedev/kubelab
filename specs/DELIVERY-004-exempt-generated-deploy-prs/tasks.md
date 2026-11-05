@@ -88,6 +88,10 @@ empty deploy PRs instead of merging them, and pin the merge to the judged head s
   tag (a trailing newline that `$` admits under `match`) and on the resolved sha. ✓ 2026-11-04
 - [x] F9: `classify_diff` is split by rule and `judge` loses its readiness checks to `_not_ready`; C901
   is enforced for `toolkit/features/deploy_*.py`. ✓ 2026-11-04
+- [x] Independent re-review (PASS-WITH-GAPS) minors, all in tests: N1, the name scan allow-lists the head
+  keys the granting side may read (`sha`); N2, the judge step's `env:`, the steps before it and the absence
+  of workflow- or job-level `env` are pinned; N3, every non-green staging verdict pauses, and a skipped job
+  over an older green does not. ✓ 2026-11-04
 
 ## Closing
 
