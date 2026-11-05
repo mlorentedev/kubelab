@@ -193,3 +193,21 @@ def test_under_xdist_the_heaviest_file_is_dispatched_first(tmp_path: Path) -> No
     )
     assert run.returncode == 0, run.stdout[-800:]
     assert log.read_text(encoding="utf-8").splitlines()[0] == "test_heavy"
+
+
+@pytest.mark.parametrize(("result", "code"), [("success", 0), ("failure", 1), ("cancelled", 1), ("skipped", 1)])
+def test_the_gate_step_exits_non_zero_on_every_result_but_success(result: str, code: int) -> None:
+    """Runs the step's own script, not a reading of it: the text could be right and the shell wrong."""
+    script = _ci()["jobs"]["tests"]["steps"][0]["run"].replace("${{ needs.test-shards.result }}", result)
+    assert "${{" not in script, script
+    assert subprocess.run(["bash", "-e", "-c", script], capture_output=True, timeout=30).returncode == code
+
+
+def test_the_record_still_knows_most_of_the_suite() -> None:
+    """A file the record lacks weighs the mean: correct, but balance degrades as they pile up.
+
+    When this fails, refresh the record from a recent CI run: `make test-durations RUN=<id>`.
+    """
+    files = _suite_files()
+    unknown = [f for f in files if f not in _record()]
+    assert len(unknown) <= len(files) // 10, f"{len(unknown)} files missing from the record: refresh it"
