@@ -4,6 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 710 | [A GitHub App's webhook is half API and half settings page, and an App created without one answers 404](lesson-710-github-app-webhook-is-half-api-half-settings.md) | 2026-11-05 |
 | 706 | [One job name for several environments hides which environment a run judged](lesson-706-one-job-name-for-several-environments-hides-the-verdict.md) | 2026-11-04 |
 | 699 | [Accepting `mergeable_state: unstable` stops enforcing every check that is not required](lesson-699-unstable-stops-enforcing-every-check-not-required.md) | 2026-11-03 |
 | 691 | [A Renovate regex that ends in a dollar sign matches nothing and reports success](lesson-691-a-renovate-regex-that-ends-in-a-dollar-sign-matches-nothing-and-reports-success.md) | 2026-11-02 |

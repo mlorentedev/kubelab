@@ -576,6 +576,13 @@ secrets-audit:
 acme-token-scope:
 	@$(TOOLKIT) secrets acme-token-scope $(if $(LIVE),--live,)
 
+# Plan only. `APPLY=1` points the kubelab-console GitHub App's webhook at the
+# API's receiver (CONSOLE-004); `SECRET=1` also resends the secret after a
+# rotation. Prod only: the App has one hook. Events and Active are App settings.
+.PHONY: forge-github-hook
+forge-github-hook:
+	@$(TOOLKIT) services forge github-hook $(if $(APPLY),--apply,) $(if $(SECRET),--resend-secret,)
+
 # Plan only. `APPLY=1` is what creates organizations and repositories for real —
 # opt-in because the first run mutates a live forge (TOOL-035, #1076).
 .PHONY: gitea-reconcile

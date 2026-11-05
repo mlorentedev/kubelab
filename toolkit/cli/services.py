@@ -1043,6 +1043,60 @@ def check_gitea_token_scopes(
     return 1 if failures else 0
 
 
+forge_app = typer.Typer(help="The console's forge integrations (CONSOLE-004)")
+app.add_typer(forge_app, name="forge")
+
+
+@forge_app.command("github-hook")
+def forge_github_hook(
+    apply: Annotated[bool, typer.Option("--apply", help="Write the config. Without it, plan only.")] = False,
+    resend_secret: Annotated[
+        bool, typer.Option("--resend-secret", help="Write the secret even with no visible drift (after a rotation)")
+    ] = False,
+) -> None:
+    """Converge the kubelab-console GitHub App's webhook to the API's receiver.
+
+    Plan only by default. The events the App subscribes to and the hook's Active
+    toggle are App settings the API cannot set: the operator's step.
+
+    Prod only, with no --env: the App has one hook, and staging is VPN-only, so
+    pointing it at staging would stop every delivery.
+    """
+    from toolkit.features.github_app_hook import GitHubAppHooks, HookConfigError, converge, declared_hook
+
+    merged = ConfigurationManager("prod", get_settings().project_root).get_merged_config()
+    app_id = merged["infra"]["forge"]["github"]["app_id"]
+    key = merged.get("apps", {}).get("services", {}).get("core", {}).get("github_app", {}).get("private_key", "")
+    secret = merged.get("apps", {}).get("platform", {}).get("api", {}).get("forge_github_webhook_secret", "") or ""
+    if not key:
+        logger.error("no apps.services.core.github_app.private_key in SOPS (common.enc.yaml)")
+        raise typer.Exit(1)
+    spec = declared_hook(merged)
+    console.print(f"webhook URL: {spec.url}")
+    try:
+        result = converge(
+            GitHubAppHooks(app_id, key), spec, secret=str(secret), apply=apply, resend_secret=resend_secret
+        )
+    except HookConfigError as e:
+        logger.error(str(e))
+        raise typer.Exit(1) from e
+    for field, live, want in result.changes:
+        console.print(f"  {field}: {live!r} -> {want!r}")
+    if result.wrote:
+        console.print(f"[green]written and read back[/green]: {spec.url} (secret sent, not readable back)")
+    elif result.changes:
+        console.print("[yellow]drift, not written[/yellow]: rerun with --apply")
+    else:
+        console.print(f"[green]in sync[/green]: {spec.url}")
+    if result.missing_events:
+        console.print(
+            f"[yellow]not subscribed[/yellow]: {', '.join(result.missing_events)}. In the App's settings, "
+            "Permissions & events > Subscribe to events, tick them and save; the API cannot set this."
+        )
+    if result.missing_events or (result.changes and not result.wrote):
+        raise typer.Exit(2)
+
+
 vikunja_app = typer.Typer(help="Audit the Vikunja task platform")
 app.add_typer(vikunja_app, name="vikunja")
 
