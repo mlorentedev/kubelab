@@ -44,6 +44,17 @@ type Receiver struct {
 	Secrets map[string]string
 	Sources []Source
 	Store   EventStore
+
+	sourcesErr error // the declaration did not parse; see NewReceiver
+}
+
+// NewReceiver reads the sources from their declaration (`forge:owner/repo,...`).
+// A declaration that does not parse makes every signed delivery answer 503, never
+// 204: a 2xx is a success the forge does not redeliver, so the delivery would be
+// lost for good while both sides look healthy.
+func NewReceiver(declaration string, secrets map[string]string, store EventStore) *Receiver {
+	sources, err := ParseSources(declaration)
+	return &Receiver{Secrets: secrets, Sources: sources, Store: store, sourcesErr: err}
 }
 
 // declares reports whether the delivery's repository is one the reconcile reads.
@@ -83,7 +94,14 @@ func (rc *Receiver) Handle(ctx context.Context, forgeName string, header http.He
 	if delivery == "" || event == "" || !json.Valid(payload) {
 		return http.StatusBadRequest
 	}
+	if rc.sourcesErr != nil {
+		log.Printf("forge webhook: %s delivery %s: sources: %v", forgeName, delivery, rc.sourcesErr)
+		return http.StatusServiceUnavailable
+	}
 	if !rc.declares(forgeName, payload) {
+		// Unreachable while the hook's scope matches the sources, so this line is what
+		// shows the drift: a renamed repository, a widened installation, a stale entry.
+		log.Printf("forge webhook: %s delivery %s: repository not declared, not stored", forgeName, delivery)
 		return http.StatusNoContent
 	}
 	stored := Event{Forge: forgeName, DeliveryID: delivery, Type: event, Payload: payload}

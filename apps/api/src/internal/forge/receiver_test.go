@@ -113,6 +113,24 @@ func TestReceiver(t *testing.T) {
 	}
 }
 
+// A declaration that does not parse must not turn every delivery into a 204,
+// which the forge records as delivered and never retries.
+func TestReceiverAsksForRedeliveryWhenTheSourcesDoNotParse(t *testing.T) {
+	const secret, body = "fixture", `{"action":"opened","repository":{"name":"kubelab","owner":{"login":"mlorentedev"}}}`
+	h := header("X-Gitea-Signature", sign(secret, body), "X-Gitea-Delivery", "d", "X-Gitea-Event", "issues")
+	for _, decl := range []string{"gitea:mlorentedev/kubelab", "gitea:mlorentedev/kubelab,not-a-source"} {
+		st := &fakeStore{}
+		rc := forge.NewReceiver(decl, map[string]string{"gitea": secret}, st)
+		want, stored := 202, 1
+		if strings.Contains(decl, "not-a-source") {
+			want, stored = 503, 0
+		}
+		if got := rc.Handle(context.Background(), "gitea", h, strings.NewReader(body)); got != want || len(st.events) != stored {
+			t.Fatalf("%q: status %d stored %d, want %d stored %d", decl, got, len(st.events), want, stored)
+		}
+	}
+}
+
 func TestReceiverRejectsSignedGarbage(t *testing.T) {
 	const secret, body = "fixture", "not json"
 	rc := &forge.Receiver{Secrets: map[string]string{"gitea": secret}, Sources: declared, Store: &fakeStore{}}
