@@ -26,9 +26,9 @@ owner: manu
 > Draft order. The values, and so every task after "Measure", wait for the data.
 
 - [ ] Collect: #3106 merged and applied in prod (`make provision NODE=vps ENV=prod TAGS=k3s`, dry run first)
-- [ ] [AC4] Read Headscale's access-log lines in prod: the `101` and the long upgraded connection
-- [ ] Measure: after seven or more days, the slow-request distribution per router from Loki, through a toolkit command, not by hand
-- [ ] For each route with requests longer than the candidate bound: measure its time to first header directly, and list it only if its headers are late
+- [ ] [AC4] Read Headscale's access-log lines in prod: the `101` and the long upgraded connection. Blocks choosing the default: if the handshake's headers are not bounded by the `101`, Headscale gets an exception first
+- [ ] Measure: after seven or more days, the slow-request distribution per router from Loki, through a toolkit command, not by hand. It reports each router's request count beside the distribution, so a router with no slow requests reads as "no sample", not as "needs no exception"
+- [ ] For each route with requests longer than the candidate bound: measure its time to first header directly, and list it only if its headers are late. The default is sized from these time-to-first-header figures, never from the access-log durations, which include the body
 - [ ] [AC5] ADR: default, exceptions with their measurements, `dialTimeout`, `idleConnTimeout`, duration versus count
 - [ ] [AC3] Write the failing coverage test: every route has the default or a declared exception, and every exception matches a route
 - [ ] [AC2] [AC3] Declare the exceptions in `common.yaml`; the generator emits the `ServersTransport` and the reference
