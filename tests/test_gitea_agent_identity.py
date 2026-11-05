@@ -294,3 +294,44 @@ def test_execute_without_a_configurator_reports_the_grant_as_failed() -> None:
         declared_webhooks=N8N_HOOK_ONLY,
     )
     assert [target for target, _ in report.failures] == ["collaborator personal/tool"]
+
+
+# --- the agent owns nothing, checked where the bot's and reviewer's are ----------
+
+
+@pytest.mark.parametrize("args", [(), ("--apply",)], ids=["plan", "apply"])
+def test_reconcile_reports_what_the_agent_owns(monkeypatch: pytest.MonkeyPatch, args: tuple[str, ...]) -> None:
+    """ADR-062's amendment holds the agent to the machine class's rule: it owns
+    nothing, so retiring it is a membership deletion. The reconcile prints that
+    property for the bot and the reviewer; without the agent in the same report a
+    repository created under `dedalo` would pass every run unseen."""
+    from typer.testing import CliRunner
+
+    import toolkit.cli.services as cli
+    import toolkit.features.gitea_repos as repos
+    from tests.test_gitea_repo_reconcile import _NoForgeAdmin
+    from toolkit.features.gitea_repos import ReconcilePlan
+
+    identities = {"bot": "hefesto", "reviewer": "mentor", "agent": "dedalo"}
+
+    class _Config:
+        def __init__(self, *_a: object, **_k: object) -> None:
+            pass
+
+        def get_merged_config(self) -> dict[str, object]:
+            return {"apps": {"auth": {"identities": identities}}}
+
+    reported: list[str] = []
+    monkeypatch.setattr(cli, "_gitea_clients", lambda env: (_NoForgeAdmin(), None, "hefesto", "https://forge.invalid"))
+    monkeypatch.setattr(cli, "ConfigurationManager", _Config)
+    monkeypatch.setattr(cli, "_report_machine_ownership", lambda admin, login, **k: reported.append(login))
+    monkeypatch.setattr(repos, "load_declaration", lambda merged: {"personal": [RepoSpec("tool")]})
+    monkeypatch.setattr(repos, "load_settings", lambda merged: None)
+    monkeypatch.setattr(repos, "load_webhooks", lambda merged: ())
+    monkeypatch.setattr(repos, "plan_reconcile", lambda *a, **k: ReconcilePlan())
+    monkeypatch.setattr(repos, "execute", lambda *a, **k: repos.ExecutionReport())
+
+    result = CliRunner().invoke(cli.app, ["gitea", "reconcile", *args])
+
+    assert result.exit_code == 0, result.output
+    assert reported == ["hefesto", "mentor", "dedalo"]

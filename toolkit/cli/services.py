@@ -485,11 +485,16 @@ def gitea_reconcile(
     # The PR reviewer (TOOL-080), resolved through the identity map like the bot.
     # Absent until its row is declared, and then the plan carries its read team.
     reviewer = merged["apps"]["auth"]["identities"].get("reviewer")
+    # The agents' authoring account (AUTH-022) is held to the same rule: it
+    # writes where a repository declares it, and owns nothing.
+    agent = merged["apps"]["auth"]["identities"].get("agent")
 
     def report_ownership() -> None:
         _report_machine_ownership(admin, bot_username)
         if reviewer:
             _report_machine_ownership(admin, str(reviewer), criterion="TOOL-080 AC5")
+        if agent:
+            _report_machine_ownership(admin, str(agent), criterion="AUTH-022 AC3")
 
     if not declared:
         logger.warning("no `gitea.organizations` declared in common.yaml — nothing to reconcile")
