@@ -32,7 +32,14 @@ owner: manu
 - [x] Fixed `test_restore_drill.py` assertion broken by logger wrapping under the longer xdist basetemp
 - [x] Lessons `lesson-710-*`, `lesson-712-*`
 - [x] [AC1] Serial vs parallel on the final commit, locally and in CI
-- [ ] [AC2] p50 over 20 PR runs: needs sharding (#3111)
+- [ ] [AC2] p50 over 20 PR runs (after #3111 merges)
+- [x] Phase 2 (#3111) branch `feat/issue-3111-shard-tests`; per-file durations measured on CI (probe run 41970560974) into `tests/shard_durations.json`
+- [x] [AC5] Write failing tests: file-level plan disjoint and complete (with an unknown file), order-independent, balanced within the heaviest file; plugin wiring end to end; stored durations summed per file (`tests/test_test_shards.py`)
+- [x] [AC5] `tests/sharding.py` plugin (`--shard`, `--shard-durations`, `--store-shard-durations`), registered from `tests/conftest.py`
+- [x] [AC7] Write failing tests on `ci.yml`: matrix matches `SHARD=I/N`, `Tests` needs the shards, runs `if: always()` and fails on any result but success, coverage upload includes hidden files
+- [x] [AC4][AC7] `ci.yml`: `test-shards` matrix job and `Tests` aggregate (coverage combine, then lint/types/validate-sync/Ansible unchanged)
+- [x] [AC5][AC6] Locally: three shards vs a single run on the same tree, counts and combined `TOTAL`
+- [ ] [AC6] In CI: combined `TOTAL` vs master's single-runner `TOTAL`
 - [x] [AC4] `Tests` stays the required check name (unchanged job `name:`)
 
 ## Closing
