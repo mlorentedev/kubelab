@@ -98,6 +98,9 @@ access_control:
     # their own IngressRoute rule with no ForwardAuth, so they never reach this.
     - domain: 'status.kubelab.live'
       policy: one_factor
+    # The forge console (CONSOLE-004), its own host.
+    - domain: 'console.kubelab.live'
+      policy: one_factor
 
     # VPN users get one_factor for everything else
     - domain: '*.kubelab.live'

@@ -192,3 +192,53 @@ func nonNil(s []string) []string {
 	}
 	return s
 }
+
+// queueLimit bounds one answer; the queue is read by one operator, newest first.
+const queueLimit = 500
+
+// Queue reads the open items of the declared sources, newest first, and each
+// declared source's state. A source never read comes back unreachable with no
+// time, so the page shows it rather than dropping it. Rows of a source no longer
+// declared stay in the table and out of the answer.
+func (m ForgeModel) Queue(ctx context.Context, sources []forge.Source) ([]forge.SourceState, []forge.Item, error) {
+	db, err := Pool(m.Conf)
+	if err != nil {
+		return nil, nil, err
+	}
+	forges, owners, repos := make([]string, len(sources)), make([]string, len(sources)), make([]string, len(sources))
+	for i, s := range sources {
+		forges[i], owners[i], repos[i] = s.Forge, s.Owner, s.Repo
+	}
+	const declared = `unnest($1::text[], $2::text[], $3::text[]) WITH ORDINALITY AS d(forge, owner, repo, pos)`
+
+	rows, err := db.Query(ctx, `SELECT d.forge, d.owner, d.repo, s.as_of, coalesce(s.source_reachable, false)
+		FROM `+declared+` LEFT JOIN forge_source s USING (forge, owner, repo) ORDER BY d.pos`, forges, owners, repos)
+	if err != nil {
+		return nil, nil, err
+	}
+	states, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (forge.SourceState, error) {
+		var st forge.SourceState
+		err := r.Scan(&st.Source.Forge, &st.Source.Owner, &st.Source.Repo, &st.AsOf, &st.Reachable)
+		return st, err
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	rows, err = db.Query(ctx, `SELECT i.forge, i.owner, i.repo, i.number, i.kind, i.title, i.state, i.author,
+		i.assignees, i.labels, i.url, i.updated_at
+		FROM forge_item i JOIN `+declared+` USING (forge, owner, repo)
+		WHERE i.state = 'open' ORDER BY i.updated_at DESC LIMIT $4`, forges, owners, repos, queueLimit)
+	if err != nil {
+		return nil, nil, err
+	}
+	items, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (forge.Item, error) {
+		var it forge.Item
+		var kind string
+		err := r.Scan(&it.Source.Forge, &it.Source.Owner, &it.Source.Repo, &it.Number, &kind, &it.Title,
+			&it.State, &it.Author, &it.Assignees, &it.Labels, &it.URL, &it.UpdatedAt)
+		it.Kind = forge.Kind(kind)
+		return it, err
+	})
+	return states, items, err
+}

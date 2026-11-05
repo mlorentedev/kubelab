@@ -6,6 +6,12 @@
     "environments": ["prod"]
   },
   {
+    "name": "console",
+    "zone": "kubelab",
+    "proxied": true,
+    "environments": ["prod"]
+  },
+  {
     "name": "status",
     "zone": "kubelab",
     "proxied": false,
