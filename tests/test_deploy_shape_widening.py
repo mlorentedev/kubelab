@@ -459,7 +459,7 @@ def _name_reads(roots: list) -> list[str]:
             target = ast.unparse(getattr(holder, "value", holder))
             if value in NAME_KEYS or value.startswith("deploy/"):
                 hits.append(value)
-            elif target.endswith("['head']") and value not in HEAD_KEYS:
+            elif target.endswith(("['head']", ".get('head')")) and value not in HEAD_KEYS:
                 hits.append(f"{value} of {target}")
             elif value == "ref" and not target.endswith("['base']"):
                 hits.append(f"ref of {target}")
@@ -483,6 +483,8 @@ def test_the_granting_side_reads_no_branch_name_or_author(module: str) -> None:
         'ref.startswith("deploy/")',
         'pr["head"]["label"].endswith("staging-web")',
         'pr["head"].get("repo")',
+        'pr["head"]["repo"]["full_name"]',
+        'pr.get("head").get("repo")',
         'pr["labels"]',
     ],
 )
@@ -497,7 +499,9 @@ def test_the_name_detector_fires(source: str) -> None:
 def test_the_name_detector_allows_the_base_ref() -> None:
     import ast
 
-    assert not _name_reads([ast.parse('pr["base"]["ref"]; pr["base"].get("ref"); pr["head"]["sha"]')])
+    assert not _name_reads(
+        [ast.parse('pr["base"]["ref"]; pr["base"].get("ref"); pr["head"]["sha"]; pr.get("head").get("sha")')]
+    )
 
 
 def test_the_required_contexts_are_the_approved_ones() -> None:

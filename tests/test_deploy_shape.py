@@ -401,10 +401,12 @@ class TestEvaluate:
         routes[f"repos/mlorentedev/web/commits/{SHORT}"] = {"sha": "f" * 40}
         assert evaluate(7, REPO, FakeApi(routes), decl, products).verdict == "not-mechanical"
 
-    def test_a_resolved_sha_longer_than_a_commit_is_refused(self, decl, products) -> None:
-        """#3062 F5: pins `fullmatch` on the resolved sha, which `match` would admit."""
+    @pytest.mark.parametrize("suffix", ["0", "\n"])
+    def test_a_resolved_sha_longer_than_a_commit_is_refused(self, decl, products, suffix: str) -> None:
+        """#3062 F5: pins `fullmatch` on the resolved sha. The newline case is refused
+        only by `fullmatch`, however the pattern is anchored."""
         routes = routes_for("web", "mlorentedev/web")
-        routes[f"repos/mlorentedev/web/commits/{SHORT}"] = {"sha": FULL + "0"}
+        routes[f"repos/mlorentedev/web/commits/{SHORT}"] = {"sha": FULL + suffix}
         assert evaluate(7, REPO, FakeApi(routes), decl, products).verdict == "not-mechanical"
 
     def test_an_api_failure_is_unknown(self, decl, products) -> None:
