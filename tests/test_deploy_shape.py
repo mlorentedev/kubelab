@@ -403,11 +403,14 @@ class TestEvaluate:
 
     @pytest.mark.parametrize("suffix", ["0", "\n"])
     def test_a_resolved_sha_longer_than_a_commit_is_refused(self, decl, products, suffix: str) -> None:
-        """#3062 F5: pins `fullmatch` on the resolved sha. The newline case is refused
-        only by `fullmatch`, however the pattern is anchored."""
+        """#3062 F5: pins `fullmatch` on the resolved sha. The sha still starts with the
+        tag's short sha and is on the branch, so only the pattern refuses it, and the
+        newline case is refused only by `fullmatch`, however the pattern is anchored."""
         routes = routes_for("web", "mlorentedev/web")
         routes[f"repos/mlorentedev/web/commits/{SHORT}"] = {"sha": FULL + suffix}
-        assert evaluate(7, REPO, FakeApi(routes), decl, products).verdict == "not-mechanical"
+        routes[f"repos/mlorentedev/web/compare/master...{FULL + suffix}"] = {"status": "behind"}
+        shape = evaluate(7, REPO, FakeApi(routes), decl, products)
+        assert shape.verdict == "not-mechanical" and "resolved to" in shape.reason, shape.reason
 
     def test_an_api_failure_is_unknown(self, decl, products) -> None:
         routes = routes_for("web", "mlorentedev/web")
