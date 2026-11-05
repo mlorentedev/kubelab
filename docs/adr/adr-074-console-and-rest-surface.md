@@ -106,7 +106,7 @@ Until then, the toolkit pays a bounded cost for a third custom app: `deployment 
 
 ### D4 — Client state is fetched, not stored
 
-The console holds no state a forge or the API holds (ADR-066 A2, A3). Islands read the API with a cache-and-revalidate client and keep only view state (filters, sort, selection) in the URL, so every view is a link. Saved views are named URLs, kept per operator in the API's store. They are the one thing the console persists, and they hold no item data.
+The console holds no state a forge or the API holds (ADR-066 A2, A3). Islands read the API with a cache-and-revalidate client and keep only view state (filters, sort, selection) in the URL, so every view is a link. A saved view is that link, bookmarked: the first version persists nothing. Storing views server-side would be a second table that cannot be rebuilt from the forges, beside ADR-066 A2's one exception, the A8 usage counter. It is added only with its backup coverage declared.
 
 ### D5 — One origin: nginx at `/`, the API under `/console/` on the console host
 
@@ -191,7 +191,7 @@ Whether a developer-facing CLI is part of `dotf` or a separate static binary is 
 
 - **A third custom app costs toolkit work** (D3) and a Node job in CI.
 - **One more image and Deployment on the always-on host.** A static nginx is a few tens of MiB. It is stated against the VPS memory budget when the Deployment is written (C11: no new recurring cost).
-- **The development loop needs an auth path.** Authelia's cookie is scoped to the console host, so `astro dev` on `localhost` cannot call staging's `/console/` with a session. The first `apps/console` slice provides a dev proxy that forwards to staging with the operator's session cookie, or a fixture mode, and states which (ADR-053 §4 requires an inner loop).
+- **The development loop needs an auth path.** Authelia's cookie is scoped to the console host, so `astro dev` on `localhost` cannot call staging's `/console/` with a session. The first `apps/console` slice provides a fixture mode: the API's JSON contract, recorded, served locally. ADR-053 §4 requires an inner loop. A proxy to staging is added only if fixtures prove insufficient, and it never takes a session cookie from a file or an environment variable.
 - **More work inside the CONSOLE-004 timebox.** ADR-066 A8's kill criteria stand: if the console is not opened on at least 5 of 14 days, the setup reverts. The usage counter A8 describes ships no later than the first `apps/console` slice, and further frontend work is gated on the counter showing use.
 
 ### Neutral
@@ -210,6 +210,8 @@ Each step is one pull request unless noted. Steps 1 and 2 are API slices that ne
    - the forge view at parity with the embedded page;
    - a dev loop with fixtures;
    - the embedded page deleted.
+
+   This step adds a CI workflow and a release-please package, so a human merges it. It is never landed under the standing merge grant.
 4. The Linear-style forge view:
    - tabs for All, Pull requests and Issues, with counts;
    - filters by repository, label, author and state, held in the URL;
