@@ -11,6 +11,7 @@ import os
 import subprocess
 import sys
 import textwrap
+import uuid
 from pathlib import Path
 
 import pytest
@@ -104,7 +105,9 @@ def _child_pytest(tmp_path: Path, body: str) -> subprocess.CompletedProcess:
         (stubs / client).chmod(0o755)
     env = {k: v for k, v in os.environ.items() if k != "KUBELAB_HOST_CLIENT_REPORT"}
     env["PATH"] = f"{stubs}{os.pathsep}{env.get('PATH', '')}"
-    target = REPO_ROOT / "tests" / f"test_zz_barrier_probe_{tmp_path.name}.py"
+    # Unique across workers: each xdist worker has its own basetemp, so two of
+    # them hand out the same `tmp_path.name` for the same test (#3078).
+    target = REPO_ROOT / "tests" / f"test_zz_barrier_probe_{uuid.uuid4().hex}.py"
     target.write_text(textwrap.dedent(body), encoding="utf-8")
     try:
         return subprocess.run(

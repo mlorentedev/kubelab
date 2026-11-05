@@ -111,7 +111,9 @@ def coredns(docker_mount_dir: Path) -> Iterator[int]:
         check=True, capture_output=True, text=True, timeout=180,
     )  # fmt: skip
     try:
-        published = subprocess.run(["docker", "port", name, "1053/udp"], check=True, capture_output=True, text=True)
+        published = subprocess.run(
+            ["docker", "port", name, "1053/udp"], check=True, capture_output=True, text=True, encoding="utf-8"
+        )
         port = int(published.stdout.split()[0].rsplit(":", 1)[1])
         deadline = time.monotonic() + 30
         while True:
