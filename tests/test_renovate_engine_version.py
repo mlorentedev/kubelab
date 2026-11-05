@@ -55,7 +55,12 @@ def test_workflow_carries_no_literal_engine_version() -> None:
         assert STEP_OUTPUT.match(str(inputs[key])), f"{key} is a literal: {inputs[key]!r}"
 
 
-@pytest.mark.skipif(shutil.which("yq") is None, reason="yq is not installed; the runner image ships it")
+# Skipped only off CI: in CI a missing yq must fail here, because the workflow
+# needs it on the same runner image and a skip would read as a pass.
+@pytest.mark.skipif(
+    shutil.which("yq") is None and not os.environ.get("CI"),
+    reason="yq is not installed locally; CI runs this on the runner image",
+)
 def test_the_step_hands_the_action_the_common_key(tmp_path: pathlib.Path) -> None:
     """Run the step's own script, so a step that only mentions the key cannot pass."""
     inputs = _action_step()["with"]
