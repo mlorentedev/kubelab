@@ -31,9 +31,9 @@ owner: manu
 - [x] Found `loadgroup` is a no-op on pytest 9.2 (xdist#1407); switched to `loadfile`
 - [x] Fixed `test_restore_drill.py` assertion broken by logger wrapping under the longer xdist basetemp
 - [x] Lessons `lesson-710-*`, `lesson-712-*`
-- [ ] [AC1] Serial vs parallel on the final commit, locally and in CI
-- [ ] [AC2] p50 over 20 PR runs after merge
-- [ ] [AC4] `Tests` stays the required check name (unchanged job `name:`)
+- [x] [AC1] Serial vs parallel on the final commit, locally and in CI
+- [ ] [AC2] p50 over 20 PR runs: needs sharding (#3111)
+- [x] [AC4] `Tests` stays the required check name (unchanged job `name:`)
 
 ## Closing
 

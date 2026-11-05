@@ -27,7 +27,7 @@ wip_override: "owner-directed: #3078 is the critical path of every kubelab PR (f
 ## Out of scope
 
 - Splitting lint, types and `validate-sync` into their own jobs: those jobs would not be required checks, so gating would be lost until the branch-protection declaration changes (two-PR migration, ADR-042). Follow-up ticket.
-- Sharding by duration across a matrix. `-n auto` brought CI's pytest from 27.3 to about 16 min on 4 vCPU, so AC2 needs it. It is its own PR.
+- Sharding by duration across a matrix (#3111). `-n auto` brought CI's pytest from 26m43s to 13m40s on 4 vCPU, and `-n 8` was slower (17m05s), so AC2 needs it.
 - `--dist loadgroup` with `xdist_group` markers: a silent no-op on pytest 9.2 with pytest-xdist 3.8.0 (pytest-dev/pytest-xdist#1407, lesson-712). Revisit on the next xdist release.
 - Single-file pytest targets in the Makefile (`test-*-live`, `mutate`): they stay serial.
 
