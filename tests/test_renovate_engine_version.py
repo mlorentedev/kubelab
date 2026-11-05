@@ -11,9 +11,13 @@ every other pinned image.
 from __future__ import annotations
 
 import json
+import os
 import pathlib
 import re
+import shutil
+import subprocess
 
+import pytest
 import yaml
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
@@ -21,7 +25,7 @@ WORKFLOW = REPO / ".github/workflows/renovate.yml"
 COMMON = REPO / "infra/config/values/common.yaml"
 RENOVATE = REPO / "renovate.json"
 ENGINE = "ghcr.io/renovatebot/renovate"
-STEP_OUTPUT = re.compile(r"^\$\{\{\s*steps\.(?P<id>[A-Za-z0-9_-]+)\.outputs\.[A-Za-z0-9_-]+\s*\}\}$")
+STEP_OUTPUT = re.compile(r"^\$\{\{\s*steps\.(?P<id>[A-Za-z0-9_-]+)\.outputs\.(?P<out>[A-Za-z0-9_-]+)\s*\}\}$")
 
 
 def _steps() -> list[dict]:
@@ -51,14 +55,26 @@ def test_workflow_carries_no_literal_engine_version() -> None:
         assert STEP_OUTPUT.match(str(inputs[key])), f"{key} is a literal: {inputs[key]!r}"
 
 
-def test_the_step_feeding_the_action_reads_the_common_key() -> None:
+@pytest.mark.skipif(shutil.which("yq") is None, reason="yq is not installed; the runner image ships it")
+def test_the_step_hands_the_action_the_common_key(tmp_path: pathlib.Path) -> None:
+    """Run the step's own script, so a step that only mentions the key cannot pass."""
     inputs = _action_step()["with"]
-    ids = {STEP_OUTPUT.match(str(inputs[k])).group("id") for k in ("renovate-version", "renovate-image")}
+    wanted = {k: STEP_OUTPUT.match(str(inputs[k])) for k in ("renovate-image", "renovate-version")}
+    ids = {m.group("id") for m in wanted.values()}
     assert len(ids) == 1
     (source,) = [s for s in _steps() if s.get("id") in ids]
-    script = source["run"]
-    assert ".ci.renovate.image" in script
-    assert "infra/config/values/common.yaml" in script
+
+    output = tmp_path / "github_output"
+    output.touch()
+    subprocess.run(
+        ["bash", "-euo", "pipefail", "-c", source["run"]],
+        cwd=REPO,
+        env={**os.environ, "GITHUB_OUTPUT": str(output)},
+        check=True,
+    )
+    produced = dict(line.split("=", 1) for line in output.read_text(encoding="utf-8").splitlines())
+    handed = {k: produced[m.group("out")] for k, m in wanted.items()}
+    assert f"{handed['renovate-image']}:{handed['renovate-version']}" == _engine_image()
 
 
 def test_renovate_bumps_the_engine_key() -> None:
