@@ -22,7 +22,7 @@
   },
   {
     "id": "OPS-065-edge-backend-timeouts-f4",
-    "behavior": "Headscale's time to first header is measured in prod and recorded with its exception; the VPN works after the prod deploy",
+    "behavior": "Headscale's handshake finishes its headers within the bound, from its access-log lines; the VPN works after the prod deploy",
     "verification": "echo 'not implemented: measurement is pending' && exit 1",
     "state": "pending",
     "evidence": ""
