@@ -1,0 +1,37 @@
+[
+  {
+    "id": "OPS-065-edge-backend-timeouts-f1",
+    "behavior": "A staging backend that never answers is cut at the declared default bound, and the client gets the edge's error page",
+    "verification": "echo 'not implemented: stuck-backend fixture and its test are pending' && exit 1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "OPS-065-edge-backend-timeouts-f2",
+    "behavior": "A route declared as an exception keeps its longer bound",
+    "verification": "echo 'not implemented: exceptions are pending the data from #3106' && exit 1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "OPS-065-edge-backend-timeouts-f3",
+    "behavior": "A test fails on a route with neither the default nor a declared exception, and on an exception that matches no route",
+    "verification": "echo 'not implemented: coverage test is pending' && exit 1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "OPS-065-edge-backend-timeouts-f4",
+    "behavior": "Headscale's handshake finishes its headers within the bound, from its access-log lines; the VPN works after the prod deploy",
+    "verification": "echo 'not implemented: measurement is pending' && exit 1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "OPS-065-edge-backend-timeouts-f5",
+    "behavior": "An ADR records the default, the exceptions, dialTimeout, idleConnTimeout and the duration-versus-count decision",
+    "verification": "echo 'not implemented: ADR is pending' && exit 1",
+    "state": "pending",
+    "evidence": ""
+  }
+]
