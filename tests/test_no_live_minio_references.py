@@ -40,6 +40,8 @@ EXEMPT_PREFIXES = (
     "specs/",
     "CHANGELOG.md",
     "tests/test_no_live_minio_references.py",
+    # The shard plan's record lists every test file by name, this one included (#3111).
+    "tests/shard_durations.json",
 )
 
 PATTERN = re.compile(r"(?<![a-z])minio", re.IGNORECASE)

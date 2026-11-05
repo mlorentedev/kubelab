@@ -83,7 +83,7 @@ def test_the_record_holds_only_paths_and_positive_seconds() -> None:
 
 
 def test_the_plugin_deselects_other_shards_and_runs_unknown_files(tmp_path: Path) -> None:
-    """The wiring, end to end: three shards over a suite whose record misses a file."""
+    """The wiring, end to end: two shards over a suite whose record misses a file."""
     suite = tmp_path / "tests"
     suite.mkdir()
     names = ["test_a.py", "test_b.py", "test_c.py", "test_d.py", "test_new.py"]
@@ -93,10 +93,10 @@ def test_the_plugin_deselects_other_shards_and_runs_unknown_files(tmp_path: Path
     seconds = {f"tests/{n}": s for n, s in zip(names[:4], (9, 5, 4, 1), strict=True)}
     record.write_text(json.dumps(seconds), encoding="utf-8")
     ran: list[str] = []
-    for index in (1, 2, 3):
+    for index in (1, 2):
         run = subprocess.run(
             [sys.executable, "-m", "pytest", "-c", "/dev/null", "--rootdir", str(tmp_path), "-p", "tests.sharding"]
-            + ["-q", "-p", "no:cacheprovider", "--collect-only", f"--shard={index}/3"]
+            + ["-q", "-p", "no:cacheprovider", "--collect-only", f"--shard={index}/2"]
             + [f"--shard-durations={record}", "tests"],
             cwd=tmp_path,
             capture_output=True,
@@ -106,7 +106,14 @@ def test_the_plugin_deselects_other_shards_and_runs_unknown_files(tmp_path: Path
             timeout=120,
         )
         assert run.returncode == 0, run.stdout[-800:] + run.stderr[-800:]
-        ran += [line for line in run.stdout.splitlines() if "::" in line]
+        collected = [line for line in run.stdout.splitlines() if "::" in line]
+        # xdist dispatches files in collection order, so the heaviest go first: one
+        # started last would run on alone after every other worker finished.
+        order = list(dict.fromkeys(line.split("::")[0] for line in collected))
+        weight = sharding.weights(order, json.loads(record.read_text(encoding="utf-8")))
+        assert order == sorted(order, key=lambda f: (-weight[f], f)), order
+        assert all(line.endswith(("test_one", "test_two")) for line in collected)
+        ran += collected
     assert sorted(ran) == sorted(f"tests/{n}::{t}" for n in names for t in ("test_one", "test_two"))
 
 
