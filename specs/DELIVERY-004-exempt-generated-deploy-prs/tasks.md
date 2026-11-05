@@ -84,7 +84,10 @@ empty deploy PRs instead of merging them, and pin the merge to the judged head s
 - [x] F6: the squash subject and body come from the judged app and tag (`--subject`, `--body`); the
   pinned merge line moved in the same diff. ✓ 2026-11-04
 - [x] F7: each close stands alone; a refused close fails the job only after the merges ran. ✓ 2026-11-04
-- [ ] F5 and F9, in the next PR.
+- [x] F5: leaves compare by type and value, so `false` -> `0` is a change; `fullmatch` is pinned on the
+  tag (a trailing newline that `$` admits under `match`) and on the resolved sha. ✓ 2026-11-04
+- [x] F9: `classify_diff` is split by rule and `judge` loses its readiness checks to `_not_ready`; C901
+  is enforced for `toolkit/features/deploy_*.py`. ✓ 2026-11-04
 
 ## Closing
 
