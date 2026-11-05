@@ -61,6 +61,14 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     group.addoption("--store-shard-durations", default=None, help="write per-file seconds of this run to PATH")
 
 
+def pytest_configure(config: pytest.Config) -> None:
+    # xdist's `loadfile` reorders files by test count unless told not to, which
+    # would undo the heaviest-first order below (measured on CI: the 259s file
+    # still started last). Only when sharding: a plain `make test` is unchanged.
+    if config.getoption("--shard") and hasattr(config.option, "loadscopereorder"):
+        config.option.loadscopereorder = False
+
+
 @pytest.hookimpl(trylast=True)
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
     value = config.getoption("--shard")

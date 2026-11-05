@@ -170,3 +170,26 @@ def test_every_shard_uploads_its_coverage_including_the_hidden_data_file() -> No
     upload = [s for s in _ci()["jobs"]["test-shards"]["steps"] if "upload-artifact" in s.get("uses", "")]
     assert upload and upload[0]["with"]["include-hidden-files"] is True
     assert ".coverage" in upload[0]["with"]["path"]
+
+
+def test_under_xdist_the_heaviest_file_is_dispatched_first(tmp_path: Path) -> None:
+    """xdist's own reorder (by test count) must not undo the plan's order: measured, not collected."""
+    log = tmp_path / "ran.log"
+    body = f"def test_{{i}}():\n    open({str(log)!r}, 'a').write(__name__ + '\\n')\n"
+    (tmp_path / "test_heavy.py").write_text(body.format(i=0), encoding="utf-8")
+    (tmp_path / "test_light.py").write_text("".join(body.format(i=i) for i in range(6)), encoding="utf-8")
+    record = tmp_path / "durations.json"
+    record.write_text(json.dumps({"test_heavy.py": 100, "test_light.py": 1}), encoding="utf-8")
+    run = subprocess.run(
+        [sys.executable, "-m", "pytest", "-c", "/dev/null", "--rootdir", str(tmp_path), "-p", "tests.sharding"]
+        + ["-q", "-p", "no:cacheprovider", "-n", "1", "--dist", "loadfile", "--shard=1/1"]
+        + [f"--shard-durations={record}", "test_heavy.py", "test_light.py"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env={"PYTHONPATH": str(ROOT), "PATH": "/usr/bin:/bin"},
+        timeout=120,
+    )
+    assert run.returncode == 0, run.stdout[-800:]
+    assert log.read_text(encoding="utf-8").splitlines()[0] == "test_heavy"
