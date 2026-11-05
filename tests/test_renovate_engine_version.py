@@ -82,13 +82,23 @@ def test_the_step_hands_the_action_the_common_key(tmp_path: pathlib.Path) -> Non
     assert f"{handed['renovate-image']}:{handed['renovate-version']}" == _engine_image()
 
 
+def _selects(pattern: str, path: str) -> bool:
+    """Renovate reads `/.../` as a regex and anything else as a glob."""
+    if len(pattern) > 1 and pattern.startswith("/") and pattern.endswith("/"):
+        return re.search(pattern[1:-1], path) is not None
+    return pathlib.PurePosixPath(path).match(pattern)
+
+
 def test_renovate_bumps_the_engine_key() -> None:
     """The key is only a home if a manager reads it; a regex that misses is silent."""
     config = json.loads(RENOVATE.read_text(encoding="utf-8"))
     text = COMMON.read_text(encoding="utf-8")
+    path = COMMON.relative_to(REPO).as_posix()
     found = set()
     for manager in config["customManagers"]:
-        if not any("common" in p for p in manager["managerFilePatterns"]):
+        # Select the manager the way Renovate does: a `/regex/` pattern matched
+        # against the file's real path, never a substring of the pattern.
+        if not any(_selects(p, path) for p in manager["managerFilePatterns"]):
             continue
         for pattern in manager["matchStrings"]:
             for m in re.finditer(pattern.replace("(?<", "(?P<"), text):
