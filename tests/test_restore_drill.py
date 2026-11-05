@@ -113,9 +113,11 @@ def test_data_that_cannot_be_deleted_is_not_clean_and_is_named(capsys) -> None:
     assert not box.clean
     said = _out(capsys)
     # The logger wraps long lines, and where it breaks depends on the length of
-    # the temporary path: under xdist it splits the name itself (#3078).
-    assert "could not remove" in said and box.name.split("-")[0] in "".join(said.split())
-    assert "it holds n8n's data and key, delete it now" in said
+    # the temporary path: under xdist it split the name itself (#3078). The text
+    # after the path moves with it, so every comparison drops whitespace.
+    flat = "".join(said.split())
+    for expected in ("could not remove", box.name.split("-")[0], "it holds n8n's data and key, delete it now"):
+        assert "".join(expected.split()) in flat, expected
 
 
 def test_the_data_is_deleted_even_when_removing_the_container_raises() -> None:

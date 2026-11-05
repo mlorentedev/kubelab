@@ -1,7 +1,7 @@
 [
   {
     "id": "CI-001-pytest-xdist-f1",
-    "behavior": "make test runs the suite with -n auto --dist loadfile, the mode keeps a file on one worker in order, and no test is dropped",
+    "behavior": "the make test recipe asks for -n auto and a --dist mode that, run on a probe, keeps a file on one worker in order; neither the recipe nor addopts carries a deselecting option (the full-suite count and coverage match is AC1 evidence in verification.md)",
     "verification": ".venv/bin/pytest -q --no-cov -p no:cacheprovider tests/test_pytest_parallel_config.py",
     "state": "pending",
     "evidence": ""
