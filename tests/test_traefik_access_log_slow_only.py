@@ -12,6 +12,7 @@ without a URL.
 from __future__ import annotations
 
 import pathlib
+import re
 
 import jinja2
 import yaml
@@ -53,6 +54,15 @@ def test_slow_requests_are_logged_as_json_and_only_slow_ones() -> None:
     assert access["format"] == "json"
     assert access["filters"]["minduration"] == _defaults()["k3s_traefik_access_log_min_duration"]
     assert set(access["filters"]) == {"minduration"}, "another filter would widen what is logged"
+
+
+def test_the_threshold_is_a_positive_duration() -> None:
+    # Wiring alone is not enough: `0` or `0s` would log every request, which is the
+    # volume and the exposure this log exists to avoid.
+    threshold = str(_access()["filters"]["minduration"])
+    found = re.fullmatch(r"(\d+(?:\.\d+)?)(ms|s|m)", threshold)
+    assert found, f"{threshold!r} is not a Go duration in ms, s or m"
+    assert float(found.group(1)) > 0, "a zero threshold logs every request"
 
 
 def test_only_the_declared_fields_are_kept() -> None:
