@@ -69,6 +69,7 @@ A search of the pattern library (`00_meta/patterns/`) found no frontend or dashb
 | D. A separate repository now | One-way-ish (cross-repo promotion, governance) | Rejected now. The product lifecycle in `CLAUDE.md` incubates in this monorepo first, and ADR-053 §5 says not to design the extracted template from one data point. Extraction trigger in D3. |
 | E. An off-the-shelf tracker or portal (Vikunja, Plane, Backstage) | — | Already rejected: ADR-066 (2026-10-20 amendment) and the Backstage row of the rejection list. |
 | F. Grafana as the console | — | Already rejected: Grafana holds no ownership and opens no actions (ADR-073 D10, ADR-066). Statistics stay in Grafana, and the console links to them (D8). |
+| G. The console probes the nodes itself, or calls the toolkit to provision | — | Rejected. Probing duplicates the monitoring of record (ADR-028), so the fleet strip reads Headscale instead (D8). Calling the toolkit breaks ADR-073 D11 (data, not calls) and ADR-067 C1 (GitOps only), so a provisioning click opens a PR (D8). Reopen the second only through #2449. |
 
 ## Decision
 
@@ -162,10 +163,20 @@ The API derives each of the following and exposes them under D5. The console ren
 
 ### D8 — Modules and boundaries
 
-The console has two modules (ADR-066 A7):
+The console has three modules (ADR-066 A7):
 
 - **Forge view.** Built first.
 - **Product registry.** Built later. It reads what the toolkit writes to git (ADR-073 D11) and links into Argo CD, Grafana, logs and runbooks.
+  - **Its provisioning actions are pull requests.** A click such as "add a database to product X" edits the product's declaration (the `resources:` block of ADR-073 D3) and opens the PR. CI renders and verifies it. Staging merges unattended (ADR-073 D13), and prod and destruction wait for a human.
+  - The console never calls the Python toolkit, because the boundary is data in git (ADR-073 D11). It never writes to a cluster either (ADR-067 C1).
+  - Self-service without a kubelab PR is a separate question, open on #2449. This ADR does not decide it.
+- **Fleet status.** A read-only strip of the nodes in `networking.nodes`.
+  - **Source:** Headscale's node list (online, last seen), read by the API. The console probes nothing itself. Uptime Kuma is not the source: it watches prod services and the VPS, not the homelab nodes.
+  - **States, not up/down.** Each node is shown against its class (ADR-028).
+    - An on-demand node that is offline reads "last seen 6 h ago", which is its normal state.
+    - Only an always-on node that is offline is a fault.
+  - It is not monitoring. Alerting and history stay with Grafana and Uptime Kuma (ADR-028), and the strip links to them.
+  - Before it is built, check that the API in prod can reach Headscale's REST API with a read-only key.
 
 Statistics (throughput, queue age, time to first review, time with CI red) stay in Grafana over a counts-only view (CONSOLE-004 AC6), and the console links to them.
 
@@ -227,7 +238,9 @@ Each step is one pull request unless noted. Steps 1 and 2 are API slices that ne
 7. Notices panel (D7), after the tap is agreed with the OBS-042 lane.
 8. Narrow writes and the outbox (ADR-066 A2), Slack `/task create` re-pointed (ADR-066 A4).
 9. Automations (D7): event emission to n8n, the "acted on by" record, flows triggered by name; the board's automations as the first rules.
-10. Product registry module (D8, ADR-073 D11).
+10. Product registry module (D8, ADR-073 D11), read-only first.
+11. Provisioning actions in the registry, each one opening a PR (D8, ADR-073 D13).
+12. Fleet status strip (D8). It needs no earlier step except the scaffold (3), so it may move up once step 4 has shipped.
 
 Parallel work that remains on CONSOLE-004's task list:
 

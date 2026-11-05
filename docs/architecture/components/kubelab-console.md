@@ -25,7 +25,8 @@ The operator cockpit: a frontend app on its own host, behind Authelia, over a re
 - **Inbox:** why an item needs the operator now.
 - **Notices:** what n8n and the bots send to Slack, read at the source.
 - **Automations:** n8n flows, shown on the items they acted on and triggerable by name.
-- **Product registry:** a later module (ADR-073 D11).
+- **Product registry:** a later module (ADR-073 D11). Its provisioning actions open PRs: staging merges unattended, prod waits for a human.
+- **Fleet status:** a read-only strip of the homelab and cloud nodes from Headscale, showing each node against its always-on or on-demand class (ADR-028).
 
 Statistics stay in Grafana, and the console links to them.
 
