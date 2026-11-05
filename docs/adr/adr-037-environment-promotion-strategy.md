@@ -24,6 +24,12 @@ This ADR answers "how do I validate a change against a non-prod environment befo
 
 **Amended, not superseded**: the validation flow this ADR defines — deploy to staging from a worktree, apply secrets, restart, run e2e, only then merge — is unchanged and remains the default. What changes is that `singleton` services are now named as the exception rather than being assumed to fit and quietly not fitting. Their intended test path is an ephemeral restore from a prod backup, which ADR-061 records as **doctrine and not present capability** — verified restore is still open work.
 
+## Amendment — 2026-11-03 (a generated staging deploy PR merges without a human)
+
+The staging receivers keep one long-lived deploy PR per app, and until now the gate was "merging moves staging, leaving the PR open keeps staging where it is". Since DELIVERY-004 (#1619, operator decision 2026-10-20) flipped `mechanical.merge`, `deploy-merge.yml` merges that PR itself once its diff is mechanical (`deploy-shape`) and every context is green. Leaving it open therefore no longer holds staging.
+
+The hold is now a draft: the judge skips drafts, and the receivers' force-update keeps the draft state. Stopping every unattended merge is `gh workflow disable deploy-merge.yml`, and stopping it durably is reverting the switch (`docs/runbooks/gitops-delivery-promotion.md`). Prod is unchanged: its promotion PR still waits for the operator (#1741).
+
 ## Context
 
 The 2026-05-22 AI-001 session captured a lesson worded as "GitOps test-before-merge with Argo CD selfHeal = impossible vía kubectl directo (revierte en segundos); use merge-then-smoke". That was a tactical observation, not a principle. Treating staging as a write-only mirror of prod (because Argo CD selfHeal reverts any direct kubectl apply) defeats the entire purpose of having staging.

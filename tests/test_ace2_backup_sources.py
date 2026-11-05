@@ -30,8 +30,3 @@ def test_hermes_is_captured_from_its_home_and_not_from_its_env_file() -> None:
     # The rendered secrets are rebuilt from SOPS; they stay out of the snapshot.
     for secret in (context["agent_stack_hermes_env"], context["agent_stack_hermes_ts_env"]):
         assert not secret.startswith(path + "/"), secret
-
-
-def test_ace2_ships_to_its_own_bucket_from_its_first_snapshot() -> None:
-    """Born on the per-node model: it never had a copy in the shared bucket to migrate."""
-    assert "ace2" in _common()["backup"]["r2"]["own_bucket_nodes"]

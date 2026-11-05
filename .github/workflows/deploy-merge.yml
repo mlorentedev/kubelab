@@ -10,15 +10,20 @@ name: deploy-merge
 # `toolkit tools deploy-merge` judges every open non-draft PR to master from
 # master's code: the verdict recomputed at one head sha, every context branch
 # protection requires passing on that sha, `clean`, and the head unchanged at
-# the end. It never reads the event payload or a branch name. This file only
-# acts on its decisions:
+# the end. It never reads the event payload or a branch name. While the latest
+# deploy-verify run on master whose job ran is not green, it skips every PR
+# (#3062 F11), so nothing merges on top of a staging that did not sync. This
+# file only acts on its decisions:
 #
-#   merge   squash-merge, pinned to the judged sha (--match-head-commit). A
+#   merge   squash-merge, pinned to the judged sha (--match-head-commit), with
+#           a subject and body the judge built from the app and tag it judged,
+#           never the PR's title or body (#3062 F6). A
 #           refusal because the head moved means the receiver force-pushed a
 #           newer tag mid-run. That is reported as superseded, and the next
 #           run judges the new head.
 #   close   the PR has no changed files, so there is nothing to merge (#2649
-#           merged empty). Reopening it undoes this.
+#           merged empty). Reopening it undoes this. A close that fails is
+#           reported and fails the job only after the merges ran (#3062 F7).
 #
 # Identity: the merge runs with RELEASE_PLEASE_TOKEN, so the push workflows
 # fire after it; a merge made with GITHUB_TOKEN starts none. Everything else
@@ -43,6 +48,7 @@ permissions:
   pull-requests: write   # close and comment
   checks: read
   statuses: read
+  actions: read          # deploy-verify's runs and jobs (#3062 F11)
 
 jobs:
   merge:
@@ -55,12 +61,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      # No `ref:`. For schedule and workflow_run, github.sha is the default
-      # branch's tip, never a PR's head, so the judge and its declarations are
-      # master's, as in the repository's other scheduled workflows. A dispatch
-      # is limited to the default branch by the job's `if:`.
+      # The judge and its declarations are master's, never a PR's head. Named
+      # explicitly, as deploy-shape.yml and review-attestation.yml do, so the
+      # widening test can pin all three to the same line.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
+          ref: ${{ github.event.repository.default_branch }}
           fetch-depth: 1
 
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7
@@ -90,31 +96,51 @@ jobs:
           poetry run toolkit tools deploy-merge --out "$RUNNER_TEMP/decisions.json"
           echo "enabled=$(jq -r .enabled "$RUNNER_TEMP/decisions.json")" >> "$GITHUB_OUTPUT"
 
+      # A pause makes every decision a skip, so no other line would say why.
+      - name: Report a pause
+        run: |
+          jq -r 'if .paused then "every PR waits: \(.paused)" else empty end' "$RUNNER_TEMP/decisions.json" |
+            tee -a "$GITHUB_STEP_SUMMARY"
+
       - name: Report what an enabled switch would do
         if: steps.judge.outputs.enabled != 'true'
         run: |
           jq -r '.decisions[] | select(.action != "skip") | "would \(.action) #\(.pr) at \(.head_sha): \(.reason)"' \
             "$RUNNER_TEMP/decisions.json" | tee -a "$GITHUB_STEP_SUMMARY"
 
+      # Each close stands alone: one that fails is reported and the loop goes on,
+      # and the merges below still run. `Fail on a refused close` turns the job red
+      # afterwards (#3062 F7). The default shell runs `bash -e`, which would stop at
+      # the first failure, so `set +e` clears it.
       - name: Close pull requests with nothing to merge
+        id: close
         if: steps.judge.outputs.enabled == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          set -euo pipefail
-          jq -r '.decisions[] | select(.action == "close") | "\(.pr) \(.head_sha)"' "$RUNNER_TEMP/decisions.json" |
+          set +e
+          set -uo pipefail
+          failed=false
           while read -r n sha; do
             if [ "$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${n}" --jq .head.sha)" != "$sha" ]; then
-              echo "::notice::#${n} moved since it was judged empty; the next run judges it again"
+              echo "::notice::#${n} moved since it was judged empty, or could not be read; the next run judges it again"
               continue
             fi
             # Close first: a close that fails leaves no comment, so a persistent API
             # failure cannot post one per run. A closed PR is not judged again.
-            gh api -X PATCH "repos/${GITHUB_REPOSITORY}/pulls/${n}" -f state=closed >/dev/null
-            body="Closed: this pull request has no changed files at ${sha}, so there is nothing to merge."
-            gh api -X POST "repos/${GITHUB_REPOSITORY}/issues/${n}/comments" -f body="${body} Reopen it to undo." >/dev/null
+            if ! gh api -X PATCH "repos/${GITHUB_REPOSITORY}/pulls/${n}" -f state=closed >/dev/null; then
+              echo "::error::#${n} is empty at ${sha} and the close was refused"
+              failed=true
+              continue
+            fi
+            body="Closed: this pull request has no changed files at ${sha}, so there is nothing to merge. Reopen it to undo."
+            if ! gh api -X POST "repos/${GITHUB_REPOSITORY}/issues/${n}/comments" -f body="${body}" >/dev/null; then
+              echo "::error::#${n} was closed but its comment was refused"
+              failed=true
+            fi
             echo "closed #${n} (empty at ${sha})" | tee -a "$GITHUB_STEP_SUMMARY"
-          done
+          done < <(jq -r '.decisions[] | select(.action == "close") | "\(.pr) \(.head_sha)"' "$RUNNER_TEMP/decisions.json")
+          echo "failed=${failed}" >> "$GITHUB_OUTPUT"
 
       - name: Merge mechanical deploys at the judged sha
         if: steps.judge.outputs.enabled == 'true'
@@ -123,8 +149,8 @@ jobs:
         run: |
           set -uo pipefail
           failed=0
-          while read -r n sha; do
-            if gh pr merge "$n" --squash --match-head-commit "$sha"; then
+          while IFS=$'\t' read -r n sha subject body; do
+            if gh pr merge "$n" --squash --match-head-commit "$sha" --subject "$subject" --body "$body"; then
               echo "merged #${n} at ${sha}" | tee -a "$GITHUB_STEP_SUMMARY"
             elif [ "$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${n}" --jq .head.sha)" != "$sha" ]; then
               echo "::notice::#${n} superseded: its head moved past ${sha}; the next run judges the new head"
@@ -132,5 +158,12 @@ jobs:
               echo "::error::#${n} was judged mergeable at ${sha} and the merge was refused"
               failed=1
             fi
-          done < <(jq -r '.decisions[] | select(.action == "merge") | "\(.pr) \(.head_sha)"' "$RUNNER_TEMP/decisions.json")
+          done < <(jq -r '.decisions[] | select(.action == "merge") | [.pr, .head_sha, .subject, .body] | @tsv' \
+            "$RUNNER_TEMP/decisions.json")
           exit "$failed"
+
+      - name: Fail on a refused close
+        if: always() && steps.close.outputs.failed == 'true'
+        run: |
+          echo "::error::a close was refused; see the close step"
+          exit 1

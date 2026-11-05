@@ -116,11 +116,10 @@ done
 errfile="$(mktemp)" || fail "cannot create a temp file"
 
 # Each node's repository opens with its own password (BACKUP-057): the Secret
-# carries RESTIC_PASSWORD_<NODE>, the node's own once it has moved to its own
-# bucket, the shared one before. A Secret applied before that carries only the
-# shared RESTIC_PASSWORD, so it stands in until BACKUP-057 PR 5 removes it.
+# carries RESTIC_PASSWORD_<NODE>, and nothing stands in for a missing one.
 # Resolved per node, so one missing password costs one node, not the fleet.
-shared_password="${RESTIC_PASSWORD:-}"
+# A RESTIC_PASSWORD left in the environment is never read, so a Secret that
+# still carries the old shared key cannot open a repository by accident.
 unset RESTIC_PASSWORD
 node_password_var() {
     case "$1" in
@@ -227,7 +226,7 @@ while read -r node repo declared_id address port class services || [ -n "$node" 
     if password_var="$(node_password_var "$node")"; then
         eval "password=\${$password_var:-}"
     fi
-    RESTIC_PASSWORD="${password:-$shared_password}"
+    RESTIC_PASSWORD="$password"
     export RESTIC_PASSWORD
 
     if [ -z "$RESTIC_PASSWORD" ]; then

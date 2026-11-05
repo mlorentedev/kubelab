@@ -227,6 +227,13 @@ repos:
 # Global configuration
 default_language_version:
   python: python3.12
+  # Pinned, never "latest": unpinned, nodeenv resolves the newest entry in the
+  # nodejs.org index, and on 2026-11-03 that entry was v27.0.0-alpha.0.0.0,
+  # which nodeenv cannot parse, so every hook needing node (markdownlint) failed
+  # to install. A local node does not help: pre-commit ignores one installed
+  # under the home directory (mise, nvm) and falls back to nodeenv. Renovate
+  # bumps this line (the `node-version` custom manager in renovate.json, #3070).
+  node: 24.22.1
 
 # Files to exclude
 exclude: |

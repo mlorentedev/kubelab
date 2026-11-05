@@ -45,8 +45,28 @@ spec:
   entryPoints:
     - websecure
   routes:
+    # AUTH-020 (#2482): Argo CD always renders "Log in via", so a browser opening `/` with no
+    # session cookie is sent to /auth/login, which answers 303 to Authelia. Only the exact root:
+    # the CLI, gRPC-web, /api/webhook and the SPA's own paths never match it.
+    # tests/test_argocd_sign_in_redirect.py pins the shape.
+    - match: Host(`argo.kubelab.live`) && Path(`/`) && !HeaderRegexp(`Cookie`, `(^|;\s*)argocd\.token=`)
+      kind: Rule
+      priority: 100
+      middlewares:
+        - name: secure-headers
+          namespace: kubelab
+        - name: rate-limit
+          namespace: kubelab
+        - name: crowdsec-bouncer
+          namespace: kubelab
+        - name: argocd-sign-in
+          namespace: kubelab
+      services:
+        - name: argocd
+          port: 30080
     - match: Host(`argo.kubelab.live`)
       kind: Rule
+      priority: 1
       middlewares:
         - name: secure-headers
           namespace: kubelab
@@ -60,3 +80,20 @@ spec:
           port: 30080
   tls:
     certResolver: letsencrypt
+---
+# The router above decides which requests are redirected, so the regex matches anything:
+# anchored on `/$` it let `/?x=1` through unredirected (measured on traefik:v3.6).
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: argocd-sign-in
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: argocd
+    app.kubernetes.io/component: gitops
+    app.kubernetes.io/part-of: kubelab
+spec:
+  redirectRegex:
+    regex: ".*"
+    replacement: "https://argo.kubelab.live/auth/login"
+    permanent: false
