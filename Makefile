@@ -146,7 +146,11 @@ help:
 # Bootstrap
 # -----------------------------------------------------------------------------
 .PHONY: setup
-setup: setup-python setup-poetry setup-dependencies setup-sops setup-certs setup-ansible
+# setup-certs makes the dev stack's certs, whatever ENV the shell exports, so
+# it runs pinned to dev rather than as a prerequisite that refuses another ENV.
+setup: setup-python setup-poetry setup-dependencies setup-sops setup-ansible
+	@test "$(ENV)" = dev || echo "setup-certs makes the dev stack's certs; ENV=$(ENV) does not apply to it." >&2
+	@$(MAKE) --no-print-directory setup-certs ENV=dev
 	@echo "✓ Setup complete. Run 'toolkit --help' to see available commands"
 
 .PHONY: setup-python
@@ -167,6 +171,14 @@ setup-poetry:
 setup-dependencies:
 	@$(POETRY) install
 
+# Dev-only targets run the Docker Compose stack with --env dev whatever ENV says, and make
+# never rejects a variable a recipe does not read: `make smoke-test ENV=prod` once read dev,
+# found nothing and exited 0 (#3069). Each one starts with this; the argument names the
+# target to use for a cluster env, if there is one.
+define require_dev_env
+	@test "$(ENV)" = dev || { echo "$@ runs the dev Compose stack only, and ENV=$(ENV) was given.$(if $(1), Use: $(1))" >&2; exit 2; }
+endef
+
 .PHONY: setup-sops
 setup-sops:
 	@if ! command -v sops >/dev/null 2>&1; then \
@@ -176,6 +188,7 @@ setup-sops:
 
 .PHONY: setup-certs
 setup-certs:
+	$(call require_dev_env)
 	@$(TOOLKIT) tools certs generate --env dev
 
 .PHONY: setup-ansible
@@ -190,6 +203,7 @@ setup-ansible:
 
 .PHONY: regen-certs
 regen-certs:
+	$(call require_dev_env)
 	@echo "Regenerating dev TLS certificates..."
 	@$(TOOLKIT) tools certs generate --env dev
 	@mkcert -install >/dev/null 2>&1 || true
@@ -433,12 +447,14 @@ config-check-drift:
 
 .PHONY: build-dev
 build-dev:
+	$(call require_dev_env)
 	@$(TOOLKIT) services build api --env dev --no-cache
 	@$(TOOLKIT) services build errors --env dev --no-cache
 	@echo "✓ Development services built"
 
 .PHONY: up-dev
 up-dev:
+	$(call require_dev_env)
 	@$(TOOLKIT) services up \
 		api errors gitea n8n uptime loki grafana authelia crowdsec github-runner traefik \
 		--env dev
@@ -446,6 +462,7 @@ up-dev:
 
 .PHONY: down-dev
 down-dev:
+	$(call require_dev_env)
 	@echo "--- Bringing down ALL development services and removing volumes ---"
 	@$(TOOLKIT) services down \
 		api errors gitea n8n uptime loki grafana authelia crowdsec github-runner traefik \
@@ -454,13 +471,18 @@ down-dev:
 
 .PHONY: dev-full-clean
 dev-full-clean: down-dev
+	$(call require_dev_env)
 	@echo "--- Ensuring all Docker containers and volumes are removed ---"
 	@docker volume prune -f || true
 	@docker container prune -f || true
 	@echo "✓ Docker environment cleaned"
 
 .PHONY: dev-full-reset dev-full-reset-resume
-dev-full-reset: dev-full-clean credentials-generate
+# credentials-generate runs from the recipe, after the guard, never as a
+# prerequisite: under `make -j` a prerequisite runs alongside the guard (#3069).
+dev-full-reset: dev-full-clean
+	$(call require_dev_env)
+	@$(MAKE) --no-print-directory credentials-generate ENV=dev
 	@echo "============================================================"
 	@echo "--- MANUAL STEP REQUIRED ---"
 	@echo "After 'make credentials-generate' finished (output above this message),"
@@ -478,6 +500,7 @@ dev-full-reset: dev-full-clean credentials-generate
 # non-TTY caller (CI, an agent session, `make -j`) with no output explaining why.
 # A target boundary is the honest way to express "a human has to act here".
 dev-full-reset-resume:
+	$(call require_dev_env)
 	@$(TOOLKIT) config generate --env dev # Regenerate config with updated secrets
 	@echo "--- Starting all services ---"
 	@$(TOOLKIT) services up crowdsec authelia traefik gitea n8n uptime loki grafana api errors github-runner --env dev
@@ -490,6 +513,7 @@ dev-full-reset-resume:
 
 .PHONY: restart-dev
 restart-dev: down-dev up-dev
+	$(call require_dev_env)
 	@echo "✓ Development environment restarted"
 
 .PHONY: secrets
@@ -1764,19 +1788,14 @@ n8n-probe:
 backup-mint-node-tokens:
 	@$(TOOLKIT) backup mint-node-tokens --env $(or $(filter staging prod,$(ENV)),prod) $(if $(NODE),--node $(NODE)) $(if $(filter 1,$(ROTATE)),--rotate) $(if $(filter 1,$(WATCHER)),--watcher-only)
 
-# Move ONE node into its own bucket (BACKUP-057 AC4): copy its history under a
-# temporary token, compare snapshot by snapshot, then declare, deploy,
-# re-initialise, ship and pin it. Stops at the first failure. Prod only, and ENV
-# is required, never defaulted. CHECK=1 lists the source and changes nothing.
-# Leaves common.yaml and targets.txt changed: commit them in a PR.
-# Runbook: docs/runbooks/offsite-backup-restore.md.
-.PHONY: backup-migrate
-backup-migrate:
-	@test -n "$(NODE)" || (echo "Usage: make backup-migrate NODE=<node> ENV=prod [CHECK=1]" && exit 1)
-	@test "$(NODE)" != "all" || (echo "backup-migrate takes exactly one node, never NODE=all" && exit 1)
-	@test "$(ENV)" = prod || (echo "backup-migrate needs ENV=prod, got '$(ENV)'" && exit 1)
-	@test -z "$(CHECK)" -o "$(CHECK)" = 1 || (echo "CHECK takes 1 or nothing, got '$(CHECK)'" && exit 1)
-	@$(TOOLKIT) backup migrate --node $(NODE) --env $(ENV) $(if $(CHECK),--check)
+# Retires an R2 pair no SECRET_CATALOG entry owns (BACKUP-057 PR 5): revokes its
+# token through the minter, proves the account no longer knows it, then unsets
+# both keys from every SOPS file holding them. Reports only, unless APPLY=1.
+# FORGET=1 unsets a pair whose token is already gone.
+.PHONY: backup-revoke-r2-pair
+backup-revoke-r2-pair:
+	@test -n "$(PAIR)" || (echo "Usage: make backup-revoke-r2-pair PAIR=<prefix> (backup.r2.readonly_ or backup.r2) [APPLY=1] [FORGET=1]" && exit 1)
+	@$(TOOLKIT) backup revoke-r2-pair --pair $(PAIR) $(if $(filter 1,$(APPLY)),--apply) $(if $(filter 1,$(FORGET)),--forget)
 
 .PHONY: sync-terraform-backend
 sync-terraform-backend: ## Render infra/terraform/backend.s3.tfbackend from terraform.state (TF-007)
@@ -2053,6 +2072,7 @@ bootstrap-k8s:
 # -----------------------------------------------------------------------------
 .PHONY: smoke-test
 smoke-test:
+	$(call require_dev_env,make test-e2e ENV=$(ENV))
 	@$(TOOLKIT) services health --env dev
 
 .PHONY: validate

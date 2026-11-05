@@ -48,12 +48,6 @@
     # no-op on an unprefixed name, so it yields the correct short name for
     # both shapes.
     node_short_name: "{{ inventory_hostname | regex_replace('^kubelab-', '') }}"
-    # BACKUP-057: a node ships to its own bucket, with its own pair and restic
-    # password, only once it is listed in `backup.r2.own_bucket_nodes`. The list
-    # is edited at the migration sitting, so no merge moves a node by itself.
-    # Read with `| bool` at every use: a templated var can arrive as the string
-    # "False", which a bare `if` treats as true.
-    node_own_bucket: "{{ node_short_name in (config.backup.r2.own_bucket_nodes | default([])) }}"
 
   pre_tasks: &backup_pre_tasks
     - name: Load base config (SSOT)
@@ -126,22 +120,14 @@
         # R: the prune waits this long for history copied into the repository
         # (#1920). No role default, so a play that forgets it fails the apply.
         node_backup_r2_lock_retention_days: "{{ config.backup.r2.lock_retention_days }}"
-        # Own bucket: its root, named as `node_bucket()` names it
+        # The node's own bucket, at its root, named as `node_bucket()` names it
         # (`kubelab-backup-<node>`, r2_tfvars.NODE_BUCKET_PREFIX; the isolation
-        # test renders this and compares). Shared bucket: the prefix as before.
+        # test renders this and compares), with its own pair and restic password.
         node_backup_r2_repository: >-
-          {{ 's3:' ~ (config.backup.r2.endpoint | regex_replace('/$', '')) ~ '/kubelab-backup-' ~ node_short_name
-             if node_own_bucket | bool
-             else config.backup.r2.repo_prefix ~ '/' ~ inventory_hostname }}
-        node_backup_restic_password: >-
-          {{ secrets.backup.nodes[node_short_name].restic_password
-             if node_own_bucket | bool else secrets.backup.restic_password }}
-        node_backup_r2_access_key: >-
-          {{ secrets.backup.r2.nodes[node_short_name].access_key_id
-             if node_own_bucket | bool else secrets.backup.r2.access_key_id }}
-        node_backup_r2_secret_key: >-
-          {{ secrets.backup.r2.nodes[node_short_name].secret_access_key
-             if node_own_bucket | bool else secrets.backup.r2.secret_access_key }}
+          s3:{{ config.backup.r2.endpoint | regex_replace('/$', '') }}/kubelab-backup-{{ node_short_name }}
+        node_backup_restic_password: "{{ secrets.backup.nodes[node_short_name].restic_password }}"
+        node_backup_r2_access_key: "{{ secrets.backup.r2.nodes[node_short_name].access_key_id }}"
+        node_backup_r2_secret_key: "{{ secrets.backup.r2.nodes[node_short_name].secret_access_key }}"
         # BACKUP-044 AC9. Domain from the SSOT, token from SOPS keyed by the
         # node's own short name — so adding a node to `backup.sources` and its
         # token to the catalog is the whole wiring, with no list to update here.

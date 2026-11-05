@@ -322,6 +322,19 @@ def _load_test_results_dir(output: str, root: Path) -> Path:
     return directory
 
 
+def _load_test_result_base(directory: Path, now: Any, commit: str) -> Path:
+    """`<date>-<commit>`, or the first free `-N` after it: a rerun never replaces a run.
+
+    Chosen once per run, so the run's own checkpoints still rewrite one file.
+    """
+    stem = f"{now:%Y-%m-%d}-{commit}"
+    base, n = directory / stem, 1
+    while base.with_suffix(".json").exists() or base.with_suffix(".md").exists():
+        n += 1
+        base = directory / f"{stem}-{n}"
+    return base
+
+
 def _load_test_lab(env: str) -> tuple[Any, dict[str, Any], dict[str, Any]]:
     """Refuses any env but staging before it reads a value or opens a connection."""
     from toolkit.features.configuration import ConfigurationManager
@@ -346,7 +359,7 @@ def load_test_run(
 ) -> None:
     """Measure staging: a baseline under the limiter, then ramps to the first degraded step.
 
-    Takes no URL. Writes <date>-<commit>.json and .md, and always removes the route
+    Takes no URL. Writes <date>-<commit>[-N].json and .md, and always removes the route
     it applies. Exits 0 with results, 1 when refused or when a step could not run.
     """
     import json
@@ -368,7 +381,7 @@ def load_test_run(
             cwd=settings.project_root,
         ).stdout.strip()
         now = datetime.now(timezone.utc)
-        base = _load_test_results_dir(output, settings.project_root) / f"{now:%Y-%m-%d}-{commit}"
+        base = _load_test_result_base(_load_test_results_dir(output, settings.project_root), now, commit)
 
         def save(result: dict[str, Any]) -> None:
             result = {**result, "date": now.strftime("%Y-%m-%dT%H:%MZ"), "commit": commit}

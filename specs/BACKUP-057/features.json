@@ -37,7 +37,7 @@
   {
     "id": "BACKUP-057-f5",
     "behavior": "The migration copies, matches every source snapshot to exactly one copy by its original ID, reinitialises the marker with its journal line, ships and re-pins, stopping at the first mismatch (AC4)",
-    "verification": "poetry run pytest tests/test_backup_migrate.py --no-cov -q",
+    "verification": "Manual, measured 2026-10-08 on all four nodes (vps 39/39, rpi3 40/40, rpi4 52/52, beelink 61/61 snapshots matched) and recorded in verification.md. The command and its test were removed in PR 5, since nothing is left to move out of the shared bucket",
     "state": "pending",
     "evidence": ""
   },

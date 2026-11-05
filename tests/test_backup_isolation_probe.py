@@ -95,10 +95,9 @@ def _secrets() -> dict[str, str]:
     return out
 
 
-def _probe(r2: R2, declared: list[str] | None = None, secrets: dict[str, str] | None = None) -> bool:
+def _probe(r2: R2, secrets: dict[str, str] | None = None) -> bool:
     return bi.probe(
         NODES,
-        declared=NODES if declared is None else declared,
         endpoint=ENDPOINT,
         secret=(secrets if secrets is not None else _secrets()).get,
         run=r2.run,
@@ -253,7 +252,6 @@ def test_an_empty_fleet_fails_it_instead_of_passing_over_nothing() -> None:
     assert (
         bi.probe(
             [],
-            declared=[],
             endpoint=ENDPOINT,
             secret=_secrets().get,
             run=r2.run,
@@ -264,10 +262,6 @@ def test_an_empty_fleet_fails_it_instead_of_passing_over_nothing() -> None:
         is False
     )
     assert r2.requests == []
-
-
-def test_a_node_still_shipping_to_the_shared_bucket_fails_it() -> None:
-    assert _probe(R2(), declared=NODES[:3]) is False
 
 
 def test_a_node_without_its_pair_in_sops_fails_it() -> None:

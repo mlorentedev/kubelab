@@ -72,9 +72,28 @@ DRILL_NAMESPACE = "kubelab"
 #: last one that exists. Only once the whole range is past that final point does
 #: Grafana's staleness handling start counting its intervals.
 #:
-#: The number matters because the advice is acted on: told 45m, the operator
-#: re-runs into a second refusal and concludes the drill is broken.
-RESOLVE_LATENCY_MIN = 90
+#: The number matters because the advice is acted on: told 45m when the
+#: latency was 90m, the operator re-ran into a second refusal and concluded the
+#: drill was broken. Advice must never be shorter than the latency.
+#:
+#: Both effects were then removed from the rule (#1668): the query is `instant`
+#: and one missing evaluation resolves the instance. Measured on staging
+#: 2026-11-04 with the drill itself:
+#:
+#:     03:29:58  claim removed, right after the FIRING evaluation
+#:     03:59:55  first evaluation that cannot see it -> stale, RESOLVED
+#:     04:00:05  gone from the alert list
+#:
+#: Two intervals, and pinned there for the drill: it removes the claim within a
+#: minute of FIRING, so its last line is always about 30m old at the evaluation
+#: that drops it. A claim deleted by hand at another moment can take up to 45m
+#: (the rule's comment in disk-rules.yaml); this constant answers the drill's
+#: own re-run advice only.
+#:
+#: 35, not 30: the measurement was 30m07s, and advice that equals it sends
+#: the operator back seconds before the alert list drops the instance, into
+#: exactly the second refusal this constant exists to prevent.
+RESOLVE_LATENCY_MIN = 35
 
 #: A storage class that cannot exist is what makes the claim *stay* Pending.
 #: A claim on a real class would bind as soon as anything consumed it, and a

@@ -14,6 +14,7 @@ that produced the incident.
 from __future__ import annotations
 
 import pathlib
+import re
 
 import pytest
 import yaml
@@ -324,6 +325,52 @@ class TestTheDrillWatchesTheRuleThatExists:
         doc = yaml.safe_load(DISK_RULES.read_text(encoding="utf-8"))
         by_title = {rule["title"]: rule["uid"] for group in doc["groups"] for rule in group["rules"]}
         assert by_title[pvc_drill.DRILL_ALERT_NAME] == "obs015-pvc-unbound-failure"
+
+
+class TestADeletedClaimResolvesPromptly:
+    """The two settings that bound how long a deleted claim keeps firing (#1668 AC1).
+
+    Measured 89.5m under `noDataState: OK` (staging, 2026-11-03), and noDataState
+    was never the lever: other claims keep the result non-empty, so the deleted
+    claim's series goes MISSING. Two things held it: a `range` query over 30m,
+    whose last point keeps a series alive 30m past its `[30m]` lookback, and
+    Grafana's default of two missing-series evaluations at the 15m interval.
+    """
+
+    def _rule(self) -> dict:
+        doc = yaml.safe_load(DISK_RULES.read_text(encoding="utf-8"))
+        rules = {rule["uid"]: rule for group in doc["groups"] for rule in group["rules"]}
+        return rules["obs015-pvc-unbound-failure"]
+
+    def test_one_missing_evaluation_resolves_the_instance(self) -> None:
+        assert self._rule().get("missing_series_evals_to_resolve") == 1
+
+    def test_the_setting_uses_the_key_grafana_reads(self) -> None:
+        """Grafana 13.0.2's provisioning struct reads only the snake_case key
+        (`rules_types.go`); the camelCase spelling of the API is ignored with no
+        error, and the drill would then measure 90m again."""
+        assert "missingSeriesEvalsToResolve" not in self._rule()
+
+    def test_the_query_is_instant(self) -> None:
+        query = next(d for d in self._rule()["data"] if d["refId"] == "A")
+        assert query["model"]["queryType"] == "instant"
+
+    def test_the_advised_latency_follows_from_the_rule(self) -> None:
+        """The drill removes its claim right after FIRING, so the instance
+        resolves once the last line leaves the lookback, plus one interval per
+        extra missing evaluation (measured 30m07s at one). The constant must sit
+        inside that window, so changing the lookback, the interval or the
+        evaluation count without re-measuring turns this red."""
+        doc = yaml.safe_load(DISK_RULES.read_text(encoding="utf-8"))
+        group = next(g for g in doc["groups"] if any(r["uid"] == "obs015-pvc-unbound-failure" for r in g["rules"]))
+        interval = int(re.fullmatch(r"(\d+)m", group["interval"]).group(1))
+        expr = next(d for d in self._rule()["data"] if d["refId"] == "A")["model"]["expr"]
+        lookback = int(re.search(r"\[(\d+)m\]", expr).group(1))
+        evals = self._rule()["missing_series_evals_to_resolve"]
+        earliest = lookback + (evals - 1) * interval
+        # Strictly above `earliest`: advice equal to the measurement sends the
+        # operator back before the alert list has dropped the instance.
+        assert earliest < pvc_drill.RESOLVE_LATENCY_MIN < earliest + interval
 
 
 class TestTheAdviceMatchesWhatWasMeasured:

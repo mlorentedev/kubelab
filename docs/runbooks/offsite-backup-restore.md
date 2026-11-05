@@ -89,7 +89,7 @@ It sends the requests a stolen node credential would send, and fails on any that
 - every node's own pair lists and deletes in every other node's bucket, and each request must be refused with `AccessDenied`;
 - each node's own pair deletes the youngest object under its bucket's `data/`, which the bucket lock must refuse with `ObjectLockedByBucketPolicy`.
 
-A refusal for any other reason (a network error, a missing bucket) fails the probe, because it proves nothing. An empty `data/` fails it too, because the lock has nothing to refuse. A node not yet in `backup.r2.own_bucket_nodes` fails it as well, since it still ships to the shared bucket. So the probe passes only after every node has been moved and has shipped once to its own bucket. Before the migration it fails, but its `N of 24 cross-node requests refused` line already measures the scope half.
+A refusal for any other reason (a network error, a missing bucket) fails the probe, because it proves nothing. An empty `data/` fails it too, because the lock has nothing to refuse. So the probe passes only once every node has shipped to its own bucket.
 
 The cross delete names `data/kubelab-isolation-probe-<node>`, a key that no restic repository writes, so a broken scope cannot remove a pack. The own delete has to name a real pack, because a lock guards only what exists, so the probe first makes sure the delete can only be refused. It reads the bucket's lock rules with `cloudflare.r2_admin_token` and attempts nothing unless an enabled `data/` rule holds objects by age for at least `backup.r2.lock_retention_days`. It also attempts nothing when the youngest pack is less than a day from the end of that window, because past it the delete is allowed by design. Either case fails the probe and says why. A missing rule is restored with `make tf-r2-apply`.
 
@@ -200,8 +200,28 @@ the mint revoke the old token. A `"healthy":1` line per node and a fleet
 `"healthy":1` mean the cluster has it. The token can be re-minted, so it has no
 Bitwarden escrow: losing it loses no data.
 
-The pair `backup.r2.readonly_*`, made by hand in the dashboard, is read by nothing
-since BACKUP-057 PR 4a; PR 5 revokes it.
+### Retiring a pair nothing reads
+
+An R2 pair's Access Key ID is its token's id, and that id is stored only in
+SOPS. Unsetting the keys first leaves a live token that nobody can name any
+more. So a pair is retired with one command, which revokes the token, checks
+that the account no longer knows it, and only then unsets both keys from every
+SOPS file that holds them:
+
+```bash
+make backup-revoke-r2-pair PAIR=backup.r2.readonly_            # report only
+make backup-revoke-r2-pair PAIR=backup.r2.readonly_ APPLY=1    # revoke, then unset
+```
+
+`PAIR` is the key prefix. A prefix that ends in `_` is joined as written
+(`backup.r2.readonly_access_key_id`); any other is joined with a dot
+(`backup.r2` gives `backup.r2.access_key_id`). The command refuses a pair that
+still has a `SECRET_CATALOG` entry, because something reads it. Remove the
+consumer and the entry first. If the account has no token with that id, the
+command unsets nothing. That happens when the token was already revoked, or
+when it is a user token the minter cannot see. Confirm in the dashboard that it
+is gone, then rerun with `FORGET=1`. Commit the changed `*.enc.yaml` in the
+same PR. Retired so far: `backup.r2.readonly_*` (2026-11-04).
 
 ## On-demand backup stale
 
@@ -312,67 +332,25 @@ a PR, then `make sync-r2-watcher-targets`. Take the id from the watcher's
 lands, the watcher reports the node `repository id changed` on purpose: accepting
 a new history is a reviewed change, not a side effect of a ship.
 
-## Moving a node into its own bucket
+## Adding a node
 
-BACKUP-057: each node ships to `kubelab-backup-<node>` with its own token and restic
-password, instead of to `kubelab-backups/<node>` with the shared ones. One node at a
-time, all four in one sitting: until a node's copy is verified, `kubelab-backups`
-holds its only copy, and that bucket has no lock.
+BACKUP-057: a node in `backup.sources` ships to `kubelab-backup-<node>` with its own
+token and restic password, and there is no other place for it to ship. Nothing is
+moved: the node is born there, as ace2 was. The five nodes that moved out of
+`kubelab-backups` on 2026-10-08 did so with a one-off command that was removed once
+the last of them had moved.
 
-```bash
-make backup-migrate NODE=rpi3 ENV=prod CHECK=1   # lists the source and finds the pin line; changes nothing
-make backup-migrate NODE=rpi3 ENV=prod
-```
-
-It stops at the first failure:
-
-1. **Copy.** It mints a temporary token, `kubelab-backup-migrate-<node>`: Object Read
-   on `kubelab-backups`, Object Read & Write on the node's bucket. `restic copy`
-   needs one because it reads source and destination with the same `AWS_*`, and
-   no standing pair reaches both. The token must list both buckets and be refused
-   on another node's before anything is copied. It is revoked once the copy is
-   compared, whatever happened, and it is never stored. The copy runs with
-   `--no-lock`: restic locks the source too, and this token cannot write there
-   (lesson-538). The comparison in step 2 is what catches a prune that ran mid-copy.
-2. **Compare.** Every source snapshot must have exactly one copy (its `original`).
-   A missing or doubled snapshot stops the migration, even when the counts match.
-3. **Declare.** It adds the node to `backup.r2.own_bucket_nodes` in `common.yaml`.
-4. **Deploy** (`backup`), then **re-initialise** (`backup-repo-reinit`). The deploy
-   comes first. A scheduled ship landing between them then refuses the new
-   repository and pages once, which is harmless. Re-initialising first would let it
-   record the old repository's id instead.
-5. **Ship once** (`backup-node`). The node records the copied repository's id.
-6. **Pin** that id in `backup.r2.repository_ids` and regenerate the watcher's
-   `targets.txt`.
-
-What to expect, and what to do:
-
-- **Commit** `common.yaml` and `targets.txt` in a PR when the sitting ends.
-- **Until that PR merges,** the prod watcher still reads `kubelab-backups/<node>`, which
-  has stopped growing. Its snapshot-age alert for the moved node fires on schedule.
-  That is the old target ageing, not a failed backup.
-- **Until that PR merges, do not deploy `node_backup` from master** (`make backup`,
-  `make provision`). Master does not declare the node, so the deploy points it back at
-  `kubelab-backups` with the shared secrets, and the next ship lands there.
-- **After the merge, run `make apply-secrets ENV=prod`** from a clean checkout of
-  the merged `master`: it renders from the working tree, so a stale branch renders
-  the old declaration. Argo CD syncs the new
-  `targets.txt`, but the watcher's Secret is not in git: it picks each node's
-  `RESTIC_PASSWORD_<NODE>` from the declaration only when `apply-secrets` renders it.
-  Until then the watcher opens the new bucket with the shared password and reports
-  `wrong password or no key found` (lesson-539). `DRY_RUN=1` first should show only
-  `r2-backup-watcher-secrets` as `configured`. Then `make watcher-run
-  NAME=r2-backup-watcher ENV=prod` reports every node healthy.
-- **If a step fails after the declaration,** the node is declared and not pinned. Fix
-  the cause, then finish by hand: run the failed target and the ones after it
-  (`make backup ENV=prod`, `make backup-repo-reinit NODE=<node> DEST=r2 ENV=prod`,
-  `make backup-node NODE=<node> ENV=prod`). Then finish step 6 too: pin the id
-  that `restic cat config` reports in `backup.r2.repository_ids`, run
-  `make sync-r2-watcher-targets`, and commit both files in the PR. Without the
-  regeneration, the watcher keeps reading the old prefix. Re-running
-  `backup-migrate` refuses a declared node.
-- **If the copy step fails,** re-run the migration: the copy resumes, and a
-  re-copy duplicates nothing.
+1. Declare the node in `backup.sources` and run `make sync-r2-watcher-targets`.
+2. `make tf-r2-apply` creates its bucket and the lock.
+3. `make backup-mint-node-tokens ENV=prod NODE=<node>` mints its pair and its restic
+   password into SOPS. Escrow the password in Bitwarden in the same sitting
+   (`make backup-escrow-check ENV=prod`).
+4. `make backup-mint-node-tokens ENV=prod WATCHER=1 ROTATE=1`, so the watcher's
+   token names the new bucket, then `make apply-secrets ENV=prod`: the watcher's
+   Secret reads each node's `RESTIC_PASSWORD_<NODE>` only when `apply-secrets`
+   renders it (lesson-539).
+5. `make backup ENV=prod`, then `make backup-node NODE=<node> ENV=prod`, then pin the
+   id as in "Repository missing or replaced", step 4.
 
 ## Backing up on demand
 
@@ -699,7 +677,7 @@ make backup-drill-node NODE=<node> ENV=prod
 ```
 
 It reads the node's repository and credentials the same way the node does: its own
-bucket if the node is in `own_bucket_nodes`, otherwise the shared one. It restores the
+bucket, pair and password. It restores the
 newest snapshot into a scratch directory. Each source must restore at least one file,
 every declared database must pass `PRAGMA integrity_check`, and every declared
 `exclude` must be absent. A `pg_dumpall` source is skipped by name; `drill-postgres`
