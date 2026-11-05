@@ -283,7 +283,18 @@ node_backup_prune_connections: 20
 # 128M (a plain check peaked at 76M). Memory barely moves with t because packs
 # are streamed; time grows with the pack count, at ~1 pack/s on the RPi3. So
 # raise t when a repository nears ~400 packs, not when memory moves.
-node_backup_check_read_data_groups: 1
+#
+# t = 16 since #2920. On 2026-11-01 the full read timed out on rpi3, rpi4 and
+# beelink, at 364-961 packs and up to 2.8 GB. Measured 2026-11-04 on the hotel
+# uplink, under MemoryMax=128M: a plain check took 55s on rpi3 and 107s on rpi4,
+# and reading 1/8 of the packs took another 109s and 383s. At 1/16 the check
+# runs for about 110s and 300s. With the ~100s ship in front of it, rpi4 keeps
+# about 200s of the 600s spare, and its repository shrinks once the Pi-hole
+# telemetry is pruned (#3035). The check stays inside the ship's 600s, not under a longer
+# timeout of its own, because `restic check` holds the exclusive lock, and ship
+# and prune wait for a lock only about that long. Every pack is read once every
+# 16 weeks.
+node_backup_check_read_data_groups: 16
 
 # RPi3 memory ceiling: 128M, set by playbooks/backup.yml for rpi3 only.
 # MemorySwapMax=0 is deliberate, not decoration -- the node has ~900MB swap
@@ -346,6 +357,14 @@ node_backup_boot_ship_delay: "2min"
 # shared between nodes. Applied uniformly to both trigger shapes since the
 # timer template carries one RandomizedDelaySec regardless of branch.
 node_backup_randomized_delay: "5min"
+
+# The weekly check's spread, wider than the ship's. `Persistent=true` catches
+# up a missed week at boot, so after the homelab powers on, every on-demand
+# node would start its check in the same minute and read from R2 over one
+# uplink (#2920: rpi3, rpi4 and beelink all within two minutes, 2026-11-01).
+# One hour is more than the 600s budget of each on-demand node laid end to end,
+# and still well inside a 3-4h homelab session.
+node_backup_check_randomized_delay: "1h"
 
 # `restic check` weekly, not per-run (Part 3's script already supports the
 # --check flag; this is Part 4 wiring it to its own timer). Ratified cadence

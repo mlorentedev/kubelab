@@ -3,9 +3,9 @@ name: Deploy Staging
 # Continuous delivery to staging (ADR-046 D3 — PR-per-update). On each push to
 # master that changes app code, build an immutable `sha-<short>` image per
 # changed app, run `toolkit deployment promote --env staging`, and open a PR with
-# the regenerated overlay. Merging it (human + required checks) lets Argo CD sync
-# staging to master HEAD. Same mechanism as prod promotion; staging differs only
-# in that the PR is opened automatically here.
+# the regenerated overlay. Merging it lets Argo CD sync staging to master HEAD.
+# deploy-merge.yml merges it without a human once it is mechanical and every
+# context is green (DELIVERY-004); prod keeps its operator merge.
 #
 # The PR is opened with RELEASE_PLEASE_TOKEN (a PAT), NOT the default
 # GITHUB_TOKEN: a PR opened by GITHUB_TOKEN does not trigger `on: pull_request`
@@ -145,15 +145,16 @@ jobs:
           # ONE STABLE BRANCH, not one per sha (#1681). Keyed on the sha, every
           # api push minted a PR and the older ones were closed as superseded by
           # hand (five on 2026-11-02 alone). One long-lived offer, force-updated
-          # to the newest sha, keeps the gate (ADR-037): merging moves staging,
-          # leaving it open keeps staging where it is.
+          # to the newest sha. Merging moves staging; deploy-merge merges it when
+          # it is mechanical and green, and a draft holds it (DELIVERY-004).
           BRANCH="deploy/staging-${APP}"
           TITLE="chore(staging): deploy ${APP} ${TAG}"
           BODY="Staging promotion of \`${APP}\` to \`${TAG}\` (ADR-046).
 
           This pull request is long-lived: every api push force-updates it to the
-          newest \`sha-*\` and rewrites this title. Merging it moves staging;
-          leaving it open keeps staging where it is (ADR-037)."
+          newest \`sha-*\` and rewrites this title. Merging it moves staging.
+          deploy-merge merges it once it is mechanical and green (DELIVERY-004);
+          to hold staging, convert it to a draft (docs/runbooks/gitops-delivery-promotion.md)."
 
           # Asked BEFORE the push, so an API failure leaves the remote untouched
           # and the title never names a sha the branch no longer carries.

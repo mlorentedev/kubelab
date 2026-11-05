@@ -21,10 +21,9 @@ import json
 import os
 import pathlib
 import re
+import shutil
 import subprocess
 import time
-
-import shutil
 
 import pytest
 
@@ -130,6 +129,11 @@ SIZES = {"rpi3": 123_456_789, "vps": 2_345_678_901}
 BUCKET_BYTES = sum(SIZES.values()) + 1_000_000
 
 
+def _node_passwords(**by_node: str) -> dict[str, str]:
+    """The probe's per-node variables, keyed RESTIC_PASSWORD_<NODE>."""
+    return {f"RESTIC_PASSWORD_{node.upper()}": value for node, value in by_node.items()}
+
+
 def _sizes(**overrides: str) -> str:
     """The sizes file, one `<kind> <name> <bytes|null> <seconds>` per line."""
     entries = {("bucket", "kubelab-backups"): str(BUCKET_BYTES), **{("node", n): str(b) for n, b in SIZES.items()}}
@@ -224,7 +228,8 @@ def fleet(tmp_path: pathlib.Path, request):
         # By path: Ubuntu's busybox `sh` prefers its own `nc` applet to PATH.
         "NC": str(nc),
         "PROBE_NOW": str(NOW),
-        "RESTIC_PASSWORD": "not-a-real-value-fixture",
+        # One per node (BACKUP-057); the probe reads no shared RESTIC_PASSWORD.
+        **_node_passwords(rpi3="not-a-real-value-fixture", vps="not-a-real-value-fixture"),
         "AWS_ACCESS_KEY_ID": "not-a-real-value-fixture",
         "AWS_SECRET_ACCESS_KEY": "not-a-real-value-fixture",
         "PROBE_SHELL": " ".join(request.param),
@@ -369,12 +374,11 @@ def test_a_pod_without_its_secret_still_reports_unhealthy(fleet, missing) -> Non
 
 
 def test_each_node_opens_with_its_own_password(fleet) -> None:
-    """BACKUP-057: a moved node's repository takes its own password, the rest the shared one."""
+    """BACKUP-057: every node's repository takes that node's own password."""
     fake, _, env = fleet
     (fake / "rpi3.password").write_text("fixture-rpi3", encoding="utf-8")
-    (fake / "kubelab-vps.password").write_text("fixture-shared", encoding="utf-8")
-    env = {**env, "RESTIC_PASSWORD_RPI3": "fixture-rpi3", "RESTIC_PASSWORD_VPS": "fixture-shared"}
-    del env["RESTIC_PASSWORD"]
+    (fake / "kubelab-vps.password").write_text("fixture-vps", encoding="utf-8")
+    env = {**env, **_node_passwords(rpi3="fixture-rpi3", vps="fixture-vps")}
     rc, nodes, (summary,) = _run(env)
     assert rc == 0 and summary["healthy"] == 1, nodes
 
@@ -382,7 +386,8 @@ def test_each_node_opens_with_its_own_password(fleet) -> None:
 def test_a_node_given_another_nodes_password_is_unreadable(fleet) -> None:
     fake, _, env = fleet
     (fake / "rpi3.password").write_text("fixture-rpi3", encoding="utf-8")
-    env = {**env, "RESTIC_PASSWORD_RPI3": "fixture-shared", "RESTIC_PASSWORD_VPS": "fixture-shared"}
+    (fake / "kubelab-vps.password").write_text("fixture-vps", encoding="utf-8")
+    env = {**env, **_node_passwords(rpi3="fixture-vps", vps="fixture-vps")}
     rc, nodes, (summary,) = _run(env)
     assert _node(nodes, "rpi3")["healthy"] == 0 and "wrong password" in _node(nodes, "rpi3")["reason"]
     assert _node(nodes, "vps")["healthy"] == 1
@@ -390,10 +395,9 @@ def test_a_node_given_another_nodes_password_is_unreadable(fleet) -> None:
 
 
 def test_a_missing_node_password_costs_that_node_only(fleet) -> None:
-    """With no shared fallback, the node whose password is absent is named; the others still run."""
+    """The node whose password is absent is named; the others still run."""
     _, _, env = fleet
-    env = {**env, "RESTIC_PASSWORD_VPS": "x"}
-    del env["RESTIC_PASSWORD"]
+    del env["RESTIC_PASSWORD_RPI3"]
     rc, nodes, (summary,) = _run(env)
     assert _node(nodes, "rpi3")["healthy"] == 0
     assert "RESTIC_PASSWORD_RPI3" in _node(nodes, "rpi3")["reason"]
@@ -401,13 +405,23 @@ def test_a_missing_node_password_costs_that_node_only(fleet) -> None:
     assert summary["healthy"] == 0
 
 
-def test_a_secret_from_before_per_node_passwords_still_opens_the_fleet(fleet) -> None:
-    """The shared RESTIC_PASSWORD stands in until PR 5, so the probe Argo syncs at merge
-    keeps working against a Secret `apply-secrets` has not rewritten yet."""
+def test_a_shared_password_in_the_environment_opens_no_repository(fleet) -> None:
+    """BACKUP-057 PR 5: a Secret that still carries the old `RESTIC_PASSWORD` is not a fallback.
+
+    The shared password is the right one for the repository, as it was for every
+    node before the migration. A node with no password of its own must still be
+    reported unreadable, naming the variable it lacks, rather than opened by a
+    key nobody is supposed to have delivered to the cluster any more.
+    """
     fake, _, env = fleet
-    (fake / "rpi3.password").write_text(env["RESTIC_PASSWORD"], encoding="utf-8")
+    (fake / "rpi3.password").write_text("fixture-shared", encoding="utf-8")
+    env = {k: v for k, v in env.items() if k != "RESTIC_PASSWORD_RPI3"}
+    env["RESTIC_PASSWORD"] = "fixture-shared"
     rc, nodes, (summary,) = _run(env)
-    assert rc == 0 and summary["healthy"] == 1, nodes
+    assert rc != 0 and summary["healthy"] == 0
+    assert _node(nodes, "rpi3")["healthy"] == 0
+    assert "RESTIC_PASSWORD_RPI3" in _node(nodes, "rpi3")["reason"]
+    assert _node(nodes, "vps")["healthy"] == 1
 
 
 def test_missing_targets_still_report_unhealthy(fleet) -> None:

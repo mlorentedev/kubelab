@@ -264,6 +264,21 @@ class TestResultsDirectory:
         assert _load_test_results_dir("docs/new", tmp_path) == tmp_path / "docs/new"
         assert (tmp_path / "docs/new").is_dir()
 
+    def test_a_second_run_on_the_same_day_and_commit_keeps_the_first(self, tmp_path: pathlib.Path) -> None:
+        """Measured 2026-11-04: a 3,200/s rerun on the same commit replaced the 2,000/s results."""
+        from datetime import datetime, timezone
+
+        from toolkit.cli.infra import _load_test_result_base
+
+        now = datetime(2026, 11, 4, 7, 9, tzinfo=timezone.utc)
+        first = _load_test_result_base(tmp_path, now, "0e224c0f")
+        assert first == tmp_path / "2026-11-04-0e224c0f"
+        first.with_suffix(".json").write_text("{}", encoding="utf-8")
+        second = _load_test_result_base(tmp_path, now, "0e224c0f")
+        assert second == tmp_path / "2026-11-04-0e224c0f-2"
+        second.with_suffix(".md").write_text("", encoding="utf-8")
+        assert _load_test_result_base(tmp_path, now, "0e224c0f") == tmp_path / "2026-11-04-0e224c0f-3"
+
 
 class _DyingLab:
     """Enough of a Lab for `run`: everything answers, and the second ramp dies."""

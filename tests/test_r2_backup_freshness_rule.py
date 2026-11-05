@@ -127,9 +127,10 @@ def _probe(tmp_path: pathlib.Path, nodes: list[Node], now: int) -> list[dict]:
         "REACH_TIMEOUT": "1",
         "NC": str(bin_dir / "nc"),
         "PROBE_NOW": str(now),
-        "RESTIC_PASSWORD": "not-a-real-value-fixture",
         "AWS_ACCESS_KEY_ID": "not-a-real-value-fixture",
         "AWS_SECRET_ACCESS_KEY": "not-a-real-value-fixture",
+        # One per node, as the Secret carries them (BACKUP-057): the probe reads no shared key.
+        **{f"RESTIC_PASSWORD_{node.name.upper()}": "not-a-real-value-fixture" for node in nodes},
     }
     proc = subprocess.run(["sh", str(PROBE)], env=env, capture_output=True, text=True, timeout=60)
     return [json.loads(line) for line in proc.stdout.splitlines() if line.strip()]

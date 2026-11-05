@@ -260,6 +260,15 @@ class TestExempt:
         files = [{"path": p} for p in [registry["mechanical"]["values_file"], *registry["mechanical"]["overlay_files"]]]
         assert classify(pr(files=files, headRefOid="a" * 40), registry, shape).state == "pending"
 
+    @pytest.mark.parametrize("login", ["mlorentedev", "kubelab-bot"])
+    def test_a_deploy_branch_and_author_exempt_nothing(self, registry: dict, login: str) -> None:
+        """review-2 F2: the exemption reads the diff and the verdict, never who opened the
+        PR or what its branch is called."""
+        files = [{"path": p} for p in [registry["mechanical"]["values_file"], *registry["mechanical"]["overlay_files"]]]
+        payload = pr(files=files, headRefOid="a" * 40, headRefName="deploy/staging-web", author={"login": login})
+        shape = {"verdict": "not-mechanical", "head_sha": "a" * 40}
+        assert classify(payload, registry, shape).state == "pending"
+
     def test_a_proper_subset_of_a_signature_is_not_exempt(self, registry: dict) -> None:
         """Half a signature is not a signature.
 

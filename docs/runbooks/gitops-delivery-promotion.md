@@ -21,9 +21,18 @@ When release-please cuts `api:X.Y.Z`, `release.yml` does **not** rebuild. It res
 ## Deploy to staging (normal dev loop)
 
 1. Open a feature PR, get it green, merge to `master`.
-2. `staging-deploy.yml` fires automatically: builds `kubelab-<app>:sha-<short>` for each changed app, runs `toolkit deployment promote --env staging --app <app> --version sha-<short>`, regenerates the overlay, and opens a PR titled `chore(staging): deploy sha-<short>`.
-3. Review (a glance — the diff is the image tag) and **merge** it. Argo CD (staging) syncs and rolls the pods.
+2. `staging-deploy.yml` (api) or `product-image-receiver.yml` (web and other products) fires automatically: builds or receives `kubelab-<app>:sha-<short>`, runs `toolkit deployment promote --env staging --app <app> --version sha-<short>`, and force-updates the one long-lived PR from `deploy/staging-<app>`, titled `chore(staging): deploy <app> sha-<short>`.
+3. `deploy-merge.yml` merges that PR without a human once it is mechanical (`deploy-shape`) and every context is green (DELIVERY-004, #1619). Argo CD (staging) syncs and rolls the pods, and `deploy-verify.yml` checks the result.
 4. Verify: `curl -sSI https://staging.mlorente.dev/` → 200, and spot-check the change.
+
+### Hold or stop unattended staging merges
+
+Leaving a staging deploy PR open no longer holds staging: the next deploy-merge run (every 30 minutes, and after CI) merges it.
+
+- **Hold one app:** convert its deploy PR to a draft (`gh pr ready <N> --undo`). The judge skips drafts, and the next image force-updates the branch without changing the draft state. Mark it ready to release the hold. Closing the PR is not a hold, because the next image opens a new one.
+- **Stop every unattended merge now:** `gh workflow disable deploy-merge.yml --repo mlorentedev/kubelab`. This takes effect immediately and needs no PR. Re-enable it with `gh workflow enable`.
+- **Paused by itself:** while staging's latest deploy-verify verdict on master is not green, deploy-merge skips every PR. Its run summary says `every PR waits:` with that run's URL. The verdict is the newest run with a job named `(argocd/kubelab-staging)` that ran; prod's runs never clear it. Fix the failed sync first ([deploy-verify is red](#deploy-verify-is-red)). It also pauses when deploy-verify cannot be read, or when no staging verdict is among the latest 100 runs. That happens after about two days with staging off, when prod's runs fill the window. To clear it, replay the last green staging commit: `gh workflow run deploy-verify.yml --repo mlorentedev/kubelab -f sha=<sha> -f env=staging`.
+- **Stop it durably:** open a PR setting `mechanical.merge` to `false` in `harness/review-attestation.json` (reverting the PR that flipped it). The widening test requires `tests/test_deploy_shape_widening.py`'s `APPROVED` and `TestSwitch` to move in the same diff. With the switch off, deploy-merge only reports what it would do.
 
 Pre-merge preview (optional): a feature-branch CI build also produces `sha-<pr-short>`; deploy it to staging out-of-band with `make deploy-k8s ENV=staging` (selfHeal:false tolerates it until the next sync).
 

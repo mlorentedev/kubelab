@@ -327,8 +327,9 @@ jobs:
           # Keying the branch on the sha minted a pull request per image: of 104
           # `chore(staging): deploy` PRs, 67 were closed as superseded and one was
           # a genuine "hold staging". One long-lived offer, force-updated to the
-          # newest sha, keeps the gate (ADR-037): merging moves staging, leaving it
-          # open keeps staging where it is. `allow_auto_merge` stays false.
+          # newest sha. Merging moves staging; deploy-merge merges it when it is
+          # mechanical and green, and a draft holds it (DELIVERY-004).
+          # `allow_auto_merge` stays false.
           BRANCH="deploy/staging-${APP}"
           TITLE="chore(staging): deploy ${APP} ${TAG}"
           BODY="Staging promotion of \`${APP}\` to \`${TAG}\` (ADR-046, cross-repo dispatch from ${REPOSITORY}).
@@ -337,8 +338,9 @@ jobs:
           \`kubelab.yaml\` at that commit, so its diff is part of this review.
 
           This pull request is long-lived: every image dispatch force-updates it to
-          the newest \`sha-*\` and rewrites this title. Merging it moves staging;
-          leaving it open keeps staging where it is (ADR-037)."
+          the newest \`sha-*\` and rewrites this title. Merging it moves staging.
+          deploy-merge merges it once it is mechanical and green (DELIVERY-004);
+          to hold staging, convert it to a draft (docs/runbooks/gitops-delivery-promotion.md)."
 
           # The lookup runs BEFORE the push. The title must name the sha on offer,
           # because someone merges a long-lived PR by its title; pushing first and

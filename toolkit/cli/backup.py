@@ -43,24 +43,24 @@ def mint_node_tokens_cmd(
         raise typer.Exit(code=1)
 
 
-@app.command("migrate")
-def migrate_cmd(
-    node: Annotated[str, typer.Option("--node", "-n", help="One backup.sources node")],
-    env: Annotated[str, typer.Option("--env", "-e", help="Only prod: the node buckets are prod's")],
-    check: Annotated[
-        bool, typer.Option("--check", help="List the source snapshots; mint, copy and deploy nothing")
+@app.command("revoke-r2-pair")
+def revoke_r2_pair_cmd(
+    pair: Annotated[str, typer.Option("--pair", help="Key prefix: backup.r2.readonly_ or backup.r2")],
+    apply: Annotated[bool, typer.Option("--apply", help="Revoke and unset; without it, only report")] = False,
+    forget: Annotated[
+        bool, typer.Option("--forget", help="Unset a pair whose token the account no longer has")
     ] = False,
 ) -> None:
-    """Move one node's restic history into its own bucket (BACKUP-057 AC4).
+    """Retire an R2 pair no catalog entry owns: revoke its token, prove it gone, then unset it (BACKUP-057).
 
-    Copies under a temporary token that is revoked when the copy is compared,
-    trusts the copy only when every source snapshot has exactly one copy, then
-    declares, deploys, re-initialises, ships and pins the node. Stops at the first
-    failure. Leaves common.yaml and targets.txt changed, to commit in a PR.
+    The token id is the pair's Access Key ID and is stored only in SOPS, so the
+    keys are unset only after the account stops knowing the id. A pair still in
+    SECRET_CATALOG is refused: something reads it. Nothing is printed but the
+    token's name.
     """
-    from toolkit.features.backup_migrate import migrate
+    from toolkit.features.backup_token_revoke import revoke_pair_cmd
 
-    if not migrate(node, env=env, check=check):
+    if not revoke_pair_cmd(pair, apply=apply, forget=forget):
         raise typer.Exit(code=1)
 
 
@@ -324,7 +324,7 @@ def isolation_probe_cmd(
     Each node's pair lists and deletes in every other node's bucket, and must be
     refused with AccessDenied; each node's own pair deletes the youngest pack in
     its bucket, and must be refused by the lock. A refusal for any other reason,
-    an empty data/ prefix, or a node still on the shared bucket fails it too.
+    or an empty data/ prefix, fails it too.
     """
     from toolkit.features.backup_isolation import probe_fleet
 

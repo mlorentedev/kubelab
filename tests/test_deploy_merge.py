@@ -13,8 +13,16 @@ from typing import Any
 
 import pytest
 
-from tests.test_deploy_shape import HEAD, REPO, FakeApi, routes_for
-from toolkit.features.deploy_merge import CLOSE, MERGE, SKIP, judge, merge_enabled, required_contexts
+from tests.test_deploy_shape import HEAD, NEW, REPO, FakeApi, routes_for
+from toolkit.features.deploy_merge import (
+    CLOSE,
+    MERGE,
+    SKIP,
+    judge,
+    merge_enabled,
+    pause_reason,
+    required_contexts,
+)
 from toolkit.features.deploy_shape import load_declaration
 from toolkit.features.product_registry import load_registry as load_products
 from toolkit.features.review_attestation import DEFAULT_REGISTRY
@@ -71,8 +79,8 @@ def products():
     return load_products(REPO_ROOT / "infra/config/products.yaml").products
 
 
-def run(api: MergeApi, decl, products):
-    return judge(7, REPO, api, decl, products, REQUIRED)
+def run(api: MergeApi, decl, products, paused: str | None = None):
+    return judge(7, REPO, api, decl, products, REQUIRED, paused=paused)
 
 
 class TestMerge:
@@ -129,6 +137,25 @@ class TestEachConditionRefusesAlone:
         routes = mergeable()
         routes[f"repos/{REPO}/pulls/7/files?per_page=100"] = [{"filename": "README.md", "status": "modified"}]
         assert run(MergeApi(routes), decl, products).action == SKIP
+
+    # The receivers open deploy PRs with RELEASE_PLEASE_TOKEN, the operator's PAT, so
+    # the author GitHub shows is the operator; the bot name is what the commits carry.
+    @pytest.mark.parametrize("login", ["mlorentedev", "kubelab-bot"])
+    def test_a_deploy_branch_and_author_grant_nothing(self, decl, products, login: str) -> None:
+        """review-2 F2: the name and the author are what anyone can mint. A PR from
+        `deploy/staging-web` by either identity with a non-mechanical diff is skipped."""
+        routes = mergeable()
+        routes[f"repos/{REPO}/pulls/7/files?per_page=100"] = [{"filename": "README.md", "status": "modified"}]
+
+        class Named(MergeApi):
+            def json(self, path: str) -> Any:
+                value = super().json(path)
+                if path == f"repos/{REPO}/pulls/7":
+                    head = {**value["head"], "ref": "deploy/staging-web"}
+                    value = {**value, "head": head, "user": {"login": login}}
+                return value
+
+        assert run(Named(routes), decl, products).action == SKIP
 
     def test_unknown(self, decl, products) -> None:
         routes = mergeable()
@@ -256,3 +283,123 @@ class TestWorkflowTriggers:
         assert wf["jobs"]["merge"].get("if") == (
             "github.event_name != 'workflow_dispatch' || github.ref_name == github.event.repository.default_branch"
         )
+
+
+RUNS = f"repos/{REPO}/actions/workflows/deploy-verify.yml/runs?branch=master&status=completed&per_page=100"
+STAGING, PROD = "Argo CD status (argocd/kubelab-staging)", "Argo CD status (argocd/kubelab-prod)"
+SWEEP = "Status arrived (argocd/kubelab-prod)"
+
+
+def verify_runs(*runs: tuple[int, str, list[tuple[str, str]]]) -> dict[str, Any]:
+    """Routes for deploy-verify's runs, newest first: (id, run conclusion, [(job name, conclusion)])."""
+    routes: dict[str, Any] = {
+        RUNS: {
+            "workflow_runs": [
+                {"id": i, "conclusion": c, "html_url": f"https://example.invalid/runs/{i}"} for i, c, _ in runs
+            ]
+        }
+    }
+    for i, _, jobs in runs:
+        routes[f"repos/{REPO}/actions/runs/{i}/jobs?per_page=100"] = {
+            "jobs": [{"name": n, "conclusion": j} for n, j in jobs]
+        }
+    return routes
+
+
+def paused(*runs: tuple[int, str, list[tuple[str, str]]]) -> str | None:
+    return pause_reason(FakeApi(verify_runs(*runs)), REPO, "master", "staging")
+
+
+class TestDeployVerifyPause:
+    """#3062 F11 option A: while staging's latest deploy-verify verdict on master is
+    red, nothing merges unattended. Prod reports the same commit seconds later under
+    the same job, so only a job named for staging is staging's verdict."""
+
+    def test_staging_green_does_not_pause(self) -> None:
+        assert paused((2, "success", [(STAGING, "success")])) is None
+
+    def test_staging_red_pauses_and_names_the_run(self) -> None:
+        reason = paused((2, "failure", [(STAGING, "failure")]))
+        assert reason is not None and "https://example.invalid/runs/2" in reason and "staging" in reason
+
+    def test_prod_green_after_staging_red_still_pauses(self) -> None:
+        assert paused((3, "success", [(PROD, "success")]), (2, "failure", [(STAGING, "failure")])) is not None
+
+    def test_a_prod_sweep_green_after_staging_red_still_pauses(self) -> None:
+        assert paused((3, "success", [(SWEEP, "success")]), (2, "failure", [(STAGING, "failure")])) is not None
+
+    def test_prod_red_after_staging_green_does_not_pause(self) -> None:
+        assert paused((3, "failure", [(PROD, "failure")]), (2, "success", [(STAGING, "success")])) is None
+
+    def test_staging_green_after_staging_red_clears_it(self) -> None:
+        assert paused((3, "success", [(STAGING, "success")]), (2, "failure", [(STAGING, "failure")])) is None
+
+    def test_a_skipped_staging_job_is_not_a_verdict(self) -> None:
+        assert paused((3, "success", [(STAGING, "skipped")]), (2, "failure", [(STAGING, "failure")])) is not None
+
+    def test_a_job_name_without_the_context_is_not_a_verdict(self) -> None:
+        """Runs from before the jobs carried their context are not read as staging's."""
+        assert paused((2, "success", [("Argo CD status", "success")])) is not None
+
+    def test_a_run_that_failed_to_start_pauses(self) -> None:
+        assert paused((3, "startup_failure", []), (2, "success", [(STAGING, "success")])) is not None
+
+    def test_no_staging_verdict_in_the_window_fails_closed(self) -> None:
+        assert paused((3, "success", [(PROD, "success")]), (2, "success", [(SWEEP, "success")])) is not None
+
+    def test_no_runs_fails_closed(self) -> None:
+        assert pause_reason(FakeApi({RUNS: {"workflow_runs": []}}), REPO, "master", "staging") is not None
+
+    def test_unreadable_runs_fail_closed(self) -> None:
+        assert pause_reason(FakeApi({RUNS: RuntimeError("403")}), REPO, "master", "staging") is not None
+
+    def test_unreadable_jobs_fail_closed(self) -> None:
+        routes = verify_runs((3, "success", [(STAGING, "success")]))
+        routes[f"repos/{REPO}/actions/runs/3/jobs?per_page=100"] = RuntimeError("403")
+        assert pause_reason(FakeApi(routes), REPO, "master", "staging") is not None
+
+    def test_a_pause_skips_a_mergeable_pr(self, decl, products) -> None:
+        assert run(MergeApi(mergeable()), decl, products).action == MERGE, "the fixture must merge unpaused"
+        decision = run(MergeApi(mergeable()), decl, products, paused="deploy-verify is red")
+        assert decision.action == SKIP and "deploy-verify is red" in decision.reason, decision.reason
+
+    def test_a_pause_skips_even_an_empty_pr(self, decl, products) -> None:
+        """The decision on #3062 is "skips every PR"; an empty one is closed a run later."""
+        routes = mergeable()
+        routes[f"repos/{REPO}/pulls/7/files?per_page=100"] = []
+        assert run(MergeApi(routes), decl, products, paused="red").action == SKIP
+
+
+class TestSquashMessage:
+    """#3062 F6: the squash message comes from what was judged, never from the PR's
+    title or body, which the judge does not read (`[skip ci]`, `feat!:`)."""
+
+    def test_a_merge_carries_a_subject_and_body_from_the_judged_app_and_tag(self, decl, products) -> None:
+        decision = run(MergeApi(mergeable()), decl, products)
+        assert decision.action == MERGE, decision.reason
+        assert decision.subject == f"chore(staging): deploy web {NEW} (#7)"
+        assert decision.body == f"Staging promotion of web to {NEW}, merged as a mechanical deploy (#1619)."
+
+    def test_a_skip_carries_no_message(self, decl, products) -> None:
+        decision = run(MergeApi(mergeable()), decl, products, paused="red")
+        assert decision.subject is None and decision.body is None
+
+
+def test_the_cli_writes_the_pause_into_the_decisions(tmp_path, monkeypatch) -> None:
+    """The workflow's `Report a pause` step reads it: a pause makes every decision a
+    skip, so without it a paused run explains nothing (#3086 review)."""
+    from typer.testing import CliRunner
+
+    from toolkit.cli.tools import app
+    from toolkit.features import deploy_shape
+
+    routes = {
+        f"repos/{REPO}": {"default_branch": "master"},
+        f"repos/{REPO}/pulls?state=open&base=master&per_page=100&page=1": [],
+        **verify_runs((2, "failure", [(STAGING, "failure")])),
+    }
+    monkeypatch.setattr(deploy_shape, "GhApi", lambda: FakeApi(routes))
+    out = tmp_path / "decisions.json"
+    result = CliRunner().invoke(app, ["deploy-merge", "--repo", REPO, "--out", str(out)])
+    assert result.exit_code == 0, result.output
+    assert "https://example.invalid/runs/2" in json.loads(out.read_text(encoding="utf-8"))["paused"]

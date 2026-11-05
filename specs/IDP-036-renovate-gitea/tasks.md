@@ -19,15 +19,15 @@ created: "2026-11-01"
 
 ## Implementation
 
-> Replace these with the actual steps for this feature. Keep them small (one commit each) and in TDD order.
-> The `[P]` / `[AC<n>]` markers are optional — see the legend above. Behaviors 1 and 2 below are independent, so their *first* test task carries `[P]`.
-
-- [ ] [P] [AC1] Write failing test for <behavior 1>
-- [ ] [AC1] Implement <module/function> to make it pass
-- [ ] Refactor for clarity (extract, rename, dedupe)
-- [ ] [P] [AC2] Write failing test for <behavior 2>
-- [ ] [AC2] Implement to make it pass
-- [ ] ...
+- [ ] [P] [AC4] Failing test: `.github/workflows/renovate.yml` carries no literal `renovate-version`, and the step that sets it reads the `common.yaml` image key
+- [ ] [AC4] Declare `ghcr.io/renovatebot/renovate:<version>` in `common.yaml` and make the workflow read the tag from it (a `.github/**` change, so the owner merges it)
+- [ ] [P] [AC1] Failing test: the rendered repository list equals the repositories in `apps.services.core.gitea.organizations`
+- [ ] [AC1] [AC3] Template the global config (`onboarding: false`, `requireConfig: optional`, the shared repository settings) and the repository list in `beelink_services`
+- [ ] [AC6] Declare the bot identity and its organization membership; mint and record its token with the role's existing mint-then-record pair, the mint gated on the SOPS entry being absent; register it in `SECRET_CATALOG`
+- [ ] [AC2] Timer and oneshot service (`OnCalendar=hourly`, `Persistent=true`, after the forge's compose unit and a Gitea readiness wait, a container memory limit)
+- [ ] [AC2] Provision Beelink twice: first run applies, second reports `changed=0`
+- [ ] [AC5] First run: a dashboard issue on each repository; record PR volume over two cycles on #1384
+- [ ] [AC7] Remove the dead `dependabot.yml` files (#2140)
 
 ## Closing
 
