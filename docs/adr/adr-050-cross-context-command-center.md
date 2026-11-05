@@ -22,6 +22,11 @@ Accepted — 2026-06-20. Output of an `/architecture-session`. Builds on ADR-026
 in force. CONSOLE-002, the spec that implemented D1, D3, D4, D5 and D7, was abandoned on 2026-10-18
 (#2443). **D5 is still in force** with no implementation, and kubelab#2494 carries it.
 
+**Status note — 2026-11-05.** [ADR-074](adr-074-console-and-rest-surface.md) reaffirms D1's *frontend*
+shape for the console: Astro with React islands, as `apps/console`. It does not revive D1's board,
+which owns status and priority in its own store, and ADR-066's 2026-10-20 amendment (A2) still
+rejects that board.
+
 ## Amendment — 2026-10-01 (D5 default with no local provider)
 
 **A Context with no explicit policy now has no provider: explicit deny, no inference.** D5 made the default "local-only (Ollama)", and AI-007 retired Ollama on 2026-08-09 (ADR-029's amendment). Read literally, "local-only" then named a provider that does not exist, and the two ways to fill that gap point in opposite directions: route to whatever provider is configured, or route nowhere. The first silently turns a security control into a cloud default. The operator chose the second (#1968, 2026-10-01).
