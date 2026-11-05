@@ -19,5 +19,19 @@
     "verification": "grep -qE '^    name: Tests$' .github/workflows/ci.yml",
     "state": "pending",
     "evidence": ""
+  },
+  {
+    "id": "CI-001-pytest-xdist-f4",
+    "behavior": "the shard plan runs every test file on exactly one shard, a file the durations record lacks included, whatever the collection order; the plugin deselects the other shards' files end to end",
+    "verification": ".venv/bin/pytest -q --no-cov -p no:cacheprovider tests/test_test_shards.py -k 'exactly_one_shard or collection_order or plugin_deselects or heaviest_file'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CI-001-pytest-xdist-f5",
+    "behavior": "ci.yml runs one shard per matrix entry with the matching SHARD=I/N, and the required Tests job needs the shards, runs always() and fails unless they all succeeded",
+    "verification": ".venv/bin/pytest -q --no-cov -p no:cacheprovider tests/test_test_shards.py -k 'ci_runs_every_shard or required_check_fails or uploads_its_coverage'",
+    "state": "pending",
+    "evidence": ""
   }
 ]
