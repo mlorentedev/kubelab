@@ -17,21 +17,21 @@ owner: manu
 
 ## Setup
 
-- [ ] Branch created from main: `feat/CI-001-pytest-xdist`
-- [ ] `proposal.md` is complete and acceptance criteria are testable
-- [ ] No open questions left in `proposal.md` "Risks / open questions"
+- [x] Branch created from master: `feat/issue-3078-pytest-xdist`
+- [x] `proposal.md` is complete and acceptance criteria are testable
+- [x] No open questions left in `proposal.md` "Risks / open questions"
 
 ## Implementation
 
-> Replace these with the actual steps for this feature. Keep them small (one commit each) and in TDD order.
-> The `[P]` / `[AC<n>]` markers are optional — see the legend above. Behaviors 1 and 2 below are independent, so their *first* test task carries `[P]`.
-
-- [ ] [P] [AC1] Write failing test for <behavior 1>
-- [ ] [AC1] Implement <module/function> to make it pass
-- [ ] Refactor for clarity (extract, rename, dedupe)
-- [ ] [P] [AC2] Write failing test for <behavior 2>
-- [ ] [AC2] Implement to make it pass
-- [ ] ...
+- [x] [AC1] Measure the serial suite on the base commit (count, failure set, `coverage.xml` covered lines/branches, duration)
+- [x] [AC3] Write failing guard: `make test` runs `-n auto --dist loadgroup`, addopts keep `not e2e and not infra`, no `--deselect`/`--ignore`/`-k` (`tests/test_pytest_parallel_config.py`)
+- [x] [AC1] Add `pytest-xdist`, put the options in the `make test` recipe
+- [x] [AC1] Run `--dist loadfile`, then per-test distribution twice; compare failures, coverage and ignored files with the serial run
+- [x] [AC3] Fix the shared state found: `WikiGenerator.wiki_docs_path` follows `project_root`; barrier probe files named per worker; Docker picks the CoreDNS host port; the refused-port test keeps its socket bound
+- [x] Lesson `docs/lessons/ci-automation/lesson-710-*`
+- [ ] [AC1] Serial vs parallel on the final commit, locally and in CI
+- [ ] [AC2] p50 over 20 PR runs after merge
+- [ ] [AC4] `Tests` stays the required check name (unchanged job `name:`)
 
 ## Closing
 

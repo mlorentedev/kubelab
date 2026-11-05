@@ -1,8 +1,22 @@
 [
   {
     "id": "CI-001-pytest-xdist-f1",
-    "behavior": "Outcome 1",
-    "verification": "echo 'not implemented' && exit 1",
+    "behavior": "make test runs the suite with -n auto --dist loadgroup and drops no test to do so",
+    "verification": ".venv/bin/pytest -q --no-cov -p no:cacheprovider tests/test_pytest_parallel_config.py",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CI-001-pytest-xdist-f2",
+    "behavior": "the wiki generator writes under the project root it holds at generate time, never into the checkout",
+    "verification": ".venv/bin/pytest -q --no-cov -p no:cacheprovider tests/test_wiki_generator_follows_project_root.py",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CI-001-pytest-xdist-f3",
+    "behavior": "the required check keeps the name Tests",
+    "verification": "grep -qE '^    name: Tests$' .github/workflows/ci.yml",
     "state": "pending",
     "evidence": ""
   }
