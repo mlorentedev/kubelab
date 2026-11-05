@@ -23,7 +23,7 @@ Accepted — 2026-08-27. Output of an SDD implementation session ([`specs/archiv
 - The read model, webhooks, outbox and writes stay in `apps/api` as A2 places them.
 - The frontend becomes its own app, `apps/console`, which is not a second API.
 
-A8's kill criteria stand, and its usage counter ships no later than the first `apps/console` slice.
+A8's usage test stands. The operator widened its five-day timebox to ADR-074's sequence, and the usage counter ships as that sequence's step 2.
 
 ## Context
 

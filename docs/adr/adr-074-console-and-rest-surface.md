@@ -192,7 +192,10 @@ Whether a developer-facing CLI is part of `dotf` or a separate static binary is 
 - **A third custom app costs toolkit work** (D3) and a Node job in CI.
 - **One more image and Deployment on the always-on host.** A static nginx is a few tens of MiB. It is stated against the VPS memory budget when the Deployment is written (C11: no new recurring cost).
 - **The development loop needs an auth path.** Authelia's cookie is scoped to the console host, so `astro dev` on `localhost` cannot call staging's `/console/` with a session. The first `apps/console` slice provides a fixture mode: the API's JSON contract, recorded, served locally. ADR-053 §4 requires an inner loop. A proxy to staging is added only if fixtures prove insufficient, and it never takes a session cookie from a file or an environment variable.
-- **More work inside the CONSOLE-004 timebox.** ADR-066 A8's kill criteria stand: if the console is not opened on at least 5 of 14 days, the setup reverts. The usage counter A8 describes ships no later than the first `apps/console` slice, and further frontend work is gated on the counter showing use.
+- **More work than CONSOLE-004's timebox.** ADR-066 A8 makes its five working days the operator's to widen. On 2026-11-05 the operator widened them to this ADR's sequence, because the scope grew from a queue view to the cockpit.
+  - The usage test stands unchanged: if the console is not opened on at least 5 of 14 consecutive days after it ships, the setup reverts.
+  - The usage counter ships as Sequence step 2, before `apps/console` exists, so the test is measured rather than assumed.
+  - Frontend work from step 4 onwards continues while the counter shows use.
 
 ### Neutral
 
