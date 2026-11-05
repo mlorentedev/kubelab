@@ -17,13 +17,20 @@ import (
 type fakeQueue struct {
 	states []forge.SourceState
 	items  []forge.Item
+	total  int
 	err    error
 	asked  []forge.Source
+	after  *forge.QueueKey
+	limit  int
 }
 
-func (f *fakeQueue) Queue(_ context.Context, sources []forge.Source) ([]forge.SourceState, []forge.Item, error) {
-	f.asked = sources
-	return f.states, f.items, f.err
+func (f *fakeQueue) Queue(_ context.Context, sources []forge.Source, after *forge.QueueKey, limit int) (forge.QueuePage, error) {
+	f.asked, f.after, f.limit = sources, after, limit
+	items := f.items
+	if len(items) > limit {
+		items = items[:limit]
+	}
+	return forge.QueuePage{States: f.states, Items: items, Total: f.total}, f.err
 }
 
 const consoleHost = "console.kubelab.live"
@@ -105,6 +112,58 @@ func TestQueueAnswersSourcesAndItems(t *testing.T) {
 	if len(body.Items) != 1 || body.Items[0].Number != 7 || body.Items[0].Kind != "pull" ||
 		body.Items[0].Source != "github:mlorentedev/kubelab" {
 		t.Fatalf("items = %+v", body.Items)
+	}
+}
+
+type pageBody struct {
+	Items []struct{ Number int } `json:"items"`
+	Total int                    `json:"total"`
+	Next  *string                `json:"next"`
+}
+
+func decodePage(t *testing.T, w *httptest.ResponseRecorder) pageBody {
+	t.Helper()
+	var b pageBody
+	if err := json.Unmarshal(w.Body.Bytes(), &b); err != nil {
+		t.Fatalf("status %d body %s: %v", w.Code, w.Body.String(), err)
+	}
+	return b
+}
+
+// A page names the next one by the last item it holds, and the cursor comes back
+// as that item's key; the last page names none.
+func TestQueuePagesCarryANextCursor(t *testing.T) {
+	src := forge.Source{Forge: "github", Owner: "mlorentedev", Repo: "kubelab"}
+	at := time.Date(2026, 11, 5, 9, 0, 0, 123456000, time.UTC)
+	var items []forge.Item
+	for n := 5; n >= 1; n-- {
+		items = append(items, forge.Item{Source: src, Number: n, Kind: forge.KindIssue, UpdatedAt: at})
+	}
+	q := &fakeQueue{items: items, total: 5}
+	const decl = "github:mlorentedev/kubelab"
+
+	first := decodePage(t, serve(t, q, decl, "/console/queue?limit=2"))
+	if len(first.Items) != 2 || first.Total != 5 || first.Next == nil || q.after != nil || q.limit != 3 {
+		t.Fatalf("first page = %+v, asked after %v limit %d", first, q.after, q.limit)
+	}
+	serve(t, q, decl, "/console/queue?limit=2&after="+*first.Next)
+	if want := items[1].Key(); q.after == nil || *q.after != want {
+		t.Fatalf("cursor came back as %+v, want %+v", q.after, want)
+	}
+
+	last := decodePage(t, serve(t, q, decl, "/console/queue"))
+	if len(last.Items) != 5 || last.Next != nil {
+		t.Fatalf("a page holding everything names a next one: %+v", last)
+	}
+}
+
+// The cursor and the limit are client input.
+func TestQueueRefusesABadPageRequest(t *testing.T) {
+	for _, query := range []string{"after=not-base64!", "after=e30", "after=" + encodeCursor(forge.QueueKey{}),
+		"limit=0", "limit=501", "limit=ten"} {
+		if w := serve(t, &fakeQueue{}, "github:mlorentedev/kubelab", "/console/queue?"+query); w.Code != http.StatusBadRequest {
+			t.Fatalf("%s: status = %d, want 400", query, w.Code)
+		}
 	}
 }
 
