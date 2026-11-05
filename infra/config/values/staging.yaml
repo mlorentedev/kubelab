@@ -84,6 +84,11 @@ apps:
       crowdsec:
         domain: crowdsec.staging.kubelab.live
 
+infra:
+  forge:
+    # Staging's console host; the *.staging.kubelab.live wildcard already resolves it.
+    console_domain: console.staging.kubelab.live
+
 secret_expiry:
   declared:
     # Approximate: Vikunja shows no expiry date, so these are the earliest plausible

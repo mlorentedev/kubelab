@@ -40,6 +40,14 @@ type Item struct {
 	UpdatedAt time.Time
 }
 
+// SourceState is what the queue shows about a source: when it was last read in
+// full and whether the last attempt reached it. A source never read has no time.
+type SourceState struct {
+	Source    Source
+	AsOf      *time.Time
+	Reachable bool
+}
+
 // Reader lists the items of one source changed since a point in time. A zero
 // since lists everything.
 type Reader interface {

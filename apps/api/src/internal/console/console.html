@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Forge queue</title>
+<style>
+  body { font: 14px/1.4 system-ui, sans-serif; margin: 1.5rem; color: #1f2328; }
+  h1 { font-size: 1.25rem; margin: 0 0 .75rem; }
+  .sources { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: .75rem; }
+  .source { padding: .2rem .5rem; border-radius: 4px; background: #dafbe1; }
+  .source.down { background: #ffebe9; }
+  input { padding: .35rem .5rem; width: 22rem; max-width: 100%; margin-bottom: .75rem; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { text-align: left; padding: .35rem .5rem; border-bottom: 1px solid #d0d7de; vertical-align: top; }
+  th { font-weight: 600; }
+  .label { display: inline-block; margin: 0 .25rem .15rem 0; padding: 0 .4rem; border-radius: 9px; background: #eaeef2; font-size: 12px; }
+  .muted { color: #59636e; }
+  #error { color: #cf222e; }
+</style>
+</head>
+<body>
+<h1>Forge queue</h1>
+<div class="sources" id="sources"></div>
+<input id="filter" type="search" placeholder="Filter by title, label, author or repository">
+<p id="error"></p>
+<table>
+  <thead><tr><th>Item</th><th>Title</th><th>Labels</th><th>Author</th><th>Updated</th></tr></thead>
+  <tbody id="items"></tbody>
+</table>
+<script>
+// Every forge value is written with textContent, never as HTML: titles and labels are user input.
+const el = (tag, text, cls) => { const e = document.createElement(tag); if (text !== undefined) e.textContent = text; if (cls) e.className = cls; return e; };
+const ago = (iso) => { const m = Math.round((Date.now() - new Date(iso)) / 60000); return m < 60 ? m + " min" : m < 2880 ? Math.round(m / 60) + " h" : Math.round(m / 1440) + " d"; };
+let items = [];
+
+function render() {
+  const q = document.getElementById("filter").value.toLowerCase();
+  const body = document.getElementById("items");
+  body.replaceChildren();
+  for (const it of items) {
+    const text = [it.title, it.author, it.source, ...(it.labels || [])].join(" ").toLowerCase();
+    if (q && !text.includes(q)) continue;
+    const tr = el("tr");
+    tr.append(el("td", it.source.split(":")[1] + " #" + it.number + (it.kind === "pull" ? " PR" : ""), "muted"));
+    const title = el("td"); const a = el("a", it.title); a.href = it.url; a.rel = "noopener"; title.append(a); tr.append(title);
+    const labels = el("td"); for (const l of it.labels || []) labels.append(el("span", l, "label")); tr.append(labels);
+    tr.append(el("td", it.author), el("td", ago(it.updated_at), "muted"));
+    body.append(tr);
+  }
+}
+
+async function load() {
+  try {
+    // Authelia answers an expired session with a redirect to its portal; do not follow it as data.
+    const r = await fetch("queue", { credentials: "same-origin", redirect: "manual" });
+    if (r.type === "opaqueredirect" || r.status === 401) throw new Error("session expired, reload the page to sign in");
+    if (!r.ok) throw new Error("queue answered " + r.status);
+    const data = await r.json();
+    const box = document.getElementById("sources");
+    box.replaceChildren();
+    for (const s of data.sources) {
+      const when = s.as_of ? "read " + ago(s.as_of) + " ago" : "never read";
+      box.append(el("span", s.source + " - " + when + (s.reachable ? "" : " - unreachable"), s.reachable ? "source" : "source down"));
+    }
+    items = data.items;
+    document.getElementById("error").textContent = "";
+    render();
+  } catch (e) {
+    document.getElementById("error").textContent = "Could not load the queue: " + e.message;
+  }
+}
+
+document.getElementById("filter").addEventListener("input", render);
+load();
+setInterval(load, 60000);
+</script>
+</body>
+</html>

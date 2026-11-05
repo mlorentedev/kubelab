@@ -119,3 +119,47 @@ func TestSameDeliveryProjectsOnce(t *testing.T) {
 		t.Fatalf("title = %q, rows = %d, err = %v", title, rows, err)
 	}
 }
+
+func TestQueueReadsDeclaredOpenItemsNewestFirst(t *testing.T) {
+	port := os.Getenv("FORGE_TEST_POSTGRES_PORT")
+	if port == "" {
+		t.Skip("FORGE_TEST_POSTGRES_PORT is not set")
+	}
+	conf := config.Postgres{Host: "127.0.0.1", Port: port, Tenant: "api", Password: "fixture"}
+	ctx := context.Background()
+	conn, err := pgx.Connect(ctx, conf.DSN())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close(ctx)
+	if _, err := conn.Exec(ctx, `TRUNCATE forge_event, forge_item, forge_source`); err != nil {
+		t.Fatal(err)
+	}
+	model := store.ForgeModel{Conf: conf}
+	read := forge.Source{Forge: "github", Owner: "o", Repo: "read"}
+	gone := forge.Source{Forge: "github", Owner: "o", Repo: "undeclared"}
+	never := forge.Source{Forge: "gitea", Owner: "o", Repo: "never"}
+	t0 := time.Date(2026, 11, 3, 8, 0, 0, 0, time.UTC)
+	item := func(n int, state string, at time.Time) forge.Item {
+		return forge.Item{Number: n, Kind: forge.KindIssue, Title: "t", State: state, Author: "a", URL: "u", UpdatedAt: at}
+	}
+	if err := model.SaveRead(ctx, read, []forge.Item{item(1, "open", t0), item(2, "open", t0.Add(time.Hour)),
+		item(3, "closed", t0.Add(2*time.Hour))}, t0); err != nil {
+		t.Fatal(err)
+	}
+	if err := model.SaveRead(ctx, gone, []forge.Item{item(9, "open", t0)}, t0); err != nil {
+		t.Fatal(err)
+	}
+
+	states, items, err := model.Queue(ctx, []forge.Source{read, never})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(states) != 2 || states[0].Source != read || !states[0].Reachable || states[0].AsOf == nil ||
+		states[1].Source != never || states[1].Reachable || states[1].AsOf != nil {
+		t.Fatalf("states = %+v", states)
+	}
+	if len(items) != 2 || items[0].Number != 2 || items[1].Number != 1 || items[0].Source != read {
+		t.Fatalf("items = %+v, want open items 2 then 1 of the declared source", items)
+	}
+}
