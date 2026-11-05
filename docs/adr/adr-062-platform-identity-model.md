@@ -52,10 +52,15 @@ Tracks [#2482](https://github.com/mlorentedev/kubelab/issues/2482) (AUTH-020), w
 
 - **P3. Every app reached by people starts its sign-in at Authelia.** The default is the edge perimeter: a Traefik ForwardAuth, so an anonymous browser's first response is a 302 to `auth.kubelab.live` and never reaches the app. Machine paths (push heartbeats, git over HTTPS, webhooks, CLI and API tokens) are split out at the edge as in P1, and each split needs a test on the rendered routes before it ships. Two exist today: `tests/test_uptime_kuma_perimeter.py` (P1) and `tests/test_grafana_api_token_route.py` (the token-bearing Grafana API route, AI-024).
 - **Where the perimeter cannot be the first hop, the app redirects to Authelia itself, and the ticket records why.** Open WebUI is the case today. It is reached through prod Traefik with no ForwardAuth, because a perimeter on top would break the API calls the page makes after login (`infra/k8s/overlays/prod/open-webui.yaml`). It sets `ENABLE_LOGIN_FORM=false` and `OAUTH_AUTO_REDIRECT=true`. The public route refuses the password sign-in API (`/api/v1/auths/signin`, the call the `/auth?form=signin` page makes), so break-glass works only on ace2's own address. Its redirect is client-side, so the first response is the SPA rather than a 302 (#2655).
-- **Status on 2026-11-02:**
+- **Status on 2026-11-04 (#2482 closed):**
   - Behind the perimeter: Grafana, n8n, the Traefik dashboard and Uptime Kuma.
   - In-app redirect: Open WebUI.
-  - Parked on #2482 with their reasons: Argo CD (the hub changes only through `make deploy-argocd`), Gitea (its machine paths need a bypass list proven first) and Vikunja.
+  - Edge redirect to the app's own sign-in: Argo CD. A request for `/` with no `argocd.token` cookie gets a 302 to `/auth/login`, which answers 303 to Authelia (#3073). It is two hops because `/auth/login` sets Argo CD's OAuth state. A deep link or an expired cookie still shows "Log in via".
+  - **Gitea: in-app redirect everywhere except `/`, by decision.** `REQUIRE_SIGNIN_VIEW` sends every page with content to `/user/login`, and `/user/login` answers 303 to the OAuth2 source (#2439). `/` is exempt and shows the landing page, whose one button goes to Authelia. Measured in prod on 2026-11-04: `/` 200, `/user/login` 303, `/explore/repos` 303.
+    - `LANDING_PAGE=login` would close `/`, but it would break sign-out. Gitea 1.27.3 ends the IdP session only through the provider's `end_session_endpoint`. Authelia's discovery document has none (measured 2026-11-04, authelia/authelia#5057), so Gitea falls back to `/`. With that setting `/` re-enters a live Authelia session, and the gitea client's `consent_mode` is `implicit`, so "Sign out" would put the user back on the dashboard.
+    - The edge perimeter (P3's default) is not used for Gitea, deliberately. Gitea already refuses every page with content to an anonymous visitor, so a ForwardAuth would add no gate that the app lacks. It would also need a bypass list covering most of what Gitea serves: git over HTTPS, the API, act_runner and LFS. A wrong entry in that list breaks CI or `git push` with no one watching. The only page a perimeter would change is `/`, so the risk buys one click.
+    - Revisit when Authelia advertises `end_session_endpoint`. Gitea then chains to it on its own and `LANDING_PAGE=login` becomes safe. The trigger is tracked on #1813.
+  - Not applicable: Vikunja, which is being replaced (owner decision 2026-11-03).
 
 ## Amendment — 2026-10-17 (session policy: no app outlives the IdP)
 

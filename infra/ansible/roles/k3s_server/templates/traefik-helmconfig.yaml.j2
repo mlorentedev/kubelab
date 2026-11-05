@@ -51,6 +51,29 @@ spec:
     readinessProbe:
       timeoutSeconds: {{ k3s_traefik_liveness_timeout_seconds }}
       failureThreshold: 3
+    # Only requests slower than the declared duration, so that a bound on how long
+    # Traefik waits for a backend is sized from what routes really take (OPS-065).
+    # Fields are an allowlist: the path carries the query string, and no credential
+    # may reach Loki (SEC-021), so a route is named by router and service only.
+    logs:
+      access:
+        enabled: true
+        format: json
+        filters:
+          minduration: "{{ k3s_traefik_access_log_min_duration }}"
+        fields:
+          general:
+            defaultmode: drop
+            names:
+              RouterName: keep
+              ServiceName: keep
+              RequestMethod: keep
+              DownstreamStatus: keep
+              OriginStatus: keep
+              Duration: keep
+              OriginDuration: keep
+          headers:
+            defaultmode: drop
     persistence:
       enabled: true
       storageClass: local-path

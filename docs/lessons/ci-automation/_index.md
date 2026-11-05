@@ -5,6 +5,7 @@ Newest first. Back to [all categories](../_index.md).
 | # | Lesson | Date |
 |---|---|---|
 | 712 | [With pytest 9.2, `--dist loadgroup` ignores every `xdist_group` marker and says nothing](lesson-712-xdist-loadgroup-ignores-every-group-on-pytest-9-2.md) | 2026-11-04 |
+| 711 | [An anchored pattern under `match` and Python's `==` both admit more than they appear to](lesson-711-an-anchored-pattern-and-python-equality-both-admit-more-than-they-read.md) | 2026-11-04 |
 | 710 | [A parallel test run finds shared state that a serial run hides, and grouping is not always the fix](lesson-710-a-parallel-test-run-finds-shared-state-a-serial-run-hides.md) | 2026-11-04 |
 | 706 | [One job name for several environments hides which environment a run judged](lesson-706-one-job-name-for-several-environments-hides-the-verdict.md) | 2026-11-04 |
 | 699 | [Accepting `mergeable_state: unstable` stops enforcing every check that is not required](lesson-699-unstable-stops-enforcing-every-check-not-required.md) | 2026-11-03 |

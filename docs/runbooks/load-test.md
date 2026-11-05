@@ -44,6 +44,8 @@ Declared in `toolkit/features/load_test.py` before the first run:
 
 `lower_bound_only: true` means do not call the figure a limit.
 
+Below each ramp, "Where the time went" splits every step by k6's request phases (p95 and p99, in ms). The latency columns above are `http_req_duration`, which leaves out `blocked`: a step whose p99 is low while `blocked` or `connecting` is in seconds waited for connections, not for the backend. A high `waiting` points at Traefik or the backend instead. The phases are in each step's `phases` field in the JSON; runs before #3102 have none.
+
 ## If a run dies
 
 A killed process skips the cleanup and leaves the route. `make test-infra` fails on it in `tests/infra/test_rate_limit.py`, because every route must carry the limiter. Remove it:

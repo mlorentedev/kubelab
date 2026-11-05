@@ -211,6 +211,27 @@ class TestParsing:
             0,
         )
 
+    def test_a_step_records_where_each_request_spent_its_time(self) -> None:
+        # #3102: a p90 of 5 s over a p50 of 6 ms reads the same whether requests waited
+        # for a connection, a TLS handshake or the backend; only the phases tell them apart.
+        trend = {"med": 1, "p(95)": 2, "p(99)": 3, "max": 4}
+        metrics = {
+            "http_req_duration": {"values": {"avg": 2, "med": 1, "p(90)": 3, "p(95)": 4, "p(99)": 5, "max": 6}},
+            "http_req_blocked": {"values": trend},
+            "http_req_connecting": {"values": {**trend, "p(99)": 30}},
+            "http_req_tls_handshaking": {"values": trend},
+            "http_req_waiting": {"values": trend},
+            "http_req_receiving": {"values": trend},
+        }
+        phases = lt.parse_summary(json.dumps(metrics))["phases"]
+        assert set(phases) == {"blocked", "connecting", "tls_handshaking", "waiting", "receiving"}
+        assert phases["connecting"] == {"p50_ms": 1, "p95_ms": 2, "p99_ms": 30, "max_ms": 4}
+
+    def test_a_phase_k6_did_not_report_reads_as_zero(self) -> None:
+        metrics = {"http_req_duration": {"values": {"avg": 2, "med": 1, "p(90)": 3, "p(95)": 4, "p(99)": 5, "max": 6}}}
+        phases = lt.parse_summary(json.dumps(metrics))["phases"]
+        assert phases["tls_handshaking"] == {"p50_ms": 0, "p95_ms": 0, "p99_ms": 0, "max_ms": 0}
+
     def test_cpu_counts_iowait_as_idle(self) -> None:
         assert lt.cpu_percent("cpu 0 0 0 100 0 0 0 0 0 0", "cpu 25 0 0 150 25 0 0 0 0 0") == 25.0
 
@@ -338,6 +359,27 @@ class TestKeepsWhatItMeasured:
     def test_a_report_of_a_partial_run_says_so(self) -> None:
         assert lt.render({"baseline": [], "ramps": [], "incomplete": True}).startswith("**Incomplete")
         assert "Incomplete" not in lt.render({"baseline": [], "ramps": []})
+
+    @staticmethod
+    def _rendered_step() -> dict:
+        figures = dict.fromkeys(("requests", "achieved_rps", "error_rate", "status_429", "dropped", "vus_peak"), 0)
+        figures |= dict.fromkeys(("avg_ms", "p50_ms", "p90_ms", "p95_ms", "p99_ms", "max_ms", "throttled_ms"), 0.0)
+        return {
+            **figures, "rate": 100, "node_cpu": 1.0, "generator_cpu": 1.0, "node_mem_available_mb": 1,
+            "pods_top": {}, "reasons": [],
+        }  # fmt: skip
+
+    def test_a_report_shows_the_phases_of_each_step(self) -> None:
+        step = self._rendered_step()
+        step["phases"] = {p: {"p50_ms": 0, "p95_ms": 0, "p99_ms": 0, "max_ms": 0} for p in lt.PHASES}
+        step["phases"]["connecting"]["p99_ms"] = 3000
+        text = lt.render({"baseline": [], "ramps": [{"target": "api", "repeat": 1, "knee": {}, "steps": [step]}]})
+        assert "connecting p99" in text and "3000.0" in text
+
+    def test_a_report_of_an_older_run_without_phases_still_renders(self) -> None:
+        ramp = {"target": "api", "repeat": 1, "knee": {}, "steps": [self._rendered_step()]}
+        text = lt.render({"baseline": [], "ramps": [ramp]})
+        assert "connecting p99" not in text
 
 
 class TestRefusesARunThatMeasuresNothing:
