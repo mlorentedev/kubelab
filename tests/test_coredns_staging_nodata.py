@@ -23,6 +23,7 @@ import socket
 import struct
 import subprocess
 import time
+import uuid
 from collections.abc import Iterator
 from pathlib import Path
 from typing import NamedTuple
@@ -97,20 +98,21 @@ def coredns(docker_mount_dir: Path) -> Iterator[int]:
     # The image runs as a non-root user, and the temporary directory is 0700:
     # without this CoreDNS cannot read its config and exits at once.
     docker_mount_dir.chmod(0o755)
-    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
-        probe.bind(("127.0.0.1", 0))
-        port = int(probe.getsockname()[1])
-    name = f"coredns-staging-nodata-{port}"
+    # Docker picks the host port. A port probed here and released before `docker
+    # run` binds it is free for any parallel worker to take in between (#3078).
+    name = f"coredns-staging-nodata-{uuid.uuid4().hex[:8]}"
     subprocess.run(
         [
             "docker", "run", "-d", "--rm", "--name", name,
-            "-p", f"127.0.0.1:{port}:1053/udp",
+            "-p", "127.0.0.1::1053/udp",
             "-v", f"{docker_mount_dir}:/etc/coredns:ro",
             image, "-conf", "/etc/coredns/Corefile",
         ],
         check=True, capture_output=True, text=True, timeout=180,
     )  # fmt: skip
     try:
+        published = subprocess.run(["docker", "port", name, "1053/udp"], check=True, capture_output=True, text=True)
+        port = int(published.stdout.split()[0].rsplit(":", 1)[1])
         deadline = time.monotonic() + 30
         while True:
             try:

@@ -2085,9 +2085,14 @@ ENV ?= dev
 # excluded here is excluded from CI too. The integration tests start a real
 # Uptime Kuma container (~90s); `test-fast` skips them for the inner loop, but
 # the safe option is the default one on purpose.
+#
+# One worker per CPU (#3078: 27 minutes serial in CI). `loadgroup` keeps the
+# tests marked `@pytest.mark.xdist_group(name)` on one worker; the rest spread
+# test by test. The options live here, not in pyproject addopts, because tests
+# that run a nested pytest inherit addopts and would fork workers of their own.
 .PHONY: test
 test:
-	@$(POETRY) run pytest
+	@$(POETRY) run pytest -n auto --dist loadgroup
 
 # Prove a guard goes red against one mutation (#2104), instead of the hand-written
 # commit/mutate/checkout line that lost work when a hook refused the commit
