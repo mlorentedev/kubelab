@@ -1,5 +1,5 @@
 ---
-id: "lesson-707-gitea-permission-endpoint-misses-team-units"
+id: lesson-707-gitea-permission-endpoint-misses-team-units
 type: lesson
 status: active
 title: "Gitea's collaborator permission endpoint answers `read` for an account a team grants write to"
