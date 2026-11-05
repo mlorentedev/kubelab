@@ -38,6 +38,7 @@ pytest-mock = "^3.17.0"
 types-requests = "^2.33.0.20261030"
 mutmut = "^3.8.1"
 jmespath = "^1.1.0"
+pytest-xdist = "^3.8.0"
 
 [tool.poetry.scripts]
 toolkit = "toolkit.main:app"

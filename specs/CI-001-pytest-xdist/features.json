@@ -1,0 +1,23 @@
+[
+  {
+    "id": "CI-001-pytest-xdist-f1",
+    "behavior": "the make test recipe asks for -n auto and a --dist mode that, run on a probe, keeps a file on one worker in order; neither the recipe nor addopts carries a deselecting option (the full-suite count and coverage match is AC1 evidence in verification.md)",
+    "verification": ".venv/bin/pytest -q --no-cov -p no:cacheprovider tests/test_pytest_parallel_config.py",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CI-001-pytest-xdist-f2",
+    "behavior": "the wiki generator writes under the project root it holds at generate time, never into the checkout",
+    "verification": ".venv/bin/pytest -q --no-cov -p no:cacheprovider tests/test_wiki_generator_follows_project_root.py",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CI-001-pytest-xdist-f3",
+    "behavior": "the required check keeps the name Tests",
+    "verification": "grep -qE '^    name: Tests$' .github/workflows/ci.yml",
+    "state": "pending",
+    "evidence": ""
+  }
+]
