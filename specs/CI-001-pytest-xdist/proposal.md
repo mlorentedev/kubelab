@@ -22,12 +22,13 @@ wip_override: "owner-directed: #3078 is the critical path of every kubelab PR (f
 
 ## What
 
-`make test` runs the suite across every available CPU with `pytest-xdist` (`-n auto --dist loadgroup`). Tests that share state outside their own `tmp_path` carry an `xdist_group` marker, so each group runs on one worker. Coverage is combined across workers by pytest-cov, and the figure equals the serial one on the same commit. The required check `Tests` keeps its name and its contents.
+`make test` runs the suite across every available CPU with `pytest-xdist` (`-n auto --dist loadfile`). Each test file runs on one worker, in order, so module-scoped fixtures behave as in a serial run. Tests that shared state across workers (repo paths, released ports, per-worker temp names) are fixed in the test, not deselected. Coverage is combined across workers by pytest-cov, and the figure equals the serial one on the same commit. The required check `Tests` keeps its name and its contents.
 
 ## Out of scope
 
 - Splitting lint, types and `validate-sync` into their own jobs: those jobs would not be required checks, so gating would be lost until the branch-protection declaration changes (two-PR migration, ADR-042). Follow-up ticket.
-- Sharding by duration across a matrix. Only if `-n auto` alone stays over 10 minutes, and as its own PR.
+- Sharding by duration across a matrix. `-n auto` brought CI's pytest from 27.3 to about 16 min on 4 vCPU, so AC2 needs it. It is its own PR.
+- `--dist loadgroup` with `xdist_group` markers: a silent no-op on pytest 9.2 with pytest-xdist 3.8.0 (pytest-dev/pytest-xdist#1407, lesson-712). Revisit on the next xdist release.
 - Single-file pytest targets in the Makefile (`test-*-live`, `mutate`): they stay serial.
 
 ## Risks / open questions
@@ -41,7 +42,7 @@ wip_override: "owner-directed: #3078 is the critical path of every kubelab PR (f
 
 - [ ] AC1: the same number of tests passes, with the same coverage figure, as a serial run on the same commit (locally: serial vs xdist; in CI: base commit's `Tests` vs this PR's).
 - [ ] AC2: `Tests` p50 is 10 min or less, measured over 20 pull request runs (verified after merge).
-- [ ] AC3: tests that cannot run in parallel are marked and grouped, never deselected; the default marker expression is unchanged and no `--deselect`/`--ignore` is added.
+- [ ] AC3: tests that cannot run in parallel are grouped (by file, `--dist loadfile`) or fixed, never deselected; the default marker expression is unchanged and no `--deselect`/`--ignore` is added.
 - [ ] AC4: the required check name `Tests` does not change.
 
 ## References

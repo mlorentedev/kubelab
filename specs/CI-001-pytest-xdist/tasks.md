@@ -24,11 +24,13 @@ owner: manu
 ## Implementation
 
 - [x] [AC1] Measure the serial suite on the base commit (count, failure set, `coverage.xml` covered lines/branches, duration)
-- [x] [AC3] Write failing guard: `make test` runs `-n auto --dist loadgroup`, addopts keep `not e2e and not infra`, no `--deselect`/`--ignore`/`-k` (`tests/test_pytest_parallel_config.py`)
+- [x] [AC3] Write failing guard: `make test` runs `-n auto` with a `--dist` mode proved by a nested run to keep a file on one worker in order, addopts keep `not e2e and not infra`, no `--deselect`/`--ignore`/`-k` (`tests/test_pytest_parallel_config.py`)
 - [x] [AC1] Add `pytest-xdist`, put the options in the `make test` recipe
 - [x] [AC1] Run `--dist loadfile`, then per-test distribution twice; compare failures, coverage and ignored files with the serial run
 - [x] [AC3] Fix the shared state found: `WikiGenerator.wiki_docs_path` follows `project_root`; barrier probe files named per worker; Docker picks the CoreDNS host port; the refused-port test keeps its socket bound
-- [x] Lesson `docs/lessons/ci-automation/lesson-710-*`
+- [x] Found `loadgroup` is a no-op on pytest 9.2 (xdist#1407); switched to `loadfile`
+- [x] Fixed `test_restore_drill.py` assertion broken by logger wrapping under the longer xdist basetemp
+- [x] Lessons `lesson-710-*`, `lesson-712-*`
 - [ ] [AC1] Serial vs parallel on the final commit, locally and in CI
 - [ ] [AC2] p50 over 20 PR runs after merge
 - [ ] [AC4] `Tests` stays the required check name (unchanged job `name:`)

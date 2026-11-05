@@ -111,8 +111,10 @@ def test_data_that_cannot_be_deleted_is_not_clean_and_is_named(capsys) -> None:
     with scratch(_Docker(), "n8ndrill", holds="n8n's data and key", wipe=lambda workdir: False) as box:
         pass
     assert not box.clean
-    said = _out(capsys)  # the logger wraps long lines, here inside the path
-    assert "could not remove" in said and box.name.split("-")[0] in said
+    said = _out(capsys)
+    # The logger wraps long lines, and where it breaks depends on the length of
+    # the temporary path: under xdist it splits the name itself (#3078).
+    assert "could not remove" in said and box.name.split("-")[0] in "".join(said.split())
     assert "it holds n8n's data and key, delete it now" in said
 
 
