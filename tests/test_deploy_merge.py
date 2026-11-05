@@ -321,7 +321,10 @@ class TestDeployVerifyPause:
     @pytest.mark.parametrize("conclusion", ["failure", "cancelled", "timed_out", "action_required", "neutral"])
     def test_anything_but_success_pauses(self, conclusion: str) -> None:
         """Only green is green: a cancelled or timed-out verdict did not say staging synced (re-review N3)."""
-        assert paused((2, conclusion, [(STAGING, conclusion)])) is not None
+        # An older green below it, so a verdict filtered out falls through to green
+        # instead of reaching the no-verdict fallback, and the reason names this run.
+        reason = paused((3, conclusion, [(STAGING, conclusion)]), (2, "success", [(STAGING, "success")]))
+        assert reason is not None and "https://example.invalid/runs/3" in reason, reason
 
     def test_staging_red_pauses_and_names_the_run(self) -> None:
         reason = paused((2, "failure", [(STAGING, "failure")]))
