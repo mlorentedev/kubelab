@@ -260,8 +260,46 @@ class TestTheJudgeIsMasters:
             'poetry run toolkit tools deploy-shape --pr "$NUMBER" --out "$RUNNER_TEMP/deploy-shape.json" || true\n'
         ),
     }
-    # Commands that would swap the checked-out code after the checkout step.
-    RESWAP = ("git checkout", "git switch", "git fetch", "git reset", "git worktree", "PYTHONPATH")
+    # The whole `env:` of each judge step: an added variable (`PYTHONPATH` above all)
+    # can point the judge at other code without touching its `run:` (re-review N2).
+    JUDGE_ENV = {
+        "deploy-merge.yml": {"GH_TOKEN": "${{ secrets.GITHUB_TOKEN }}"},
+        "deploy-shape.yml": {
+            "GH_TOKEN": "${{ secrets.GITHUB_TOKEN }}",
+            "NUMBER": "${{ github.event.pull_request.number }}",
+        },
+        "review-attestation.yml": {
+            "GH_TOKEN": "${{ secrets.GITHUB_TOKEN }}",
+            "NUMBER": "${{ steps.pr.outputs.number }}",
+        },
+    }
+    # Every step before the judge, in order, by name or action (version left free for
+    # pin bumps): a step inserted there could fetch other code for the judge to run.
+    SETUP = (
+        "actions/checkout",
+        "actions/setup-python",
+        "Install Poetry",
+        "Cache Poetry's package cache",
+        "Install project deps",
+    )
+    PRELUDE = {
+        "deploy-merge.yml": SETUP,
+        "deploy-shape.yml": SETUP,
+        "review-attestation.yml": (*SETUP, "Resolve the pull request", "Fetch the PR payload"),
+    }
+    # Commands that would swap the checked-out code after the checkout step, or carry
+    # a variable into later steps.
+    RESWAP = (
+        "git checkout",
+        "git switch",
+        "git fetch",
+        "git reset",
+        "git worktree",
+        "gh pr checkout",
+        "PYTHONPATH",
+        "GITHUB_ENV",
+        "GITHUB_PATH",
+    )
 
     @staticmethod
     def _steps(workflow: str) -> list[dict]:
@@ -285,13 +323,41 @@ class TestTheJudgeIsMasters:
         runs = [s["run"] for s in self._steps(workflow) if f"poetry run toolkit tools {tool}" in s.get("run", "")]
         assert runs == [self.JUDGES[workflow]], f"{workflow} runs {runs}: {DECIDED}"
 
+    @staticmethod
+    def _label(step: dict) -> str:
+        return step.get("name") or str(step.get("uses", "")).split("@", 1)[0]
+
+    def _judge_index(self, workflow: str) -> int:
+        steps = self._steps(workflow)
+        found = [i for i, s in enumerate(steps) if s.get("run") == self.JUDGES[workflow]]
+        assert len(found) == 1, f"{workflow}: the judge step was not found once; this test lost its subject"
+        return found[0]
+
+    @pytest.mark.parametrize("workflow", sorted(JUDGES))
+    def test_the_judge_step_env_is_the_declared_one(self, workflow: str) -> None:
+        step = self._steps(workflow)[self._judge_index(workflow)]
+        assert step.get("env") == self.JUDGE_ENV[workflow], f"{workflow} judge env {step.get('env')}: {DECIDED}"
+
+    @pytest.mark.parametrize("workflow", sorted(JUDGES))
+    def test_nothing_runs_before_the_judge_but_its_setup(self, workflow: str) -> None:
+        before = tuple(self._label(s) for s in self._steps(workflow)[: self._judge_index(workflow)])
+        assert before == self.PRELUDE[workflow], f"{workflow} runs {before} before the judge: {DECIDED}"
+
+    @pytest.mark.parametrize("workflow", sorted(JUDGES))
+    def test_no_workflow_or_job_env_reaches_the_judge(self, workflow: str) -> None:
+        import yaml
+
+        wf = yaml.safe_load((WORKFLOWS / workflow).read_text(encoding="utf-8"))
+        envs = [wf.get("env")] + [job.get("env") for job in wf["jobs"].values()]
+        assert not any(envs), f"{workflow} sets a workflow- or job-level env {envs}: {DECIDED}"
+
     @pytest.mark.parametrize("workflow", sorted(JUDGES))
     def test_no_step_swaps_the_checked_out_code(self, workflow: str) -> None:
         swaps = [
             (step.get("name") or step.get("id"), cmd)
             for step in self._steps(workflow)
             for cmd in self.RESWAP
-            if cmd in step.get("run", "")
+            if cmd in step.get("run", "") or cmd in str(step.get("env") or {})
         ]
         assert not swaps, f"{workflow} swaps master's code after checkout: {swaps}: {DECIDED}"
 
@@ -305,7 +371,11 @@ class TestTheJudgeIsMasters:
 # `.get("ref")`, a constant bound to a name first. `review_attestation.py` reads
 # authors to recognise REVIEWS, which is its job, so only the code that decides
 # the exemption is scanned there: `exempt_signature` and `classify`'s exempt block.
-NAME_KEYS = frozenset({"login", "user", "actor", "author", "head_ref", "headRefName", "sender"})
+NAME_KEYS = frozenset({"login", "user", "actor", "author", "head_ref", "headRefName", "sender", "label", "labels"})
+# Of a PR's head, the granting side reads the sha and nothing else. An allow-list,
+# because the head also carries `label` (`owner:branch`), `repo` and `user`, and a
+# deny-list has to anticipate each of them (independent re-review, N1).
+HEAD_KEYS = frozenset({"sha"})
 
 
 def _granting_code() -> dict[str, list]:
@@ -383,15 +453,16 @@ def _name_reads(roots: list) -> list[str]:
             if not (isinstance(node, ast.Constant) and isinstance(node.value, str)):
                 continue
             value = node.value
+            holder = parents.get(node)
+            if isinstance(holder, ast.Call):  # x.get("key")
+                holder = holder.func
+            target = ast.unparse(getattr(holder, "value", holder))
             if value in NAME_KEYS or value.startswith("deploy/"):
                 hits.append(value)
-            elif value == "ref":
-                holder = parents.get(node)
-                if isinstance(holder, ast.Call):  # x.get("ref")
-                    holder = holder.func
-                target = ast.unparse(getattr(holder, "value", holder))
-                if not target.endswith("['base']"):
-                    hits.append(f"ref of {target}")
+            elif target.endswith("['head']") and value not in HEAD_KEYS:
+                hits.append(f"{value} of {target}")
+            elif value == "ref" and not target.endswith("['base']"):
+                hits.append(f"ref of {target}")
     return hits
 
 
@@ -410,6 +481,9 @@ def test_the_granting_side_reads_no_branch_name_or_author(module: str) -> None:
         'pr.get("headRefName")',
         'event["sender"]',
         'ref.startswith("deploy/")',
+        'pr["head"]["label"].endswith("staging-web")',
+        'pr["head"].get("repo")',
+        'pr["labels"]',
     ],
 )
 def test_the_name_detector_fires(source: str) -> None:
@@ -423,7 +497,7 @@ def test_the_name_detector_fires(source: str) -> None:
 def test_the_name_detector_allows_the_base_ref() -> None:
     import ast
 
-    assert not _name_reads([ast.parse('pr["base"]["ref"]; pr["base"].get("ref")')])
+    assert not _name_reads([ast.parse('pr["base"]["ref"]; pr["base"].get("ref"); pr["head"]["sha"]')])
 
 
 def test_the_required_contexts_are_the_approved_ones() -> None:

@@ -318,6 +318,11 @@ class TestDeployVerifyPause:
     def test_staging_green_does_not_pause(self) -> None:
         assert paused((2, "success", [(STAGING, "success")])) is None
 
+    @pytest.mark.parametrize("conclusion", ["failure", "cancelled", "timed_out", "action_required", "neutral"])
+    def test_anything_but_success_pauses(self, conclusion: str) -> None:
+        """Only green is green: a cancelled or timed-out verdict did not say staging synced (re-review N3)."""
+        assert paused((2, conclusion, [(STAGING, conclusion)])) is not None
+
     def test_staging_red_pauses_and_names_the_run(self) -> None:
         reason = paused((2, "failure", [(STAGING, "failure")]))
         assert reason is not None and "https://example.invalid/runs/2" in reason and "staging" in reason
@@ -336,6 +341,8 @@ class TestDeployVerifyPause:
 
     def test_a_skipped_staging_job_is_not_a_verdict(self) -> None:
         assert paused((3, "success", [(STAGING, "skipped")]), (2, "failure", [(STAGING, "failure")])) is not None
+        # The other direction, so dropping the skipped filter goes red too (re-review N3).
+        assert paused((3, "skipped", [(STAGING, "skipped")]), (2, "success", [(STAGING, "success")])) is None
 
     def test_a_job_name_without_the_context_is_not_a_verdict(self) -> None:
         """Runs from before the jobs carried their context are not read as staging's."""
