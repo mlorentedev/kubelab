@@ -28,15 +28,15 @@ owner: manu
 - [x] [AC1] [AC3] `tests/test_gitea_agent_identity.py`
 - [x] [AC4] `make secrets-copy-gitea-agent-token`; dotfiles registry entry (mlorentedev/dotfiles#3152)
 - [ ] [AC2] Provision twice, second `changed=0`
-- [ ] [AC3] Reconcile apply, then plan no-op
+- [x] [AC3] Reconcile apply, then plan no-op ✓ 2026-11-05
 - [ ] [AC4] Copy into Bitwarden after dotfiles#3152 merges; `dotf secrets verify`
-- [ ] [AC5] Open one PR on `personal/imagesensortool` with the agent token; check its author
+- [x] [AC5] Open one PR on `personal/imagesensortool` with the agent token; check its author ✓ 2026-11-05 (#152)
 
 ## Closing
 
 - [x] ADR-062 amendment, lesson-707, runbook line
 - [ ] `verification.md` filled in with live evidence
-- [ ] PR opened referencing this spec folder
+- [x] PR opened referencing this spec folder ✓ 2026-11-03 (#3085)
 
 ## Machine-readable features
 
