@@ -1,0 +1,93 @@
+[
+  {
+    "id": "IDP-053-forge-agnostic-product-path-f1",
+    "behavior": "AC1: a registry entry may declare image_registry and private; derived_image honours the first; a private entry without image_registry or pull_credential is refused; registry prune skips non-default-registry products",
+    "verification": ".venv/bin/python -m pytest -q tests/test_product_registry.py tests/test_registry_prune.py",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "IDP-053-forge-agnostic-product-path-f2",
+    "behavior": "AC2: overlays and promote use the entry's registry, web overlays are byte-identical, promote --env prod refuses a product with no events.prod, tag_exists is tri-state, no prod overlay image points at the forge host",
+    "verification": "make validate-sync ENV=staging && make validate-sync ENV=prod && .venv/bin/python -m pytest -q tests/test_promotion.py tests/test_prod_images_always_on.py",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "IDP-053-forge-agnostic-product-path-f3",
+    "behavior": "AC3: a private entry yields a dockerconfigjson pull Secret and imagePullSecrets on that product's Deployment only; web is byte-identical; the credential never appears in argv or logs",
+    "verification": ".venv/bin/python -m pytest -q tests/test_image_pull_secret.py tests/test_k8s_secrets_apply.py",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "IDP-053-forge-agnostic-product-path-f4",
+    "behavior": "AC4: the Gitea pull token is catalogued, pinned to read:package, minted once and rotatable",
+    "verification": ".venv/bin/python -m pytest -q tests/test_gitea_registry_pull_token.py tests/test_gitea_token_rotation_registry.py tests/test_gitea_token_scopes.py",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "IDP-053-forge-agnostic-product-path-f4d",
+    "behavior": "AC4 (deployed): the minted token pulls a manifest of personal/imagesensortool and is refused for a package it must not reach",
+    "verification": "toolkit services gitea registry-check --app imagesensortool",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "IDP-053-forge-agnostic-product-path-f5",
+    "behavior": "AC5: a contract without hostnames.prod validates, the committed schema equals the model, prod render is refused for it, and the DNS, tile and registry tests skip prod for staging-only products",
+    "verification": ".venv/bin/python -m pytest -q tests/test_product_contract.py tests/test_product_contract_schema.py tests/test_product_contract_drift.py tests/test_dns_contract_hostnames.py tests/test_platform_tiles_cover_registry.py tests/test_product_registry.py",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "IDP-053-forge-agnostic-product-path-f6",
+    "behavior": "AC6: the imagesensortool onboarding PR leaves the tree green and its staging snapshot renders clean",
+    "verification": "make test && make validate-sync ENV=staging && toolkit product render --contract infra/config/products/contracts/imagesensortool.yaml --env staging --check",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "IDP-053-forge-agnostic-product-path-f7d",
+    "behavior": "AC7 (deployed): imagesensortool runs on staging from the Gitea registry and answers /healthz with 200",
+    "verification": "kubectl -n kubelab rollout status deploy/imagesensortool --timeout=120s",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "IDP-053-forge-agnostic-product-path-f8",
+    "behavior": "AC8: one forge adapter interface with GitHub and Gitea implementations, no forge-name comparison outside it, Gitea reads use a read:repository-only token",
+    "verification": ".venv/bin/python -m pytest -q tests/test_forge_adapter.py tests/test_no_forge_names_outside_adapter.py tests/test_gitea_repo_reader_token.py",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "IDP-053-forge-agnostic-product-path-f9",
+    "behavior": "AC9: the receiver has a route job selecting runs-on per forge, no forge != github refusal, and all forge reads go through toolkit product resolve and fetch-contract",
+    "verification": ".venv/bin/python -m pytest -q tests/test_product_image_receiver_workflow.py tests/test_receiver_pr_step.py && actionlint",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "IDP-053-forge-agnostic-product-path-f10",
+    "behavior": "AC10: the owner's decision on the Gitea-to-receiver trigger is recorded in the CI/CD runbook",
+    "verification": "grep -n 'IDP-053' docs/runbooks/cicd.md",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "IDP-053-forge-agnostic-product-path-f11",
+    "behavior": "AC11: release-contract works for a non-GitHub forge, refuses an unsupported or private registry with ERROR/WHY/FIX, and proves sha- tags of 7+ hex digits",
+    "verification": ".venv/bin/python -m pytest -q tests/test_product_release.py tests/test_registry_digest.py",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "IDP-053-forge-agnostic-product-path-f12",
+    "behavior": "AC12: deploy-shape answers mechanical for a Gitea product's deploy PR with provenance proven against Gitea",
+    "verification": ".venv/bin/python -m pytest -q tests/test_deploy_shape.py tests/test_deploy_shape_widening.py",
+    "state": "pending",
+    "evidence": ""
+  }
+]

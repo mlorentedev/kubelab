@@ -34,6 +34,9 @@ k3s_traefik_memory_limit: 1536Mi
 k3s_traefik_liveness_timeout_seconds: 5
 k3s_traefik_liveness_period_seconds: 15
 k3s_traefik_liveness_failure_threshold: 6
+# Access log keeps only requests slower than this (OPS-065): enough to see which
+# routes take long, near zero volume otherwise.
+k3s_traefik_access_log_min_duration: 1s
 k3s_traefik_http_port: 80
 k3s_traefik_https_port: 443
 

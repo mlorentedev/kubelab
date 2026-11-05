@@ -160,6 +160,22 @@ def pause_reason(api: Api, repo: str, branch: str, env: str) -> str | None:
     return f"no {DEPLOY_VERIFY} verdict for {env} on {branch} among the latest {len(runs)} runs"
 
 
+def _not_ready(number: int, repo: str, api: Api, head: str, required: Iterable[str]) -> tuple[str | None, str | None]:
+    """(why `head` may not merge, or None; the merge state read last), for a PR already judged mechanical."""
+    failing, unexcused = _failing_contexts(api, repo, head, required)
+    if failing:
+        return f"required contexts not passing: {', '.join(failing)}", None
+    if unexcused:
+        return f"contexts not passing that nothing excuses: {', '.join(unexcused)}", None
+    final = api.json(f"repos/{repo}/pulls/{number}")
+    if final["head"]["sha"] != head:
+        return "the head moved while it was being judged", None
+    state = final.get("mergeable_state")
+    if state not in MERGE_STATES_OK:
+        return f"merge state is {state!r}, not one of {sorted(MERGE_STATES_OK)}", state
+    return None, state
+
+
 def judge(
     number: int,
     repo: str,
@@ -186,18 +202,9 @@ def judge(
         shape = evaluate(number, repo, api, decl, products)
         if shape.verdict != MECHANICAL or shape.head_sha != head:
             return Decision(number, SKIP, f"{shape.verdict}: {shape.reason}", shape.head_sha)
-        failing, unexcused = _failing_contexts(api, repo, head, required)
-        if failing:
-            return Decision(number, SKIP, f"required contexts not passing: {', '.join(failing)}", head)
-        if unexcused:
-            return Decision(number, SKIP, f"contexts not passing that nothing excuses: {', '.join(unexcused)}", head)
-
-        final = api.json(f"repos/{repo}/pulls/{number}")
-        if final["head"]["sha"] != head:
-            return Decision(number, SKIP, "the head moved while it was being judged", head)
-        state = final.get("mergeable_state")
-        if state not in MERGE_STATES_OK:
-            return Decision(number, SKIP, f"merge state is {state!r}, not one of {sorted(MERGE_STATES_OK)}", head)
+        refusal, state = _not_ready(number, repo, api, head, required)
+        if refusal:
+            return Decision(number, SKIP, refusal, head)
     except Exception as exc:  # noqa: BLE001 — a PR that cannot be read is not merged
         return Decision(number, SKIP, f"cannot judge: {exc!r}")
     return Decision(

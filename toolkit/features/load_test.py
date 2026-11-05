@@ -52,6 +52,11 @@ ROUTE_MANIFEST = "infra/load-test/limiter-bypass-route.yaml"
 SCRIPT = "infra/load-test/constant-rate.js"
 STAGING_NAME = re.compile(r"(^|\.)staging\.[a-z0-9.-]+$")
 
+# Where a request's time went (#3102). `http_req_duration` is sending + waiting +
+# receiving and leaves out `blocked`, the time before the request had a connection,
+# which includes `connecting` and `tls_handshaking` when it had to open one.
+PHASES = ("blocked", "connecting", "tls_handshaking", "waiting", "receiving")
+
 
 class LoadTestRefused(Exception):
     """The run would leave staging, or could not prove it stays there."""
@@ -120,7 +125,7 @@ def k6_command(image: str, env: dict[str, str]) -> str:
     return f"docker run --rm -i --network host {flags} {image} run --quiet --no-usage-report -"
 
 
-def parse_summary(stdout: str) -> dict[str, float]:
+def parse_summary(stdout: str) -> dict[str, Any]:
     """The figures of one step, from the metrics k6 printed. Latencies in ms."""
     metrics = json.loads(stdout.strip().splitlines()[-1])
     duration = metrics["http_req_duration"]["values"]
@@ -141,6 +146,15 @@ def parse_summary(stdout: str) -> dict[str, float]:
         "p95_ms": duration["p(95)"],
         "p99_ms": duration["p(99)"],
         "max_ms": duration["max"],
+        "phases": {
+            phase: {
+                "p50_ms": value(f"http_req_{phase}", "med"),
+                "p95_ms": value(f"http_req_{phase}", "p(95)"),
+                "p99_ms": value(f"http_req_{phase}", "p(99)"),
+                "max_ms": value(f"http_req_{phase}", "max"),
+            }
+            for phase in PHASES
+        },
     }
 
 
@@ -479,6 +493,19 @@ def render(result: dict[str, Any]) -> str:
         ]  # fmt: skip
         return "| " + " | ".join(str(c) for c in cells) + " |"
 
+    phase_head = (
+        "| rate/s | " + " | ".join(f"{p} p95 | {p} p99" for p in PHASES) + " |\n" + "|" + "---|" * (1 + 2 * len(PHASES))
+    )
+
+    def phase_row(s: dict[str, Any]) -> str:
+        cells = [str(s["rate"])]
+        cells += [f"{s['phases'][p][k]:.1f}" for p in PHASES for k in ("p95_ms", "p99_ms")]
+        return "| " + " | ".join(cells) + " |"
+
+    def phase_table(steps: list[dict[str, Any]]) -> list[str]:
+        timed = [s for s in steps if "phases" in s]  # runs before #3102 have none
+        return ["", "Where the time went, ms:", "", phase_head, *map(phase_row, timed)] if timed else []
+
     meta = {k: result[k] for k in ("date", "commit", "facts", "criteria", "restarts_during_run") if k in result}
     lines = ["**Incomplete: this run stopped before its last ramp.**", ""] if result.get("incomplete") else []
     lines += ["```json", json.dumps(meta, indent=2), "```", "", "## Baseline under the limiter", "", head]
@@ -486,4 +513,5 @@ def render(result: dict[str, Any]) -> str:
     for r in result["ramps"]:
         lines += ["", f"## {r['target']}, ramp {r['repeat']}", "", f"Knee: `{json.dumps(r['knee'])}`", "", head]
         lines += [row(s) for s in r["steps"]]
+        lines += phase_table(r["steps"])
     return "\n".join(lines) + "\n"

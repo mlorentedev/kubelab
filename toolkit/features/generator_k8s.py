@@ -533,7 +533,10 @@ class K8sGenerator(BaseGenerator):
         middlewares = ["secure-headers", "rate-limit", "error-pages"]
         if enable_auth:
             authelia_name = env_vars.get("APPS_SERVICES_SECURITY_AUTHELIA_NAME", "authelia")
-            middlewares.append(f"{authelia_name}-auth@kubernetescrd")
+            # The Middleware object's own name (base/services/authelia.yaml), in the
+            # routes' namespace. This emitted `<name>-auth@kubernetescrd`, an object that
+            # never existed, unseen while no generated route asked for auth (CONSOLE-004).
+            middlewares.append(authelia_name)
         return middlewares
 
     def _build_resources(
