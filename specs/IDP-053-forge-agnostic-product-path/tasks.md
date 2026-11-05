@@ -132,14 +132,15 @@ Blocked until `personal/imagesensortool` commits a valid `kubelab.yaml` (image, 
 Depends on S1, S2 and S3a merged. Files: `infra/config/products.yaml`,
 `infra/config/products/contracts/imagesensortool.yaml`, `infra/config/values/staging.yaml`
 (staging-only block, `version` set), the platform tile file, the e2e expectation file,
-`infra/config/values/common.yaml` (`networking.staging_zones` and the hairpin block in
-`infra/k8s/base/edge/coredns-custom.yaml`), regenerated overlays.
+regenerated overlays. Only if `hostnames.staging` is outside `staging.kubelab.live`
+(proposal risk 7): `infra/config/values/common.yaml` (`networking.staging_zones`) and the
+hairpin block in `infra/k8s/base/edge/coredns-custom.yaml`.
 
 - [ ] [AC6] Registry entry: `forge: gitea`, `repository: personal/imagesensortool`, `receiver: generic` held back until #2611 settles (S6b), `image_registry: gitea.kubelab.live/personal`, `private: true`, `pull_credential`, `events: {staging: ...}` and no `events.prod`
 - [ ] [AC6] Snapshot: `toolkit product render --contract ... --env staging` and commit the snapshot
-- [ ] [AC6] Staging values block with a pinned `version` (never `:latest`), platform tile, e2e expectation, staging zone
+- [ ] [AC6] Staging values block with a pinned `version` (never `:latest`), platform tile, e2e expectation, and the staging zone only for a hostname outside `staging.kubelab.live`
 - [ ] [AC6] `make test`, `make validate-sync ENV=staging`, `product render --check` exit 0
-- [ ] Owner provisions the staging zone (VPS, RPi4) and confirms the ACME token covers the domain (see "What cannot be verified")
+- [ ] Only for a hostname outside `staging.kubelab.live`: owner provisions the staging zone (VPS, RPi4) and confirms the ACME token covers the domain (see "What cannot be verified")
 
 ### S4. First deploy by hand (owner, ~80 LOC of runbook)
 

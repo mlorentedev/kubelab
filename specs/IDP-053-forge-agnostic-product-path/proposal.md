@@ -84,7 +84,10 @@ touches disjoint files, and gates nothing in Track 1.
 - **S8, the prod half** (owner ruling #2449 Q4(A)): an authenticated, forge-neutral
   `release-contract` and digest read, closing #2627 AC2 and AC1.
 - **S9, later:** `deploy_shape` provenance through the adapter, after DELIVERY-004 (#3063)
-  settles. No earlier slice touches `deploy_shape.py`.
+  settles. No earlier slice touches `deploy_shape.py`. #2612's own acceptance (`deploy-shape`
+  judges a Gitea product's PR `mechanical`, and no forge names in `deploy_shape.py`) is met
+  only by S9, so #2612 stays open until S9 lands, and the no-forge-names test allow-lists
+  `deploy_shape.py` until then.
 
 ### Slices at a glance
 
@@ -295,11 +298,15 @@ Must be resolved before the named slice starts; none blocks writing the others.
 5. **The homelab is on demand (ADR-028).** A Gitea product's receipt waits for `kubelab-bee`,
    and a queued self-hosted job on GitHub fails after 24 hours. Accepted and documented in the
    runbook (S4, S6b), as the issue states.
-6. **Unknown product facts:** the staging hostname (assumed `staging.imagesensortool.com`;
-   `imagesensortool.com` is in `zones.json` with no records), the auth level for the beta, and
+6. **Unknown product facts:** the staging hostname, the auth level for the beta, and
    whether `/healthz` answers a kubelet probe. They come from the product's `kubelab.yaml`, not
-   from this spec; S3b is blocked until that file exists.
-7. **Staging DNS and TLS for a new zone.** `networking.staging_zones` (`common.yaml`) feeds
+   from this spec; S3b is blocked until that file exists. The hostname has two shapes with
+   different costs. A name under the existing zone (`imagesensortool.staging.kubelab.live`)
+   reuses the VPN-only staging wildcard and needs none of risk 7, so it is the cheaper choice
+   for the beta. A name in the product's own domain (`staging.imagesensortool.com`;
+   `imagesensortool.com` is in `zones.json` with no records) needs all of risk 7.
+7. **Staging DNS and TLS for a new zone, only when the hostname is outside
+   `staging.kubelab.live`.** `networking.staging_zones` (`common.yaml`) feeds
    Headscale split DNS, the RPi4 CoreDNS and Pi-hole; the hairpin block in
    `coredns-custom.yaml` is hand-written per staging zone. A new staging zone needs a provision
    run on the VPS and the RPi4 (not verifiable from a diff), and an ACME DNS-01 certificate
@@ -380,7 +387,7 @@ Each new test that guards a boundary is mutation-checked with
 |---|---|---|
 | The reviewer-account token reaches the package | `toolkit services gitea registry-check --app imagesensortool` | after S2c mint |
 | Staging pulls from `gitea.kubelab.live` (DNS and TLS from the node, credential accepted) | `kubectl -n kubelab describe pod -l app.kubernetes.io/name=imagesensortool` shows `Pulled`, not `Failed` | S4 |
-| Split DNS and the staging certificate for the new zone | `dig +short <staging host> @<rpi4>` returns the staging node; `toolkit secrets acme-token-scope` names `imagesensortool.com` | after S3b provision |
+| Split DNS and the staging certificate for the new zone (only for a hostname outside `staging.kubelab.live`, risk 7) | `dig +short <staging host> @<rpi4>` returns the staging node; `toolkit secrets acme-token-scope` names `imagesensortool.com` | after S3b provision |
 | The Gitea 1.27.3 API behaves as the adapter assumes | S5b's verification note, measured on a local Gitea 1.27.3 | before S5b code |
 | The self-hosted runner accepts the `route`-selected label and reaches Gitea | the dry run in AC9 | S6b |
 | The minimum GitHub permission for a dispatch token | dispatch with a token narrower than `repo`, record the status | before D1 is decided |
