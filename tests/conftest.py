@@ -14,6 +14,9 @@ import pytest
 
 from tests.host_clients import denied
 
+# Splits the suite across CI runners by whole file (#3111): `--shard=I/N`.
+pytest_plugins = ["tests.sharding"]
+
 if TYPE_CHECKING:
     from _typeshed import StrOrBytesPath
 
