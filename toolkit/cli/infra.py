@@ -1264,6 +1264,43 @@ def k8s_alert_smoke(
         raise typer.Exit(1)
 
 
+@k8s_app.command("acme-quiet-check")
+def k8s_acme_quiet_check(
+    env: Annotated[str, typer.Option("--env", "-e", help="Target environment (staging|prod)")],
+) -> None:
+    """Prove the ACME failure rule stays quiet on Traefik's heartbeat (OBS-033).
+
+    Evaluates the rule's own expression, read from the rendered overlay, one
+    minute after the newest `Testing certificate renew` line in Loki, and fails
+    unless the heartbeat is in the window and the rule answers empty. Read-only,
+    so prod is allowed: prod is where a noisy rule would page.
+    """
+    if env not in ("staging", "prod"):
+        logger.error("acme-quiet-check: --env must be staging or prod")
+        raise typer.Exit(2)
+    validate_environment_config(env)
+
+    from toolkit.cli.observability import _loki_client
+    from toolkit.features.acme_quiet_check import QuietCheckError, run_acme_quiet_check
+    from toolkit.features.break_glass import render
+    from toolkit.features.observability import LogsUnavailableError
+
+    try:
+        with _loki_client(env) as loki:
+            result = run_acme_quiet_check(loki, render(env, settings.project_root))
+    except (QuietCheckError, LogsUnavailableError) as exc:
+        logger.error(f"acme-quiet-check: not measured: {exc}")
+        raise typer.Exit(1) from exc
+    typer.echo(
+        f"heartbeats in window: {result.heartbeats_in_window}, boot lines in window: {result.boot_lines_in_window}"
+    )
+    for line in result.matched_lines:
+        typer.echo(f"  matched: {line}")
+    typer.echo(f"{'ok' if result.ok else 'FAIL'}: {result.reason}")
+    if not result.ok:
+        raise typer.Exit(1)
+
+
 # =============================================================================
 # BACKUP COMMANDS
 # =============================================================================

@@ -1931,6 +1931,15 @@ alert-smoke:
 	@test -n "$(filter $(ENV),staging)" || (echo "Usage: make alert-smoke ENV=staging" && exit 1)
 	@$(TOOLKIT) infra k8s alert-smoke --env $(ENV)
 
+# The other half of alert-smoke (OBS-033, #2195): the ACME failure rule must stay
+# quiet on Traefik's daily `Testing certificate renew` heartbeat. Evaluates the
+# rule's own expression one minute after the newest heartbeat in Loki. Read-only,
+# so prod is allowed.
+.PHONY: acme-quiet-check
+acme-quiet-check:
+	@test -n "$(filter $(ENV),staging prod)" || (echo "Usage: make acme-quiet-check ENV=staging|prod" && exit 1)
+	@$(TOOLKIT) infra k8s acme-quiet-check --env $(ENV)
+
 .PHONY: flush-sessions
 flush-sessions:
 	@test -n "$(filter $(ENV),staging prod)" || (echo "Usage: make flush-sessions ENV=staging|prod" && exit 1)

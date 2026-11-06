@@ -107,6 +107,36 @@ class TestLokiClient:
         assert entries[0]["container"] == "authelia"
         assert entries[0]["node"] == "vps"
         assert "Failed login" in entries[0]["line"]
+        assert entries[0]["ts_ns"] == 1724395000000000000
+
+    @staticmethod
+    def _answer(mock_urlopen: MagicMock, body: dict) -> None:
+        response = MagicMock()
+        response.read.return_value = json.dumps(body).encode("utf-8")
+        response.__enter__.return_value = response
+        mock_urlopen.return_value = response
+
+    @patch("urllib.request.urlopen")
+    def test_query_range_absolute_window_overrides_since(self, mock_urlopen):
+        self._answer(mock_urlopen, {"status": "success", "data": {"result": []}})
+        LokiClient(base_url="http://mock-loki:3100").query_range("{a}", since="1h", start_ns=10, end_ns=20)
+        url = mock_urlopen.call_args[0][0].full_url
+        assert "start=10&" in url and "end=20&" in url
+
+    @patch("urllib.request.urlopen")
+    def test_query_instant_returns_the_vector_at_the_instant(self, mock_urlopen):
+        series = [{"metric": {"domain": "x"}, "value": [1, "2"]}]
+        self._answer(mock_urlopen, {"status": "success", "data": {"resultType": "vector", "result": series}})
+        assert LokiClient(base_url="http://mock-loki:3100").query_instant("sum(x)", at_ns=42) == series
+        url = mock_urlopen.call_args[0][0].full_url
+        assert "/loki/api/v1/query?" in url and "time=42" in url
+
+    @patch("urllib.request.urlopen")
+    def test_query_instant_error_is_not_an_empty_vector(self, mock_urlopen):
+        # An empty vector is what "quiet" looks like; a failed query must not.
+        self._answer(mock_urlopen, {"status": "error", "error": "parse error"})
+        with pytest.raises(LogsUnavailableError, match="parse error"):
+            LokiClient(base_url="http://mock-loki:3100").query_instant("sum(", at_ns=1)
 
     @patch("urllib.request.urlopen", side_effect=urllib.error.URLError("Connection refused"))
     def test_query_range_connection_error(self, _mock_urlopen):

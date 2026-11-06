@@ -108,39 +108,25 @@ class LokiClient:
         since: str = "15m",
         limit: int = 50,
         direction: str = "BACKWARD",
+        start_ns: int | None = None,
+        end_ns: int | None = None,
     ) -> list[dict[str, Any]]:
-        """Query Loki log stream using LogQL."""
+        """Query Loki log stream using LogQL.
+
+        `start_ns`/`end_ns` pin an absolute window and override `since`.
+        """
         now = datetime.datetime.now(datetime.timezone.utc)
         start_time = now - _parse_time_offset(since)
 
         params = {
             "query": query,
-            "start": str(int(start_time.timestamp() * 1e9)),
-            "end": str(int(now.timestamp() * 1e9)),
+            "start": str(start_ns if start_ns is not None else int(start_time.timestamp() * 1e9)),
+            "end": str(end_ns if end_ns is not None else int(now.timestamp() * 1e9)),
             "limit": str(limit),
             "direction": direction,
         }
 
-        url = f"{self.base_url.rstrip('/')}/loki/api/v1/query_range?{urllib.parse.urlencode(params)}"
-        req = urllib.request.Request(url, headers={"User-Agent": "KubeLab-Toolkit-Observability"})
-
-        try:
-            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-        except Exception as e:
-            # The same swallow as `get_alerts` below, in the sibling client.
-            #
-            # Unlike that one it was NOT caught lying: Loki answered on
-            # 127.0.0.1:3100 with `status: success` and an empty result, so
-            # "No logs found in the last 5m" was true. I went looking for a
-            # second instance of the defect, and the honest finding is that the
-            # SHAPE is here and the symptom was not.
-            #
-            # Fixed anyway, because the shape is what fails later: an unreachable
-            # Loki and a quiet one are indistinguishable from an empty list, and
-            # the CLI renders that list as a calm sentence about the time window.
-            raise LogsUnavailableError(f"Loki query failed: {e}") from e
-
+        data = self._get("query_range", params)
         entries = []
         if data.get("status") == "success" and "data" in data:
             results = data["data"].get("result", [])
@@ -155,12 +141,43 @@ class LokiClient:
                     entries.append(
                         {
                             "timestamp": dt_str,
+                            "ts_ns": int(ts_ns),
                             "container": labels.get("container", labels.get("app", "unknown")),
                             "node": labels.get("node", labels.get("host", "unknown")),
                             "line": line,
                         }
                     )
         return entries
+
+    def query_instant(self, query: str, at_ns: int) -> list[dict[str, Any]]:
+        """Evaluate a LogQL metric query at one instant; the raw vector series."""
+        data = self._get("query", {"query": query, "time": str(at_ns)})
+        if data.get("status") != "success":
+            raise LogsUnavailableError(f"Loki instant query failed: {data.get('error', data.get('status'))}")
+        result: list[dict[str, Any]] = data["data"].get("result", [])
+        return result
+
+    def _get(self, endpoint: str, params: dict[str, str]) -> dict[str, Any]:
+        url = f"{self.base_url.rstrip('/')}/loki/api/v1/{endpoint}?{urllib.parse.urlencode(params)}"
+        req = urllib.request.Request(url, headers={"User-Agent": "KubeLab-Toolkit-Observability"})
+
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+                data: dict[str, Any] = json.loads(resp.read().decode("utf-8"))
+        except Exception as e:
+            # The same swallow as `get_alerts` below, in the sibling client.
+            #
+            # Unlike that one it was NOT caught lying: Loki answered on
+            # 127.0.0.1:3100 with `status: success` and an empty result, so
+            # "No logs found in the last 5m" was true. I went looking for a
+            # second instance of the defect, and the honest finding is that the
+            # SHAPE is here and the symptom was not.
+            #
+            # Fixed anyway, because the shape is what fails later: an unreachable
+            # Loki and a quiet one are indistinguishable from an empty list, and
+            # the CLI renders that list as a calm sentence about the time window.
+            raise LogsUnavailableError(f"Loki query failed: {e}") from e
+        return data
 
     def query_service_logs(
         self,

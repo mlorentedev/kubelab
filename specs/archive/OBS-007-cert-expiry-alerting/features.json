@@ -18,10 +18,10 @@
   {
     "id": "OBS-007-cert-expiry-alerting-f3",
     "behavior": "The rule does not fire on the periodic 'Testing certificate renew...' heartbeat, nor on 'Starting provider *acme.Provider', which staging logs on every Traefik boot.",
-    "verification": "sh -c 'echo \"NO AUTOMATED CHECK EXISTS FOR THIS CRITERION YET\" >&2; exit 1'",
-    "state": "partial",
-    "evidence": "2026-08-10: alert expression evaluated one minute after a known heartbeat; heartbeats in window 1, result empty (tasks.md, Phase 3).",
-    "notes": "Covers AC3. Verified by hand on 2026-08-10: the alert expression was evaluated at an instant one minute after a known heartbeat, so the heartbeat is provably inside the [10m] range, and the result was empty. **The command deliberately FAILS.** An earlier revision used `python3 -c 'sys.exit(0)'` with a note calling it vacuous -- but the harness judges by exit code, not by notes, so that would have let this be marked passing without checking anything. A sentinel that exits non-zero cannot. Closing it for real means a toolkit command that queries Loki. Archived as partial: the measurement stands, and the repeatable check is #2195 (OBS-033)."
+    "verification": "make acme-quiet-check ENV=prod",
+    "state": "passing",
+    "evidence": "2026-11-06: `make acme-quiet-check` exit 0 on staging and prod, heartbeats in window 1, boot lines in window 1, rule answered empty. With the rule's error filter widened to match `renew`, the same staging run exited 1 with 'the rule matches the heartbeat'. First measured by hand on 2026-08-10 (tasks.md, Phase 3).",
+    "notes": "Covers AC3. The check reads the rule's expression from the rendered overlay, evaluates it one minute after the newest `Testing certificate renew` line in Loki, and fails unless the rule's own selector sees the heartbeat in the window and the rule answers empty (#2195, OBS-033). Read-only, so it runs in prod. Before it existed this command was a sentinel that exited 1 on purpose, so the criterion could not be marked passing without a real check."
   },
   {
     "id": "OBS-007-cert-expiry-alerting-f4",
