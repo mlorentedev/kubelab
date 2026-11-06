@@ -27,7 +27,7 @@ owner: manu
 - [x] [AC3] `writers:` in the loader, `collaborators_to_grant` in the plan, `ensure_collaborator` with read-back, CLI reads
 - [x] [AC1] [AC3] `tests/test_gitea_agent_identity.py`
 - [x] [AC4] `make secrets-copy-gitea-agent-token`; dotfiles registry entry (mlorentedev/dotfiles#3152)
-- [ ] [AC2] Provision twice, second `changed=0`
+- [ ] [AC2] Provision twice, second `changed=0` (blocked by #3080)
 - [x] [AC3] Reconcile apply, then plan no-op ✓ 2026-11-05
 - [x] [AC4] Copy into Bitwarden after dotfiles#3152 merges; `dotf secrets verify` ✓ 2026-11-05
 - [x] [AC5] Open one PR on `personal/imagesensortool` with the agent token; check its author ✓ 2026-11-05 (#152)
@@ -35,7 +35,7 @@ owner: manu
 ## Closing
 
 - [x] ADR-062 amendment, lesson-707, runbook line
-- [ ] `verification.md` filled in with live evidence
+- [x] `verification.md` filled in with live evidence ✓ 2026-11-05
 - [x] PR opened referencing this spec folder ✓ 2026-11-03 (#3085)
 
 ## Machine-readable features
