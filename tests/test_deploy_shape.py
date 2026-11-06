@@ -168,6 +168,26 @@ class TestValues:
         shape = classify_diff(changes(VALUES, OVERLAY), before, after, apps, decl)
         assert shape.verdict == "not-mechanical", f"{tag!r} classified as mechanical"
 
+    @pytest.mark.parametrize("replacement", ["0", "0.0"])
+    def test_a_type_change_python_calls_equal_ends_it(self, decl, apps, replacement: str) -> None:
+        """#3062 F5: `false == 0 == 0.0` in Python, so a leaf compared by value alone hid this."""
+        before, after = bump(
+            "web", NEW, values_extra=lambda t: t.replace("enable_blog: false", f"enable_blog: {replacement}", 1)
+        )
+        shape = classify_diff(changes(VALUES, OVERLAY), before, after, apps, decl)
+        assert shape.verdict == "not-mechanical", shape.reason
+
+    def test_a_tag_with_a_trailing_newline_is_refused(self, decl, apps) -> None:
+        """#3062 F5: the pattern is anchored, and `$` still admits a trailing newline under
+        `match`. Only `fullmatch` refuses it, so this pins it."""
+        before, after = bump("web", NEW)
+        after[VALUES] = after[VALUES].replace(f"version: {NEW}\n", f'version: "{NEW}\\n"\n', 1)
+        after[OVERLAY] = re.sub(rf"image: (\S+kubelab-web:{NEW})\n", r'image: "\1\\n"\n', after[OVERLAY])
+        assert yaml.safe_load(after[VALUES])["apps"]["platform"]["web"]["version"] == f"{NEW}\n"
+        assert f'kubelab-web:{NEW}\\n"' in after[OVERLAY]
+        shape = classify_diff(changes(VALUES, OVERLAY), before, after, apps, decl)
+        assert shape.verdict == "not-mechanical", shape.reason
+
     def test_no_values_change_is_not_mechanical(self, decl, apps) -> None:
         before, after = bump("web", current_version("web"))
         shape = classify_diff(changes(VALUES, OVERLAY), before, after, apps, decl)
@@ -380,6 +400,17 @@ class TestEvaluate:
         routes = routes_for("web", "mlorentedev/web")
         routes[f"repos/mlorentedev/web/commits/{SHORT}"] = {"sha": "f" * 40}
         assert evaluate(7, REPO, FakeApi(routes), decl, products).verdict == "not-mechanical"
+
+    @pytest.mark.parametrize("suffix", ["0", "\n"])
+    def test_a_resolved_sha_longer_than_a_commit_is_refused(self, decl, products, suffix: str) -> None:
+        """#3062 F5: pins `fullmatch` on the resolved sha. The sha still starts with the
+        tag's short sha and is on the branch, so only the pattern refuses it, and the
+        newline case is refused only by `fullmatch`, however the pattern is anchored."""
+        routes = routes_for("web", "mlorentedev/web")
+        routes[f"repos/mlorentedev/web/commits/{SHORT}"] = {"sha": FULL + suffix}
+        routes[f"repos/mlorentedev/web/compare/master...{FULL + suffix}"] = {"status": "behind"}
+        shape = evaluate(7, REPO, FakeApi(routes), decl, products)
+        assert shape.verdict == "not-mechanical" and "resolved to" in shape.reason, shape.reason
 
     def test_an_api_failure_is_unknown(self, decl, products) -> None:
         routes = routes_for("web", "mlorentedev/web")

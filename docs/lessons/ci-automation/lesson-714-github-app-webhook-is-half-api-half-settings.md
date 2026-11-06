@@ -1,5 +1,5 @@
 ---
-id: lesson-710-github-app-webhook-is-half-api-half-settings
+id: lesson-714-github-app-webhook-is-half-api-half-settings
 type: lesson
 status: active
 created: "2026-11-05"

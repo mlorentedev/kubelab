@@ -116,7 +116,11 @@ _MISSING = object()
 
 
 def _leaves(before: Any, after: Any, path: tuple[Any, ...] = ()) -> list[tuple[tuple[Any, ...], Any, Any]]:
-    """Every leaf that differs, as (path, before, after). A shape change is one leaf."""
+    """Every leaf that differs, as (path, before, after). A shape change is one leaf.
+
+    Leaves compare by type and value: Python has `false == 0 == 0.0`, and a YAML
+    type change is a change (#3062 F5).
+    """
     if isinstance(before, dict) and isinstance(after, dict):
         out = []
         for key in list(before) + [k for k in after if k not in before]:
@@ -127,7 +131,7 @@ def _leaves(before: Any, after: Any, path: tuple[Any, ...] = ()) -> list[tuple[t
         for i, (b, a) in enumerate(zip(before, after, strict=True)):
             out += _leaves(b, a, (*path, i))
         return out
-    return [] if before == after else [(path, before, after)]
+    return [] if (type(before), before) == (type(after), after) else [(path, before, after)]
 
 
 def _owner(docs: Any, path: tuple[Any, ...]) -> Any:
@@ -151,25 +155,55 @@ def classify_diff(
     """Judge one diff against the declaration. Pure: no IO, no network.
 
     `changes` is the PR's file list (`filename`, `status`); `before`/`after` hold
-    each declared file's text at the merge base and at the head.
+    each declared file's text at the merge base and at the head. Each rule is its
+    own function, and the first one that refuses decides.
     """
+    refusal = _file_set_refusal(changes, decl)
+    if refusal:
+        return refusal
+    try:
+        values, overlay = _changed_leaves(before, after, decl)
+    except (KeyError, yaml.YAMLError) as exc:
+        return Shape(UNKNOWN, f"cannot read the declared files: {exc!r}")
+    moved = _version_move(values, apps, decl)
+    if isinstance(moved, Shape):
+        return moved
+    app, old, new = moved
+    return _overlay_refusal(overlay, app, old, new) or Shape(
+        MECHANICAL, f"{app} {old} -> {new}, overlay image only", app=app, old=old, new=new
+    )
+
+
+def _file_set_refusal(changes: list[dict[str, Any]], decl: Declaration) -> Shape | None:
+    """Exactly the declared files, each one modified."""
     names = {c.get("filename") for c in changes}
     if names != set(decl.files) or len(changes) != len(decl.files):
         return Shape(NOT_MECHANICAL, f"the changed files are not exactly the {decl.name} set")
     if any(c.get("status") != "modified" for c in changes):
         return Shape(NOT_MECHANICAL, "a declared file was added, removed or renamed, not modified")
+    return None
 
-    values_path, overlay_paths = decl.values_file, decl.overlay_files
-    try:
-        values = _leaves(yaml.safe_load(before[values_path]), yaml.safe_load(after[values_path]))
-        overlay: list[tuple[tuple[Any, ...], Any, Any, Any]] = []
-        for overlay_path in overlay_paths:
-            docs_before = list(yaml.safe_load_all(before[overlay_path]))
-            docs_after = list(yaml.safe_load_all(after[overlay_path]))
-            overlay += [(p, b, a, _owner(docs_after, p)) for p, b, a in _leaves(docs_before, docs_after)]
-    except (KeyError, yaml.YAMLError) as exc:
-        return Shape(UNKNOWN, f"cannot read the declared files: {exc!r}")
 
+# (path, before, after), and for the overlay the container the leaf belongs to.
+_Leaf = tuple[tuple[Any, ...], Any, Any]
+_OverlayLeaf = tuple[tuple[Any, ...], Any, Any, Any]
+
+
+def _changed_leaves(
+    before: Mapping[str, str], after: Mapping[str, str], decl: Declaration
+) -> tuple[list[_Leaf], list[_OverlayLeaf]]:
+    """The values leaves that differ, and the overlay leaves with the container each belongs to."""
+    values = _leaves(yaml.safe_load(before[decl.values_file]), yaml.safe_load(after[decl.values_file]))
+    overlay: list[_OverlayLeaf] = []
+    for overlay_path in decl.overlay_files:
+        docs_before = list(yaml.safe_load_all(before[overlay_path]))
+        docs_after = list(yaml.safe_load_all(after[overlay_path]))
+        overlay += [(p, b, a, _owner(docs_after, p)) for p, b, a in _leaves(docs_before, docs_after)]
+    return values, overlay
+
+
+def _version_move(values: list[_Leaf], apps: Iterable[str], decl: Declaration) -> Shape | tuple[str, str, str]:
+    """(app, old, new) when the one changed value is a registered app's version moving to an admitted tag."""
     if len(values) != 1:
         return Shape(NOT_MECHANICAL, f"{len(values)} values changed; a deploy moves exactly one version")
     (leaf, old, new) = values[0]
@@ -180,7 +214,11 @@ def classify_diff(
         return Shape(NOT_MECHANICAL, f"the changed value {'.'.join(map(str, leaf))} is not a registered app's version")
     if not isinstance(old, str) or not isinstance(new, str) or not decl.tag_pattern.fullmatch(new):
         return Shape(NOT_MECHANICAL, f"{app} moved to {new!r}, which is not an immutable tag this class admits")
+    return app, old, new
 
+
+def _overlay_refusal(overlay: list[_OverlayLeaf], app: str, old: str, new: str) -> Shape | None:
+    """Only `app`'s image moved in the overlay, from <repo>:<old> to <repo>:<new>."""
     if not overlay:
         return Shape(NOT_MECHANICAL, f"{app}'s version moved and the overlay did not")
     for leaf_path, image_before, image_after, owner in overlay:
@@ -196,8 +234,7 @@ def classify_diff(
         # whose image moved; the container it belongs to does (#2983).
         if owner != app:
             return Shape(NOT_MECHANICAL, f"the overlay moved the image of container {owner!r}, not {app}'s")
-
-    return Shape(MECHANICAL, f"{app} {old} -> {new}, overlay image only", app=app, old=old, new=new)
+    return None
 
 
 # --------------------------------------------------------------------------- #

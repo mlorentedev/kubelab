@@ -1,0 +1,253 @@
+---
+tags: [spec, tasks]
+created: "2026-11-03"
+id: "IDP-053-forge-agnostic-product-path"
+type: spec-tasks
+status: active
+owner: manu
+---
+
+# Tasks - IDP-053-forge-agnostic-product-path
+
+> TDD order inside each slice: failing test, then code, then refactor. One slice = one PR.
+> **Markers:** `[P]` = no dependency on another unchecked task, safe to run in parallel (the
+> slice touches files no other open slice touches). `[AC<n>]` = helps satisfy acceptance
+> criterion `<n>` in `proposal.md`.
+>
+> **Order.** Wave 1 (all parallel, disjoint files): S1a, S2c, S3a, S5a. Wave 2: S1b and S2a
+> (after S1a), S5b (after S5a and the API note), S5c (after S2c, to avoid a shared-file
+> conflict), S6a (after S5a). Wave 3: S2b (after S1b and S2a), S3b (after S1, S2, S3a and the
+> product's `kubelab.yaml`), S6b (after S6a, S5b, S5c), S8. Then S4 (after S3b merges and an
+> image exists), S7 (after the owner decides D1), S9 (after #3063).
+>
+> **Merge owner.** ADR-073 D13: anything under `infra/` or `.github/workflows/`, and every
+> secrets PR and mint, is the owner's to merge or run. Slices marked "agent" touch neither and
+> may be merged by the agent under the standing grant once CI is green and triage is posted.
+>
+> **Hard rule for every slice:** none touches `toolkit/features/deploy_shape.py` before S9.
+
+## Setup
+
+- [ ] Branch created from master: `feat/idp-053-<slice>` (one branch per slice)
+- [ ] `proposal.md` acceptance criteria are testable (they name commands)
+- [ ] D1 and D2 are decided before the slices that carry them (S7, S2c/S5c); the rest are not blocked
+
+## Implementation
+
+### S1a. Registry fields and prune exclusion [P] (agent merges, ~90 LOC)
+
+Files: `toolkit/features/product_registry.py`, `toolkit/features/registry.py`,
+`infra/config/products.yaml` (schema comment only, no new entry), tests below.
+
+- [ ] [P] [AC1] Failing tests in `tests/test_product_registry.py`: `image_registry` and `private`
+  parse; `derived_image` returns `<image_registry>/<image_name or app>`; `private` without
+  `image_registry` or `pull_credential` is refused with ERROR / WHY / FIX; two private entries on
+  one host naming different credentials are refused (D6)
+- [ ] [AC1] Add `image_registry`, `private`, `pull_credential` (username + catalog key) to `Product`; `derived_image` honours `image_registry`
+- [ ] [AC1] Failing test in `tests/test_registry_prune.py`: a product whose registry is not
+  `platform_registry()` is skipped by `image_repositories`, and
+  `test_the_committed_set_is_the_three_kubelab_repositories` still passes
+- [ ] [AC1] `image_repositories` skips non-default-registry products instead of raising on `/`
+- [ ] Mutation check on both new guards: `make mutate FILE=toolkit/features/product_registry.py TEST=tests/test_product_registry.py`
+
+Acceptance: `.venv/bin/python -m pytest -q tests/test_product_registry.py tests/test_registry_prune.py`
+
+### S1b. Generator, promote, `tag_exists`, prod-lane guard (agent merges, ~130 LOC)
+
+Depends on S1a. Files: `toolkit/features/generator_k8s.py`, `toolkit/features/promotion.py`,
+`toolkit/features/registry.py`, `toolkit/features/product_render.py` (test only: `CONTRACT_KEYS`
+is NOT edited, D4).
+
+- [ ] [AC2] Failing test: the generated overlay image for a product with `image_registry` is
+  `<image_registry>/<name>:<tag>`, and the committed overlays for `web` are byte-identical
+  (`make validate-sync ENV=staging` / `ENV=prod` stay clean)
+- [ ] [AC2] `_build_context` and `_resolve_image` take the registry from the product's entry, falling back to `REGISTRY`
+- [ ] [AC2] Failing test in `tests/test_product_registry.py`: `"image_registry" not in CONTRACT_KEYS` (D4)
+- [ ] [AC2] Failing tests in `tests/test_promotion.py`: `promote --env prod` for a product with no `events.prod` is refused (D5); a prod values block without `version` for a staging-only product fails
+- [ ] [AC2] Implement the refusal and the committed-test for staging-only products
+- [ ] [AC2] Failing tests for `tag_exists` on a non-`docker.io` host: 200 is True, 404 is False, 401/403/unreachable is None with a warning naming the registry (D3); injectable HTTP, no network in tests
+- [ ] [AC2] Implement the OCI `HEAD /v2/<name>/manifests/<tag>` transport
+- [ ] [AC2] New `tests/test_prod_images_always_on.py`: no prod overlay image points at a forge host (D7)
+
+Acceptance: `make validate-sync ENV=staging && make validate-sync ENV=prod` and
+`.venv/bin/python -m pytest -q tests/test_promotion.py tests/test_product_registry.py tests/test_prod_images_always_on.py`
+
+### S2a. dockerconfigjson Secret through `apply-secrets` (owner merges, ~140 LOC)
+
+Depends on S1a. Owner merges because it changes the secret delivery path (D13).
+Files: `toolkit/features/k8s_secrets.py`, tests.
+
+- [ ] [AC3] Failing test: `SecretMapping` accepts a `secret_type`; a private entry yields `pull-<host-slug>` of type `kubernetes.io/dockerconfigjson` whose `.dockerconfigjson` decodes to `{"auths": {"<host>": {"username", "password", "auth"}}}`
+- [ ] [AC3] `_render_secret_manifest` takes the type (default stays `Opaque`); build the dockerconfigjson from the catalogued token, as a rendered literal (D6)
+- [ ] [AC3] Failing test: the token never appears in an argv, a log line or `--dry-run` output (the manifest is redacted the way the existing Secret dry-run is)
+- [ ] [AC3] Failing test: `web`'s rendered secrets are unchanged; a registry with no private entry adds no Secret
+- [ ] [AC3] Generate the mapping from the registry (no hand-written list entry per product)
+
+Acceptance: `.venv/bin/python -m pytest -q tests/test_image_pull_secret.py tests/test_k8s_secrets_apply.py tests/test_k8s_secrets_delivery.py` (the first is new)
+
+### S2b. `imagePullSecrets` in the Deployment template (owner merges, ~50 LOC)
+
+Depends on S1b and S2a. Files: `infra/k8s/templates/deployments.yaml.j2`,
+`toolkit/features/generator_k8s.py`, regenerated overlays (not counted).
+
+- [ ] [AC3] Failing test: a private product's Deployment carries `imagePullSecrets: [{name: pull-<host-slug>}]`; every other Deployment is byte-identical
+- [ ] [AC3] Emit the block only when the entry is `private`
+- [ ] [AC3] `make validate-sync ENV=staging && make validate-sync ENV=prod` clean
+
+Acceptance: `.venv/bin/python -m pytest -q tests/test_image_pull_secret.py` and the two `validate-sync` runs.
+
+### S2c. Gitea pull token: catalog, mint, `registry-check` [P] (owner merges and mints, ~140 LOC)
+
+First task, before any code: the consequence check for D2, run against the live forge by the
+owner (or by the agent with the owner's read-only token if they hand one over). Record the
+result on #2612.
+
+- [ ] [AC4] Consequence check (D2): create a throwaway `read:package` token on the reviewer account, pull a manifest for `personal/imagesensortool`, record status. Fail means go back to the architect (ADR-062/065), and the rest of S2c/S5c wait
+- [ ] [P] [AC4] Failing tests in `tests/test_gitea_registry_pull_token.py`, copying the shape of `tests/test_gitea_issue_reader_token.py`: the grant in `token_scopes` equals `read:package` exactly; the mint is gated on the SOPS key being absent; the revoke-then-unset rotation covers it
+- [ ] [AC4] Add `registry_pull` to `ROTATABLE_TOKENS` (`gitea_tokens.py`), `SCOPE_BY_METHOD` if a client method is needed (`gitea_client.py`), the catalog entry (`secrets_manager.py`, `forge_actions` for the Kubernetes apply path, file per D2), the `common.yaml` `token_scopes` grant, and the Ansible mint task in `beelink_services`
+- [ ] [AC4] Failing test then implement `toolkit services gitea registry-check --app <app>`: pulls a manifest by consequence, prints status, never the token; exit 0 / non-zero
+- [ ] [AC4] Owner operation: mint, then `toolkit secrets audit --env staging` and `registry-check` (deployed)
+
+Acceptance: `.venv/bin/python -m pytest -q tests/test_gitea_registry_pull_token.py tests/test_gitea_token_rotation_registry.py tests/test_gitea_token_scopes.py tests/test_gitea_token_scope_drift.py`
+
+### S3a. Optional `hostnames.prod` and staging-only guards [P] (agent merges, ~90 LOC)
+
+Files: `toolkit/features/product_contract.py`, `toolkit/features/product_guards.py`,
+`toolkit/features/product_render.py`, `toolkit/schemas/kubelab-product.schema.json`
+(regenerated, not counted), tests (see the list in `proposal.md`).
+
+- [ ] [P] [AC5] Failing tests: a contract with no `hostnames.prod` validates; `_FIELD_FIX["hostnames"]` text no longer says "exactly staging and prod"; the committed JSON Schema equals the model
+- [ ] [AC5] Make `Hostnames.prod` optional; regenerate the schema with `python -m toolkit.features.product_contract --write-schema`
+- [ ] [AC5] Failing tests: `_check_hostnames` loops only the envs the registry entry's `events` declares; `product render --env prod` for a staging-only product is refused with ERROR / WHY / FIX
+- [ ] [AC5] Implement; `CONTRACT_KEYS` derivation for `domain`, `site_domain`, `site_url` does not read an absent env
+- [ ] [AC5] Failing tests in the six red tests named in `proposal.md`: a staging-only fixture needs no prod tile, no prod snapshot, no prod e2e expectation and no prod DNS record; `test_dns_contract_hostnames.py` gets a case pinning the existing skip
+- [ ] [AC5] Make `test_platform_tiles_cover_registry`, `test_e2e_expectations_cover_registry` and `test_product_registry` loop the envs the entry declares
+
+Acceptance: `.venv/bin/python -m pytest -q tests/test_product_contract.py tests/test_product_contract_schema.py tests/test_product_contract_drift.py tests/test_product_contract_guards.py tests/test_dns_contract_hostnames.py tests/test_platform_tiles_cover_registry.py tests/test_e2e_expectations_cover_registry.py tests/test_product_registry.py`
+
+### S3b. Onboarding PR for `imagesensortool` (owner merges, ~70 LOC plus data)
+
+Blocked until `personal/imagesensortool` commits a valid `kubelab.yaml` (image, port 8080,
+`/healthz`, `hostnames.staging`, auth level) and its CI has pushed one `sha-<12hex>` image.
+Depends on S1, S2 and S3a merged. Files: `infra/config/products.yaml`,
+`infra/config/products/contracts/imagesensortool.yaml`, `infra/config/values/staging.yaml`
+(staging-only block, `version` set), the platform tile file, the e2e expectation file,
+regenerated overlays. Only if `hostnames.staging` is outside `staging.kubelab.live`
+(proposal risk 7): `infra/config/values/common.yaml` (`networking.staging_zones`) and the
+hairpin block in `infra/k8s/base/edge/coredns-custom.yaml`.
+
+- [ ] [AC6] Registry entry: `forge: gitea`, `repository: personal/imagesensortool`, `receiver: generic` held back until #2611 settles (S6b), `image_registry: gitea.kubelab.live/personal`, `private: true`, `pull_credential`, `events: {staging: ...}` and no `events.prod`
+- [ ] [AC6] Snapshot: `toolkit product render --contract ... --env staging` and commit the snapshot
+- [ ] [AC6] Staging values block with a pinned `version` (never `:latest`), platform tile, e2e expectation, and the staging zone only for a hostname outside `staging.kubelab.live`
+- [ ] [AC6] `make test`, `make validate-sync ENV=staging`, `product render --check` exit 0
+- [ ] Only for a hostname outside `staging.kubelab.live`: owner provisions the staging zone (VPS, RPi4) and confirms the ACME token covers the domain (see "What cannot be verified")
+
+### S4. First deploy by hand (owner, ~80 LOC of runbook)
+
+- [ ] [AC7] Owner mints the pull token (S2c) and runs `apply-secrets` for staging
+- [ ] [AC7] `toolkit deployment promote imagesensortool --env staging --version sha-<12hex>`; deploy PR opened and merged by the owner
+- [ ] [AC7] Run the three commands in AC7 and record the output in `verification.md`
+- [ ] [AC7] Runbook: `docs/runbooks/cicd.md` gains the Gitea product path (hand-run promote, on-demand node note, how to read a pull failure)
+
+### S5a. Forge adapter, GitHub implementation [P] (agent merges, ~200 LOC)
+
+Files: new `toolkit/features/forge_adapter.py`, `toolkit/features/product_ready.py`,
+`toolkit/features/product_release.py`, `toolkit/cli/product.py` (new `product resolve`),
+tests.
+
+- [ ] [P] [AC8] Failing tests in `tests/test_forge_adapter.py`: a `ForgeAdapter` protocol with `resolve_commit(short)`, `is_on_default_branch(sha)`, `read_file(path, ref)`, `resolve_tag(tag)`; the GitHub implementation maps each to the `gh api` call the receiver and `product_release` make today (injectable runner, no network)
+- [ ] [AC8] Implement `forge_adapter.py` with the GitHub implementation and a factory keyed on the registry entry's `forge`
+- [ ] [AC8] Move the `forge != github` refusals in `product_ready.py:58` and `product_release.py:52` behind the factory (an unsupported forge is refused by the factory, not by string compare)
+- [ ] [AC8] `toolkit product resolve --app --tag` prints the resolved commit and on-default-branch verdict
+- [ ] [AC8] New `tests/test_no_forge_names_outside_adapter.py`: no module outside `forge_adapter.py` compares `forge` to a forge name; `deploy_shape.py` is allow-listed with a comment pointing at S9
+
+Acceptance: `.venv/bin/python -m pytest -q tests/test_forge_adapter.py tests/test_no_forge_names_outside_adapter.py tests/test_product_release.py tests/test_product_ready.py`
+
+### S5b. Gitea implementation (agent merges, ~170 LOC)
+
+Depends on S5a and the API note. Files: `toolkit/features/forge_adapter.py`,
+`toolkit/features/gitea_client.py` (new read methods plus their `SCOPE_BY_METHOD` entries),
+`docs/lessons/` or the spec's `verification.md` (the note).
+
+- [ ] [AC8] API note first: run a local Gitea 1.27.3 (as `scope-lab.py` does) and record, for each adapter method, the endpoint, the status codes and the edge cases (unknown vs ambiguous short sha, `compare` direction, raw at a commit, annotated tag). Commit it before code
+- [ ] [AC8] Failing tests with recorded responses: each of the four methods on the Gitea implementation; unknown and ambiguous short sha are told apart; a missing file is an error with ERROR / WHY / FIX
+- [ ] [AC8] Implement on `GiteaClient`; each new method is mapped in `SCOPE_BY_METHOD` and the test that pins the method-to-scope map passes with `read:repository` only
+- [ ] [AC8] The factory selects the Gitea implementation for `forge: gitea`
+
+Acceptance: `.venv/bin/python -m pytest -q tests/test_forge_adapter.py tests/test_gitea_token_scopes.py tests/test_gitea_token_scope_drift.py`
+
+### S5c. Read-only Gitea token for repository reads [P] (owner merges and mints, ~100 LOC)
+
+Sequence after S2c (shares `gitea_tokens.py`, `common.yaml`, the Ansible task file). Depends on D2.
+
+- [ ] [AC8] Failing tests in `tests/test_gitea_repo_reader_token.py` (shape of the issue_reader test): grant equals `read:repository`, mint gated on absence, rotation covers it
+- [ ] [AC8] `repo_reader` in `ROTATABLE_TOKENS`, catalog entry delivered to the kubelab Actions secrets (`forge_actions`, target repo `mlorentedev/kubelab`), `token_scopes` grant, Ansible mint
+- [ ] [AC8] Owner mints; the receiver's `resolve` job reads it as a secret
+
+Acceptance: `.venv/bin/python -m pytest -q tests/test_gitea_repo_reader_token.py tests/test_gitea_token_rotation_registry.py tests/test_gitea_token_scopes.py`
+
+### S6a. Receiver logic as toolkit commands (agent merges, ~150 LOC)
+
+Depends on S5a. Moves the workflow's inline `gh api` shell into testable commands without
+changing the workflow's behaviour (the workflow edit itself is S6b). Files:
+`toolkit/cli/product.py`, `toolkit/features/product_receiver.py` (new), tests.
+
+- [ ] [AC9] Failing tests: `product resolve` returns the same JSON the workflow's resolve step builds today for a GitHub fixture
+- [ ] [AC9] `toolkit product fetch-contract --app --sha` reads `kubelab.yaml` at the commit through the adapter and writes it
+- [ ] [AC9] Failing test then implement `toolkit product route --app` printing `{forge, runs_on}` from `products.yaml` only (GitHub keeps `vars.RUNNER_DOCKER`'s ubuntu default, Gitea selects the self-hosted label)
+
+Acceptance: `.venv/bin/python -m pytest -q tests/test_product_receiver.py tests/test_forge_adapter.py`
+
+### S6b. Receiver workflow: `route` job and per-forge runner (owner merges, ~120 LOC)
+
+Depends on S6a, S5b, S5c. Dormant until #2611 settles (Risks 3). Files:
+`.github/workflows/product-image-receiver.yml`, `tests/test_product_image_receiver_workflow.py`,
+`tests/test_receiver_pr_step.py`.
+
+- [ ] [AC9] Failing workflow tests: a `route` job exists, reads `products.yaml` only and has no secret; `resolve` `runs-on` comes from its output; `promote` stays on a hosted runner (Risks 4); no `forge != github` step remains; the GitHub path's jobs run on the runners they run on today
+- [ ] [AC9] Edit the workflow to match; resolve calls `toolkit product resolve` and `fetch-contract` only
+- [ ] [AC9] `actionlint` clean
+- [ ] [AC9] `workflow_dispatch` dry run on the self-hosted runner for the Gitea product (deployed)
+
+Acceptance: `.venv/bin/python -m pytest -q tests/test_product_image_receiver_workflow.py tests/test_receiver_pr_step.py && actionlint`
+
+### S7. Trigger (owner decides D1; implementation per option)
+
+- [ ] [AC10] Owner rules on D1; the decision is commented on #2612 and the loser's reason recorded
+- [ ] [AC10] Option (a): `forge_actions` catalog entry for the dispatch token (`personal/imagesensortool` target), the product CI step that fires `repository_dispatch` with `{tag}`, a runbook paragraph in `docs/runbooks/cicd.md`; spike first: the minimum token permission
+- [ ] [AC10] Option (b): a separate spec (Go API outbound dispatch plus Gitea webhook registration); out of this one's size budget
+
+### S8. Prod half: authenticated, forge-neutral `release-contract` and digest (agent merges the code; the credential is owner, ~200 LOC)
+
+Depends on S5b and S1b. Closes #2627 AC1 and AC2. Files: `toolkit/features/product_release.py`,
+`toolkit/features/registry.py`, tests.
+
+- [ ] [P] [AC11] Failing tests in `tests/test_registry_digest.py` (new): authenticated manifest digest read for GHCR and for the Gitea registry; unsupported or private registry without a credential is refused with ERROR / WHY / FIX naming the registry
+- [ ] [AC11] Implement `tag_digest` for non-`docker.io` hosts using the catalogued pull credential (D3's authenticated half)
+- [ ] [AC11] Failing test then implement: `release-contract` reads the contract through the adapter for any forge; `sha-` tags of 7 or more hex digits are proven (#2627 AC1)
+
+Acceptance: `.venv/bin/python -m pytest -q tests/test_product_release.py tests/test_registry_digest.py`
+
+### S9. `deploy_shape` provenance through the adapter (owner merges, after #3063, ~80 LOC)
+
+- [ ] [AC12] Failing test: a Gitea product's deploy PR is `mechanical` when provenance proves against Gitea, and `not-mechanical` with an ERROR / WHY / FIX when it does not
+- [ ] [AC12] Replace `_provenance`'s `gh api` calls and the `forge == "github"` branch with the adapter; remove the allow-list entry in `test_no_forge_names_outside_adapter.py`
+
+Acceptance: `.venv/bin/python -m pytest -q tests/test_deploy_shape.py tests/test_deploy_shape_widening.py tests/test_no_forge_names_outside_adapter.py`
+
+## Closing
+
+- [ ] Every acceptance criterion from `proposal.md` is covered by at least one test or a recorded deployed check
+- [ ] Every acceptance criterion has a matching entry in `features.json` with a non-vacuous verification command
+- [ ] Type checks pass (`make lint`)
+- [ ] No unrelated changes in any slice's diff
+- [ ] `verification.md` filled in, including the deployed checks
+- [ ] Each slice PR references this spec folder and carries a `## Knowledge` section
+- [ ] An independent adversarial review before archive (the reviewer is not the implementer)
+
+## Machine-readable features
+
+`features.json` (alongside this file) follows [[pattern-feature-list-as-primitive]]: one entry
+per acceptance criterion, `state` starts `pending`, and only the harness sets `passing` after
+running `verification` and capturing exit code 0. Entries for deployed criteria carry the
+command that is run on the machine after the owner's operation; until then they fail by design.

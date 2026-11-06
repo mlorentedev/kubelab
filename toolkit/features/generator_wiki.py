@@ -24,7 +24,11 @@ class WikiGenerator(BaseGenerator):
         if project_root:
             self.project_root = project_root
         self.environment = environment
-        self.wiki_docs_path = self.project_root / PATH_STRUCTURES.WIKI_DOCS
+
+    @property
+    def wiki_docs_path(self) -> Path:
+        """Derived on each read, so a `project_root` reassigned after `__init__` moves the output too."""
+        return self.project_root / PATH_STRUCTURES.WIKI_DOCS
 
     def generate(self, env: str) -> dict[str, Any]:
         """Generate wiki configuration and collect documentation.

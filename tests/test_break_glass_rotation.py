@@ -309,16 +309,18 @@ def test_a_service_on_a_powered_off_node_is_skipped_not_reported_as_drift(
 
     from toolkit.features import break_glass as bg
 
-    with socket.socket() as sock:
-        sock.bind(("127.0.0.1", 0))
-        closed = sock.getsockname()[1]  # nothing listens once the socket closes
     monkeypatch.setattr(rot, "targets", lambda decls, values: [rot.Target("open-webui", "breakglass", "k", "bg@x")])
     monkeypatch.setattr(bg, "declarations", lambda values: {})
-    monkeypatch.setattr(bg, "resolve", lambda env, s, root: ({}, None, bg.Direct(url=f"http://127.0.0.1:{closed}")))
     monkeypatch.setattr(bg, "secret_file", lambda key, env, d: (_ for _ in ()).throw(AssertionError("no SOPS read")))
     monkeypatch.setattr("toolkit.features.oidc_clients.load_values", lambda env, root=None: {})
     monkeypatch.setattr("toolkit.features.secrets_manager.SecretsManager", lambda *_: None)
 
-    lines: list[str] = []
-    assert rot.rotate_break_glass("prod", tmp_path, lines.append) == []
+    # Bound and never listening for the whole test, so a connection is refused.
+    # A closed socket frees the port for a parallel worker's listener (#3078).
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        closed = sock.getsockname()[1]
+        monkeypatch.setattr(bg, "resolve", lambda env, s, root: ({}, None, bg.Direct(url=f"http://127.0.0.1:{closed}")))
+        lines: list[str] = []
+        assert rot.rotate_break_glass("prod", tmp_path, lines.append) == []
     assert any("open-webui: skipped" in line and "not reachable" in line for line in lines)

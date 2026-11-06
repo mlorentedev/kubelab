@@ -28,6 +28,36 @@ A module of `apps/api` (ADR-066 amendment A2), not a new service. Behind Autheli
 3. **Slack capture.** `/task create` opens an issue through the same create write, in the repository its `area:` label maps to, or in `knowledge` when none does. Every task is an issue in some repository, and the view stores no item without one. This is CONSOLE-007 (#2586) and lands after the view.
 4. **Statistics in Grafana.** Throughput, queue age, time to first review, time with a red CI and items by status, priority and area, plus the health of the view itself. Grafana shows aggregates only and opens no action: the view stays the place to act.
 
+## The console
+
+Decided with the operator on 2026-11-04, after the read model was live and the page still had no address.
+
+- **Address.** `console.kubelab.live` (staging `console.staging.kubelab.live`), declared once as `infra.forge.console_domain`. A host of its own, behind Authelia whole like Grafana or n8n, rather than a path on `api.kubelab.live`: a path made the public API host carry one signed-in corner, held by a Traefik path rule and an Authelia `resources` regex that each failed open alone, and `mlorente.dev` already proxies `/api` to the same Service with no session in front.
+- **Served by the api binary**, with no deployment of its own. Because that binary also answers the public API host, it serves `/console` only to a request for the console host, and to none when the host is not declared.
+- **Who uses it**: the operator, signed in through Authelia. Break-glass is a port-forward to the api Service.
+
+| Use case | Screen | Delivery |
+|---|---|---|
+| What needs me: review requested, my pull requests with a red CI, assigned to me | Inbox | Reasons in the second slice |
+| Triage everything open on both forges by repository, area, priority or text | All | First slice (filter by text) |
+| Trust the view: when each forge was read, and whether it is down | Freshness bar on every screen | First slice |
+| Set `status:*` or `priority:*`, assign, close or reopen from a row | Row actions | AC2 |
+| Capture an issue, repository chosen by `area:` | New issue | AC2, and CONSOLE-007 from Slack |
+
+The first slice is read-only: the page, `GET /console/queue` (open items of the declared sources, newest first, with each source's last read time and reachability) and the access above. Its JSON is open to a `reasons` field on each item, added by the second slice without breaking the page.
+
+```
+console.kubelab.live                       [Inbox] [All] [+ New issue]
+github:mlorentedev/kubelab read 3 min ago - gitea:personal/resume read 1 min ago
+----------------------------------------------------------------------------
+INBOX
+  review requested  kubelab #3068 PR  fix(api): keep forge deliveries ...
+  red CI            kubelab #3041 PR  build(api): x/crypto ...
+  assigned          resume  #12       Update CV for ...      [status v][close]
+ALL  (filter: repository / area / priority / text)
+  P1 status:in-progress  kubelab #2570  CONSOLE-004 ...      [status v][prio v]
+```
+
 ## Out of scope
 
 Things this PR explicitly does NOT include. Forces a sharp boundary and prevents scope creep.
@@ -42,7 +72,7 @@ Things this PR explicitly does NOT include. Forces a sharp boundary and prevents
 
 Failure modes, dependencies, and unknowns to clarify before implementation. If any item here is unresolved, do not move to `tasks.md` yet.
 
-- **Where the UI is served** (from `apps/api` or apart). Blocks `tasks.md`. Leaning towards the api binary: no new deployment, image pipeline or route for one operator. Decided in this spec, not ADR-074 (A7 puts this view outside it).
+- **Where the UI is served**: decided 2026-11-04, see "The console" below.
 - **Delivery order.** The pain stops when the view is usable, not when Vikunja is deleted. The read queue over both forges ships first, the narrow writes second, and the retirement waits for parity and A8's 14 days. Keep A8's five working days. A8 says "on Gitea alone" and A2 defers the UI to ADR-074: both need a one-line correction in the ADR.
 - **GitHub call budget.** The GraphQL secondary limit already cuts sessions short. Reads go through webhooks plus a periodic reconcile, never polling, with a stated hourly call ceiling (#1501).
 

@@ -18,6 +18,13 @@ Accepted — 2026-08-27. Output of an SDD implementation session ([`specs/archiv
 
 **Status note — 2026-10-20.** The 2026-10-20 amendment below reverses this ADR's central choice. Forge issues and pull requests are the task surface, the view over them is a cross-forge read model in the kubelab API, and Vikunja is retired. D1-D6 and the four earlier amendments stay as the record of what was deployed and why; they no longer describe the target. Of the Decision Drivers, the memory budget, zero PVCs and always-on still bind; the fourth is restated in A5.
 
+**Status note — 2026-11-05.** A2's "a separate service for the view: rejected at the current scale, unless ADR-074 decides otherwise" is decided by [ADR-074](adr-074-console-and-rest-surface.md). The split is by layer:
+
+- The read model, webhooks, outbox and writes stay in `apps/api` as A2 places them.
+- The frontend becomes its own app, `apps/console`, which is not a second API.
+
+A8's usage test stands. The operator widened its five-day timebox to ADR-074's sequence, and the usage counter ships as that sequence's step 2.
+
 ## Context
 
 Task state across KubeLab was historically coupled to GitHub Projects v2 (Board #1 "bitácora"). As KubeLab evolved into a hybrid multi-forge topology ([ADR-028](adr-028-operational-topology.md), [ADR-061](adr-061-stateful-service-placement.md), [ADR-065](adr-065-forge-repository-organization.md)), this setup broke down:

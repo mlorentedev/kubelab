@@ -19,7 +19,7 @@ created: "2026-10-21"
 
 ## Decisions before code
 
-- [x] ✓ 2026-10-22 UI is served from the `apps/api` binary (ADR-057 D2; Authelia already fronts the route). The ADR corrections to A2 and A8 are in #2623
+- [x] ✓ 2026-10-22 UI is served from the `apps/api` binary (ADR-057 D2). Corrected 2026-11-04: Authelia did not front `api.kubelab.live`, whose rule is `bypass`; the console got a host of its own instead. The ADR corrections to A2 and A8 are in #2623
 - [x] ✓ 2026-10-22 Label set lives at `infra.forge.labels` (ADR-036: read by more than one component), shared with CONSOLE-006 (#2588), with an `area_repos` map and `fallback: knowledge`
 - [x] ✓ 2026-10-22 GitHub is read with a GitHub App installation token (its own rate pool, not shared with a user PAT); the ceiling is 1000 calls per hour, a conservative start to tighten after measurement
 - [x] ✓ 2026-10-22 Reconcile runs every 10 minutes per source and the alert fires when a source has not been read for 20 minutes. The period and the bound are one decision: `as_of` only advances on a successful read, so a bound shorter than the period would fire every cycle
@@ -52,18 +52,20 @@ created: "2026-10-21"
   - [x] ✓ 2026-11-02 Projection: every 10 seconds, the `forge_source` row first because of the foreign key, item and delivery mark in one transaction, and a late older delivery does not overwrite a newer read (PR-Agent finding on #2933)
   - [x] ✓ 2026-11-03 Deliver `FORGE_GITHUB_WEBHOOK_SECRET` and `FORGE_GITEA_WEBHOOK_SECRET` through SOPS and `SECRET_CATALOG`, prod only: staging is VPN-only, so no forge reaches it
   - [ ] Register the two webhooks as code
-    - [x] ✓ 2026-11-05 GitHub: the App's own hook, `make forge-github-hook` (plan; `APPLY=1` writes, `SECRET=1` resends after a rotation). The events and the Active toggle are the operator's settings step, which the command checks (lesson-710)
+    - [x] ✓ 2026-11-05 GitHub: the App's own hook, `make forge-github-hook` (plan; `APPLY=1` writes, `SECRET=1` resends after a rotation). The events and the Active toggle are the operator's settings step, which the command checks (lesson-714)
     - [ ] Gitea: with the Gitea source slice. `infra.forge.sources` declares GitHub only, so every Gitea delivery would be filtered, and `repository_settings.webhooks` puts a hook on every declared repository while the Gitea source is per organization
 - [x] ✓ 2026-11-02 [AC4] Test: the same delivery twice projects once (`TestSameDeliveryProjectsOnce`, against Postgres)
 - [x] ✓ 2026-11-02 [AC4] Periodic reconcile per source every 10 minutes under the hourly call ceiling, with a guard test that counts calls. `infra.forge.sources` declares GitHub only: which Gitea repository to read is the operator's call, and the Gitea reader is wired with it
-- [ ] [AC1] Queue endpoint with the inbox reason (author, requested reviewer, failing CI, waiting on me)
-  - [ ] The queue lists declared sources only, so a repository removed from `infra.forge.sources` leaves the view, and an item deleted upstream goes on the next full rebuild (PR-Agent finding on #3001)
+- [ ] [AC1] Queue endpoint with the inbox reason (author, requested reviewer, failing CI, waiting on me). `GET /console/queue` serves the open items without reasons since 2026-11-04; the reasons need the operator's login per forge and check-run reads
+  - [x] ✓ 2026-11-04 The queue lists declared sources only, so a repository removed from `infra.forge.sources` leaves the view, and an item deleted upstream goes on the next full rebuild (PR-Agent finding on #3001)
 
 ### 2. Access and UI
 
-- [ ] [AC3] Authelia in front of the route; 401 without a credential
+- [x] [AC3] The console on its own host behind Authelia (`console.kubelab.live`, see "The console" in `proposal.md`); the api serves `/console` only for that host ✓ 2026-11-04
+- [ ] [AC3] Authelia in front of the write routes; 401 without a credential
 - [ ] [AC3] Machine token in SOPS and `SECRET_CATALOG`, accepted on the create write only; test that every other route refuses it
-- [ ] [AC1] Queue page, with each source's freshness visible
+- [x] [AC1] Queue page, read-only, with each source's freshness visible ✓ 2026-11-04
+- [ ] [AC1] Inbox screen with the reasons, once the queue endpoint carries them
 
 ### 3. Narrow writes
 

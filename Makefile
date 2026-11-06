@@ -2092,9 +2092,39 @@ ENV ?= dev
 # excluded here is excluded from CI too. The integration tests start a real
 # Uptime Kuma container (~90s); `test-fast` skips them for the inner loop, but
 # the safe option is the default one on purpose.
+#
+# One worker per CPU (#3078: 27 minutes serial in CI). `loadfile` runs each
+# test file on one worker, in order, so module-scoped fixtures see what a serial
+# run shows them. Not `loadgroup`: with pytest 9.2 and pytest-xdist 3.8.0 it
+# ignores `xdist_group` markers without a word (pytest-dev/pytest-xdist#1407);
+# revisit on the next xdist release. The options live here, not in pyproject
+# addopts, because tests that run a nested pytest inherit addopts and would
+# fork workers of their own.
+#
+# CI splits the suite across runners by whole file with `SHARD=I/N` (#3111,
+# tests/sharding.py), balanced on tests/shard_durations.json. Each shard also
+# stores its own per-file seconds, which `Tests` merges into an artifact.
 .PHONY: test
 test:
-	@$(POETRY) run pytest
+	@$(POETRY) run pytest -n auto --dist loadfile $(if $(SHARD),--shard=$(SHARD) --store-shard-durations=shard-durations.json)
+
+# Combines the shards' `.coverage.shard-*` files into the one report a
+# single-runner `make test` prints, and merges their stored durations.
+.PHONY: test-shards-combine
+test-shards-combine:
+	@$(POETRY) run coverage combine
+	@$(POETRY) run coverage report --show-missing
+	@$(POETRY) run coverage xml
+	@$(POETRY) run python -m tests.sharding shard-durations.json shard-durations-*.json
+
+# Rewrites the record the shards balance on from a CI run's merged durations,
+# never from a workstation's: the plan must balance the runners' seconds.
+# A stale record costs balance, not correctness; commit the result.
+.PHONY: test-durations
+test-durations:
+	@test -n "$(RUN)" || { echo "usage: make test-durations RUN=<CI run id>"; exit 1; }
+	@gh run download $(RUN) --repo mlorentedev/kubelab --name shard-durations --dir .shard-durations
+	@mv .shard-durations/shard-durations.json tests/shard_durations.json && rmdir .shard-durations
 
 # Prove a guard goes red against one mutation (#2104), instead of the hand-written
 # commit/mutate/checkout line that lost work when a hook refused the commit

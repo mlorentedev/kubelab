@@ -559,6 +559,13 @@ infra:
     # What the view reads, as `forge:owner/repo` separated by commas. Read by the API as
     # INFRA_FORGE_SOURCES; a source with no credential is reported unreachable, never empty.
     sources: "github:mlorentedev/kubelab"
+    # The console's own host (CONSOLE-004), guarded whole by Authelia. The API binary
+    # serves /console only to a request for this host, and to none when it is empty,
+    # because it also answers the public api host. Read as INFRA_FORGE_CONSOLE_DOMAIN.
+    # The IngressRoute is base/services/console.yaml (prod: overlays/prod/patches.yaml),
+    # the Authelia rule is in both authelia-config/configuration.yml files, and the
+    # public record is `console` in infra/terraform/dns/services.json.
+    console_domain: console.kubelab.live
 resources:
   default_memory_limit: 512m
   default_memory_reservation: 256m
@@ -643,6 +650,11 @@ ci:
         required_contexts:
           - PR gate
           - GitGuardian Security Checks
+  # The Renovate engine, one pin for both forges (IDP-036): the GitHub workflow
+  # reads it, and the Gitea run on the Beelink node will. Not reconciled by the
+  # branch-protection tool: the common.yaml image manager in renovate.json bumps it.
+  renovate:
+    image: ghcr.io/renovatebot/renovate:44.199.2
 
 # ===========================================================================
 # K3S CLUSTER
@@ -2173,6 +2185,10 @@ apps:
             secret: apps.services.ai.open_webui.admin_password
             path: /auth?form=signin
           loki: {}
+          # The forge console (CONSOLE-004). It has no login of its own: Authelia is
+          # its only door, so the path port-forwards the api Service and reads
+          # /console/ without one.
+          console: {}
           uptime-kuma:
             # The private path only (#2483): the EndpointSlice address over the tailnet
             # (RPi3), never the public route or the IdP. Not an account form: Kuma's own

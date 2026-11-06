@@ -4,7 +4,11 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
-| 710 | [A GitHub App's webhook is half API and half settings page, and an App created without one answers 404](lesson-710-github-app-webhook-is-half-api-half-settings.md) | 2026-11-05 |
+| 714 | [A GitHub App's webhook is half API and half settings page, and an App created without one answers 404](lesson-714-github-app-webhook-is-half-api-half-settings.md) | 2026-11-05 |
+| 713 | [A required check that waits on a matrix must run when a shard fails, and each shard's coverage must leave the directory before the next run](lesson-713-a-sharded-required-check-must-run-when-a-shard-fails.md) | 2026-11-05 |
+| 712 | [With pytest 9.2, `--dist loadgroup` ignores every `xdist_group` marker and says nothing](lesson-712-xdist-loadgroup-ignores-every-group-on-pytest-9-2.md) | 2026-11-04 |
+| 711 | [An anchored pattern under `match` and Python's `==` both admit more than they appear to](lesson-711-an-anchored-pattern-and-python-equality-both-admit-more-than-they-read.md) | 2026-11-04 |
+| 710 | [A parallel test run finds shared state that a serial run hides, and grouping is not always the fix](lesson-710-a-parallel-test-run-finds-shared-state-a-serial-run-hides.md) | 2026-11-04 |
 | 706 | [One job name for several environments hides which environment a run judged](lesson-706-one-job-name-for-several-environments-hides-the-verdict.md) | 2026-11-04 |
 | 699 | [Accepting `mergeable_state: unstable` stops enforcing every check that is not required](lesson-699-unstable-stops-enforcing-every-check-not-required.md) | 2026-11-03 |
 | 691 | [A Renovate regex that ends in a dollar sign matches nothing and reports success](lesson-691-a-renovate-regex-that-ends-in-a-dollar-sign-matches-nothing-and-reports-success.md) | 2026-11-02 |
