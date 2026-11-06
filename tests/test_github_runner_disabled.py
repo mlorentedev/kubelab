@@ -70,7 +70,7 @@ def test_on_still_renders_the_runner_service() -> None:
 
 def test_the_role_removes_the_container_when_off() -> None:
     task = _task("Remove the GitHub runner container when it is not declared")
-    assert task["command"] == f"docker rm -f {SERVICE}"
+    assert task["command"] == "docker rm -f {{ runner_container_name }}"
     assert task["when"] == "not (runner_enabled | bool)"
     # Idempotent: an absent container is the converged state, not a change or a failure.
     assert task["changed_when"] == "_github_runner_rm.stdout | length > 0"
@@ -95,3 +95,19 @@ def test_the_running_check_only_applies_when_on() -> None:
 def test_the_image_is_only_pulled_when_on() -> None:
     text = TASKS.read_text(encoding="utf-8")
     assert "([runner_image] if runner_enabled | bool else [])" in text
+
+
+def test_the_container_name_comes_from_the_declaration() -> None:
+    """The removal, the probe and the render must all name the declared container.
+    A literal in one of them means a rename in `common.yaml` leaves that one
+    addressing a container that no longer exists, and `docker rm -f` on a missing
+    name reports nothing (lesson-715)."""
+    text = PLAYBOOK.read_text(encoding="utf-8")
+    assert 'runner_container_name: "{{ config.apps.services.automation.github_runner.name }}"' in text
+    assert _task("Verify GitHub Runner container is running")["command"].endswith("{{ runner_container_name }}")
+    env = ansible_env(str(ROLE / "templates"), undefined=StrictUndefined)
+    rendered = env.get_template("compose.yml.j2").render(
+        **{**_template_vars(_ssot()), "runner_enabled": True, "runner_container_name": "renamed-runner"}
+    )
+    assert yaml.safe_load(rendered)["services"][SERVICE]["container_name"] == "renamed-runner"
+    assert _declaration()["name"] == SERVICE

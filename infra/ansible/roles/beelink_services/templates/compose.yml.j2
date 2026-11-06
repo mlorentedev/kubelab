@@ -232,7 +232,7 @@ services:
 
   github-runner:
     image: {{ runner_image }}
-    container_name: github-runner
+    container_name: {{ runner_container_name }}
     restart: {{ restart_policy }}
     environment:
       REPO_URL: "{{ runner_repo_url }}"

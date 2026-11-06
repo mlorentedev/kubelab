@@ -124,7 +124,7 @@
   # leaves a service the template no longer renders running as an orphan. Its
   # registration needs no counterpart here: the runner is EPHEMERAL and none is
   # registered on GitHub.
-  command: docker rm -f github-runner
+  command: docker rm -f {{ runner_container_name }}
   register: _github_runner_rm
   # `docker rm -f` exits 0 for a container that does not exist (Docker 29.9.2,
   # measured on bee 2026-11-06), and prints the name only of one it removed, so
@@ -307,7 +307,7 @@
 # --- Health checks ---
 - name: Verify GitHub Runner container is running
   when: runner_enabled | bool
-  command: docker inspect --format '{% raw %}{{.State.Status}}{% endraw %}' github-runner
+  command: docker inspect --format '{% raw %}{{.State.Status}}{% endraw %}' {{ runner_container_name }}
   register: _runner_state
   # Read-only probe whose result is consumed by a condition, so check mode must
   # not skip it: a skipped `command:` registers no stdout, and the condition then
