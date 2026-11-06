@@ -212,6 +212,20 @@ class TestVerdict:
     def test_a_ramp_that_reached_a_step_measured_it(self, reasons: list) -> None:
         assert lt.knee(self._steps(*reasons))["measured"] is True
 
+    def test_a_generator_saturated_on_the_first_step_measured_nothing(self) -> None:
+        # No healthy step, and the stop was the generator's: there is no figure
+        # to call a lower bound, and nothing was learnt about the service.
+        got = lt.knee(self._steps(["generator"]))
+        assert got["measured"] is False
+        assert got["lower_bound_only"] is False
+        assert got["last_healthy_rps"] is None and got["vus_at_last_healthy"] is None
+
+    def test_a_service_degraded_on_the_first_step_is_a_measurement(self) -> None:
+        # The knee is below the first step, and `first_degraded_rps` says so.
+        got = lt.knee(self._steps(["latency"]))
+        assert got["measured"] is True and got["lower_bound_only"] is False
+        assert got["last_healthy_rps"] is None and got["first_degraded_rps"] is not None
+
     def test_the_ramp_stops_at_the_first_unhealthy_step(self) -> None:
         seen: list[int] = []
 

@@ -201,11 +201,13 @@ def knee(steps: list[dict[str, Any]]) -> dict[str, Any]:
 
     A ramp that ended on the generator, or never degraded, says nothing about where
     the service stops: `last_healthy_rps` is then only a lower bound. One stopped by
-    the limiter measured nothing at all, and neither did one a rollout cut short:
-    `measured` is then false and no figure stands beside it."""
+    the limiter measured nothing at all, and neither did one a rollout cut short,
+    nor one whose generator saturated on the first step, before any healthy step
+    gave a figure to bound: `measured` is then false and no figure stands beside it."""
     healthy = [s["rate"] for s in steps if not s["reasons"]]
     bad = next((s for s in steps if s["reasons"]), None)
-    measured = not (bad is not None and bool({"limiter", "rollout"} & set(bad["reasons"])))
+    reasons = set(bad["reasons"]) if bad else set()
+    measured = not ({"limiter", "rollout"} & reasons or ("generator" in reasons and not healthy))
     last = healthy[-1] if healthy and measured else None
     return {
         "measured": measured,
@@ -213,7 +215,7 @@ def knee(steps: list[dict[str, Any]]) -> dict[str, Any]:
         "first_degraded_rps": bad["rate"] if bad else None,
         "reasons": bad["reasons"] if bad else [],
         "lower_bound_only": measured and (bad is None or "generator" in bad["reasons"]),
-        "vus_at_last_healthy": next((s["vus_peak"] for s in steps if s["rate"] == last), None),
+        "vus_at_last_healthy": next((s["vus_peak"] for s in steps if s["rate"] == last), None) if last else None,
     }
 
 
