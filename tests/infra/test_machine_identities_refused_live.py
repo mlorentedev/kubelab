@@ -4,8 +4,8 @@ The static half, `tests/test_machine_identities_not_authelia_users.py`, holds th
 declaration. This half records the refusal on the running portal, because AUTH-004
 asked for a demonstration rather than an absence.
 
-A refusal here cannot tell "no such user" from "wrong password": Authelia answers
-both with the same 401, on purpose. The password is random, so the test shows
+A refusal here cannot tell an unknown account from a bad credential: Authelia
+answers both with the same 401, on purpose. The password is random, so the test shows
 that the first factor fails, not why. The static half shows why.
 
 One attempt per identity per run. Prod bans a username after 3 failures in 2
