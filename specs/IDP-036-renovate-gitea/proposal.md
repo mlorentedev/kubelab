@@ -56,13 +56,13 @@ This deviates from the ticket's K3s CronJob, and from this spec's first draft, w
 
 ## Acceptance criteria
 
-- [ ] The repository list is derived from `apps.services.core.gitea.organizations`, never hand-listed. A test renders the role's template and compares it against the SSOT.
-- [ ] A systemd timer in `beelink_services` (`OnCalendar=hourly`, `Persistent=true`) starts the run only once Gitea answers, and skips with exit 0 when it does not. A powered-off node fires nothing, a stopped forge on a running node fails nothing, and the second provision run reports `changed=0`.
-- [ ] One shared preset in `ci-workflows`, used on Gitea through a global config rendered by Ansible that `extends` it at a pinned tag, with `onboarding: false` and `requireConfig: optional`. The preset sets `vulnerabilityAlerts` on its own schedule and `groupName` per ecosystem, with no automerge. No Gitea repository holds a copy.
-- [ ] The Renovate engine version lives only in `ci-workflows`. The Gitea run reads it at the pinned `ci-workflows` tag, and kubelab carries no engine version of its own: a test fails on a literal one in the role or in `.github/workflows/renovate.yml`.
-- [ ] The Dependency Dashboard is on, and PR volume over the first two cycles is recorded on #1384.
-- [ ] The bot account and its token go through SOPS and the rotation catalog, on their own identity, and so does the read-only `GITHUB_COM_TOKEN` the preset fetch needs.
-- [ ] The dead `dependabot.yml` files in fae-brain, openkm-brain and resume are removed (#2140).
+- [ ] **AC1.** The repository list is derived from `apps.services.core.gitea.organizations`, never hand-listed. A test renders the role's template and compares it against the SSOT.
+- [ ] **AC2.** A systemd timer in `beelink_services` (`OnCalendar=hourly`, `Persistent=true`) starts the run only once Gitea answers, and skips with exit 0 when it does not. A powered-off node fires nothing, a stopped forge on a running node fails nothing, and the second provision run reports `changed=0`.
+- [ ] **AC3.** One shared preset in `ci-workflows`, used on Gitea through a global config rendered by Ansible that `extends` it at a pinned tag, with `onboarding: false` and `requireConfig: optional`. The preset sets `vulnerabilityAlerts` on its own schedule and `groupName` per ecosystem, with no automerge. No Gitea repository holds a copy.
+- [ ] **AC4.** The Renovate engine version lives only in `ci-workflows`. The Gitea run reads it from `renovate/engine.json` at the pinned `ci-workflows` tag, and kubelab carries no engine version of its own: a test fails on a literal engine version in the `beelink_services` role. The interim GitHub pin (`ci.renovate.image`, `renovate.yml`) is not guarded here, because the `ci-workflows` session's kubelab PR deletes it.
+- [ ] **AC5.** The Dependency Dashboard is on, and PR volume over the first two cycles is recorded on #1384.
+- [ ] **AC6.** The bot account and its token go through SOPS and the rotation catalog, on their own identity, and so does the read-only `GITHUB_COM_TOKEN` the preset fetch needs.
+- [ ] **AC7.** The dead `dependabot.yml` files in fae-brain, openkm-brain and resume are removed (#2140).
 
 ## References
 
