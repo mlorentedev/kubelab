@@ -220,6 +220,15 @@ class TestVerdict:
         assert got["lower_bound_only"] is False
         assert got["last_healthy_rps"] is None and got["vus_at_last_healthy"] is None
 
+    def test_a_ramp_with_no_steps_measured_nothing(self) -> None:
+        got = lt.knee([])
+        assert got["measured"] is False and got["lower_bound_only"] is False
+
+    def test_a_healthy_rate_of_zero_keeps_its_vus(self) -> None:
+        steps = [{"rate": 0, "reasons": [], "vus_peak": 3}, {"rate": 50, "reasons": ["latency"], "vus_peak": 4}]
+        got = lt.knee(steps)
+        assert (got["last_healthy_rps"], got["vus_at_last_healthy"]) == (0, 3)
+
     def test_a_service_degraded_on_the_first_step_is_a_measurement(self) -> None:
         # The knee is below the first step, and `first_degraded_rps` says so.
         got = lt.knee(self._steps(["latency"]))
