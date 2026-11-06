@@ -53,7 +53,11 @@ design has run since 2026-10-09. Its first measurement, 2026-10-09 to 10-15 (mlo
 2. **Amendment B applies here too.** An Anthropic model never signs an adversarial review alone. Haiku signs only as
    `fallback`, with a classified reason, and Sonnet only as `second`. A first signature always comes from another
    vendor. This replaces the old "never Anthropic" rule. `dotf spec archive` already enforces it at pool load.
-3. **PR-Agent draws by declared weight**, with dotfiles' starting weights: mimo 27, glm 19, deepseek 19, Haiku 35.
+3. **PR-Agent draws by declared weight**, with dotfiles' starting weights: mimo 12, glm 13, deepseek 25, Haiku 50.
+   Amended 2026-11-05 with dotfiles' first re-weight (mlorentedev/dotfiles#2216, #3212) from mimo 27, glm 19,
+   deepseek 19, Haiku 35: mimo held most of NaN's slot time, a quarter of its attempts ending empty at NaN's
+   reasoning-only ceiling, and Haiku's findings were the least often addressed, so deepseek takes mimo's share.
+   The declared NaN chain keeps mimo first here: `scripts/pr-agent-route.sh` does not derive it from the weights.
    - A NaN model that fails its preflight gives up its weight for that run.
    - A PR with 1,500 or more changed lines, or the `deep-review` label, reviews first on Sonnet.
    - The Anthropic models CI may spend on are an allowlist in `scripts/pr-agent-route.sh`, priced and capped by a test.

@@ -94,15 +94,16 @@ def test_the_risk_predicate_is_the_owner_decided_one() -> None:
 
 #: CI's spending shares by model (ADR-070: "starting weights"). The forge reviewer's order is
 #: `forge_rank`, a separate key, and must never be bought by moving one of these.
+#: Re-weighted 2026-11-05 on measured data (mlorentedev/dotfiles#2216), not to buy a forge order.
 CI_WEIGHTS = {
-    "openai/mimo-v2.6-flash": 27,
-    "openai/deepseek-v4-flash": 19,
-    "openai/glm5.3-flash": 19,
-    "anthropic/claude-haiku-5-5": 35,
+    "openai/mimo-v2.6-flash": 12,
+    "openai/deepseek-v4-flash": 25,
+    "openai/glm5.3-flash": 13,
+    "anthropic/claude-haiku-5-5": 50,
 }
 
 
-def test_the_ci_weights_are_what_they_were_before_the_forge_had_an_order_of_its_own() -> None:
+def test_the_ci_weights_are_the_adr_070_ones_and_no_forge_order_moved_them() -> None:
     weights = {m["pr_agent"]["model"]: m["pr_agent"]["weight"] for m in PR_AGENT_MEMBERS if "weight" in m["pr_agent"]}
     assert weights == CI_WEIGHTS
 

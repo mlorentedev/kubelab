@@ -319,7 +319,7 @@ def test_the_shipped_weights_are_the_ones_adr_070_adopted() -> None:
         {m["pr_agent"]["model"]: m["pr_agent"]["weight"] for m in pool["pool"] if "weight" in m.get("pr_agent", {})}
     )
     assert shipped == adopted
-    assert adopted == {"mimo": 27, "glm": 19, "deepseek": 19, "haiku": 35}
+    assert adopted == {"mimo": 12, "glm": 13, "deepseek": 25, "haiku": 50}
 
 
 def test_the_shipped_pool_routes_to_sonnet_at_1500_changed_lines_and_not_below(route: Route) -> None:
