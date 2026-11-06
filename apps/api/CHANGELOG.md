@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.4.0](https://github.com/mlorentedev/kubelab/compare/api-v1.3.2...api-v1.4.0) (2026-11-06)
+
+
+### Features
+
+* **console:** serve the forge queue on its own host behind Authelia ([#3107](https://github.com/mlorentedev/kubelab/issues/3107)) ([1b5e724](https://github.com/mlorentedev/kubelab/commit/1b5e7248fd542e5d616a554cf023742be53f4a9d))
+
+
+### Bug Fixes
+
+* **api:** keep forge deliveries only for the repositories the reconcile reads ([#3068](https://github.com/mlorentedev/kubelab/issues/3068)) ([706fc1f](https://github.com/mlorentedev/kubelab/commit/706fc1fdee2822655e67b83917e230c57947180c))
+
 ## [1.3.2](https://github.com/mlorentedev/kubelab/compare/api-v1.3.1...api-v1.3.2) (2026-11-03)
 
 
