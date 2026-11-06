@@ -65,8 +65,16 @@ jobs:
   # infra/k8s (the RBAC and render tests walk the manifests), so filtering on
   # `toolkit/**` would skip exactly the cross-cutting breakage worth catching.
   # The job is well under a minute; a filter would buy nothing and cost coverage.
-  tests:
-    name: Tests
+  # The suite, split across runners by whole test file (#3111): one shard is
+  # 4 vCPU running `-n auto --dist loadfile` on its share, planned from
+  # tests/shard_durations.json by tests/sharding.py. `Tests` below is the
+  # required check and fails unless every shard passed.
+  test-shards:
+    name: Tests shard ${{ matrix.shard }}
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     runs-on: >-
       ${{ github.event.pull_request.head.repo.fork
           && 'ubuntu-latest'
@@ -131,7 +139,83 @@ jobs:
       # `infra`/`e2e` markers and are deselected by the pytest config, so nothing
       # here needs VPN or a kubeconfig.
       - name: Tests
-        run: make test
+        run: make test SHARD=${{ matrix.shard }}/3
+
+      # The data file's name carries the shard, so the three land side by side
+      # for `coverage combine`. Hidden files are left out of an artifact unless
+      # asked for, and `.coverage` is one.
+      - name: Name the coverage data after the shard
+        run: |
+          mv .coverage ".coverage.shard-${{ matrix.shard }}"
+          mv shard-durations.json "shard-durations-${{ matrix.shard }}.json"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: tests-shard-${{ matrix.shard }}
+          path: |
+            .coverage.shard-${{ matrix.shard }}
+            shard-durations-${{ matrix.shard }}.json
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
+
+  tests:
+    name: Tests
+    needs: test-shards
+    # Runs whatever the shards concluded: a required check that is skipped
+    # reads as passed to branch protection, so a failed shard must turn this
+    # job red, not skip it.
+    if: always()
+    runs-on: >-
+      ${{ github.event.pull_request.head.repo.fork
+          && 'ubuntu-latest'
+          || fromJSON(vars.RUNNER_DOCKER || '"ubuntu-latest"') }}
+    env:
+      # Same reason as in the shards: Rich splits option names with colour codes.
+      TERM: dumb
+    steps:
+      - name: Every shard passed
+        run: |
+          if [ "${{ needs.test-shards.result }}" != "success" ]; then
+            echo "test shards concluded ${{ needs.test-shards.result }}"
+            exit 1
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7
+        with:
+          python-version: '3.12'
+
+      - name: Install Poetry
+        run: pipx install poetry
+
+      - name: Install dependencies
+        # `make setup` also provisions SOPS, certs and Ansible — none of which a
+        # unit test touches, and all of which need credentials CI does not have.
+        run: poetry install --no-interaction --no-ansi
+
+      # Same gates the Definition of Done requires locally (`make check`), in the same
+      # order, through the same Makefile targets — so a green CI run and a green
+      # workstation run mean the same thing. Cluster-dependent suites carry the
+      # `infra`/`e2e` markers and are deselected by the pytest config, so nothing
+      # here needs VPN or a kubeconfig.
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        with:
+          pattern: tests-shard-*
+          merge-multiple: true
+
+      # The coverage figure is computed once, on the whole suite, as a
+      # single-runner `make test` prints it.
+      - name: Combine the shards' coverage
+        run: make test-shards-combine
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: shard-durations
+          path: shard-durations.json
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Lint
         run: make lint

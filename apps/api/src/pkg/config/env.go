@@ -42,6 +42,7 @@ type Config struct {
 		GitHubWebhookSecret  string // empty rejects every delivery
 		GiteaWebhookSecret   string // empty rejects every delivery
 		Sources              string // forge:owner/repo, comma separated; empty reads nothing
+		ConsoleDomain        string // the console's own host; empty serves the console nowhere
 	}
 	Email struct {
 		Host   string
@@ -120,6 +121,7 @@ func populateConfig() (*Config, error) {
 	cfg.Forge.GitHubWebhookSecret = os.Getenv("FORGE_GITHUB_WEBHOOK_SECRET")
 	cfg.Forge.GiteaWebhookSecret = os.Getenv("FORGE_GITEA_WEBHOOK_SECRET")
 	cfg.Forge.Sources = os.Getenv("INFRA_FORGE_SOURCES")
+	cfg.Forge.ConsoleDomain = os.Getenv("INFRA_FORGE_CONSOLE_DOMAIN")
 
 	// Validate configuration
 	if err := validateConfig(cfg); err != nil {

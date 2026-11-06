@@ -80,6 +80,10 @@ access_control:
     - domain: 'api.staging.kubelab.live'
       policy: bypass
 
+    # The forge console (CONSOLE-004), its own host.
+    - domain: 'console.staging.kubelab.live'
+      policy: one_factor
+
     # n8n: own auth (2.x built-in user management, OIDC is enterprise-only)
     - domain: 'n8n.staging.kubelab.live'
       policy: bypass

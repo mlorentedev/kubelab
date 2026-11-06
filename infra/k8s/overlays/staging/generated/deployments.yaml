@@ -26,7 +26,7 @@ spec:
     spec:
       containers:
         - name: api
-          image: docker.io/mlorentedev/kubelab-api:sha-b392e87
+          image: docker.io/mlorentedev/kubelab-api:sha-706fc1f
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
@@ -92,7 +92,7 @@ spec:
     spec:
       containers:
         - name: web
-          image: docker.io/mlorentedev/kubelab-web:sha-5385caa
+          image: docker.io/mlorentedev/kubelab-web:sha-e06e2ea
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

@@ -14,6 +14,7 @@ resources:
   - edge/rate-limit.yaml
   - edge/vpn-whitelist.yaml
   - services/grafana.yaml
+  - services/console.yaml
   - services/loki.yaml
   - services/vector.yaml
   - services/redis.yaml

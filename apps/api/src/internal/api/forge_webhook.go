@@ -25,9 +25,9 @@ func ForgeWebhookHandler(c *gin.Context) {
 		c.Status(503)
 		return
 	}
-	rc := forge.Receiver{
-		Secrets: map[string]string{"github": conf.Forge.GitHubWebhookSecret, "gitea": conf.Forge.GiteaWebhookSecret},
-		Store:   pgEvents{conf: conf.Postgres},
-	}
+	// The reconcile's sources, so a delivery is kept only for a repository it reads.
+	rc := forge.NewReceiver(conf.Forge.Sources,
+		map[string]string{"github": conf.Forge.GitHubWebhookSecret, "gitea": conf.Forge.GiteaWebhookSecret},
+		pgEvents{conf: conf.Postgres})
 	c.Status(rc.Handle(c.Request.Context(), c.Param("forge"), c.Request.Header, c.Request.Body))
 }

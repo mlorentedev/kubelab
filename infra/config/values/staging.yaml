@@ -38,7 +38,7 @@ apps:
   # Platform applications (custom-built)
   platform:
     api:
-      version: sha-b392e87
+      version: sha-706fc1f
       domain: api.staging.kubelab.live
       site_domain: staging.kubelab.live
       site_url: https://staging.kubelab.live
@@ -52,7 +52,7 @@ apps:
       enable_blog: false
       enable_homelabs: false
       enable_contact: false
-      version: sha-5385caa
+      version: sha-e06e2ea
 
   # Third-party services
   services:
@@ -83,6 +83,11 @@ apps:
         disable_require_tls: false
       crowdsec:
         domain: crowdsec.staging.kubelab.live
+
+infra:
+  forge:
+    # Staging's console host; the *.staging.kubelab.live wildcard already resolves it.
+    console_domain: console.staging.kubelab.live
 
 secret_expiry:
   declared:
