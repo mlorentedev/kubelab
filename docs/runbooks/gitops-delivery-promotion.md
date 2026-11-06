@@ -47,6 +47,7 @@ Pre-merge preview (optional): a feature-branch CI build also produces `sha-<pr-s
 
 - **Either env:** `git revert` the deploy/promotion PR merge commit on `master` → Argo reconciles back to the previous tag. Prod self-heals to it immediately.
 - Immutable tags mean the previous image still exists; rollback is deterministic.
+- **The staging revert is a merge you make.** `deploy-shape` reads a pin that moves back to an older commit as not mechanical (#796), so deploy-merge leaves the revert PR for you. A stale PR, or a build that arrives late, cannot downgrade staging unattended. To roll back the code itself and keep it unattended, revert the app commit instead. Its build is a newer commit, and it flows through like any other.
 
 ## Troubleshooting
 
