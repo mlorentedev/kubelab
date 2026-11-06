@@ -91,7 +91,7 @@
       "vendor": "deepseek",
       "pr_agent": {
         "model": "openai/deepseek-v4-flash",
-        "weight": 19,
+        "weight": 25,
         "forge_rank": 2
       },
       "why": "1M context and a mandatory reasoning chain — roughly 4x slower than qwen3.6 on trivial prompts, which is the correct trade for a gate that runs once per spec. Exercised: BUG-074 round 3 re-ran the mutation battery itself rather than trusting the spec's table. kubelab, 2026-08-21 (#1205): under PR-Agent this model returned a 200 with an EMPTY body, spending its output on reasoning (4m15s of silence on #1202, run 32440498259), the same shape as the 32768-token completion cap NaN applies when no max_tokens is sent (#1957, lesson-601). The forge reviewer now sends max_tokens 65536 (#2479) and tried this model first until 2026-11-01, when it ran out of that cap mid-reasoning on 3 of 7 forge reviews and moved to forge_rank 2 behind glm (lesson-685); CI's draw is unchanged."
@@ -115,7 +115,7 @@
       "vendor": "xiaomi",
       "pr_agent": {
         "model": "openai/mimo-v2.6-flash",
-        "weight": 27,
+        "weight": 12,
         "forge_rank": 3
       },
       "why": "Re-admitted 2026-09-30 on the bar this file requires, not renamed in. NaN retired its predecessor mimo-v2.5 that day: it hung, then answered 401 'This API key does not have access to the requested model' (AI-045, mlorentedev/dotfiles#1763). mimo-v2.5 had been admitted 2026-08-20 on a planted-defect test, and the successor was given the same one: the `((count++))` exit-status-1 case under `set -e` from this repo's prohibited-pattern table. mimo-v2.6-flash found it in 21 s and 772 completion tokens, named a failing input (count=0), and gave the fix (`count=$((count + 1))`). deepseek-v4-flash, run on the same prompt, found the same defect in 9 s. That is agreement on one planted defect, not a quality ranking, and it is stated as that. It stays a SECOND fallback, after the provider-diverse one, because provider diversity remains the stronger property. Profile: 1M context, reasoning chain, which is this pool's line against qwen3.6 and gemma4 at 262K.",
@@ -131,7 +131,7 @@
       "vendor": "zhipu",
       "pr_agent": {
         "model": "openai/glm5.3-flash",
-        "weight": 19,
+        "weight": 13,
         "forge_rank": 1,
         "reasoning_effort": "low"
       },
@@ -158,10 +158,10 @@
       "signs": "fallback",
       "pr_agent": {
         "model": "anthropic/claude-haiku-5-5",
-        "weight": 35,
+        "weight": 50,
         "reasoning_effort": "medium"
       },
-      "why": "Admitted 2026-10-09 by owner decision (mlorentedev/dotfiles#1923, amendment B). In the adversarial review it signs only as a FALLBACK, with a classified reason (rate limit, quota, provider error, timeout, content filter, empty answer) when the NaN first signers failed; it never signs first by draw. In PR-Agent it is drawn at weight 35, about a third of reviews, because NaN's shared per-model concurrency is the scarcer resource and the owner judged the spend acceptable (2026-10-14, mlorentedev/dotfiles#2215). Measured on four real reviews (25K-55K tokens in, 9K-32K out, all under the 100K price step): about $0.02-0.06 a review, 3 to 7 times the $0.008 this entry first estimated, because thinking tokens bill as output. Reasoning-class by profile (adaptive thinking). Effort is medium, not high: at high, thinking spent the 32,000-token output cap on large diffs and the answer came back empty in 5 of 11 runs (mlorentedev/dotfiles#2458). No calibration against a review of known outcome yet; mlorentedev/dotfiles#2215 and mlorentedev/dotfiles#2216 measure its addressed-comment rate."
+      "why": "Admitted 2026-10-09 by owner decision (mlorentedev/dotfiles#1923, amendment B). In the adversarial review it signs only as a FALLBACK, with a classified reason (rate limit, quota, provider error, timeout, content filter, empty answer) when the NaN first signers failed; it never signs first by draw. In PR-Agent it is drawn at weight 50, half of reviews, to offload NaN, whose shared concurrency is the scarcer resource (owner, 2026-11-05, mlorentedev/dotfiles#2216; 35 from 2026-10-09). Measured 2026-10-09 to 11-05 in dotfiles, kubelab and hive (mlorentedev/dotfiles#2216): about $0.035 a review at the rates above the price step, median 18 s, 1.0% of attempts empty at `length` since medium effort; its findings are the least often addressed, about 0.31 a review against 0.46 for deepseek and mimo. Reasoning-class by profile (adaptive thinking). Effort is medium, not high: at high, thinking spent the 32,000-token output cap on large diffs and the answer came back empty in 5 of 11 runs (mlorentedev/dotfiles#2458)."
     },
     {
       "id": "anthropic-review/claude-sonnet-5-5",

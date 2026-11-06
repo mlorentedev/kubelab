@@ -11,7 +11,7 @@
    chain (mimo, deepseek, glm) with a small request. A model that refuses, hangs or is over its limit is
    dropped for this run, with a warning that names it.
 2. **Draw** (`scripts/pr-agent-route.sh`). It probes Haiku, then draws the first reviewer by the
-   `pr_agent.weight` values in `harness/reviewer-pool.json`: mimo 27, glm 19, deepseek 19, Haiku 35.
+   `pr_agent.weight` values in `harness/reviewer-pool.json`: mimo 12, glm 13, deepseek 25, Haiku 50 (since 2026-11-05, mlorentedev/dotfiles#2216).
    A member that did not answer gives up its weight to the others. A PR with 1,500 or more changed lines,
    or the `deep-review` label, reviews first on Sonnet when Sonnet answers.
 3. **First attempt.** It runs on the drawn provider: 8 minutes on Anthropic, 19 on NaN.
