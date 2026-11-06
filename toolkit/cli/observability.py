@@ -22,6 +22,7 @@ from toolkit.features.cronjob_run import (
 )
 from toolkit.features.cronjob_run import get_cronjob as read_cronjob
 from toolkit.features.k8s_kubeconfig import output_path as kubeconfig_path
+from toolkit.features.kuma_status import KumaUnavailableError, ask_down_monitors
 from toolkit.features.observability import (
     AlertsUnavailableError,
     GrafanaAlertClient,
@@ -259,16 +260,34 @@ def alerts_cmd(
 
     if not alerts:
         typer.echo("✓ No firing or pending alerts in Grafana (asked and answered).")
-        return
+    else:
+        typer.echo("--- Active Grafana Alerts ---")
+        for a in alerts:
+            state_badge = "[FIRING]" if a["state"] == "alerting" else f"[{a['state'].upper()}]"
+            typer.echo(f"{state_badge} {a['name']} (Severity: {a['severity']})")
+            if a.get("summary"):
+                typer.echo(f"  Summary: {a['summary']}")
+            if a.get("runbook_url"):
+                typer.echo(f"  Runbook: {a['runbook_url']}")
 
-    typer.echo("--- Active Grafana Alerts ---")
-    for a in alerts:
-        state_badge = "[FIRING]" if a["state"] == "alerting" else f"[{a['state'].upper()}]"
-        typer.echo(f"{state_badge} {a['name']} (Severity: {a['severity']})")
-        if a.get("summary"):
-            typer.echo(f"  Summary: {a['summary']}")
-        if a.get("runbook_url"):
-            typer.echo(f"  Runbook: {a['runbook_url']}")
+    if env == "prod":
+        _echo_kuma_down()
+
+
+def _echo_kuma_down() -> None:
+    """Uptime Kuma is prod's external monitoring of record (ADR-028), so prod's answer includes it (#3156)."""
+    try:
+        down = ask_down_monitors()
+    except KumaUnavailableError as exc:
+        typer.echo(f"✗ Could not ask Uptime Kuma: {exc}", err=True)
+        typer.echo("  This is NOT 'nothing is down' — the question went unanswered.", err=True)
+        raise typer.Exit(1) from exc
+    if not down:
+        typer.echo("✓ No Uptime Kuma monitor is DOWN (asked and answered).")
+        return
+    typer.echo("--- Uptime Kuma: DOWN ---")
+    for d in down:
+        typer.echo(f"[DOWN] {d['name']} since {d['since']}" + (f": {d['msg']}" if d["msg"] else ""))
 
 
 @app.command("slack")
