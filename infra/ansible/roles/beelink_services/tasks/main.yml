@@ -351,11 +351,13 @@
     - ((_runner_registration.json | default({})).runners | default([]) | selectattr('name', 'equalto', runner_name) | list | length) == 0
   fail:
     msg: >-
-      github_runner.enabled is true, but GitHub lists no runner named '{{ runner_name }}'
+      github_runner.enabled is true, but GitHub did not list a runner named '{{ runner_name }}'
       (HTTP {{ _runner_registration.status | default('none') }}).
-      {{ 'The runner token was refused: it has likely expired (#1248).'
-         if (_runner_registration.status | default(0)) in [401, 403]
-         else 'The container runs but has not registered; read its logs.' }}
+      {{ 'GitHub could not be reached (timeout or refused connection), so registration was not checked; rerun the provision.'
+         if (_runner_registration.status | default(-1) | int) < 0
+         else ('The runner token was refused: it has likely expired (#1248).'
+               if (_runner_registration.status | int) in [401, 403]
+               else 'The container runs but has not registered; read its logs.') }}
 
 # --- Gitea (ADR-061 singleton) ---
 - name: Wait for Gitea to report healthy

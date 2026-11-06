@@ -113,3 +113,11 @@ def test_the_status_report_says_what_the_run_measured() -> None:
     assert "GH Runner off" in off and "running" not in off
     on = _report(_gitea_version={"json": {"status": "pass"}}, runner_enabled=True, runner_name="kubelab-bee")
     assert "GH Runner kubelab-bee registered" in on
+
+
+def test_a_github_that_cannot_be_reached_is_not_reported_as_unregistered() -> None:
+    """`uri` reports status -1 on a timeout or refused connection. That run never
+    asked GitHub, so the message must not send the operator to the runner's logs."""
+    msg = _env().from_string(_task(FAIL)["fail"]["msg"]).render(_runner_registration={"status": -1}, runner_name="x")
+    assert "could not be reached" in msg
+    assert "has not registered" not in msg
