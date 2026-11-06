@@ -30,7 +30,7 @@ pytestmark = pytest.mark.infra
 
 _VALUES = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "infra/config/values"))
 FIRST_FACTOR = "/api/firstfactor"
-MACHINE_IDENTITY_KEYS = ("machine", "reviewer")
+MACHINE_IDENTITY_KEYS = ("machine", "reviewer", "agent")
 
 
 def _load(name: str) -> dict:

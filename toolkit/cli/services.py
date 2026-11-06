@@ -14,6 +14,7 @@ from toolkit.core.logging import logger
 from toolkit.features import command
 from toolkit.features.configuration import ConfigurationManager
 from toolkit.features.docker_service import DockerService
+from toolkit.features.gitea_tokens import ROTATABLE_TOKENS
 
 if TYPE_CHECKING:
     from toolkit.features.gitea_actions_secrets import ActionsSecretsPlan, SecretTarget
@@ -911,7 +912,7 @@ def gitea_drop_empty(
 
 @gitea_app.command("rotate-token")
 def gitea_rotate_token(
-    token: Annotated[str, typer.Option("--token", help="Which credential: bot or admin")] = "bot",
+    token: Annotated[str, typer.Option("--token", help=f"Which credential: {', '.join(ROTATABLE_TOKENS)}")] = "bot",
     env: Annotated[str, typer.Option("--env", "-e", help="Environment holding the forge credentials")] = "prod",
     apply: Annotated[bool, typer.Option("--apply", help="Actually rotate. Without it, plan only.")] = False,
 ) -> None:
