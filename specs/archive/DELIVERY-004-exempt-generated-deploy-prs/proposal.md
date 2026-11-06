@@ -1,6 +1,6 @@
 ---
 id: "DELIVERY-004-exempt-generated-deploy-prs"
-status: implementing # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 type: spec
 created: "2026-09-04"
 issue: "mlorentedev/kubelab#1619"   # repo#NNN — GitHub issue / Project item that tracks this spec
