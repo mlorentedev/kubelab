@@ -94,6 +94,25 @@ def _gnu_userland_first() -> None:
         os.environ["PATH"] = f"{gnubin}{os.pathsep}{path}"
 
 
+def system_path(*first: str | os.PathLike[str]) -> str:
+    """A minimal PATH for running a node script: `first` (fakes), then the system dirs.
+
+    A harness that writes `PATH=<fakes>:/usr/bin:/bin` drops the GNU userland
+    `_gnu_userland_first` put on PATH, so on macOS the script finds no `timeout`
+    and runs a different command sequence (#3072). On macOS the directories that
+    hold the GNU tools go back in ahead of the system ones. Linux gets exactly
+    the system dirs, as before, because its `/usr/bin` is the GNU userland.
+    """
+    dirs = [os.fspath(d) for d in first]
+    if sys.platform == "darwin":
+        for tool in GNU_TOOLS:
+            binary = shutil.which(tool)
+            if binary is not None and (parent := os.path.dirname(binary)) not in dirs:
+                dirs.append(parent)
+    dirs += [d for d in ("/usr/bin", "/bin") if d not in dirs]
+    return os.pathsep.join(dirs)
+
+
 # --- Host-client barrier (#1886) -------------------------------------------------
 #
 # A unit test that reaches `kubectl` without mocking it does not fail where the

@@ -10,8 +10,9 @@ and `dig A` said the name was fine.
 
 The other types must get NODATA: NOERROR, no answer, the zone's SOA in the
 authority section (RFC 2308). This runs the rendered zone in the CoreDNS image
-the role pins and asks it over UDP, because the failure lives in how CoreDNS
-chains plugins, which no reading of the Corefile can show.
+the role pins and asks it, because the failure lives in how CoreDNS chains
+plugins, which no reading of the Corefile can show. The plugin chain is the
+same for both transports, so it asks over TCP (see `_query`).
 """
 
 from __future__ import annotations
@@ -67,14 +68,25 @@ def _records(packet: bytes, offset: int, count: int) -> tuple[list[tuple[int, by
     return records, offset
 
 
+def _recv_exactly(sock: socket.socket, size: int) -> bytes:
+    data = b""
+    while len(data) < size:
+        chunk = sock.recv(size - len(data))
+        if not chunk:
+            raise ConnectionError("the server closed the connection mid-reply")
+        data += chunk
+    return data
+
+
 def _query(port: int, name: str, qtype: str) -> Reply:
     query_id = random.randrange(1 << 16)
     question = b"".join(bytes([len(label)]) + label.encode() for label in name.split(".")) + b"\x00"
     packet = struct.pack("!HHHHHH", query_id, 0, 1, 0, 0, 0) + question + struct.pack("!HH", TYPES[qtype], 1)
-    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
-        sock.settimeout(2)
-        sock.sendto(packet, ("127.0.0.1", port))
-        reply = sock.recv(4096)
+    # Over TCP, which carries the same answers: Colima, the macOS Docker VM,
+    # forwards published TCP ports and drops UDP (measured 2026-11-05, #3072).
+    with socket.create_connection(("127.0.0.1", port), timeout=2) as sock:
+        sock.sendall(struct.pack("!H", len(packet)) + packet)
+        reply = _recv_exactly(sock, struct.unpack("!H", _recv_exactly(sock, 2))[0])
     reply_id, flags, qdcount, ancount, nscount, _ar = struct.unpack("!HHHHHH", reply[:12])
     assert reply_id == query_id, "a reply to another query"
     offset = 12
@@ -87,7 +99,7 @@ def _query(port: int, name: str, qtype: str) -> Reply:
 
 @pytest.fixture
 def coredns(docker_mount_dir: Path) -> Iterator[int]:
-    """The rendered staging apex zone, served by the role's pinned image; yields its UDP port."""
+    """The rendered staging apex zone, served by the role's pinned image; yields its TCP port."""
     if shutil.which("docker") is None:
         # In CI a missing docker must fail: a skip would hide the only check of this.
         if os.environ.get("CI"):
@@ -104,7 +116,7 @@ def coredns(docker_mount_dir: Path) -> Iterator[int]:
     subprocess.run(
         [
             "docker", "run", "-d", "--rm", "--name", name,
-            "-p", "127.0.0.1::1053/udp",
+            "-p", "127.0.0.1::1053/tcp",
             "-v", f"{docker_mount_dir}:/etc/coredns:ro",
             image, "-conf", "/etc/coredns/Corefile",
         ],
@@ -112,7 +124,7 @@ def coredns(docker_mount_dir: Path) -> Iterator[int]:
     )  # fmt: skip
     try:
         published = subprocess.run(
-            ["docker", "port", name, "1053/udp"], check=True, capture_output=True, text=True, encoding="utf-8"
+            ["docker", "port", name, "1053/tcp"], check=True, capture_output=True, text=True, encoding="utf-8"
         )
         port = int(published.stdout.split()[0].rsplit(":", 1)[1])
         deadline = time.monotonic() + 30
