@@ -1,7 +1,7 @@
 ---
 id: "AUTH-022-agent-forge-identity"
 type: spec
-status: implementing # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-11-03"
 issue: "mlorentedev/kubelab#2577"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal]
@@ -48,3 +48,5 @@ Agents author on the Gitea forge as its superadmin. The `toolkit services gitea`
 - Issue: mlorentedev/kubelab#2577; decision on #2296; consumer imagesensortool#114.
 - ADR: `docs/adr/adr-062-platform-identity-model.md` (amendment 2026-11-03).
 - Precedent: TOOL-080 (#1832), the reviewer's identity.
+
+<!-- archived 2026-11-06 — PR: https://github.com/mlorentedev/kubelab/pull/3178 -->
