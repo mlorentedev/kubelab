@@ -67,6 +67,7 @@ def _git(cwd: pathlib.Path, *args: str) -> str:
         check=True,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         env={**os.environ, **_GIT_ENV},
     ).stdout.strip()
 
@@ -120,6 +121,7 @@ def _run(
         env=env,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=60,
     )
     return proc, calls.read_text(encoding="utf-8").splitlines()
