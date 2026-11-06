@@ -1,0 +1,86 @@
+---
+id: forge-console-operations
+type: runbook
+status: active
+created: "2026-11-06"
+updated: "2026-11-06"
+owner: manu
+---
+
+# Forge console operations (CONSOLE-004)
+
+> Rebuild the forge read model, restore it from backup, and rotate the
+> credentials the console's API holds. Covers CONSOLE-004 AC7.
+
+The console reads three tables in the API's Postgres tenant
+(`apps/api/migrations/20261102000000_forge_read_model.sql`):
+
+| Table | What it holds | Rebuildable from the forges |
+|---|---|---|
+| `forge_source` | per source: `as_of` (last successful read), reachability | yes |
+| `forge_item` | the open and closed issues and pull requests read | yes |
+| `forge_event` | webhook deliveries, projected or not | no: an unprojected delivery is lost, and the next read covers the change it carried |
+
+## Rebuild from the forges
+
+The read model is a cache. A source with no `forge_source` row reads as never
+read, so the reconciler asks that forge for everything (`since` zero) on its
+next cycle, at API start and every `forge.ReconcilePeriod` (10 minutes). Emptied
+tables therefore come back by themselves within one cycle, with the same queue:
+`TestReadModelRebuildsFromTheForgesAlone` (`apps/api/src/internal/store/forge_rebuild_test.go`)
+empties all three tables and compares the queue before and after.
+
+When the tables are gone (a fresh database, a failed restore): do nothing but
+wait one cycle, then open `https://console.kubelab.live/console/` and check each
+source shows reachable with a recent read time.
+
+There is no command that empties the tables on purpose, and none is needed for
+the cases above. Never empty them by hand on a live cluster: that is a manual
+change to prod data.
+
+## Restore from backup
+
+The tables live in the prod Postgres, which `pg_dumpall` captures with every
+other tenant (`docs/runbooks/offsite-backup-restore.md`, section Postgres;
+drill with `make backup-drill-postgres ENV=prod`). Restore the whole dump as that
+runbook says; there is no per-table restore.
+
+After a restore the console may be older than the forges: `as_of` is the dump's,
+so the next cycle reads only what changed since then. Deliveries received after
+the dump and not in it are lost, and that same read covers them.
+
+If the restore is not worth it for the console alone, rebuilding (above) gives
+the same queue without it.
+
+## Rotate the credentials
+
+Each value's `rotate_note` in `SECRET_CATALOG` (`toolkit/features/secrets_manager.py`)
+is the procedure; this table only says which ones the console depends on.
+`make apply-secrets ENV=prod` restarts the API whenever its Secret changes (#1804).
+
+| Key | What it is | Expiry |
+|---|---|---|
+| `apps.services.core.github_app.private_key` (common) | signs the `kubelab-console` App's installation tokens | none (GitHub App keys do not expire) |
+| `apps.services.core.gitea.issue_reader_token` (prod) | reads Gitea issues and pull requests | none (Gitea tokens carry no expiry) |
+| `apps.platform.api.forge_github_webhook_secret` (prod) | GitHub signs deliveries with it | none (random, ours) |
+| `apps.platform.api.forge_gitea_webhook_secret` (prod) | Gitea signs deliveries with it | none (random, ours) |
+
+After rotating `forge_github_webhook_secret`, send it to the App's hook:
+`make forge-github-hook APPLY=1 SECRET=1`. GitHub cannot show the secret it
+holds, so the proof is a delivery: the App's Advanced tab lists each delivery's
+status, and a 401 there means the API and GitHub disagree.
+
+Gitea has no webhook to the API yet (the registration is open work on #2570),
+so `forge_gitea_webhook_secret` is held by the API alone and rotates with
+`apply-secrets` only. Once the webhook is declared, add its delivery step here.
+
+The installation tokens the API mints from the App key last one hour and are
+renewed by the API; nothing to rotate.
+
+## Verify
+
+```bash
+make secrets-audit             # each key above present for prod
+```
+
+Then open the console and check every declared source reads reachable.

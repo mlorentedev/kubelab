@@ -14,14 +14,14 @@ Fast triage commands for KubeLab platform issues across development, staging, an
 ## Overall System Health
 
 ```bash
-# Check overall status
-make status
+# Check pod and deployment status of a cluster (staging or prod)
+poetry run toolkit infra k8s status --env prod
 
-# Check all logs
-make logs
+# Logs of one service on a cluster
+make logs SVC=authelia ENV=prod
 
-# Environment validation
-make env-validate
+# Validate the generated configuration
+make validate
 
 # Docker health check
 docker ps -a
@@ -66,7 +66,7 @@ free -h
 When encountering any issue, follow this order:
 
 1. Check logs first: `toolkit apps logs <app-name> -f`
-2. Validate environment: `make env-validate`
+2. Validate the generated configuration: `make validate`
 3. Verify configurations: `docker compose config`
 4. Search existing issues: GitHub Issues, discussions
 5. Review recent changes: `git log --oneline -10`

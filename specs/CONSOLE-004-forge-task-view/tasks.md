@@ -45,7 +45,7 @@ created: "2026-10-21"
   - [x] ✓ 2026-11-01 [AC4] Deliver `issue_reader_token` to the API: `FORGE_GITEA_TOKEN` in `api-secrets` (optional, since staging has no Gitea token and the API starts without it), read by `config.Forge`, with `tests/test_forge_credentials_delivery.py` pinning that no credential lands in a ConfigMap. No NetworkPolicy is needed: NET-002 is ingress-only and the API is the caller, so egress is not restricted
   - [ ] [AC4] Measure the grant: the first live read of an issue list with `type=pulls` confirms `read:issue` alone suffices; a 403 widens `token_scopes.issue_reader` deliberately, with `ISSUE_READER_SCOPES`
   - [x] ✓ 2026-11-01 [AC4] The webhook receiver's host passes Gitea's `ALLOWED_HOST_LIST` without widening it: #2887 pinned Gitea's container to public resolvers (lesson-682), so the receiver needs a name that resolves to a public address. That also means Gitea cannot resolve `*.staging.kubelab.live`, so a Gitea webhook never reaches staging, and AC5's probe must account for it
-- [ ] [AC1] Regression test: a source that is down renders unreachable with its last read time, never empty
+- [x] [AC1] Regression test: a source that is down renders unreachable with its last read time, never empty ✓ 2026-11-06
 - [ ] [P] [AC4] Webhook receiver: reject an invalid HMAC, store the event before projecting it
   - [x] ✓ 2026-10-22 Signature verification for both forges, GitHub `sha256=` prefix and Gitea bare hex (#2636)
   - [x] ✓ 2026-11-02 Receiver endpoint and the event store: `POST /api/forge/webhooks/:forge`, HMAC before any write, a redelivery is a no-op. Until the webhook secrets reached prod, every delivery was refused
@@ -87,7 +87,7 @@ created: "2026-10-21"
 - [ ] [P] [AC7] Declare the read model in the Postgres backup coverage and rehearse one restore
   - [x] ✓ 2026-11-02 Covered: the prod dump is `pg_dumpall`, so the `api` database is in it without a change
   - [ ] Rehearse one restore
-- [ ] [AC7] Test that the read model rebuilds from the forges alone
+- [x] [AC7] Test that the read model rebuilds from the forges alone ✓ 2026-11-06
 - [x] ✓ 2026-11-01 [AC4] [AC7] Create the GitHub App for the read adapter, store its credential in SOPS with a catalog entry (App `kubelab-console`, App ID 5573076, installed on `mlorentedev/kubelab` only as installation 177667607; Issues, Pull requests and Metadata read-only, webhooks off; private key at `apps.services.core.github_app.private_key` in `common.enc.yaml`; GitHub App keys carry no expiry, so the catalog entry is `Expiry.NEVER`)
 - [x] ✓ 2026-11-01 [AC4] Deliver the App ID, installation ID and private key to the API: the two IDs at `infra.forge.github.*` reach the ConfigMap as `INFRA_FORGE_GITHUB_APP_ID` and `INFRA_FORGE_GITHUB_INSTALLATION_ID`; the key reaches `api-secrets` as `FORGE_GITHUB_PRIVATE_KEY`
 - [x] ✓ 2026-11-02 [AC4] Mint an installation token from the App ID, installation ID and key, then read once to measure the App's grant

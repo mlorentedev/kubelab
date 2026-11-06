@@ -4,6 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 717 | [A route that ties the catch-all's priority works until Traefik restarts](lesson-717-a-route-that-ties-the-catch-all-priority-works-until-traefik-restarts.md) | 2026-11-06 |
 | 709 | [A redirect regex that does not match passes the request through, silently](lesson-709-a-redirect-regex-that-does-not-match-passes-the-request-through-silently.md) | 2026-11-03 |
 | 626 | [A site network can answer DNS for any address, including the authoritative one](lesson-626-a-site-network-can-answer-dns-for-any-address-including-the-authoritative-one.md) | 2026-10-26 |
 | 625 | [A plugin Traefik downloads at start is a dependency on the network at every boot](lesson-625-a-plugin-traefik-downloads-at-start-is-a-dependency-on-the-network-at-every-boot.md) | 2026-10-26 |

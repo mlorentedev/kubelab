@@ -123,19 +123,8 @@ KNOWN_STALE: dict[tuple[str, str], str] = {
     ("docs/runbooks/deployment.md", "deploy-prod"): "appears only in the note explaining it was retired",
     ("CLAUDE.md", "backup-pvc"): "appears only in the note recording its removal (OPS-023)",
     #
-    # -- Retired with no replacement. Each needs the INSTRUCTION rewritten, not a
-    #    target renamed, which is why they outlive a mechanical pass (DOCS-004, #836).
-    ("docs/runbooks/deploy-new-k3s-service.md", "sops-check"): "no equivalent; now part of `make setup-sops`",
-    ("docs/troubleshooting/build-failures.md", "clean"): "no equivalent; dev cleanup is `make dev-full-clean`",
-    ("docs/troubleshooting/deployment.md", "clean"): "no equivalent; dev cleanup is `make dev-full-clean`",
-    ("docs/troubleshooting/deployment.md", "status"): "no equivalent; nearest is `make k8s-status ENV=x`",
-    ("docs/troubleshooting/quick-diagnostics.md", "status"): "no equivalent; nearest is `make k8s-status ENV=x`",
-    ("docs/troubleshooting/environment-configuration.md", "env-validate"): "folded into `make config-generate`",
-    ("docs/troubleshooting/quick-diagnostics.md", "env-validate"): "folded into `make config-generate`",
-    ("docs/troubleshooting/networking-dns.md", "verify-dns"): "no equivalent; DNS checks live in `make test-e2e`",
-    ("docs/troubleshooting/ssl-certificates.md", "verify-dns"): "no equivalent; DNS checks live in `make test-e2e`",
-    ("docs/troubleshooting/deployment.md", "emergency-rollback"): "no equivalent; rollback is an Argo CD operation",
-    ("docs/troubleshooting/deployment.md", "restore"): "no equivalent; see the restore runbook, not one target",
+    # The retired targets with no replacement (DOCS-004, #836) were rewritten as
+    # instructions rather than renamed, so none of them needs an exemption.
 }
 
 

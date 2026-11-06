@@ -1998,10 +1998,9 @@ edge-boot-check: ## Check what the edge brought back after a boot [CASE=no-uplin
 edge-soak: ## Read the edge's uplink soak: 48 h of this boot with no adapter reset
 	@$(TOOLKIT) infra edge soak
 
-# Measure the uplink's line rate on the edge (AC8, #2876): the adapter's own counters,
-# before the shaper, over one window per direction. Run it twice and shape at 90% of
-# the lower reading. Exits 0 measured, 2 shaper binding (lift it), 3 cannot tell.
-# Staging only: the toolkit refuses any other ENV. docs/runbooks/load-test.md
+# Measure staging's capacity with k6 from ace2, through a route that bypasses only the
+# rate limiter (OPS-054). Staging only: the toolkit refuses any other ENV.
+# docs/runbooks/load-test.md
 .PHONY: load-test load-test-clear
 load-test: ## Measure staging's capacity with k6 on ace2 (ENV=staging) [REPEATS=3 SECONDS=60 MAX_RATE=6400 MIN_RATE=0 ACCEPT_ENCODING=]
 	@$(TOOLKIT) infra load-test run --env $(ENV) $(if $(REPEATS),--repeats $(REPEATS)) $(if $(SECONDS),--seconds $(SECONDS)) $(if $(MAX_RATE),--max-rate $(MAX_RATE)) $(if $(MIN_RATE),--min-rate $(MIN_RATE)) $(if $(ACCEPT_ENCODING),--accept-encoding $(ACCEPT_ENCODING))
@@ -2009,6 +2008,9 @@ load-test: ## Measure staging's capacity with k6 on ace2 (ENV=staging) [REPEATS=
 load-test-clear: ## Remove the limiter-bypass route a dead load test left in staging (ENV=staging)
 	@$(TOOLKIT) infra load-test clear --env $(ENV)
 
+# Measure the uplink's line rate on the edge (AC8, #2876): the adapter's own counters,
+# before the shaper, over one window per direction. Run it twice and shape at 90% of
+# the lower reading. Exits 0 measured, 2 shaper binding (lift it), 3 cannot tell.
 .PHONY: edge-measure
 edge-measure: ## Measure the edge uplink's line rate, before the shaper [SECONDS=60]
 	@$(TOOLKIT) infra edge measure $(if $(SECONDS),--seconds $(SECONDS))

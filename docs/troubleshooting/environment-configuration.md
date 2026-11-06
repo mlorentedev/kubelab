@@ -39,8 +39,8 @@ docker exec container-name env | sort
 # Copy from example
 cp infra/compose/apps/api/.env.dev.example infra/compose/apps/api/.env.dev
 
-# Validate environment
-make env-validate
+# Validate the generated configuration
+make validate
 
 # Generate missing values
 toolkit credentials generate db-password
@@ -53,7 +53,7 @@ set -a; source infra/compose/apps/api/.env.dev; set +a
 ### Prevention
 
 - Keep `.env.example` files up to date with all required variables
-- Run `make env-validate` before starting services
+- Run `make validate` before starting services
 - Document new environment variables when adding features
 
 ## Invalid Configuration Values

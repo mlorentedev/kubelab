@@ -25,7 +25,7 @@ from toolkit.features.configuration import ConfigurationManager, resolve_user_id
 ENVS = ("dev", "staging", "prod")
 
 #: Keys of `apps.auth.identities` that name a machine, not a person.
-MACHINE_IDENTITY_KEYS = ("machine", "reviewer")
+MACHINE_IDENTITY_KEYS = ("machine", "reviewer", "agent")
 
 
 def _config(env: str) -> dict:

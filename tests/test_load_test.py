@@ -199,6 +199,45 @@ class TestVerdict:
     def test_a_rollout_stop_measured_nothing(self) -> None:
         assert lt.knee(self._steps([], ["rollout", "errors"]))["last_healthy_rps"] is None
 
+    @pytest.mark.parametrize("reason", ["limiter", "rollout"])
+    def test_a_ramp_that_measured_nothing_says_so_and_nothing_else(self, reason: str) -> None:
+        # #3012: it read `lower_bound_only: true` beside a `vus_at_last_healthy`, so one key
+        # meant "a lower bound" and "no figure", and a VU count stood beside a null rate.
+        got = lt.knee(self._steps([], [reason]))
+        assert got["measured"] is False
+        assert got["lower_bound_only"] is False
+        assert got["vus_at_last_healthy"] is None
+        # The rate the stop happened at is not a capacity figure either; the
+        # reason says why the run stopped.
+        assert got["first_degraded_rps"] is None and got["reasons"] == [reason]
+
+    @pytest.mark.parametrize("reasons", [[[], ["generator"]], [[], []], [[], ["latency"]]])
+    def test_a_ramp_that_reached_a_step_measured_it(self, reasons: list) -> None:
+        assert lt.knee(self._steps(*reasons))["measured"] is True
+
+    def test_a_generator_saturated_on_the_first_step_measured_nothing(self) -> None:
+        # No healthy step, and the stop was the generator's: there is no figure
+        # to call a lower bound, and nothing was learnt about the service.
+        got = lt.knee(self._steps(["generator"]))
+        assert got["measured"] is False
+        assert got["lower_bound_only"] is False
+        assert got["last_healthy_rps"] is None and got["vus_at_last_healthy"] is None
+
+    def test_a_ramp_with_no_steps_measured_nothing(self) -> None:
+        got = lt.knee([])
+        assert got["measured"] is False and got["lower_bound_only"] is False
+
+    def test_a_healthy_rate_of_zero_keeps_its_vus(self) -> None:
+        steps = [{"rate": 0, "reasons": [], "vus_peak": 3}, {"rate": 50, "reasons": ["latency"], "vus_peak": 4}]
+        got = lt.knee(steps)
+        assert (got["last_healthy_rps"], got["vus_at_last_healthy"]) == (0, 3)
+
+    def test_a_service_degraded_on_the_first_step_is_a_measurement(self) -> None:
+        # The knee is below the first step, and `first_degraded_rps` says so.
+        got = lt.knee(self._steps(["latency"]))
+        assert got["measured"] is True and got["lower_bound_only"] is False
+        assert got["last_healthy_rps"] is None and got["first_degraded_rps"] is not None
+
     def test_the_ramp_stops_at_the_first_unhealthy_step(self) -> None:
         seen: list[int] = []
 
@@ -223,6 +262,20 @@ class TestEdgeRecovery:
         counts = iter(range(100))
         with pytest.raises(lt.LoadTestRefused):
             lt.wait_for_stable_edge(lambda: True, lambda: next(counts), lambda _: None, 30, 100)
+
+    def test_an_edge_with_no_pod_never_counts_as_calm(self) -> None:
+        # #3012: `edge_state` answers ("", 0) with no pod, which never changes, so only
+        # `ready` keeps the clock at zero. A loop that trusted the state alone would pass.
+        with pytest.raises(lt.LoadTestRefused):
+            lt.wait_for_stable_edge(lambda: False, lambda: ("", 0), lambda _: None, 30, 100)
+
+    def test_calm_counts_only_from_the_pod_that_came_back(self) -> None:
+        polls = iter([("", 0)] * 3 + [("uid", 0)] * 10)
+        ready = iter([False, False, True] + [True] * 10)
+        slept: list[int] = []
+        lt.wait_for_stable_edge(lambda: next(ready), lambda: next(polls), slept.append, 30, 200)
+        # poll 3 sees the pod (state changed, clock reset); polls 4-6 are calm.
+        assert sum(slept) == 60
 
 
 class TestParsing:
@@ -467,3 +520,35 @@ class TestEdgeDownWhileWaiting:
 
         with pytest.raises(lt.LoadTestRefused, match="load-test-clear"):
             lt.cleanup(Lab(), "img")
+
+
+class TestRemoteCommandQuoting:
+    """#3012: `k6_command` runs through one remote shell, so every value is quoted."""
+
+    def test_each_value_reaches_k6_as_one_word(self) -> None:
+        import shlex
+
+        cmd = lt.k6_command("grafana/k6:1.0", {"LT_PATH": "/a b", "LT_HOST": "x;touch /tmp/p"})
+        words = shlex.split(cmd)
+        assert "LT_PATH=/a b" in words
+        assert "LT_HOST=x;touch /tmp/p" in words
+        assert words[words.index("LT_HOST=x;touch /tmp/p") - 1] == "-e"
+
+    def test_the_image_is_quoted_too(self) -> None:
+        import shlex
+
+        assert "img x" in shlex.split(lt.k6_command("img x", {}))
+
+
+def test_the_edge_measure_comment_sits_on_its_own_target() -> None:
+    # #3012: the load-test block had landed between edge-measure's comment and target.
+    lines = (REPO / "Makefile").read_text(encoding="utf-8").splitlines()
+    target = lines.index(".PHONY: edge-measure")
+    block = []
+    for line in reversed(lines[:target]):
+        if not line.startswith("#"):
+            break
+        block.append(line)
+    assert any("line rate" in line for line in block), "edge-measure has no comment directly above it"
+    load = lines.index(".PHONY: load-test load-test-clear")
+    assert "line rate" not in "".join(lines[load - 4 : load])

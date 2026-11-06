@@ -153,7 +153,7 @@ docker exec traefik cat /letsencrypt/acme.json | jq '.Certificates | length'
 - Use the Let's Encrypt staging environment first for testing
 - Check DNS propagation before deploying
 - Wait 1 hour between failed certificate attempts
-- Always verify DNS before deploying: `make verify-dns ENVIRONMENT=prod`
+- Always verify DNS before deploying: `make tf-dns-plan` (prod records are Terraform; a plan with no changes means Cloudflare matches the SSOT)
 
 ## Let's Encrypt Rate Limits
 
