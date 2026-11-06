@@ -146,8 +146,15 @@ class TestAcceptEncoding:
             lt.refuse_unknown_encoding(value)
 
     def test_the_script_sends_it_as_the_header(self) -> None:
+        # A live statement on the headers object the request sends, set before the
+        # request runs: not a comment, not a different object, not after the call.
         script = (REPO / lt.SCRIPT).read_text(encoding="utf-8")
-        assert "LT_ACCEPT_ENCODING" in script and "'Accept-Encoding'" in script
+        live = [line for line in script.splitlines() if not line.lstrip().startswith("//")]
+        code = "\n".join(live)
+        assign = code.find("if (LT_ACCEPT_ENCODING) headers['Accept-Encoding'] = LT_ACCEPT_ENCODING;")
+        assert assign != -1, "the header is not set on `headers`"
+        assert assign < code.find("export default function")
+        assert "http.get(`https://${LT_HOST}${LT_PATH}`, { headers," in code, "the request does not send `headers`"
 
 
 class TestVerdict:
