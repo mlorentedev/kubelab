@@ -12,13 +12,15 @@ rendered overlay, never copied, so the check runs against whatever the rule says
 today. The lines are searched with the rule's own stream selector, so a selector
 that no longer sees Traefik finds no line and fails rather than reading quiet.
 
-Two answers are not "quiet", and both fail:
+Three outcomes, each with its own exit code:
 
-- No such line within Loki's retention: nothing was evaluated, which is not quiet.
-- A non-empty result. The matching lines are read back so the report can say
-  whether the rule matched Traefik's own line (a regression of the rule) or a
-  real ACME failure happened in the window (staging's alert-smoke induces
-  those): the two call for opposite actions.
+- 0, quiet: every anchor line found, and the rule answered empty after each.
+- 1, regression: the rule matched Traefik's own line. Only this blames the rule.
+- 3, not measured: an anchor line is not within Loki's retention (a Traefik up
+  for over a week leaves no boot line), or a real ACME failure shares its
+  window (staging's alert-smoke induces those). Neither says anything about the
+  rule, and rerunning re-reads the same window, so the report names what moves
+  it: the next heartbeat, or the next Traefik restart.
 
 Read-only, so it runs in prod as well as staging.
 """
@@ -81,6 +83,12 @@ class AnchorResult:
     reason: str
     at_ns: int | None = None
     matched_lines: list[str] = field(default_factory=list)
+    #: The rule matched Traefik's own line. The only answer that blames the rule.
+    regression: bool = False
+
+    @property
+    def ok(self) -> bool:
+        return self.measured and self.quiet
 
 
 @dataclass(frozen=True)
@@ -89,7 +97,14 @@ class QuietResult:
 
     @property
     def ok(self) -> bool:
-        return bool(self.anchors) and all(a.measured and a.quiet for a in self.anchors)
+        return bool(self.anchors) and all(a.ok for a in self.anchors)
+
+    @property
+    def exit_code(self) -> int:
+        """0 quiet at every anchor, 1 the rule matched Traefik's own line, 3 not measured."""
+        if any(a.regression for a in self.anchors):
+            return 1
+        return 0 if self.ok else 3
 
 
 def _find_rule(docs: list[dict[str, Any]]) -> dict[str, Any]:
@@ -113,6 +128,8 @@ def rule_query(docs: list[dict[str, Any]]) -> RuleQuery:
     if not inner or not selector:
         raise QuietCheckError(f"cannot read the window and selector of {RULE_UID}: {expr}")
     window_s = int(inner.group(2)) * 60
+    if query["relativeTimeRange"].get("to", 0):
+        raise QuietCheckError(f"{RULE_UID}: relativeTimeRange.to offsets Grafana's window; this check cannot follow it")
     if window_s != query["relativeTimeRange"]["from"]:
         raise QuietCheckError(
             f"{RULE_UID}: LogQL window {window_s}s disagrees with relativeTimeRange.from "
@@ -121,20 +138,30 @@ def rule_query(docs: list[dict[str, Any]]) -> RuleQuery:
     return RuleQuery(expr=expr, window_s=window_s, selector=selector.group(0), log_query=inner.group(1).strip())
 
 
+#: What moves an anchor's window forward, so a rerun reads a new one.
+NEXT = {HEARTBEAT: "the next heartbeat (about daily)", BOOT_LINE: "the next Traefik restart"}
+
+
 def verdict(
     anchor: str, anchor_ns: int | None, alert_series: list[dict[str, Any]], matched_lines: list[str]
 ) -> AnchorResult:
     at_ns = None if anchor_ns is None else anchor_ns + EVAL_OFFSET_S * 10**9
+    regression = False
     if anchor_ns is None:
-        measured, quiet, reason = False, False, f"no `{anchor}` line in Loki in the last {LOOKBACK}"
+        measured, quiet = False, False
+        reason = f"no `{anchor}` line in Loki in the last {LOOKBACK}; rerun after {NEXT[anchor]}"
     elif not alert_series:
         measured, quiet, reason = True, True, "quiet: the line is in the window, the rule answered empty"
     elif any(a in line for a in ANCHORS for line in matched_lines):
-        measured, quiet = True, False
+        measured, quiet, regression = True, False, True
         reason = "the rule matches Traefik's own line: a regression of the rule, it would page"
     else:
-        measured, quiet, reason = True, False, "a real ACME failure is in the window; rerun once it ages out"
-    return AnchorResult(anchor, measured, quiet, reason, at_ns=at_ns, matched_lines=matched_lines)
+        # Rerunning re-reads the same window, so the advice names what moves it.
+        measured, quiet = False, False
+        reason = f"a real ACME failure shares this window, so it proves nothing; rerun after {NEXT[anchor]}"
+    return AnchorResult(
+        anchor, measured, quiet, reason, at_ns=at_ns, matched_lines=matched_lines, regression=regression
+    )
 
 
 def _evaluate(loki: LokiLike, rule: RuleQuery, anchor: str) -> AnchorResult:

@@ -1272,8 +1272,9 @@ def k8s_acme_quiet_check(
 
     Evaluates the rule's own expression, read from the rendered overlay, one
     minute after the newest `Testing certificate renew` line and again after the
-    newest `Starting provider *acme.Provider` line in Loki, and fails unless both
-    lines are found and the rule answers empty at both. Read-only,
+    newest `Starting provider *acme.Provider` line in Loki. Exits 0 quiet at
+    both, 1 when the rule matches Traefik's own line, 3 when an anchor cannot be
+    measured (no such line within retention, or a real ACME failure shares it). Read-only,
     so prod is allowed: prod is where a noisy rule would page.
     """
     if env not in ("staging", "prod"):
@@ -1289,15 +1290,20 @@ def k8s_acme_quiet_check(
     try:
         with _loki_client(env) as loki:
             result = run_acme_quiet_check(loki, render(env, settings.project_root))
-    except (QuietCheckError, LogsUnavailableError) as exc:
-        logger.error(f"acme-quiet-check: not measured: {exc}")
+    except QuietCheckError as exc:
+        # The rule itself cannot be read the way Grafana reads it: the rule's fault.
+        logger.error(f"acme-quiet-check: {exc}")
         raise typer.Exit(1) from exc
+    except LogsUnavailableError as exc:
+        logger.error(f"acme-quiet-check: not measured: {exc}")
+        raise typer.Exit(3) from exc
     for anchor in result.anchors:
-        typer.echo(f"{'ok' if anchor.measured and anchor.quiet else 'FAIL'} `{anchor.anchor}`: {anchor.reason}")
+        label = "REGRESSION" if anchor.regression else "ok" if anchor.ok else "NOT MEASURED"
+        typer.echo(f"{label} `{anchor.anchor}`: {anchor.reason}")
         for line in anchor.matched_lines[:20]:
             typer.echo(f"  matched: {line}")
-    if not result.ok:
-        raise typer.Exit(1)
+    if result.exit_code:
+        raise typer.Exit(result.exit_code)
 
 
 # =============================================================================

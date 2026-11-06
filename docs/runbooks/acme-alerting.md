@@ -157,12 +157,15 @@ make acme-quiet-check ENV=prod
 
 It evaluates the rule's expression, read from the rendered overlay, one minute
 after the newest of each of those two lines in Loki, searched with the rule's own
-stream selector, and passes only when the rule answers empty at both. A failure
-says which of two things it saw: the rule matching Traefik's own line (fix the
-rule, it would page) or a real ACME failure in the window (after `alert-smoke`,
-rerun once it ages out of the 10-minute window). A line not found within Loki's
-7-day retention is a failure too, not a pass: a Traefik that has not restarted
-for a week leaves no boot line to evaluate, so rerun after its next restart.
+stream selector, and passes (exit 0) only when the rule answers empty at both.
+Exit 1, `REGRESSION`, is the only answer that blames the rule: it matched
+Traefik's own line and would page, so fix the rule. Exit 3, `NOT MEASURED`,
+says nothing about the rule: the line is not within Loki's 7-day retention (a
+Traefik up for more than a week leaves no boot line), or a real ACME failure
+shares its window (for example right after `alert-smoke`). Rerunning re-reads
+the same window, so the output names what moves it: the next heartbeat (about
+daily), or the next Traefik restart. `make` reports any non-zero exit as its
+own `Error`, so read the label rather than make's code.
 
 Two properties worth knowing rather than rediscovering:
 

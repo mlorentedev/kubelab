@@ -69,6 +69,16 @@ class TestRuleQuery:
         with pytest.raises(q.QuietCheckError, match="window"):
             q.rule_query(_docs(EXPR, window_from=300))
 
+    def test_a_range_offset_is_refused(self) -> None:
+        # Grafana subtracts `to` from the evaluation time; the check evaluates at
+        # the instant itself, so an offset would make the two windows differ.
+        docs = _docs(EXPR)
+        rules = yaml.safe_load(docs[1]["data"]["rules.yaml"])
+        rules["groups"][0]["rules"][0]["data"][0]["relativeTimeRange"]["to"] = 60
+        docs[1]["data"]["rules.yaml"] = yaml.dump(rules)
+        with pytest.raises(q.QuietCheckError, match="relativeTimeRange.to"):
+            q.rule_query(docs)
+
     def test_a_missing_rule_is_an_error_not_a_quiet_result(self) -> None:
         with pytest.raises(q.QuietCheckError, match=q.RULE_UID):
             q.rule_query([{"kind": "ConfigMap", "metadata": {"name": "grafana-alerting-x"}, "data": {}}])
@@ -94,11 +104,37 @@ class TestVerdict:
         assert result.measured and not result.quiet
         assert "regression of the rule" in result.reason
 
-    def test_a_real_failure_in_the_window_is_not_called_a_regression(self) -> None:
+    @pytest.mark.parametrize(("anchor", "advice"), [(q.HEARTBEAT, "next heartbeat"), (q.BOOT_LINE, "next Traefik restart")])
+    def test_a_real_failure_in_the_window_measured_nothing(self, anchor: str, advice: str) -> None:
+        # Not a regression of the rule, and not quiet either: that window cannot
+        # say whether the rule ignores Traefik's own line. Rerunning re-reads the
+        # same window, so the advice names what moves it.
         line = 'ERR Unable to obtain ACME certificate domains=["x.kubelab.local"]'
-        result = q.verdict(q.HEARTBEAT, 1, ALERT, [line])
-        assert not result.quiet
-        assert "real ACME failure" in result.reason
+        result = q.verdict(anchor, 1, ALERT, [line])
+        assert not result.measured and not result.regression
+        assert "real ACME failure" in result.reason and advice in result.reason
+
+    def test_only_a_matched_traefik_line_is_a_regression(self) -> None:
+        assert q.verdict(q.HEARTBEAT, 1, ALERT, ["INF Starting provider *acme.Provider"]).regression
+        assert not q.verdict(q.HEARTBEAT, None, [], []).regression
+        assert not q.verdict(q.HEARTBEAT, 1, [], []).regression
+
+
+class TestExitCode:
+    def _result(self, *anchors: q.AnchorResult) -> q.QuietResult:
+        return q.QuietResult(list(anchors))
+
+    def test_quiet_everywhere_is_zero(self) -> None:
+        assert self._result(q.verdict(q.HEARTBEAT, 1, [], []), q.verdict(q.BOOT_LINE, 1, [], [])).exit_code == 0
+
+    def test_a_regression_is_one_whatever_else_was_measured(self) -> None:
+        regression = q.verdict(q.BOOT_LINE, 1, ALERT, ["INF Testing certificate renew..."])
+        assert self._result(q.verdict(q.HEARTBEAT, None, [], []), regression).exit_code == 1
+
+    def test_an_anchor_not_measured_is_three(self) -> None:
+        # A Traefik up for longer than Loki's retention leaves no boot line: that
+        # is the cluster's restart history, not a fault of the rule.
+        assert self._result(q.verdict(q.HEARTBEAT, 1, [], []), q.verdict(q.BOOT_LINE, None, [], [])).exit_code == 3
 
 
 class _Loki:
@@ -136,14 +172,14 @@ class TestRun:
         # The boot line rarely shares the heartbeat's window, so it needs its own instant.
         loki = _Loki({q.HEARTBEAT: 5 * S, q.BOOT_LINE: 100 * S}, {160 * S: ALERT}, ["INF Starting provider *acme.Provider"])
         result = q.run_acme_quiet_check(loki, _docs(EXPR))
-        assert not result.ok
+        assert result.exit_code == 1
         assert [a.quiet for a in result.anchors] == [True, False]
         assert loki.sample[0]["end_ns"] == 160 * S and loki.sample[0]["limit"] == q.SAMPLE_LIMIT
 
     def test_no_boot_line_in_retention_is_not_a_pass(self) -> None:
         loki = _Loki({q.HEARTBEAT: 5 * S, q.BOOT_LINE: None}, {}, [])
         result = q.run_acme_quiet_check(loki, _docs(EXPR))
-        assert not result.ok
+        assert result.exit_code == 3
         assert [a.measured for a in result.anchors] == [True, False]
         assert loki.instant == [(EXPR, 65 * S)]
 
