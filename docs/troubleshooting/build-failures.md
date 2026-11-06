@@ -32,7 +32,9 @@ docker system df
 ```bash
 # Clean up Docker resources
 docker system prune -a
-make dev-full-clean   # stops the dev stack and removes its containers and volumes
+# Destructive: stops the dev stack, then prunes EVERY unused Docker volume
+# and container on this host, not only the dev stack's
+make dev-full-clean
 
 # Verify space was reclaimed
 df -h
@@ -88,7 +90,7 @@ make build-dev 2>&1 | grep -i "error\|fail"
 ### Solution
 
 ```bash
-# Clear all caches
+# Clear all caches (dev-full-clean prunes every unused volume on this host)
 make dev-full-clean
 docker builder prune -a
 

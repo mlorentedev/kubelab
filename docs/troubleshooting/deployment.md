@@ -123,7 +123,8 @@ volumeMounts:
 # Quick restart
 make down-dev && make up-dev
 
-# Nuclear option: stop the stack and remove its containers and volumes
+# Nuclear option: stop the stack, then prune EVERY unused Docker volume and
+# container on this host (`docker volume prune -f`), not only the dev stack's
 make dev-full-clean && make up-dev
 ```
 
