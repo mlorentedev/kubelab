@@ -1274,7 +1274,8 @@ def k8s_acme_quiet_check(
     minute after the newest `Testing certificate renew` line and again after the
     newest `Starting provider *acme.Provider` line in Loki. Exits 0 quiet at
     both, 1 when the rule matches Traefik's own line, 3 when an anchor cannot be
-    measured (no such line within retention, or a real ACME failure shares it). Read-only,
+    measured (no such line within retention, or a real ACME failure shares it),
+    2 when it cannot run (bad env, or the rule cannot be read). Read-only,
     so prod is allowed: prod is where a noisy rule would page.
     """
     if env not in ("staging", "prod"):
@@ -1291,9 +1292,10 @@ def k8s_acme_quiet_check(
         with _loki_client(env) as loki:
             result = run_acme_quiet_check(loki, render(env, settings.project_root))
     except QuietCheckError as exc:
-        # The rule itself cannot be read the way Grafana reads it: the rule's fault.
-        logger.error(f"acme-quiet-check: {exc}")
-        raise typer.Exit(1) from exc
+        # The rule cannot be read the way Grafana reads it, so the check never ran.
+        # 2, not 1: exit 1 says the rule matched Traefik's own line, nothing else.
+        logger.error(f"acme-quiet-check: cannot run: {exc}")
+        raise typer.Exit(2) from exc
     except LogsUnavailableError as exc:
         logger.error(f"acme-quiet-check: not measured: {exc}")
         raise typer.Exit(3) from exc

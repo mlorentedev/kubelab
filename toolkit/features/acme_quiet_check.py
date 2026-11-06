@@ -12,7 +12,9 @@ rendered overlay, never copied, so the check runs against whatever the rule says
 today. The lines are searched with the rule's own stream selector, so a selector
 that no longer sees Traefik finds no line and fails rather than reading quiet.
 
-Three outcomes, each with its own exit code:
+Three outcomes, each with its own exit code (the command exits 2 when it cannot
+run at all: a rule it cannot read the way Grafana reads it raises
+`QuietCheckError`):
 
 - 0, quiet: every anchor line found, and the rule answered empty after each.
 - 1, regression: the rule matched Traefik's own line. Only this blames the rule.

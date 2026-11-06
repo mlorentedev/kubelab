@@ -186,3 +186,31 @@ class TestRun:
     def test_lookback_is_lokis_retention(self) -> None:
         loki_yaml = (ROOT / "infra" / "k8s" / "base" / "services" / "loki.yaml").read_text(encoding="utf-8")
         assert f"retention_period: {q.LOOKBACK}" in loki_yaml
+
+
+class TestCli:
+    """Exit 1 is reserved for a regression; a rule the check cannot read is 2."""
+
+    def _invoke(self, docs: list[dict]):  # noqa: ANN202
+        from contextlib import nullcontext
+        from unittest.mock import patch
+
+        from typer.testing import CliRunner
+
+        from toolkit.cli.infra import app
+
+        loki = _Loki({q.HEARTBEAT: 5 * S, q.BOOT_LINE: 100 * S}, {}, [])
+        with (
+            patch("toolkit.cli.infra.validate_environment_config"),
+            patch("toolkit.cli.observability._loki_client", return_value=nullcontext(loki)),
+            patch("toolkit.features.break_glass.render", return_value=docs),
+        ):
+            return CliRunner().invoke(app, ["k8s", "acme-quiet-check", "--env", "prod"])
+
+    def test_quiet_is_zero(self) -> None:
+        result = self._invoke(_docs(EXPR))
+        assert result.exit_code == 0, result.output
+
+    def test_an_unreadable_rule_is_two_not_a_regression(self) -> None:
+        result = self._invoke(_docs(EXPR, window_from=300))
+        assert result.exit_code == 2, result.output

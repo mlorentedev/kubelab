@@ -164,7 +164,10 @@ says nothing about the rule: the line is not within Loki's 7-day retention (a
 Traefik up for more than a week leaves no boot line), or a real ACME failure
 shares its window (for example right after `alert-smoke`). Rerunning re-reads
 the same window, so the output names what moves it: the next heartbeat (about
-daily), or the next Traefik restart. `make` reports any non-zero exit as its
+daily), or the next Traefik restart. Exit 2 means it never ran: the rule is
+missing from the rendered overlay, or its window disagrees with its query range
+or carries a `to` offset, so there is no expression Grafana would evaluate to
+test. `make` reports any non-zero exit as its
 own `Error`, so read the label rather than make's code.
 
 Two properties worth knowing rather than rediscovering:
