@@ -50,6 +50,9 @@ def test_no_machine_identity_is_an_authelia_user(env: str) -> None:
     users = config["apps"]["services"]["security"]["authelia"]["users"]
     declared = {resolve_user_identity(user, config) for user in users}
     assert declared, f"{env}: no Authelia user resolved, so the check below would compare nothing"
+    # `resolve_user_identity` answers "" for an `identity:` key that does not exist,
+    # so such an entry would escape the comparison without a word.
+    assert "" not in declared, f"{env}: an Authelia user entry resolves to no username"
     assert not machines & declared, (
         f"{env}: {sorted(machines & declared)} would get an Authelia password and could sign in "
         "interactively; machine identities authenticate with scoped tokens only (#2504)"
