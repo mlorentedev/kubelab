@@ -98,4 +98,4 @@ empty deploy PRs instead of merging them, and pin the merge to the judged head s
 - [x] [AC8] Reviewer quota measured 2026-10-21: on #2576 and #2581 CodeRabbit ran a full review ("No actionable comments"), and Codex attempted one and hit its usage limit. Both still spend quota on deploy PRs. pr-agent skips them. Posted on #1619.
 - [ ] Follow-up on dotfiles#2836: swap the PAT for the App. Open; until then an unattended merge shows the operator as `merged_by` (review-2 F8). Not an archive blocker: tracked there.
 - [x] Gap on the prod signature recorded on #1741 (issuecomment-6319264541). ✓ 2026-10-21
-- [ ] Independent adversarial review before archive.
+- [x] Independent adversarial review before archive: PASS, `review.md` (agy/gemini-3.8-flash-high, pool draw). ✓ 2026-11-05
