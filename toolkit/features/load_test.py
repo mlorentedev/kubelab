@@ -107,7 +107,20 @@ def resolve_nodes(values: dict[str, Any], prod: dict[str, Any]) -> tuple[str, st
     return target, address, generator
 
 
-def k6_env(target: Target, address: str, rate: int, seconds: int, bypass: bool) -> dict[str, str]:
+# What the client may declare it accepts. k6 sends `Accept-Encoding: gzip` unless told
+# otherwise, so a server that compresses per request pays for it on every request;
+# `identity` is the other arm of that A/B. The value lands unquoted in `docker run -e`.
+ACCEPT_ENCODINGS = ("gzip", "identity")
+
+
+def refuse_unknown_encoding(value: str) -> None:
+    if value not in ACCEPT_ENCODINGS:
+        raise LoadTestRefused(f"accept-encoding must be one of {ACCEPT_ENCODINGS}, not {value!r}")
+
+
+def k6_env(
+    target: Target, address: str, rate: int, seconds: int, bypass: bool, accept_encoding: str | None = None
+) -> dict[str, str]:
     env = {
         "LT_HOST": target.host,
         "LT_PATH": target.path,
@@ -117,6 +130,9 @@ def k6_env(target: Target, address: str, rate: int, seconds: int, bypass: bool) 
     }
     if bypass:
         env |= {"LT_BYPASS_HEADER": BYPASS_HEADER, "LT_BYPASS_VALUE": BYPASS_VALUE}
+    if accept_encoding is not None:
+        refuse_unknown_encoding(accept_encoding)
+        env["LT_ACCEPT_ENCODING"] = accept_encoding
     return env
 
 
@@ -291,10 +307,18 @@ class Lab:
 
 
 def run_step(
-    lab: Lab, image: str, script: str, target: Target, address: str, rate: int, seconds: int, bypass: bool
+    lab: Lab,
+    image: str,
+    script: str,
+    target: Target,
+    address: str,
+    rate: int,
+    seconds: int,
+    bypass: bool,
+    accept_encoding: str | None = None,
 ) -> dict[str, Any]:
     """One step with the node's figures around it. The generator's CPU decides its validity."""
-    env = k6_env(target, address, rate, seconds, bypass)
+    env = k6_env(target, address, rate, seconds, bypass, accept_encoding)
     before = {n: lab.cpu_line(n) for n in (lab.target_node, lab.generator)}
     stat_before = lab.cpu_stat(target.workload)
     pod_before = lab.pod(target.workload)["metadata"]["uid"]
@@ -408,6 +432,7 @@ def run(
     max_rate: int,
     checkpoint: Any = lambda _result: None,
     min_rate: int = 0,
+    accept_encoding: str | None = None,
 ) -> dict[str, Any]:
     """Baseline under the limiter, then `repeats` ramps past it. Always removes the route.
 
@@ -417,9 +442,11 @@ def run(
     import time
 
     refuse_empty_run(repeats, seconds, max_rate, min_rate)
+    if accept_encoding is not None:
+        refuse_unknown_encoding(accept_encoding)
     lab.assert_cluster()
     script = (lab.root / SCRIPT).read_text(encoding="utf-8")
-    facts = _runtime_facts(lab, image)
+    facts = {**_runtime_facts(lab, image), "accept_encoding": accept_encoding or "gzip (k6 default)"}
     steps = select_steps(min_rate, max_rate)
     restarts = {t.workload: lab.restarts(t.workload) for t in targets}
     edge_at_start = lab.edge_state()
@@ -434,7 +461,10 @@ def run(
         )
 
     stable_edge()
-    baselines = [run_step(lab, image, script, t, address, BASELINE_RATE, seconds, bypass=False) for t in targets]
+    baselines = [
+        run_step(lab, image, script, t, address, BASELINE_RATE, seconds, bypass=False, accept_encoding=accept_encoding)
+        for t in targets
+    ]
     ramps: list[dict[str, Any]] = []
     result: dict[str, Any] = {
         "facts": facts,
@@ -457,7 +487,9 @@ def run(
             for target in targets:
 
                 def one(rate: int, target: Target = target) -> dict[str, Any]:
-                    return run_step(lab, image, script, target, address, rate, seconds, bypass=True)
+                    return run_step(
+                        lab, image, script, target, address, rate, seconds, bypass=True, accept_encoding=accept_encoding
+                    )
 
                 done = ramp(one, steps, lambda: time.sleep(SETTLE_SECONDS))
                 ramps.append({"target": target.name, "repeat": repeat, "steps": done, "knee": knee(done)})

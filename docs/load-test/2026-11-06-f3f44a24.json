@@ -1,0 +1,1013 @@
+{
+  "facts": {
+    "k6_image": "grafana/k6@sha256:2dd4756ec6e14e62778916e1eb850108e4b499304c02df56760fa0bdb0fba0b8",
+    "traefik_image": "rancher/mirrored-library-traefik:3.6.7",
+    "k3s": "v1.34.4+k3s1",
+    "kernel": "6.8.0-147-generic",
+    "node_capacity": {
+      "cpu": "4",
+      "memory": "12023380Ki"
+    },
+    "cpu_model": {
+      "ace1": "Intel(R) N95",
+      "ace2": "Intel(R) N95"
+    },
+    "workloads": {
+      "api": {
+        "image": "docker.io/mlorentedev/kubelab-api:sha-1b5e724",
+        "resources": {
+          "limits": {
+            "cpu": "500m",
+            "memory": "512Mi"
+          },
+          "requests": {
+            "cpu": "250m",
+            "memory": "256Mi"
+          }
+        }
+      },
+      "web": {
+        "image": "docker.io/mlorentedev/kubelab-web:sha-e06e2ea",
+        "resources": {
+          "limits": {
+            "cpu": "500m",
+            "memory": "512Mi"
+          },
+          "requests": {
+            "cpu": "250m",
+            "memory": "256Mi"
+          }
+        }
+      }
+    }
+  },
+  "criteria": {
+    "max_error_rate": 0.01,
+    "max_p95_ms": 250.0,
+    "min_achieved_ratio": 0.95,
+    "max_generator_cpu": 85.0,
+    "step_seconds": 60,
+    "settle_seconds": 15
+  },
+  "baseline": [
+    {
+      "rate": 25,
+      "target": "api-health",
+      "requests": 1501.0,
+      "achieved_rps": 25.014732741823945,
+      "error_rate": 0.0,
+      "status_429": 0.0,
+      "dropped": 0.0,
+      "vus_peak": 0.0,
+      "avg_ms": 3.058623613590937,
+      "p50_ms": 3.090008,
+      "p90_ms": 3.516171,
+      "p95_ms": 3.671395,
+      "p99_ms": 4.018673,
+      "max_ms": 8.575753,
+      "phases": {
+        "blocked": {
+          "p50_ms": 0.000979,
+          "p95_ms": 0.001139,
+          "p99_ms": 24.801733,
+          "max_ms": 34.703468
+        },
+        "connecting": {
+          "p50_ms": 0.0,
+          "p95_ms": 0.0,
+          "p99_ms": 0.538046,
+          "max_ms": 0.887187
+        },
+        "tls_handshaking": {
+          "p50_ms": 0.0,
+          "p95_ms": 0.0,
+          "p99_ms": 23.945926,
+          "max_ms": 33.982831
+        },
+        "waiting": {
+          "p50_ms": 2.72868,
+          "p95_ms": 3.268485,
+          "p99_ms": 3.597423,
+          "max_ms": 8.210278
+        },
+        "receiving": {
+          "p50_ms": 0.105409,
+          "p95_ms": 0.165634,
+          "p99_ms": 0.208017,
+          "max_ms": 0.689919
+        }
+      },
+      "node_cpu": 10.4,
+      "generator_cpu": 3.0,
+      "node_mem_available_mb": 8745,
+      "pods_top": {
+        "traefik": "63m 50Mi",
+        "api": "20m 8Mi"
+      },
+      "throttled_ms": 0.0,
+      "edge_restarts": 0,
+      "pod_replaced": false,
+      "reasons": []
+    },
+    {
+      "rate": 25,
+      "target": "web-static",
+      "requests": 1501.0,
+      "achieved_rps": 25.01072800269298,
+      "error_rate": 0.0,
+      "status_429": 0.0,
+      "dropped": 0.0,
+      "vus_peak": 0.0,
+      "avg_ms": 7.94019027914724,
+      "p50_ms": 8.178941,
+      "p90_ms": 8.881489,
+      "p95_ms": 9.109244,
+      "p99_ms": 9.497358,
+      "max_ms": 20.34268,
+      "phases": {
+        "blocked": {
+          "p50_ms": 0.000974,
+          "p95_ms": 0.001137,
+          "p99_ms": 23.370148,
+          "max_ms": 28.956034
+        },
+        "connecting": {
+          "p50_ms": 0.0,
+          "p95_ms": 0.0,
+          "p99_ms": 0.489587,
+          "max_ms": 1.14808
+        },
+        "tls_handshaking": {
+          "p50_ms": 0.0,
+          "p95_ms": 0.0,
+          "p99_ms": 22.665452,
+          "max_ms": 28.108021
+        },
+        "waiting": {
+          "p50_ms": 6.543531,
+          "p95_ms": 7.443745,
+          "p99_ms": 7.871141,
+          "max_ms": 18.049179
+        },
+        "receiving": {
+          "p50_ms": 1.38086,
+          "p95_ms": 1.756345,
+          "p99_ms": 2.01728,
+          "max_ms": 2.95714
+        }
+      },
+      "node_cpu": 12.8,
+      "generator_cpu": 3.5,
+      "node_mem_available_mb": 8750,
+      "pods_top": {
+        "traefik": "107m 61Mi",
+        "web": "112m 4Mi"
+      },
+      "throttled_ms": 0.0,
+      "edge_restarts": 0,
+      "pod_replaced": false,
+      "reasons": []
+    }
+  ],
+  "ramps": [
+    {
+      "target": "api-health",
+      "repeat": 1,
+      "steps": [
+        {
+          "rate": 1000,
+          "target": "api-health",
+          "requests": 59721.0,
+          "achieved_rps": 995.334688899192,
+          "error_rate": 0.0,
+          "status_429": 0.0,
+          "dropped": 279.0,
+          "vus_peak": 130.0,
+          "avg_ms": 3.2809491432661826,
+          "p50_ms": 0.976852,
+          "p90_ms": 1.426842,
+          "p95_ms": 2.023555,
+          "p99_ms": 15.571772600000157,
+          "max_ms": 1091.04628,
+          "phases": {
+            "blocked": {
+              "p50_ms": 0.000408,
+              "p95_ms": 0.000584,
+              "p99_ms": 0.000713,
+              "max_ms": 1160.000273
+            },
+            "connecting": {
+              "p50_ms": 0.0,
+              "p95_ms": 0.0,
+              "p99_ms": 0.0,
+              "max_ms": 17.194999
+            },
+            "tls_handshaking": {
+              "p50_ms": 0.0,
+              "p95_ms": 0.0,
+              "p99_ms": 0.0,
+              "max_ms": 1157.953729
+            },
+            "waiting": {
+              "p50_ms": 0.856464,
+              "p95_ms": 1.827325,
+              "p99_ms": 14.761057600000186,
+              "max_ms": 1066.5977
+            },
+            "receiving": {
+              "p50_ms": 0.060379,
+              "p95_ms": 0.121601,
+              "p99_ms": 0.8083326000000047,
+              "max_ms": 832.177994
+            }
+          },
+          "node_cpu": 42.8,
+          "generator_cpu": 16.5,
+          "node_mem_available_mb": 8667,
+          "pods_top": {
+            "traefik": "872m 116Mi",
+            "api": "279m 14Mi"
+          },
+          "throttled_ms": 0.0,
+          "edge_restarts": 0,
+          "pod_replaced": false,
+          "reasons": []
+        },
+        {
+          "rate": 1200,
+          "target": "api-health",
+          "requests": 69937.0,
+          "achieved_rps": 1165.5330096024759,
+          "error_rate": 0.0,
+          "status_429": 0.0,
+          "dropped": 2064.0,
+          "vus_peak": 916.0,
+          "avg_ms": 39.40754863465659,
+          "p50_ms": 0.920453,
+          "p90_ms": 2.6077278000000015,
+          "p95_ms": 262.1418881999999,
+          "p99_ms": 962.19834828,
+          "max_ms": 1893.918416,
+          "phases": {
+            "blocked": {
+              "p50_ms": 0.000397,
+              "p95_ms": 0.000589,
+              "p99_ms": 908.0767125999989,
+              "max_ms": 3704.104581
+            },
+            "connecting": {
+              "p50_ms": 0.0,
+              "p95_ms": 0.0,
+              "p99_ms": 0.19906384,
+              "max_ms": 7.190494
+            },
+            "tls_handshaking": {
+              "p50_ms": 0.0,
+              "p95_ms": 0.0,
+              "p99_ms": 907.661624239999,
+              "max_ms": 3703.739281
+            },
+            "waiting": {
+              "p50_ms": 0.804779,
+              "p95_ms": 250.213289599999,
+              "p99_ms": 902.0156131199993,
+              "max_ms": 1865.763757
+            },
+            "receiving": {
+              "p50_ms": 0.056511,
+              "p95_ms": 5.267629599999999,
+              "p99_ms": 39.770141919999986,
+              "max_ms": 1174.087606
+            }
+          },
+          "node_cpu": 48.2,
+          "generator_cpu": 16.0,
+          "node_mem_available_mb": 8498,
+          "pods_top": {
+            "traefik": "949m 231Mi",
+            "api": "292m 18Mi"
+          },
+          "throttled_ms": 65.945,
+          "edge_restarts": 0,
+          "pod_replaced": false,
+          "reasons": [
+            "latency"
+          ]
+        }
+      ],
+      "knee": {
+        "last_healthy_rps": 1000,
+        "first_degraded_rps": 1200,
+        "reasons": [
+          "latency"
+        ],
+        "lower_bound_only": false,
+        "vus_at_last_healthy": 130.0
+      }
+    },
+    {
+      "target": "web-static",
+      "repeat": 1,
+      "steps": [
+        {
+          "rate": 1000,
+          "target": "web-static",
+          "requests": 26643.0,
+          "achieved_rps": 409.9444699411545,
+          "error_rate": 0.7248432984273543,
+          "status_429": 0.0,
+          "dropped": 33357.0,
+          "vus_peak": 2000.0,
+          "avg_ms": 4208.311136038095,
+          "p50_ms": 5000.113234,
+          "p90_ms": 5000.836924,
+          "p95_ms": 5000.9350387,
+          "p99_ms": 5001.1187424,
+          "max_ms": 5040.881344,
+          "phases": {
+            "blocked": {
+              "p50_ms": 0.000568,
+              "p95_ms": 1351.8205754999947,
+              "p99_ms": 3964.688054479998,
+              "max_ms": 4998.083139
+            },
+            "connecting": {
+              "p50_ms": 0.0,
+              "p95_ms": 0.2186703999999997,
+              "p99_ms": 0.37167881999999974,
+              "max_ms": 12.072236
+            },
+            "tls_handshaking": {
+              "p50_ms": 0.0,
+              "p95_ms": 1351.4247536999947,
+              "p99_ms": 3962.8134623199967,
+              "max_ms": 4997.734349
+            },
+            "waiting": {
+              "p50_ms": 5000.03709,
+              "p95_ms": 5000.8597412,
+              "p99_ms": 5001.03135078,
+              "max_ms": 5040.776493
+            },
+            "receiving": {
+              "p50_ms": 0.0,
+              "p95_ms": 54.113373499999994,
+              "p99_ms": 648.3845429999963,
+              "max_ms": 2175.440277
+            }
+          },
+          "node_cpu": 56.7,
+          "generator_cpu": 16.5,
+          "node_mem_available_mb": 7809,
+          "pods_top": {
+            "traefik": "787m 897Mi",
+            "web": "500m 6Mi"
+          },
+          "throttled_ms": 85681.121,
+          "edge_restarts": 0,
+          "pod_replaced": true,
+          "reasons": [
+            "rollout",
+            "errors",
+            "latency",
+            "throughput"
+          ]
+        }
+      ],
+      "knee": {
+        "last_healthy_rps": null,
+        "first_degraded_rps": 1000,
+        "reasons": [
+          "rollout",
+          "errors",
+          "latency",
+          "throughput"
+        ],
+        "lower_bound_only": true,
+        "vus_at_last_healthy": null
+      }
+    },
+    {
+      "target": "api-health",
+      "repeat": 2,
+      "steps": [
+        {
+          "rate": 1000,
+          "target": "api-health",
+          "requests": 59747.0,
+          "achieved_rps": 995.753794728506,
+          "error_rate": 0.0,
+          "status_429": 0.0,
+          "dropped": 254.0,
+          "vus_peak": 72.0,
+          "avg_ms": 1.840045123403703,
+          "p50_ms": 0.99206,
+          "p90_ms": 1.4728966000000001,
+          "p95_ms": 2.2505725,
+          "p99_ms": 9.792321420000004,
+          "max_ms": 480.57283,
+          "phases": {
+            "blocked": {
+              "p50_ms": 0.000395,
+              "p95_ms": 0.000578,
+              "p99_ms": 0.000707,
+              "max_ms": 1234.031509
+            },
+            "connecting": {
+              "p50_ms": 0.0,
+              "p95_ms": 0.0,
+              "p99_ms": 0.0,
+              "max_ms": 6.32337
+            },
+            "tls_handshaking": {
+              "p50_ms": 0.0,
+              "p95_ms": 0.0,
+              "p99_ms": 0.0,
+              "max_ms": 1233.601732
+            },
+            "waiting": {
+              "p50_ms": 0.87189,
+              "p95_ms": 2.032576999999998,
+              "p99_ms": 8.903090520000069,
+              "max_ms": 478.509592
+            },
+            "receiving": {
+              "p50_ms": 0.061516,
+              "p95_ms": 0.12559439999999994,
+              "p99_ms": 0.893345340000002,
+              "max_ms": 31.296206
+            }
+          },
+          "node_cpu": 43.3,
+          "generator_cpu": 10.3,
+          "node_mem_available_mb": 8625,
+          "pods_top": {
+            "traefik": "895m 152Mi",
+            "api": "280m 10Mi"
+          },
+          "throttled_ms": 0.0,
+          "edge_restarts": 0,
+          "pod_replaced": false,
+          "reasons": []
+        },
+        {
+          "rate": 1200,
+          "target": "api-health",
+          "requests": 71800.0,
+          "achieved_rps": 1196.6438184880863,
+          "error_rate": 0.0,
+          "status_429": 0.0,
+          "dropped": 200.0,
+          "vus_peak": 40.0,
+          "avg_ms": 1.4033621634540288,
+          "p50_ms": 0.9007229999999999,
+          "p90_ms": 1.4912331999999997,
+          "p95_ms": 2.3356883500000007,
+          "p99_ms": 9.556342279999983,
+          "max_ms": 359.805868,
+          "phases": {
+            "blocked": {
+              "p50_ms": 0.000386,
+              "p95_ms": 0.000559,
+              "p99_ms": 0.000686,
+              "max_ms": 754.914967
+            },
+            "connecting": {
+              "p50_ms": 0.0,
+              "p95_ms": 0.0,
+              "p99_ms": 0.0,
+              "max_ms": 13.817667
+            },
+            "tls_handshaking": {
+              "p50_ms": 0.0,
+              "p95_ms": 0.0,
+              "p99_ms": 0.0,
+              "max_ms": 754.527733
+            },
+            "waiting": {
+              "p50_ms": 0.782456,
+              "p95_ms": 2.1169311500000005,
+              "p99_ms": 8.506338279999968,
+              "max_ms": 359.464453
+            },
+            "receiving": {
+              "p50_ms": 0.060436,
+              "p95_ms": 0.13205915000000001,
+              "p99_ms": 0.9615269699999995,
+              "max_ms": 35.563864
+            }
+          },
+          "node_cpu": 43.3,
+          "generator_cpu": 14.0,
+          "node_mem_available_mb": 8618,
+          "pods_top": {
+            "traefik": "995m 133Mi",
+            "api": "298m 10Mi"
+          },
+          "throttled_ms": 0.0,
+          "edge_restarts": 0,
+          "pod_replaced": false,
+          "reasons": []
+        },
+        {
+          "rate": 1400,
+          "target": "api-health",
+          "requests": 83470.0,
+          "achieved_rps": 1391.1249777579292,
+          "error_rate": 0.0,
+          "status_429": 0.0,
+          "dropped": 531.0,
+          "vus_peak": 337.0,
+          "avg_ms": 2.8320005953276506,
+          "p50_ms": 0.8394465,
+          "p90_ms": 1.6280544000000006,
+          "p95_ms": 3.716451100000001,
+          "p99_ms": 61.248268259999875,
+          "max_ms": 407.482839,
+          "phases": {
+            "blocked": {
+              "p50_ms": 0.000373,
+              "p95_ms": 0.000539,
+              "p99_ms": 0.000666,
+              "max_ms": 1390.668748
+            },
+            "connecting": {
+              "p50_ms": 0.0,
+              "p95_ms": 0.0,
+              "p99_ms": 0.0,
+              "max_ms": 15.029962
+            },
+            "tls_handshaking": {
+              "p50_ms": 0.0,
+              "p95_ms": 0.0,
+              "p99_ms": 0.0,
+              "max_ms": 1390.284677
+            },
+            "waiting": {
+              "p50_ms": 0.7229365000000001,
+              "p95_ms": 3.2858809000000155,
+              "p99_ms": 58.778459449999495,
+              "max_ms": 386.680689
+            },
+            "receiving": {
+              "p50_ms": 0.0569365,
+              "p95_ms": 0.21364765000000036,
+              "p99_ms": 3.4294709799999947,
+              "max_ms": 189.351169
+            }
+          },
+          "node_cpu": 46.1,
+          "generator_cpu": 15.6,
+          "node_mem_available_mb": 8578,
+          "pods_top": {
+            "traefik": "998m 182Mi",
+            "api": "299m 14Mi"
+          },
+          "throttled_ms": 0.0,
+          "edge_restarts": 0,
+          "pod_replaced": false,
+          "reasons": []
+        },
+        {
+          "rate": 1600,
+          "target": "api-health",
+          "requests": 95683.0,
+          "achieved_rps": 1594.6819976687425,
+          "error_rate": 0.0,
+          "status_429": 0.0,
+          "dropped": 317.0,
+          "vus_peak": 163.0,
+          "avg_ms": 2.740851251894252,
+          "p50_ms": 0.816042,
+          "p90_ms": 1.9270712000000003,
+          "p95_ms": 5.701685899999999,
+          "p99_ms": 45.16517231999975,
+          "max_ms": 559.266474,
+          "phases": {
+            "blocked": {
+              "p50_ms": 0.000373,
+              "p95_ms": 0.00053,
+              "p99_ms": 0.000639,
+              "max_ms": 1616.347884
+            },
+            "connecting": {
+              "p50_ms": 0.0,
+              "p95_ms": 0.0,
+              "p99_ms": 0.0,
+              "max_ms": 12.926708
+            },
+            "tls_handshaking": {
+              "p50_ms": 0.0,
+              "p95_ms": 0.0,
+              "p99_ms": 0.0,
+              "max_ms": 1616.001326
+            },
+            "waiting": {
+              "p50_ms": 0.699309,
+              "p95_ms": 4.826412099999994,
+              "p99_ms": 42.350128299999774,
+              "max_ms": 558.508026
+            },
+            "receiving": {
+              "p50_ms": 0.056529,
+              "p95_ms": 0.43348999999999954,
+              "p99_ms": 3.9043121999999753,
+              "max_ms": 213.9728
+            }
+          },
+          "node_cpu": 46.0,
+          "generator_cpu": 15.6,
+          "node_mem_available_mb": 8545,
+          "pods_top": {
+            "traefik": "1069m 163Mi",
+            "api": "316m 13Mi"
+          },
+          "throttled_ms": 0.0,
+          "edge_restarts": 0,
+          "pod_replaced": false,
+          "reasons": []
+        },
+        {
+          "rate": 2000,
+          "target": "api-health",
+          "requests": 66342.0,
+          "achieved_rps": 1105.468821283205,
+          "error_rate": 0.43834976334750236,
+          "status_429": 0.0,
+          "dropped": 53659.0,
+          "vus_peak": 4000.0,
+          "avg_ms": 2044.5533344422986,
+          "p50_ms": 83.339106,
+          "p90_ms": 5000.7189033,
+          "p95_ms": 5001.1731242,
+          "p99_ms": 5003.19919387,
+          "max_ms": 5021.124808,
+          "phases": {
+            "blocked": {
+              "p50_ms": 0.000435,
+              "p95_ms": 781.7160141999948,
+              "p99_ms": 4039.1239580899914,
+              "max_ms": 4997.490993
+            },
+            "connecting": {
+              "p50_ms": 0.0,
+              "p95_ms": 0.23837849999999997,
+              "p99_ms": 0.4314568999999982,
+              "max_ms": 19.489251
+            },
+            "tls_handshaking": {
+              "p50_ms": 0.0,
+              "p95_ms": 781.3535336499945,
+              "p99_ms": 4038.8166011399903,
+              "max_ms": 4997.203534
+            },
+            "waiting": {
+              "p50_ms": 77.43217250000001,
+              "p95_ms": 5001.0904794,
+              "p99_ms": 5003.11799827,
+              "max_ms": 5021.057192
+            },
+            "receiving": {
+              "p50_ms": 0.034908499999999995,
+              "p95_ms": 123.21027454999982,
+              "p99_ms": 1785.7076517299997,
+              "max_ms": 3796.366598
+            }
+          },
+          "node_cpu": 83.1,
+          "generator_cpu": 31.4,
+          "node_mem_available_mb": 7384,
+          "pods_top": {
+            "traefik": "3620m 1134Mi",
+            "api": "127m 99Mi"
+          },
+          "throttled_ms": 1119.085,
+          "edge_restarts": 0,
+          "pod_replaced": false,
+          "reasons": [
+            "errors",
+            "latency",
+            "throughput"
+          ]
+        }
+      ],
+      "knee": {
+        "last_healthy_rps": 1600,
+        "first_degraded_rps": 2000,
+        "reasons": [
+          "errors",
+          "latency",
+          "throughput"
+        ],
+        "lower_bound_only": false,
+        "vus_at_last_healthy": 163.0
+      }
+    },
+    {
+      "target": "web-static",
+      "repeat": 2,
+      "steps": [
+        {
+          "rate": 1000,
+          "target": "web-static",
+          "requests": 25615.0,
+          "achieved_rps": 394.08481106031275,
+          "error_rate": 0.8480968182705446,
+          "status_429": 0.0,
+          "dropped": 34386.0,
+          "vus_peak": 2000.0,
+          "avg_ms": 4425.845358653662,
+          "p50_ms": 5000.298027,
+          "p90_ms": 5000.8676909999995,
+          "p95_ms": 5000.9547985,
+          "p99_ms": 5001.130289080001,
+          "max_ms": 5014.144299,
+          "phases": {
+            "blocked": {
+              "p50_ms": 0.000562,
+              "p95_ms": 1013.4550204999983,
+              "p99_ms": 3691.555297480001,
+              "max_ms": 4996.581986
+            },
+            "connecting": {
+              "p50_ms": 0.0,
+              "p95_ms": 0.22722819999999996,
+              "p99_ms": 0.3831616200000001,
+              "max_ms": 10.330221
+            },
+            "tls_handshaking": {
+              "p50_ms": 0.0,
+              "p95_ms": 1014.6989536999998,
+              "p99_ms": 3693.8749579400014,
+              "max_ms": 5003.078261
+            },
+            "waiting": {
+              "p50_ms": 5000.2072,
+              "p95_ms": 5000.8749872,
+              "p99_ms": 5001.0224944,
+              "max_ms": 5014.061918
+            },
+            "receiving": {
+              "p50_ms": 0.0,
+              "p95_ms": 85.90490499999993,
+              "p99_ms": 898.1022100000014,
+              "max_ms": 3136.462105
+            }
+          },
+          "node_cpu": 43.0,
+          "generator_cpu": 13.6,
+          "node_mem_available_mb": 7806,
+          "pods_top": {
+            "traefik": "1086m 1003Mi",
+            "web": "502m 6Mi"
+          },
+          "throttled_ms": 82381.292,
+          "edge_restarts": 0,
+          "pod_replaced": false,
+          "reasons": [
+            "errors",
+            "latency",
+            "throughput"
+          ]
+        }
+      ],
+      "knee": {
+        "last_healthy_rps": null,
+        "first_degraded_rps": 1000,
+        "reasons": [
+          "errors",
+          "latency",
+          "throughput"
+        ],
+        "lower_bound_only": false,
+        "vus_at_last_healthy": null
+      }
+    },
+    {
+      "target": "api-health",
+      "repeat": 3,
+      "steps": [
+        {
+          "rate": 1000,
+          "target": "api-health",
+          "requests": 59509.0,
+          "achieved_rps": 991.7706464920691,
+          "error_rate": 0.0,
+          "status_429": 0.0,
+          "dropped": 492.0,
+          "vus_peak": 307.0,
+          "avg_ms": 5.29450253067598,
+          "p50_ms": 0.975174,
+          "p90_ms": 1.472673600000001,
+          "p95_ms": 2.4352413999999993,
+          "p99_ms": 162.63552003999988,
+          "max_ms": 1127.638753,
+          "phases": {
+            "blocked": {
+              "p50_ms": 0.000397,
+              "p95_ms": 0.000605,
+              "p99_ms": 0.000738,
+              "max_ms": 1468.690968
+            },
+            "connecting": {
+              "p50_ms": 0.0,
+              "p95_ms": 0.0,
+              "p99_ms": 0.0,
+              "max_ms": 6.629693
+            },
+            "tls_handshaking": {
+              "p50_ms": 0.0,
+              "p95_ms": 0.0,
+              "p99_ms": 0.0,
+              "max_ms": 1468.351011
+            },
+            "waiting": {
+              "p50_ms": 0.856261,
+              "p95_ms": 2.218952599999999,
+              "p99_ms": 148.41116519999972,
+              "max_ms": 1119.220371
+            },
+            "receiving": {
+              "p50_ms": 0.059827,
+              "p95_ms": 0.13052439999999998,
+              "p99_ms": 4.839222719999997,
+              "max_ms": 859.864472
+            }
+          },
+          "node_cpu": 33.4,
+          "generator_cpu": 9.5,
+          "node_mem_available_mb": 8512,
+          "pods_top": {
+            "traefik": "888m 189Mi",
+            "api": "277m 25Mi"
+          },
+          "throttled_ms": 0.0,
+          "edge_restarts": 0,
+          "pod_replaced": false,
+          "reasons": []
+        },
+        {
+          "rate": 1200,
+          "target": "api-health",
+          "requests": 64622.0,
+          "achieved_rps": 1076.916930674597,
+          "error_rate": 0.022144161431091578,
+          "status_429": 0.0,
+          "dropped": 7379.0,
+          "vus_peak": 2400.0,
+          "avg_ms": 259.5384402491737,
+          "p50_ms": 0.965822,
+          "p90_ms": 945.9583616000002,
+          "p95_ms": 2313.031612149998,
+          "p99_ms": 3661.44763601,
+          "max_ms": 5008.180293,
+          "phases": {
+            "blocked": {
+              "p50_ms": 0.000399,
+              "p95_ms": 0.000652,
+              "p99_ms": 3065.4449973700007,
+              "max_ms": 4997.989289
+            },
+            "connecting": {
+              "p50_ms": 0.0,
+              "p95_ms": 0.0,
+              "p99_ms": 0.2545685100000001,
+              "max_ms": 40.459477
+            },
+            "tls_handshaking": {
+              "p50_ms": 0.0,
+              "p95_ms": 0.0,
+              "p99_ms": 3065.0904371700008,
+              "max_ms": 4997.671055
+            },
+            "waiting": {
+              "p50_ms": 0.8509340000000001,
+              "p95_ms": 2254.2829615499954,
+              "p99_ms": 3592.7454755900003,
+              "max_ms": 5008.026302
+            },
+            "receiving": {
+              "p50_ms": 0.056186,
+              "p95_ms": 24.101980099999995,
+              "p99_ms": 87.39896211000004,
+              "max_ms": 3023.324319
+            }
+          },
+          "node_cpu": 47.2,
+          "generator_cpu": 15.8,
+          "node_mem_available_mb": 8298,
+          "pods_top": {
+            "traefik": "2519m 453Mi",
+            "api": "232m 32Mi"
+          },
+          "throttled_ms": 146.391,
+          "edge_restarts": 0,
+          "pod_replaced": false,
+          "reasons": [
+            "errors",
+            "latency",
+            "throughput"
+          ]
+        }
+      ],
+      "knee": {
+        "last_healthy_rps": 1000,
+        "first_degraded_rps": 1200,
+        "reasons": [
+          "errors",
+          "latency",
+          "throughput"
+        ],
+        "lower_bound_only": false,
+        "vus_at_last_healthy": 307.0
+      }
+    },
+    {
+      "target": "web-static",
+      "repeat": 3,
+      "steps": [
+        {
+          "rate": 1000,
+          "target": "web-static",
+          "requests": 25695.0,
+          "achieved_rps": 395.2964006173568,
+          "error_rate": 0.7946682233897645,
+          "status_429": 0.0,
+          "dropped": 34305.0,
+          "vus_peak": 2000.0,
+          "avg_ms": 4372.875605597411,
+          "p50_ms": 5000.210075,
+          "p90_ms": 5000.8560048,
+          "p95_ms": 5000.9485436,
+          "p99_ms": 5001.10415036,
+          "max_ms": 5013.747023,
+          "phases": {
+            "blocked": {
+              "p50_ms": 0.000567,
+              "p95_ms": 1256.068950199999,
+              "p99_ms": 3734.830251460001,
+              "max_ms": 4995.545772
+            },
+            "connecting": {
+              "p50_ms": 0.0,
+              "p95_ms": 0.22531779999999998,
+              "p99_ms": 0.38616952000000093,
+              "max_ms": 25.86207
+            },
+            "tls_handshaking": {
+              "p50_ms": 0.0,
+              "p95_ms": 1255.4831700999987,
+              "p99_ms": 3734.4189206800006,
+              "max_ms": 4995.171002
+            },
+            "waiting": {
+              "p50_ms": 5000.136397,
+              "p95_ms": 5000.877365,
+              "p99_ms": 5001.03666054,
+              "max_ms": 5013.660577
+            },
+            "receiving": {
+              "p50_ms": 0.0,
+              "p95_ms": 40.3869311,
+              "p99_ms": 370.71779234,
+              "max_ms": 2974.238787
+            }
+          },
+          "node_cpu": 41.1,
+          "generator_cpu": 13.2,
+          "node_mem_available_mb": 7697,
+          "pods_top": {
+            "traefik": "909m 920Mi",
+            "web": "500m 6Mi"
+          },
+          "throttled_ms": 84609.109,
+          "edge_restarts": 0,
+          "pod_replaced": false,
+          "reasons": [
+            "errors",
+            "latency",
+            "throughput"
+          ]
+        }
+      ],
+      "knee": {
+        "last_healthy_rps": null,
+        "first_degraded_rps": 1000,
+        "reasons": [
+          "errors",
+          "latency",
+          "throughput"
+        ],
+        "lower_bound_only": false,
+        "vus_at_last_healthy": null
+      }
+    }
+  ],
+  "restarts_during_run": {
+    "api": 0,
+    "web": 0,
+    "traefik": 0
+  },
+  "date": "2026-11-06T02:22Z",
+  "commit": "f3f44a24"
+}

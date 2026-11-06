@@ -126,6 +126,37 @@ class TestBypassRoute:
         assert lt.k6_env(target, "10.0.0.2", 100, 60, bypass=True)["LT_BYPASS_HEADER"] == lt.BYPASS_HEADER
 
 
+class TestAcceptEncoding:
+    """An A/B on what the client accepts: k6 sends `Accept-Encoding: gzip` by default,
+    which makes a server that compresses per request pay for it on every request."""
+
+    def test_k6s_own_default_sends_nothing_extra(self) -> None:
+        target = lt.build_targets(STAGING, PROD)[1]
+        assert "LT_ACCEPT_ENCODING" not in lt.k6_env(target, "10.0.0.2", 800, 60, bypass=True)
+
+    def test_a_declared_encoding_reaches_k6(self) -> None:
+        target = lt.build_targets(STAGING, PROD)[1]
+        env = lt.k6_env(target, "10.0.0.2", 800, 60, bypass=True, accept_encoding="identity")
+        assert env["LT_ACCEPT_ENCODING"] == "identity"
+
+    @pytest.mark.parametrize("value", ["br", "identity;q=1", "gzip identity", "x -e LT_HOST=evil", ""])
+    def test_anything_but_identity_or_gzip_is_refused(self, value: str) -> None:
+        # The value lands unquoted in the `docker run -e` line.
+        with pytest.raises(lt.LoadTestRefused):
+            lt.refuse_unknown_encoding(value)
+
+    def test_the_script_sends_it_as_the_header(self) -> None:
+        # A live statement on the headers object the request sends, set before the
+        # request runs: not a comment, not a different object, not after the call.
+        script = (REPO / lt.SCRIPT).read_text(encoding="utf-8")
+        live = [line for line in script.splitlines() if not line.lstrip().startswith("//")]
+        code = "\n".join(live)
+        assign = code.find("if (LT_ACCEPT_ENCODING) headers['Accept-Encoding'] = LT_ACCEPT_ENCODING;")
+        assert assign != -1, "the header is not set on `headers`"
+        assert assign < code.find("export default function")
+        assert "http.get(`https://${LT_HOST}${LT_PATH}`, { headers," in code, "the request does not send `headers`"
+
+
 class TestVerdict:
     def test_a_healthy_step_has_no_reasons(self) -> None:
         assert lt.classify(_step(), 100) == []
@@ -355,6 +386,18 @@ class TestKeepsWhatItMeasured:
         assert [len(r["ramps"]) for r in seen] == [0, 1]
         assert all(r["incomplete"] for r in seen)
         assert lab.disarmed
+
+    @pytest.mark.parametrize(("given", "recorded"), [(None, "gzip (k6 default)"), ("identity", "identity")])
+    def test_the_result_says_what_the_client_accepted(
+        self, monkeypatch: pytest.MonkeyPatch, given: str | None, recorded: str
+    ) -> None:
+        monkeypatch.setattr(lt, "run_step", lambda *_a, **_k: {**_step(), "reasons": ["errors"]})
+        monkeypatch.setattr(lt, "_runtime_facts", lambda *_: {})
+        monkeypatch.setattr(lt, "wait_for_stable_edge", lambda *_: None)
+        monkeypatch.setattr("time.sleep", lambda _: None)
+        target = lt.Target("api", "api.example", "/health", "api")
+        result = lt.run(_DyingLab(), "img", (target,), "1.2.3.4", 1, 1, 50, accept_encoding=given)
+        assert result["facts"]["accept_encoding"] == recorded
 
     def test_a_report_of_a_partial_run_says_so(self) -> None:
         assert lt.render({"baseline": [], "ramps": [], "incomplete": True}).startswith("**Incomplete")
