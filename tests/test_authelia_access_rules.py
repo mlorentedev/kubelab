@@ -43,7 +43,10 @@ def _render(overlay: str) -> list[dict]:
     if shutil.which("kubectl") is None:
         pytest.skip("kubectl not on PATH: cannot render the overlay (a skip is CANNOT CHECK, not OK)")
     out = subprocess.run(
-        ["kubectl", "kustomize", str(REPO / "infra/k8s/overlays" / overlay)], capture_output=True, text=True
+        ["kubectl", "kustomize", str(REPO / "infra/k8s/overlays" / overlay)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
     )
     assert out.returncode == 0, out.stderr
     return [doc for doc in yaml.safe_load_all(out.stdout) if doc]
@@ -51,9 +54,7 @@ def _render(overlay: str) -> list[dict]:
 
 def _access_control(docs: list[dict]) -> dict:
     """From the rendered ConfigMap, so the prod overlay's replacement is what gets judged."""
-    (config,) = [
-        d for d in docs if d["kind"] == "ConfigMap" and d["metadata"]["name"].startswith("authelia-config")
-    ]
+    (config,) = [d for d in docs if d["kind"] == "ConfigMap" and d["metadata"]["name"].startswith("authelia-config")]
     return yaml.safe_load(config["data"]["configuration.yml"])["access_control"]
 
 
@@ -83,9 +84,7 @@ def _explicit_domains(access: dict) -> set[str]:
 @pytest.mark.parametrize("overlay", OVERLAYS)
 def test_the_render_measured_the_routes_it_is_judging(overlay: str) -> None:
     """An empty render would pass every assertion below over nothing."""
-    assert {f"grafana.{'staging.' if overlay == 'staging' else ''}kubelab.live"} <= _guarded_hosts(
-        _render(overlay)
-    )
+    assert {f"grafana.{'staging.' if overlay == 'staging' else ''}kubelab.live"} <= _guarded_hosts(_render(overlay))
 
 
 @pytest.mark.parametrize("overlay", OVERLAYS)
