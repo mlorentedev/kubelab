@@ -92,6 +92,8 @@ created: "2026-10-21"
   - [x] ✓ 2026-11-02 `forge.AppTokens`: RS256 JWT with the standard library, exchanged at `/app/installations/{id}/access_tokens`, cached until five minutes before expiry; `GitHub.Tokens` takes it per read, and a failed mint is a `SourceError`
   - [x] ✓ 2026-11-02 Read once with the deployed image: on staging at `sha-75346a3` the first full read returned 2936 items, and each of the four counts (issues and pull requests, open and closed) equals GitHub's search count. The pod used 11 MiB. The App's grant needs nothing more
 - [ ] [AC7] Runbook: rebuild, restore, rotate tokens; token expiry dates in the SOPS catalog
+- [ ] A8 usage counter (ADR-066 A8, ADR-074 sequence step 2): one daily row per operator identity read from `Remote-User`, in its own table outside the rebuildable projection and covered by the backup. It ships with the first prod promote of the console or right after it: A8's 14 days run from the day the console is live in prod (`console.kubelab.live`, api 1.4.0), and a day of use that was not recorded cannot be replayed
+- [ ] Hand over to the Vikunja retirement (#2587) only when both of its gates hold: parity, meaning the narrow writes of section 3 have shipped, and the operator has opened the console on at least 5 of 14 consecutive days, read from the counter. Until then Vikunja keeps running as the fallback A8 reverts to
 
 ### 6. End to end
 
