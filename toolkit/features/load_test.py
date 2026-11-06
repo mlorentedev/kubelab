@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import re
+import shlex
 import subprocess
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
@@ -137,8 +138,9 @@ def k6_env(
 
 
 def k6_command(image: str, env: dict[str, str]) -> str:
-    flags = " ".join(f"-e {key}={value}" for key, value in sorted(env.items()))
-    return f"docker run --rm -i --network host {flags} {image} run --quiet --no-usage-report -"
+    """One remote shell runs this, so every value is quoted, not only the ones checked."""
+    flags = " ".join(f"-e {shlex.quote(f'{key}={value}')}" for key, value in sorted(env.items()))
+    return f"docker run --rm -i --network host {flags} {shlex.quote(image)} run --quiet --no-usage-report -"
 
 
 def parse_summary(stdout: str) -> dict[str, Any]:
@@ -199,17 +201,19 @@ def knee(steps: list[dict[str, Any]]) -> dict[str, Any]:
 
     A ramp that ended on the generator, or never degraded, says nothing about where
     the service stops: `last_healthy_rps` is then only a lower bound. One stopped by
-    the limiter measured nothing at all, and neither did one a rollout cut short."""
+    the limiter measured nothing at all, and neither did one a rollout cut short:
+    `measured` is then false and no figure stands beside it."""
     healthy = [s["rate"] for s in steps if not s["reasons"]]
     bad = next((s for s in steps if s["reasons"]), None)
-    invalid = bad is not None and bool({"limiter", "rollout"} & set(bad["reasons"]))
-    bound = bad is None or invalid or "generator" in bad["reasons"]
+    measured = not (bad is not None and bool({"limiter", "rollout"} & set(bad["reasons"])))
+    last = healthy[-1] if healthy and measured else None
     return {
-        "last_healthy_rps": healthy[-1] if healthy and not invalid else None,
+        "measured": measured,
+        "last_healthy_rps": last,
         "first_degraded_rps": bad["rate"] if bad else None,
         "reasons": bad["reasons"] if bad else [],
-        "lower_bound_only": bound,
-        "vus_at_last_healthy": next((s["vus_peak"] for s in steps if healthy and s["rate"] == healthy[-1]), None),
+        "lower_bound_only": measured and (bad is None or "generator" in bad["reasons"]),
+        "vus_at_last_healthy": next((s["vus_peak"] for s in steps if s["rate"] == last), None),
     }
 
 
