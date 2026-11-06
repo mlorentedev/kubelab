@@ -68,6 +68,7 @@ created: "2026-09-03"
 - Operator 2026-10-21: attestation adopts the content predicate in PR 1; every registry app is in the class (api proven against this repository); names `deploy-shape`.
 - Check-run, not commit status: only a check-run can answer `neutral` for a normal PR.
 - Consumers recompute from master's code; the check is visible, not authoritative.
+- Traceability (final review, Minor): `features.json` breaks out only f1 and f2 (AC1, AC2). AC3–AC8 are proven in the Evidence section above and stay unlisted there, because the review's contract digest froze `features.json`.
 
 ## Promotion candidates
 
