@@ -37,8 +37,8 @@ Agents author on the Gitea forge as its superadmin. The `toolkit services gitea`
 
 ## Acceptance criteria
 
-- [ ] AC1: the declared identity, its scopes (by equality), the mint and record tasks, the orphan guards, the catalog and the rotation entry agree. A test fails on any drift.
-- [ ] AC2: `make provision NODE=bee ENV=prod TAGS=gitea` creates `dedalo` and records `agent_token`. A second run reports `changed=0`. (Blocked by #3080: the unused `github-runner` crash-loops and fails every run.)
+- [x] AC1: the declared identity, its scopes (by equality), the mint and record tasks, the orphan guards, the catalog and the rotation entry agree. A test fails on any drift.
+- [x] AC2: `make provision NODE=bee ENV=prod TAGS=gitea` creates `dedalo` and records `agent_token`. A second run reports `changed=0`. Measured 2026-11-06 after #3149 turned the crash-looping `github-runner` off.
 - [x] AC3: `make gitea-reconcile ENV=prod APPLY=1` makes `dedalo` a write collaborator on `personal/imagesensortool` and nowhere else. A second plan is a no-op.
 - [x] AC4: the token is in Bitwarden under `GITEA_KUBELAB_AGENT_TOKEN`, checked by consequence (`dotf secrets verify`), never printed.
 - [x] AC5: `dedalo` has opened one PR on `personal/imagesensortool`. `GET pulls/{n}` reports `.user.login == dedalo`.
