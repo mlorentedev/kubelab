@@ -102,7 +102,7 @@ def test_the_authelia_template_renders_clients_without_an_alg(monkeypatch: pytes
     env = TemplateRenderer(REPO / "infra/config/authelia/templates").env
     template_name = "configuration.yml.j2"
     source = env.loader.get_source(env, template_name)[0]  # type: ignore[union-attr]
-    lists = {"apps": [], "authelia_users": [], "trusted_cidrs": [], "oidc_clients": clients}
+    lists = {"apps": [], "authelia_users": [], "oidc_clients": clients}
     context = {name: "unset" for name in meta.find_undeclared_variables(env.parse(source))} | lists
     text = env.get_template(template_name).render(context)
     # The JWKS key is left as Authelia's own template expression, which Authelia

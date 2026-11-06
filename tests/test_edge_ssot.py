@@ -110,19 +110,16 @@ def test_the_rpi4s_wifi_address_is_the_lab_gateway(networking: dict[str, Any], e
     assert networking["nodes"]["rpi4"]["wifi_lan_ip"] == edge["lab_wifi"]["gateway"]
 
 
-def test_no_trust_list_names_the_lab_cidr(networking: dict[str, Any], edge: dict[str, Any]) -> None:
+def test_no_trust_list_names_the_lab_cidr(edge: dict[str, Any]) -> None:
     """No trust list names the lab network on purpose (ADR-041, AC3).
 
-    This does not show that lab clients are untrusted. The RFC 1918 supernets in
-    `trusted_cidrs` predate this edge and contain the lab CIDR, so what keeps a lab
-    client from the LAN is the edge's forward drops, tested with the firewall.
-    What this forbids is an entry that names the lab network itself, or a range
-    inside it, and an advertised route to it: trust granted to the personal
-    devices deliberately.
+    This does not show that lab clients are untrusted: what keeps a lab client
+    from the LAN is the edge's forward drops, tested with the firewall. What this
+    forbids is an advertised route to the lab network: trust granted to the
+    personal devices deliberately. `trusted_cidrs` is no longer checked here:
+    since #2669 no component trusts it, and it is only the agent egress deny list,
+    where naming the lab would deny more, not trust more.
     """
-    lab = ipaddress.ip_network(edge["lab_wifi"]["cidr"])
-    for entry in networking["trusted_cidrs"]:
-        assert not ipaddress.ip_network(entry).subnet_of(lab), entry
     # Parsed, not matched by line: a block list would put its second route on a
     # line a regex never reads.
     routes = _values_of(yaml.safe_load(PLAYBOOK.read_text(encoding="utf-8")), "tailscale_advertise_routes")

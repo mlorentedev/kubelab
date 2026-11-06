@@ -144,16 +144,11 @@ class AutheliaGenerator(BaseGenerator):
                     }
                 )
 
-            # SSOT: trusted CIDRs for Authelia access_control networks
-            networking = get_nested(merged_config, ["networking"], {})
-            trusted_cidrs = networking.get("trusted_cidrs", [])
-
             # Final context combining env_vars, apps list, users, and Argon2 constants
             context = {
                 **env_vars,
                 "apps": apps,
                 "authelia_users": authelia_users,
-                "trusted_cidrs": trusted_cidrs,
                 "oidc_clients": processed_oidc_clients,  # Add the processed clients list
                 "ARGON2_TIME_COST": AUTHELIA_CONFIG.ARGON2_TIME_COST,
                 "ARGON2_MEMORY_COST": AUTHELIA_CONFIG.ARGON2_MEMORY_COST,

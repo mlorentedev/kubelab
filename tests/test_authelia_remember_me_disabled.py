@@ -59,7 +59,6 @@ def test_the_rendered_dev_config_disables_remember_me(monkeypatch: pytest.Monkey
         **manager.get_env_vars(),
         "apps": [],
         "authelia_users": [],
-        "trusted_cidrs": [],
         "oidc_clients": [],
         **{name: getattr(AUTHELIA_CONFIG, name) for name in dir(AUTHELIA_CONFIG) if name.startswith("ARGON2_")},
     }

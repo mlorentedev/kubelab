@@ -58,14 +58,11 @@ webauthn:
 
 # ---- Access Control ----
 access_control:
+  # One explicit rule per host; anything unlisted is denied. No rule is scoped by
+  # `networks`: every client reaches Authelia from the pod CIDR (klipper-lb
+  # masquerade, #1067), so a network condition matches everyone (#2669).
+  # tests/test_authelia_access_rules.py holds both.
   default_policy: deny
-
-  networks:
-    - name: internal
-      networks:
-        - '10.0.0.0/8'
-        - '172.16.0.0/12'
-        - '192.168.0.0/16'
 
   rules:
     # Authelia portal (always bypass)
@@ -95,12 +92,8 @@ access_control:
     # Uptime Kuma's admin surface (#2483); its public paths skip the ForwardAuth.
     - domain: 'status.staging.kubelab.live'
       policy: one_factor
-
-    # Internal network catch-all
-    - domain: '*.staging.kubelab.live'
+    - domain: 'traefik.staging.kubelab.live'
       policy: one_factor
-      networks:
-        - internal
 
 # ---- Session ----
 session:
