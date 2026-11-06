@@ -101,6 +101,7 @@ def _template_vars(runner: dict) -> dict:
         gitea_oidc_discovery_url="https://auth.kubelab.live/.well-known/openid-configuration",
         gitea_cpu_limit=gitea["resources"]["cpu_limit"],
         gitea_memory_limit=gitea["resources"]["memory_limit"],
+        runner_enabled=True,
         runner_image="myoung34/github-runner",
         runner_repo_url="https://github.com/mlorentedev/kubelab",
         runner_access_token="x",

@@ -105,8 +105,10 @@ def test_the_declaration_is_read_from_a_real_render() -> None:
     """
     services = _beelink_compose().get("services") or {}
     # Named rather than counted: the stack shrank when OPS-023 retired its object
-    # store, and a count floor would have to follow every such change.
-    assert {"gitea", "github-runner"} <= set(services), (
+    # store, and a count floor would have to follow every such change. Only
+    # `gitea` renders unconditionally: both runners sit behind an `enabled` flag
+    # this render leaves undefined (github-runner since #3080).
+    assert {"gitea"} <= set(services), (
         f"parsed services {sorted(services)} from the beelink compose render; "
         f"the render is broken and the WAL assertion above proves nothing"
     )

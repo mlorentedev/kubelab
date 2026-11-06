@@ -17,7 +17,7 @@
   vars:
     image_pull_name: the Beelink services
     image_pull_images: >-
-      {{ [gitea_image, runner_image] + ([act_runner_image] if act_runner_enabled | bool else []) }}
+      {{ [gitea_image] + ([runner_image] if runner_enabled | bool else []) + ([act_runner_image] if act_runner_enabled | bool else []) }}
 
 # --- Cleanup legacy Ollama (bare metal) ---
 - name: Check if Ollama service exists
@@ -119,6 +119,21 @@
   notify: Restart gitea
   tags: [gitea]
 
+- name: Remove the GitHub runner container when it is not declared
+  # The same absence half as the act_runner task below (#3080): `compose up -d`
+  # leaves a service the template no longer renders running as an orphan. Its
+  # registration needs no counterpart here: the runner is EPHEMERAL and none is
+  # registered on GitHub.
+  command: docker rm -f github-runner
+  register: _github_runner_rm
+  # `docker rm -f` exits 0 for a container that does not exist (Docker 29.9.2,
+  # measured on bee 2026-11-06), and prints the name only of one it removed, so
+  # stdout, not the exit code, is what tells a removal from the converged state.
+  changed_when: _github_runner_rm.stdout | length > 0
+  failed_when: _github_runner_rm.rc != 0 and 'No such container' not in _github_runner_rm.stderr
+  when: not (runner_enabled | bool)
+  tags: [gitea, runner]
+
 - name: Remove the act_runner container when it is not declared
   # THE ABSENCE HALF, and it exists because Ansible has no other one. Removing the
   # service from the template stops rendering it and does nothing to the container
@@ -138,7 +153,10 @@
   # declaration.
   command: docker rm -f {{ act_runner_name }}
   register: _act_runner_rm
-  changed_when: _act_runner_rm.rc == 0
+  # `docker rm -f` exits 0 for a container that does not exist (Docker 29.9.2,
+  # measured on bee 2026-11-06), and prints the name only of one it removed, so
+  # stdout, not the exit code, is what tells a removal from the converged state.
+  changed_when: _act_runner_rm.stdout | length > 0
   failed_when: _act_runner_rm.rc != 0 and 'No such container' not in _act_runner_rm.stderr
   when: not (act_runner_enabled | bool)
   tags: [gitea, runner]
@@ -288,6 +306,7 @@
 
 # --- Health checks ---
 - name: Verify GitHub Runner container is running
+  when: runner_enabled | bool
   command: docker inspect --format '{% raw %}{{.State.Status}}{% endraw %}' github-runner
   register: _runner_state
   # Read-only probe whose result is consumed by a condition, so check mode must
