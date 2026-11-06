@@ -90,6 +90,10 @@ class RepoSpec:
     migrate_from: str | None = None
     private: bool = True
     native: bool = False
+    # Logins given write on this repository as collaborators (AUTH-022), resolved
+    # from the identity KEYS the declaration lists under `writers:`. Per repository
+    # by construction: an account here reaches this repository and no other.
+    writers: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -522,6 +526,44 @@ class VisibilityDrift:
         return f"{self.org}/{self.name}"
 
 
+#: The access a declared writer is granted (AUTH-022). Write, never admin: admin on a
+#: repository edits its settings and hooks and deletes it, which no agent needs.
+WRITER_PERMISSION = "write"
+
+
+@dataclass(frozen=True)
+class CollaboratorGrant:
+    """A declared writer the forge does not yet hold at `WRITER_PERMISSION` (AUTH-022).
+
+    `live` is what the forge holds now: None when the account is not a collaborator
+    (or the repository does not exist yet), else the collaborator's access mode.
+    """
+
+    org: str
+    name: str
+    login: str
+    live: str | None = None
+
+    @property
+    def full_name(self) -> str:
+        return f"{self.org}/{self.name}"
+
+
+def collaborator_needs_grant(live: tuple[bool, str] | None) -> bool:
+    """Does a declared writer fall short of the grant? One predicate for plan and read-back.
+
+    `live` is `(is_collaborator, permission)`, or None for a repository the forge
+    does not hold yet. The collaborator row is required, not only the mode: the
+    permission endpoint reports the effective mode, which is `read` on a public
+    repository for an account with no grant at all, so a mode alone cannot say
+    whether the grant exists. An admin collaborator is drift too and is narrowed.
+    """
+    if live is None:
+        return True
+    is_collaborator, permission = live
+    return not is_collaborator or permission != WRITER_PERMISSION
+
+
 @dataclass(frozen=True)
 class ReconcilePlan:
     """What reconciliation would do. Creates and reports -- never deletions.
@@ -541,6 +583,8 @@ class ReconcilePlan:
     reviewer: str | None = None
     repos_to_configure: tuple[SettingsChange, ...] = ()
     repos_to_hook: tuple[WebhookChange, ...] = ()
+    # Declared writers to make collaborators at `WRITER_PERMISSION` (AUTH-022).
+    collaborators_to_grant: tuple[CollaboratorGrant, ...] = ()
     undeclared_orgs: tuple[str, ...] = ()
     undeclared_repos: tuple[str, ...] = ()
     visibility_drift: tuple[VisibilityDrift, ...] = ()
@@ -596,6 +640,7 @@ class ReconcilePlan:
             and not self.review_teams_to_converge
             and not self.repos_to_configure
             and not self.repos_to_hook
+            and not self.collaborators_to_grant
         )
 
 
@@ -625,6 +670,7 @@ def plan_reconcile(
     reviewer: str | None = None,
     existing_review_teams: Mapping[str, tuple[Mapping[str, Any] | None, Sequence[str]]] | None = None,
     existing_repo_refs: Mapping[str, bool],
+    existing_collaborators: Mapping[str, Mapping[str, tuple[bool, str]] | None],
 ) -> ReconcilePlan:
     """Compare the declaration against the forge. Pure -- no network, no side effects.
 
@@ -718,6 +764,12 @@ def plan_reconcile(
     a reviewer without its reads raises rather than planning nothing, and an
     organization missing from the reads raises `KeyError`. Each entry is the org's
     `reviewers` team (None when absent) and that team's member logins.
+
+    `existing_collaborators` maps every declared repository WITH writers to
+    `{login: (is_collaborator, permission)}` for each of its declared writers, or to
+    None when the forge does not hold the repository yet (AUTH-022). Required and
+    indexed like the reads above. A writer it was never granted is created, never
+    removed: an undeclared collaborator is not this reconciler's to delete.
     """
     if reviewer and existing_review_teams is None:
         raise ValueError(
@@ -837,6 +889,23 @@ def plan_reconcile(
         if change.changes
     )
 
+    # Over every declared repository with writers, the ones this run creates
+    # included (lesson-424), except an absent native one, which nothing creates.
+    collaborators_to_grant = tuple(
+        CollaboratorGrant(
+            org=org,
+            name=spec.name,
+            login=login,
+            live=(None if live_repo is None or not live_repo[login][0] else live_repo[login][1]),
+        )
+        for org, specs in sorted(declared.items())
+        for spec in sorted(specs, key=lambda s: s.name)
+        if spec.writers and f"{org}/{spec.name}" not in not_created
+        for live_repo in (existing_collaborators[f"{org}/{spec.name}"],)
+        for login in spec.writers
+        if collaborator_needs_grant(None if live_repo is None else live_repo[login])
+    )
+
     # Reported, never acted on. The corollary ADR-065 D3 binds the reconciler to:
     # "import by accident must not become policy by inertia."
     undeclared_orgs = tuple(sorted(existing_orgs - declared_orgs))
@@ -915,6 +984,7 @@ def plan_reconcile(
         reviewer=reviewer,
         repos_to_configure=repos_to_configure,
         repos_to_hook=repos_to_hook,
+        collaborators_to_grant=collaborators_to_grant,
         undeclared_orgs=undeclared_orgs,
         undeclared_repos=undeclared_repos,
         visibility_drift=visibility_drift,
@@ -944,6 +1014,7 @@ def load_declaration(common: Mapping[str, Any]) -> dict[str, list[RepoSpec]]:
     source to None.
     """
     orgs = (common.get("apps", {}).get("services", {}).get("core", {}).get("gitea", {}).get("organizations", {})) or {}
+    identities = (common.get("apps", {}).get("auth", {}).get("identities", {})) or {}
 
     declaration: dict[str, list[RepoSpec]] = {}
     for org, spec in orgs.items():
@@ -972,10 +1043,43 @@ def load_declaration(common: Mapping[str, Any]) -> dict[str, list[RepoSpec]]:
                     migrate_from=entry.get("migrate_from"),
                     private=bool(entry.get("private", True)),
                     native=origin == "native",
+                    writers=_resolve_writers(org, entry, identities),
                 )
             )
         declaration[org] = specs
     return declaration
+
+
+#: Identity keys that may never be a writer. The reviewer is contained by having read
+#: access only (TOOL-080), and the superadmin already owns every organization.
+NON_WRITER_IDENTITIES: frozenset[str] = frozenset({"reviewer", "superadmin"})
+
+
+def _resolve_writers(org: str, entry: Mapping[str, Any], identities: Mapping[str, Any]) -> tuple[str, ...]:
+    """Resolve a repository's `writers:` identity KEYS to logins (AUTH-022).
+
+    Keys, never logins, so a rename is one edit in `apps.auth.identities`. An unknown
+    key raises rather than being skipped: a writer that silently resolves to nothing
+    is a grant that reads as declared and does not exist.
+    """
+    keys = entry.get("writers") or []
+    if not isinstance(keys, list):
+        raise ValueError(f"`{org}/{entry.get('name')}.writers` must be a list of identity keys, got {keys!r}")
+    logins: list[str] = []
+    for key in keys:
+        if key in NON_WRITER_IDENTITIES:
+            raise ValueError(
+                f"`{org}/{entry.get('name')}.writers` names {key!r}, which may not be a writer: the "
+                f"reviewer is contained by read access (TOOL-080) and the superadmin owns the org already."
+            )
+        login = identities.get(key)
+        if not login:
+            raise ValueError(
+                f"`{org}/{entry.get('name')}.writers` names {key!r}, which is not a key of "
+                f"`apps.auth.identities` ({sorted(identities)})."
+            )
+        logins.append(str(login))
+    return tuple(logins)
 
 
 def load_settings(common: Mapping[str, Any]) -> RepoSettings:
@@ -1290,6 +1394,10 @@ def format_plan(plan: ReconcilePlan) -> str:
     for team_org in plan.review_teams_to_converge:
         lines.append(
             f"  ~ team {team_org}/{READ_TEAM.name}   converge to read over all repositories, member {plan.reviewer}"
+        )
+    for grant in plan.collaborators_to_grant:
+        lines.append(
+            f"  ~ collaborator {grant.full_name}   {grant.login}: {grant.live or 'none'} -> {WRITER_PERMISSION}"
         )
     # Field by field, because this is the line an operator approves `--apply` on and
     # "settings differ" is not a basis for approving anything. A repository that does
@@ -1668,6 +1776,28 @@ class WebhookError(Exception):
     """
 
 
+class CollaboratorError(Exception):
+    """A collaborator grant Gitea accepted and did not apply (AUTH-022)."""
+
+
+def ensure_collaborator(configurator: GiteaBasicAuthClient, grant: CollaboratorGrant) -> None:
+    """PUT the collaborator at `WRITER_PERMISSION`, then READ IT BACK, as `ensure_settings` does.
+
+    The post-condition is `collaborator_needs_grant` itself, so what the plan
+    schedules and what is verified afterwards are one predicate.
+    """
+    configurator.add_collaborator(grant.org, grant.name, grant.login, WRITER_PERMISSION)
+    live = (
+        configurator.is_collaborator(grant.org, grant.name, grant.login),
+        configurator.get_collaborator_permission(grant.org, grant.name, grant.login),
+    )
+    if collaborator_needs_grant(live):
+        raise CollaboratorError(
+            f"{grant.full_name}: {grant.login} reads back as collaborator={live[0]}, permission={live[1]!r} "
+            f"after a PUT asking for {WRITER_PERMISSION!r}. Gitea accepted the request without applying it."
+        )
+
+
 class TeamPermissionError(Exception):
     """A team exists but does not grant what it was asked to grant.
 
@@ -1694,6 +1824,8 @@ class ExecutionReport:
     repos_configured: list[str] = field(default_factory=list)
     # `(full_name, url)`: a repository carries one hook per declaration (TOOL-080).
     repos_hooked: list[tuple[str, str]] = field(default_factory=list)
+    # `(full_name, login)`, each read back at `WRITER_PERMISSION` (AUTH-022).
+    collaborators_granted: list[tuple[str, str]] = field(default_factory=list)
     failures: list[tuple[str, str]] = field(default_factory=list)
 
     @property
@@ -2148,6 +2280,27 @@ def execute(
     # the change is the only fact it is handed, and this is the one place that
     # resolves it back to a declaration, the same way `find_declared_hook` is the
     # one place that resolves a URL back to a live hook.
+    # Collaborators (AUTH-022), after the creates and the settings for the same
+    # ordering reason: a repository this run brings into existence must exist first.
+    for grant in plan.collaborators_to_grant:
+        if grant.full_name in failed_repos:
+            continue
+        if configurator is None:
+            _handle_failure(
+                report,
+                f"collaborator {grant.full_name}",
+                RuntimeError(
+                    "no configurator client was supplied. Adding a collaborator is gated on repo-admin, "
+                    "like repository settings, so the caller must pass a GiteaBasicAuthClient."
+                ),
+            )
+            continue
+        try:
+            ensure_collaborator(configurator, grant)
+            report.collaborators_granted.append((grant.full_name, grant.login))
+        except Exception as exc:  # noqa: BLE001 - every failure is recorded, whatever its type
+            _handle_failure(report, f"collaborator {grant.full_name}", exc)
+
     declared_by_url = {hook.spec.url: hook for hook in declared_webhooks}
 
     for hook_change in plan.repos_to_hook:

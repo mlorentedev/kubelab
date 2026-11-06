@@ -1,0 +1,16 @@
+[
+  {
+    "id": "AUTH-022-agent-forge-identity-f1",
+    "behavior": "AC1: identity, scopes, tasks, catalog and rotation agree",
+    "verification": ".venv/bin/pytest -q tests/test_gitea_agent_identity.py tests/test_gitea_token_scopes.py tests/test_gitea_token_rotation_registry.py",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "AUTH-022-agent-forge-identity-f2",
+    "behavior": "AC3: a declared writer is planned, granted and read back; a converged one is a no-op",
+    "verification": ".venv/bin/pytest -q tests/test_gitea_agent_identity.py -k 'plan or collaborator or execute'",
+    "state": "pending",
+    "evidence": ""
+  }
+]

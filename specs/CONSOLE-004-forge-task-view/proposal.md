@@ -33,7 +33,7 @@ A module of `apps/api` (ADR-066 amendment A2), not a new service. Behind Autheli
 Decided with the operator on 2026-11-04, after the read model was live and the page still had no address.
 
 - **Address.** `console.kubelab.live` (staging `console.staging.kubelab.live`), declared once as `infra.forge.console_domain`. A host of its own, behind Authelia whole like Grafana or n8n, rather than a path on `api.kubelab.live`: a path made the public API host carry one signed-in corner, held by a Traefik path rule and an Authelia `resources` regex that each failed open alone, and `mlorente.dev` already proxies `/api` to the same Service with no session in front.
-- **Served by the api binary**, with no deployment of its own. Because that binary also answers the public API host, it serves `/console` only to a request for the console host, and to none when the host is not declared.
+- **Served by the api binary for now.** Because that binary also answers the public API host, it serves `/console` only to a request for the console host, and to none when the host is not declared. [ADR-074](../../docs/adr/adr-074-console-and-rest-surface.md) makes that page transitional: the frontend moves to `apps/console` (D1, D2), the API keeps its console surface under `/console/` on the same host (D5), and the embedded page is deleted when `apps/console` serves the same view. The ADR's sequence orders the work from here, and this spec's acceptance criteria are unchanged by it.
 - **Who uses it**: the operator, signed in through Authelia. Break-glass is a port-forward to the api Service.
 
 | Use case | Screen | Delivery |
@@ -73,7 +73,7 @@ Things this PR explicitly does NOT include. Forces a sharp boundary and prevents
 Failure modes, dependencies, and unknowns to clarify before implementation. If any item here is unresolved, do not move to `tasks.md` yet.
 
 - **Where the UI is served**: decided 2026-11-04, see "The console" below.
-- **Delivery order.** The pain stops when the view is usable, not when Vikunja is deleted. The read queue over both forges ships first, the narrow writes second, and the retirement waits for parity and A8's 14 days. Keep A8's five working days. A8 says "on Gitea alone" and A2 defers the UI to ADR-074: both need a one-line correction in the ADR.
+- **Delivery order.** The pain stops when the view is usable, not when Vikunja is deleted. The read queue over both forges ships first, the narrow writes second, and the retirement waits for parity and A8's 14 days. A8's timebox was widened by the operator to ADR-074's sequence, and the A2 and A8 corrections landed in #2623.
 - **GitHub call budget.** The GraphQL secondary limit already cuts sessions short. Reads go through webhooks plus a periodic reconcile, never polling, with a stated hourly call ceiling (#1501).
 
 ## Acceptance criteria
@@ -91,5 +91,5 @@ Observable outcomes. Each must be testable.
 ## References
 
 - Bitácora board: the GitHub issue / Project item tracking this spec (see the `issue:` frontmatter field)
-- Related ADR: `<repo>/docs/adr/adr-XXX.md` (if any)
+- Related ADRs: [ADR-066](../../docs/adr/adr-066-self-hosted-task-platform.md) (amendment A1 to A8), [ADR-074](../../docs/adr/adr-074-console-and-rest-surface.md) (console frontend, its surface and its sequence), [ADR-057](../../docs/adr/adr-057-kubelab-api-boundaries.md) D2 and D5 (one API)
 - Related patterns: `00_meta/patterns/<pattern>.md` (if any)

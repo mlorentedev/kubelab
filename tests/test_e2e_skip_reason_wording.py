@@ -27,6 +27,7 @@ from __future__ import annotations
 import errno
 import pathlib
 import socket
+import sys
 from collections.abc import Iterator
 from types import SimpleNamespace
 from typing import Any, cast
@@ -67,10 +68,19 @@ def closed_port() -> Iterator[int]:
 
     The socket stays bound, never listening, for the whole test. Closing it
     would free the port, and a listener another worker opens there would turn
-    the refusal into a connection."""
+    the refusal into a connection.
+
+    Except on macOS, which sends no reset for a port that is bound and not
+    listening: the connect times out instead (measured on Darwin 27, #3072), so
+    there the port is freed and only a free port refuses. Another worker would
+    have to bind that exact port in the gap to turn the refusal into a connection.
+    """
     with socket.socket() as probe:
         probe.bind((LOOPBACK, 0))
-        yield int(probe.getsockname()[1])
+        port = int(probe.getsockname()[1])
+        if sys.platform == "darwin":
+            probe.close()
+        yield port
 
 
 @pytest.fixture

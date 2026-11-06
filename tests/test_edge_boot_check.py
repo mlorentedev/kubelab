@@ -24,6 +24,8 @@ from unittest import mock
 import pytest
 import yaml
 
+from tests.conftest import system_path
+
 REPO = Path(__file__).resolve().parents[1]
 ROLE = REPO / "infra" / "ansible" / "roles" / "gateway"
 TASKS: list[dict[str, Any]] = yaml.safe_load((ROLE / "tasks" / "main.yml").read_text(encoding="utf-8"))
@@ -77,7 +79,7 @@ FAKES = {
   "is-system-running ")
     if [ -f "$FAKE/system" ]; then
       head -n 1 "$FAKE/system"
-      if [ "$(wc -l < "$FAKE/system")" -gt 1 ]; then sed -i 1d "$FAKE/system"; fi
+      if [ "$(wc -l < "$FAKE/system")" -gt 1 ]; then tail -n +2 "$FAKE/system" >"$FAKE/system.next" && mv "$FAKE/system.next" "$FAKE/system"; fi
     elif [ -f "$FAKE/jobs" ]; then echo starting
     elif ls "$FAKE"/failed/* >/dev/null 2>&1; then echo degraded
     else echo running; fi ;;
@@ -202,7 +204,7 @@ class Edge:
 
     def run(self, *args: str, expect: str | None = None) -> subprocess.CompletedProcess[str]:
         env = {
-            "PATH": f"{self.bin}:/usr/bin:/bin",
+            "PATH": system_path(self.bin),
             "FAKE": str(self.fake),
             "EDGE_SYS_NET": str(self.net),
             "EDGE_HOSTAPD_DIR": str(self.fake),

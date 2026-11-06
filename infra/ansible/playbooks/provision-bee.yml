@@ -318,6 +318,13 @@
         # forge task view's API. Minted and gated the same way.
         gitea_issue_reader_scopes: "{{ gitea_config.apps.services.core.gitea.token_scopes.issue_reader }}"
         gitea_issue_reader_token: "{{ gitea_secrets.apps.services.core.gitea.issue_reader_token | default('') }}"
+        # AUTH-022 -- the agents' authoring account, a third machine identity
+        # (ADR-062 D1 as amended 2026-11-03). Resolved and minted like the reviewer;
+        # its write is granted per repository by the reconciler, never by a team.
+        gitea_agent_user: "{{ gitea_config.apps.auth.identities.agent | default('') }}"
+        gitea_agent_email: "{{ gitea_config.apps.auth.identities.agent | default('') }}@{{ gitea_config.apps.services.core.gitea.domain }}"
+        gitea_agent_scopes: "{{ gitea_config.apps.services.core.gitea.token_scopes.agent }}"
+        gitea_agent_token: "{{ gitea_secrets.apps.services.core.gitea.agent_token | default('') }}"
         # The superadmin's API token (TOOL-035). Minted by the same mechanism and
         # gated the same way. Two reasons it exists, and only the first is obvious:
         # Gitea puts the creating account in a new organization's `Owners` team, so

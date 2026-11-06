@@ -26,6 +26,7 @@ from typing import Any
 import pytest
 import yaml
 
+from tests.conftest import system_path
 from tests.ansible_jinja import ansible_env, task_runs
 
 REPO = Path(__file__).resolve().parents[1]
@@ -98,7 +99,7 @@ def _run(tmp_path: Path, behaviour: str, script: str) -> subprocess.CompletedPro
         .render(docker_smoke_build_image=DEFAULTS["docker_smoke_build_image"], docker_smoke_build_timeout_seconds=2)
     )
     env = {
-        "PATH": f"{bin_dir}:/usr/bin:/bin",
+        "PATH": system_path(bin_dir),
         "DOCKERFILE": str(tmp_path / "Dockerfile"),
         "ARGS": str(tmp_path / "args"),
     }

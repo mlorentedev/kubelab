@@ -98,3 +98,19 @@ def test_the_session_hook_puts_the_gnu_userland_first(monkeypatch) -> None:
     monkeypatch.setattr(conftest, "_install_host_client_barrier", lambda: None)
     conftest.pytest_configure(None)  # type: ignore[arg-type]
     assert calls == ["gnu"]
+
+
+def test_a_minimal_harness_path_keeps_the_gnu_tools_on_macos(tmp_path, monkeypatch) -> None:
+    """A harness PATH of fakes plus /usr/bin:/bin must not drop GNU `timeout` on macOS (#3072)."""
+    import tests.conftest as conftest
+
+    gnubin = tmp_path / "gnubin"
+    gnubin.mkdir()
+    for tool in conftest.GNU_TOOLS:
+        (gnubin / tool).write_text("#!/bin/sh\n", encoding="utf-8")
+        (gnubin / tool).chmod(0o755)
+    monkeypatch.setenv("PATH", str(gnubin))
+    monkeypatch.setattr(conftest.sys, "platform", "darwin")
+    assert conftest.system_path("/fakes") == conftest.os.pathsep.join(["/fakes", str(gnubin), "/usr/bin", "/bin"])
+    monkeypatch.setattr(conftest.sys, "platform", "linux")
+    assert conftest.system_path("/fakes") == conftest.os.pathsep.join(["/fakes", "/usr/bin", "/bin"])

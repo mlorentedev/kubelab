@@ -157,6 +157,10 @@ services:
       # same script. Empty when the row is absent, and the script then skips it.
       GITEA_REVIEWER_USER: "{{ gitea_reviewer_user }}"
       GITEA_REVIEWER_EMAIL: "{{ gitea_reviewer_email }}"
+      # AUTH-022. The agents' authoring account, from apps.auth.identities.agent.
+      # Empty when the row is absent, and the script then skips it.
+      GITEA_AGENT_USER: "{{ gitea_agent_user }}"
+      GITEA_AGENT_EMAIL: "{{ gitea_agent_email }}"
     volumes:
       - {{ beelink_gitea_data_dir }}:/data
       - {{ beelink_deploy_dir }}/gitea-bootstrap.sh:/scripts/bootstrap.sh:ro

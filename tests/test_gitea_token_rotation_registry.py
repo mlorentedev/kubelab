@@ -113,7 +113,7 @@ def test_an_identity_missing_from_the_map_is_refused_not_guessed() -> None:
 
 
 def test_an_unknown_token_label_names_the_known_ones() -> None:
-    with pytest.raises(KeyError, match="admin, bot"):
+    with pytest.raises(KeyError, match="admin, agent, bot"):
         plan_rotation("nope", {"machine": "hefesto"}, secret_present=True)
 
 

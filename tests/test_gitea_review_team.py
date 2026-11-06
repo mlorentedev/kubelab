@@ -74,7 +74,7 @@ def _plan(**overrides: Any) -> Any:
         "declared_webhooks": N8N_HOOK_ONLY,
     }
     kwargs.update(overrides)
-    return plan_reconcile(DECLARED, **kwargs, existing_repo_refs=ALL_REFS_PRESENT)
+    return plan_reconcile(DECLARED, **kwargs, existing_repo_refs=ALL_REFS_PRESENT, existing_collaborators={})
 
 
 # --------------------------------------------------------------------------- the grant

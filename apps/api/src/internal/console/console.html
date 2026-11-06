@@ -29,11 +29,12 @@
   <thead><tr><th>Item</th><th>Title</th><th>Labels</th><th>Author</th><th>Updated</th></tr></thead>
   <tbody id="items"></tbody>
 </table>
+<p class="muted"><span id="count"></span> <button id="more" hidden>Load more</button></p>
 <script>
 // Every forge value is written with textContent, never as HTML: titles and labels are user input.
 const el = (tag, text, cls) => { const e = document.createElement(tag); if (text !== undefined) e.textContent = text; if (cls) e.className = cls; return e; };
 const ago = (iso) => { const m = Math.round((Date.now() - new Date(iso)) / 60000); return m < 60 ? m + " min" : m < 2880 ? Math.round(m / 60) + " h" : Math.round(m / 1440) + " d"; };
-let items = [], readAt = null;
+let items = [], total = 0, next = null, pages = 0, readAt = null, busy = false;
 
 function render() {
   const q = document.getElementById("filter").value.toLowerCase();
@@ -49,12 +50,23 @@ function render() {
     tr.append(el("td", it.author), el("td", ago(it.updated_at), "muted"));
     body.append(tr);
   }
+  // The filter reads loaded pages only, so the count says how much is loaded.
+  document.getElementById("count").textContent = items.length + " of " + total + " open items loaded";
+  document.getElementById("more").hidden = next === null;
 }
 
-async function load() {
+// load reads the first page, or appends the next one when more is true. With more
+// than one page loaded, a reread of the first page refreshes the sources and the total
+// and keeps the rows, so the health banner stays live without dropping what was loaded.
+// One read at a time: a refresh landing during an append would replace its rows.
+async function load(more) {
+  if (busy) return;
+  busy = true;
+  const keepRows = !more && pages > 1;
   try {
+    const url = more && next ? "queue?after=" + encodeURIComponent(next) : "queue";
     // Authelia answers an expired session with a redirect to its portal; do not follow it as data.
-    const r = await fetch("queue", { credentials: "same-origin", redirect: "manual" });
+    const r = await fetch(url, { credentials: "same-origin", redirect: "manual" });
     if (r.type === "opaqueredirect" || r.status === 401) throw new Error("session expired, reload the page to sign in");
     if (!r.ok) throw new Error("queue answered " + r.status);
     const data = await r.json();
@@ -64,7 +76,12 @@ async function load() {
       const when = s.as_of ? "read " + ago(s.as_of) + " ago" : "never read";
       box.append(el("span", s.source + " - " + when + (s.reachable ? "" : " - unreachable"), s.reachable ? "source" : "source down"));
     }
-    items = data.items;
+    total = data.total;
+    if (!keepRows) {
+      items = more ? items.concat(data.items) : data.items;
+      pages = more ? pages + 1 : 1;
+      next = data.next;
+    }
     readAt = new Date();
     document.getElementById("error").textContent = "";
     document.getElementById("items").classList.remove("stale");
@@ -74,12 +91,15 @@ async function load() {
     const last = readAt ? " The rows below are the last good read, " + ago(readAt) + " ago." : "";
     document.getElementById("error").textContent = "Could not load the queue: " + e.message + "." + last;
     document.getElementById("items").classList.add("stale");
+  } finally {
+    busy = false;
   }
 }
 
 document.getElementById("filter").addEventListener("input", render);
-load();
-setInterval(load, 60000);
+document.getElementById("more").addEventListener("click", () => load(true));
+load(false);
+setInterval(() => load(false), 60000);
 </script>
 </body>
 </html>

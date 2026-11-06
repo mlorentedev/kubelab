@@ -1,0 +1,13 @@
+{
+  "reviewed_sha": "9277d6d09446b39c685b5ce77ab57f6b294825a0",
+  "reviewer": "agy/gemini-3.8-flash-high",
+  "requested_at": "2026-11-06T00:53:43Z",
+  "review_digest_before": "",
+  "base_sha": "b01818b1d95d272059fd64a836f0b34c9ff7604f",
+  "contract_digests": {
+    "features.json": "a1fd0838fbb1f8b12c2ad29472c8601b644438a15872a022a1563e25a01c26a4",
+    "proposal.md": "dfd0970c9cac45b23faf7e8c72ae258499a0879780fba76f2d5cff2c7907e488",
+    "spec.md": "",
+    "tasks.md": "f438d8b7a62252ec5f29966c7ca224998620d21951b12aff1e5c0683ab7433a5"
+  }
+}

@@ -361,14 +361,24 @@ class FakeApi:
         return self.json(path)
 
 
-def routes_for(app: str, product_repo: str, compare: str = "behind") -> dict[str, Any]:
+def old_full(app: str) -> str:
+    """The full sha the fake API resolves the app's committed pin to."""
+    short = current_version(app).split("-", 1)[1]
+    return short + "e" * (40 - len(short))
+
+
+def routes_for(app: str, product_repo: str, compare: str = "behind", order: str = "ahead") -> dict[str, Any]:
+    """`compare` places the new commit against the branch; `order` places it against the current pin."""
     before, after = bump(app, NEW)
+    old_short = current_version(app).split("-", 1)[1]
     r: dict[str, Any] = {
         f"repos/{REPO}/pulls/7/files?per_page=100": changes(VALUES, OVERLAY),
         f"repos/{REPO}/compare/master...{HEAD}": {"merge_base_commit": {"sha": BASE}},
         f"repos/{product_repo}/commits/{SHORT}": {"sha": FULL},
         f"repos/{product_repo}": {"default_branch": "master"},
         f"repos/{product_repo}/compare/master...{FULL}": {"status": compare},
+        f"repos/{product_repo}/commits/{old_short}": {"sha": old_full(app)},
+        f"repos/{product_repo}/compare/{old_full(app)}...{FULL}": {"status": order},
     }
     for path in (VALUES, OVERLAY):
         r[f"repos/{REPO}/contents/{path}?ref={BASE}"] = before[path]
@@ -411,6 +421,27 @@ class TestEvaluate:
         routes[f"repos/mlorentedev/web/compare/master...{FULL + suffix}"] = {"status": "behind"}
         shape = evaluate(7, REPO, FakeApi(routes), decl, products)
         assert shape.verdict == "not-mechanical" and "resolved to" in shape.reason, shape.reason
+
+    @pytest.mark.parametrize("app,repo", [("web", "mlorentedev/web"), ("api", REPO)])
+    @pytest.mark.parametrize("order", ["behind", "diverged", "identical"])
+    def test_a_pin_that_does_not_move_forward_is_refused(self, decl, products, app: str, repo: str, order: str) -> None:
+        """#796: a rollback is a clean version move to a commit on the branch, and only
+        the order of the two commits tells it apart. `behind` is the stale PR of
+        2026-06-27; `diverged` is a current pin off the new commit's history."""
+        shape = evaluate(7, REPO, FakeApi(routes_for(app, repo, order=order)), decl, products)
+        assert shape.verdict == "not-mechanical" and "forward" in shape.reason, shape.reason
+
+    def test_a_current_pin_that_names_no_commit_is_refused(self, decl, products) -> None:
+        routes = routes_for("web", "mlorentedev/web")
+        old_short = current_version("web").split("-", 1)[1]
+        routes[f"repos/mlorentedev/web/commits/{old_short}"] = {"sha": "f" * 40}
+        shape = evaluate(7, REPO, FakeApi(routes), decl, products)
+        assert shape.verdict == "not-mechanical" and "current pin" in shape.reason, shape.reason
+
+    def test_an_order_that_cannot_be_read_is_unknown(self, decl, products) -> None:
+        routes = routes_for("web", "mlorentedev/web")
+        routes[f"repos/mlorentedev/web/compare/{old_full('web')}...{FULL}"] = RuntimeError("HTTP 502")
+        assert evaluate(7, REPO, FakeApi(routes), decl, products).verdict == "unknown"
 
     def test_an_api_failure_is_unknown(self, decl, products) -> None:
         routes = routes_for("web", "mlorentedev/web")

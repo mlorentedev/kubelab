@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import pathlib
-import yaml
+import re
+
 import pytest
+import yaml
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 GRAFANA_ALERTING_DIR = REPO_ROOT / "infra" / "k8s" / "base" / "services" / "grafana-alerting"
@@ -77,6 +79,33 @@ def test_slo_rules_structure_and_syntax() -> None:
     assert "obs015-slo-medium-burn-rate" in uids
 
 
+def _slo_query(uid: str) -> str:
+    data = yaml.safe_load((GRAFANA_ALERTING_DIR / "slo-rules.yaml").read_text(encoding="utf-8"))
+    rule = next(r for r in data["groups"][0]["rules"] if r["uid"] == uid)
+    return next(d["model"]["expr"] for d in rule["data"] if d["refId"] == "A")
+
+
+@pytest.mark.parametrize("uid", ["obs015-slo-fast-burn-rate", "obs015-slo-medium-burn-rate"])
+def test_5xx_rules_count_the_parsed_status_not_the_text(uid: str) -> None:
+    # #3140: `|~ "\b(500|502|503|504)\b"` counted any line carrying one of those
+    # numbers as a word, and read no status at all.
+    query = _slo_query(uid)
+    assert "| json" in query
+    assert re.search(r"DownstreamStatus\s*>=\s*500", query), query
+    assert '__error__=""' in query, "a line that is not JSON must not count"
+    assert "|~" not in query, "a raw-text match is back"
+
+
+@pytest.mark.parametrize("uid", ["obs015-slo-fast-burn-rate", "obs015-slo-medium-burn-rate"])
+def test_5xx_rules_ignore_the_load_test_route(uid: str) -> None:
+    # The load test overloads staging on purpose through its own route; on
+    # 2026-11-06 a run at the knee fired both rules.
+    from toolkit.features import load_test
+
+    query = _slo_query(uid)
+    assert re.search(rf'RouterName\s*!~\s*"[^"]*{re.escape(load_test.ROUTE_NAME)}[^"]*"', query), query
+
+
 def test_security_rules_stay_retired_until_the_bouncer_can_see_client_ips() -> None:
     """The inverse of what this asserted until 2026-09-01.
 
@@ -121,3 +150,15 @@ def test_security_rules_stay_retired_until_the_bouncer_can_see_client_ips() -> N
         "any rule about bans has no true-positive path. If #1067 has landed, "
         "update this test to assert the new rule instead of removing it."
     )
+
+
+@pytest.mark.parametrize("uid", ["obs015-slo-fast-burn-rate", "obs015-slo-medium-burn-rate"])
+def test_5xx_rules_filter_only_on_fields_the_access_log_keeps(uid: str) -> None:
+    # The edge drops every access-log field it does not list; a rule filtering on a
+    # dropped field would count zero lines and never fire, with no error.
+    from tests.test_traefik_access_log_slow_only import _access
+
+    kept = {name for name, mode in _access()["fields"]["general"]["names"].items() if mode == "keep"}
+    used = set(re.findall(r"\|\s*([A-Z][A-Za-z]+)\s*(?:>=|!~|=~|==|!=|>|<)", _slo_query(uid)))
+    assert used == {"DownstreamStatus", "RouterName"}, used
+    assert used <= kept, used - kept
