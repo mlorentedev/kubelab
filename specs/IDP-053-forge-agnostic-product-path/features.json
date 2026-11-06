@@ -37,7 +37,7 @@
   {
     "id": "IDP-053-forge-agnostic-product-path-f5",
     "behavior": "AC5: a contract without hostnames.prod validates, the committed schema equals the model, prod render is refused for it, and the DNS, tile and registry tests skip prod for staging-only products",
-    "verification": ".venv/bin/python -m pytest -q tests/test_product_contract.py tests/test_product_contract_schema.py tests/test_product_contract_drift.py tests/test_dns_contract_hostnames.py tests/test_platform_tiles_cover_registry.py tests/test_product_registry.py",
+    "verification": ".venv/bin/python -m pytest -q tests/test_product_contract.py tests/test_product_contract_schema.py tests/test_product_contract_drift.py tests/test_product_contract_guards.py tests/test_dns_contract_hostnames.py tests/test_platform_tiles_cover_registry.py tests/test_e2e_expectations_cover_registry.py tests/test_product_registry.py",
     "state": "pending",
     "evidence": ""
   },

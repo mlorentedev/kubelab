@@ -326,8 +326,10 @@ Must be resolved before the named slice starts; none blocks writing the others.
    product, and two generic products force-push deploy branches that rewrite the same
    `values/staging.yaml`. #2611 has an acceptance test but no decided shape. S4 (a hand-run
    promote) does not touch the receiver's force-push, so **#2611 does not block S1 to S4**; it
-   blocks the first generic receipt of `imagesensortool`. S6b merges dormant (no registry entry
-   has `receiver: generic` for a Gitea product until #2611 is settled) or is held.
+   blocks the first generic receipt of `imagesensortool`. The registry entry declares
+   `receiver: generic` from S3b (`Product` requires `receiver` with `repository`), and it stays
+   dormant by construction: the receiver refuses `forge != github` until S6b, and no trigger
+   exists until S7. So #2611 gates S6b's go-live, and S6b merges dormant or is held.
 4. **Self-hosted runner exposure (S6b).** A dispatch-triggered `promote` job holding
    `RELEASE_PLEASE_TOKEN` would run on `kubelab-bee`, a runner with the Docker socket mounted
    (ADR-030). `repository_dispatch` runs master's code only and the contract is parsed by the
@@ -387,7 +389,7 @@ recorded in `verification.md`. Test files marked (new) are created by the slice.
   equals the model; `product render --env prod` refuses it; a product with no `events.prod` has
   no prod snapshot and no prod values block; the DNS, tile and registry tests skip prod for
   it.
-  `.venv/bin/python -m pytest -q tests/test_product_contract.py tests/test_product_contract_schema.py tests/test_product_contract_drift.py tests/test_dns_contract_hostnames.py tests/test_platform_tiles_cover_registry.py tests/test_product_registry.py`
+  `.venv/bin/python -m pytest -q tests/test_product_contract.py tests/test_product_contract_schema.py tests/test_product_contract_drift.py tests/test_product_contract_guards.py tests/test_dns_contract_hostnames.py tests/test_platform_tiles_cover_registry.py tests/test_e2e_expectations_cover_registry.py tests/test_product_registry.py`
 - [ ] **AC13 (S3c).** `product render` accepts a `hostnames.staging` only if it is exactly a
   zone in `networking.staging_zones` (other than `staging.kubelab.live`) or a single label
   under `staging.kubelab.live`; when `hostnames.prod` is declared, `hostnames.staging` must
@@ -441,6 +443,7 @@ Each new test that guards a boundary is mutation-checked with
 | Property | Command that settles it | When |
 |---|---|---|
 | The reviewer-account token reaches the package | `toolkit services gitea registry-check --app imagesensortool` | after S2c mint |
+| The receiver can read `repo_reader` (S5c): `forge_actions` writes Gitea Actions secrets only (`gitea_client` `PUT /repos/{owner}/{name}/actions/secrets`), so the owner sets the `mlorentedev/kubelab` GitHub Actions secret by hand from SOPS | `gh secret list -R mlorentedev/kubelab` names it; the S6b dry run's `resolve` job reads a commit | after S5c mint |
 | Staging pulls from `gitea.kubelab.live` (DNS and TLS from the node, credential accepted) | `kubectl -n kubelab describe pod -l app.kubernetes.io/name=imagesensortool` shows `Pulled`, not `Failed` | S4 |
 | Split DNS and the staging certificate for the new zone (risk 7) | `dig +short <staging host> @<rpi4>` returns the staging node; `toolkit secrets acme-token-scope` names `imagesensortool.com` | after S3b provision |
 | The Gitea 1.27.3 API behaves as the adapter assumes | S5b's verification note, measured on a local Gitea 1.27.3 | before S5b code |

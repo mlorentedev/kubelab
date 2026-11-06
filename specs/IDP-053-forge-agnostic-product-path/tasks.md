@@ -14,7 +14,7 @@ owner: manu
 > slice touches files no other open slice touches). `[AC<n>]` = helps satisfy acceptance
 > criterion `<n>` in `proposal.md`.
 >
-> **Order.** Wave 1 (all parallel, disjoint files): S1a, S2c, S3a, S5a. Wave 2: S1b and S2a
+> **Order.** Wave 1 (all parallel, disjoint files): S1a, S3a, S5a, and S2c once the owner has run its D2 consequence check against the live forge (its first task; it cannot start without the owner). Wave 2: S1b and S2a
 > (after S1a), S3c (after S3a), S5b (after S5a and the API note), S5c (after S2c, to avoid a
 > shared-file conflict), S6a (after S5a). Wave 3: S2b (after S1b and S2a), S3b (after S1, S2,
 > S3a, S3c and the product's `kubelab.yaml`), S6b (after S6a, S5b, S5c), S8. Then S4 (after S3b
@@ -103,8 +103,8 @@ owner (or by the agent with the owner's read-only token if they hand one over). 
 result on #2612.
 
 - [ ] [AC4] Consequence check (D2): create a throwaway `read:package` token on the reviewer account, pull a manifest for `personal/imagesensortool`, record status. Also pick one package the reviewer account must not read and record its `<owner>/<name>` in `verification.md` as `OUT_OF_SCOPE_PACKAGE`, with the denial status it answers; f4d's negative half uses that value. Fail means go back to the architect (ADR-062/065), and the rest of S2c/S5c wait
-- [ ] [P] [AC4] Failing tests in `tests/test_gitea_registry_pull_token.py`, copying the shape of `tests/test_gitea_issue_reader_token.py`: the grant in `token_scopes` equals `read:package` exactly; the mint is gated on the SOPS key being absent; the revoke-then-unset rotation covers it
-- [ ] [AC4] Add `registry_pull` to `ROTATABLE_TOKENS` (`gitea_tokens.py`), `SCOPE_BY_METHOD` if a client method is needed (`gitea_client.py`), the catalog entry (`secrets_manager.py`, `forge_actions` for the Kubernetes apply path, file per D2), the `common.yaml` `token_scopes` grant, and the Ansible mint task in `beelink_services`
+- [ ] [AC4] Failing tests in `tests/test_gitea_registry_pull_token.py`, copying the shape of `tests/test_gitea_issue_reader_token.py`: the grant in `token_scopes` equals `read:package` exactly; the mint is gated on the SOPS key being absent; the revoke-then-unset rotation covers it
+- [ ] [AC4] Add `registry_pull` to `ROTATABLE_TOKENS` (`gitea_tokens.py`), `SCOPE_BY_METHOD` if a client method is needed (`gitea_client.py`), the catalog entry (`secrets_manager.py`, read from SOPS by `apply-secrets`, no `forge_actions`: that field writes Gitea Actions secrets, not the cluster; file per D2), the `common.yaml` `token_scopes` grant, and the Ansible mint task in `beelink_services`
 - [ ] [AC4] Failing test then implement `toolkit services gitea registry-check --app <app> [--package <owner>/<name>]`: pulls a manifest by consequence (the app's own package by default, the named one with `--package`), prints status, never the token; exit 0 / non-zero. The test covers both: the app's package answers 200, a package outside the token's reach answers a denial and exits non-zero
 - [ ] [AC4] Owner operation: mint, then `toolkit secrets audit --env staging` and `registry-check` (deployed)
 
@@ -156,7 +156,7 @@ regenerated overlays, and one line in `infra/config/values/common.yaml`
 (`networking.staging_zones`: `staging.imagesensortool.com`); the hairpin block follows from
 S3c.
 
-- [ ] [AC6] Registry entry: `forge: gitea`, `repository: personal/imagesensortool`, `receiver: generic` held back until #2611 settles (S6b), `image_registry: gitea.kubelab.live/personal`, `private: true`, `pull_credential`, `events: {staging: ...}` and no `events.prod`
+- [ ] [AC6] Registry entry: `forge: gitea`, `repository: personal/imagesensortool`, `receiver: generic` (dormant until S6b and S7; proposal risk 3), `image_registry: gitea.kubelab.live/personal`, `private: true`, `pull_credential`, `events: {staging: ...}` and no `events.prod`
 - [ ] [AC6] Snapshot: `toolkit product render --contract ... --env staging` and commit the snapshot
 - [ ] [AC6] Staging values block with a pinned `version` (never `:latest`), platform tile, e2e expectation, and the staging zone line
 - [ ] [AC6] `make test`, `make validate-sync ENV=staging`, `product render --check` exit 0
@@ -201,7 +201,7 @@ Acceptance: `.venv/bin/python -m pytest -q tests/test_forge_adapter.py tests/tes
 Sequence after S2c (shares `gitea_tokens.py`, `common.yaml`, the Ansible task file). Depends on D2.
 
 - [ ] [AC8] Failing tests in `tests/test_gitea_repo_reader_token.py` (shape of the issue_reader test): grant equals `read:repository`, mint gated on absence, rotation covers it
-- [ ] [AC8] `repo_reader` in `ROTATABLE_TOKENS`, catalog entry delivered to the kubelab Actions secrets (`forge_actions`, target repo `mlorentedev/kubelab`), `token_scopes` grant, Ansible mint
+- [ ] [AC8] `repo_reader` in `ROTATABLE_TOKENS`, catalog entry in SOPS (no `forge_actions`: it reaches Gitea repositories only, not `mlorentedev/kubelab` on GitHub), `token_scopes` grant, Ansible mint; the owner sets the kubelab GitHub Actions secret by hand (proposal, "What cannot be verified from a diff")
 - [ ] [AC8] Owner mints; the receiver's `resolve` job reads it as a secret
 
 Acceptance: `.venv/bin/python -m pytest -q tests/test_gitea_repo_reader_token.py tests/test_gitea_token_rotation_registry.py tests/test_gitea_token_scopes.py`
@@ -242,7 +242,7 @@ Acceptance: `.venv/bin/python -m pytest -q tests/test_product_image_receiver_wor
 Depends on S5b and S1b. Closes #2627 AC1 and AC2. Files: `toolkit/features/product_release.py`,
 `toolkit/features/registry.py`, tests.
 
-- [ ] [P] [AC11] Failing tests in `tests/test_registry_digest.py` (new): authenticated manifest digest read for GHCR and for the Gitea registry; unsupported or private registry without a credential is refused with ERROR / WHY / FIX naming the registry
+- [ ] [AC11] Failing tests in `tests/test_registry_digest.py` (new): authenticated manifest digest read for GHCR and for the Gitea registry; unsupported or private registry without a credential is refused with ERROR / WHY / FIX naming the registry
 - [ ] [AC11] Implement `tag_digest` for non-`docker.io` hosts using the catalogued pull credential (D3's authenticated half)
 - [ ] [AC11] Failing test then implement: `release-contract` reads the contract through the adapter for any forge; a 7-hex and a 10-hex `sha-` tag are both proven, so a check fixed at 7 fails (#2627 AC1)
 
