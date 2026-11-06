@@ -22,6 +22,7 @@ real.
 
 from __future__ import annotations
 
+import fnmatch
 import os
 import re
 import shutil
@@ -120,19 +121,32 @@ def _hosts(match: str) -> list[str]:
     return [name for args in re.findall(r"\bHost\(([^)]*)\)", match) for name in re.findall(r"`([^`]+)`", args)]
 
 
+def _domains(rule: dict) -> list[str]:
+    listed = rule.get("domain", [])
+    return listed if isinstance(listed, list) else [listed]
+
+
 def _explicit_domains(access: dict) -> set[str]:
-    return set(_first_policy(access))
+    return {d for rule in access.get("rules", []) for d in _domains(rule) if "*" not in d}
 
 
-def _first_policy(access: dict) -> dict[str, str]:
-    """The policy of the first rule naming each host, which is the one Authelia applies."""
-    policies: dict[str, str] = {}
+#: Criteria that narrow a rule to some requests, so it does not decide the host as a whole.
+NARROWING = ("resources", "subject", "methods", "query", "networks")
+
+
+def _applied_policy(access: dict, host: str) -> str | None:
+    """The policy of the first rule that matches every request to `host`, as Authelia evaluates them.
+
+    In order, wildcards included: a `*.zone` bypass above a host's own rule decides it first.
+    """
     for rule in access.get("rules", []):
-        listed = rule["domain"] if isinstance(rule["domain"], list) else [rule["domain"]]
-        for domain in listed:
-            if "*" not in domain:
-                policies.setdefault(domain, rule["policy"])
-    return policies
+        if any(key in rule for key in NARROWING):
+            continue
+        by_name = any(d == host or ("*" in d and fnmatch.fnmatchcase(host, d)) for d in _domains(rule))
+        by_regex = any(re.fullmatch(r, host) for r in _domains({"domain": rule.get("domain_regex", [])}))
+        if by_name or by_regex:
+            return rule["policy"]
+    return None
 
 
 @pytest.mark.parametrize("overlay", OVERLAYS)
@@ -157,8 +171,9 @@ def test_every_guarded_host_has_its_own_rule(overlay: str) -> None:
 def test_no_guarded_host_is_waved_through(overlay: str) -> None:
     """A rule existing is not a host being protected: `bypass` behind the ForwardAuth lets everyone in."""
     docs = _render(overlay)
-    policies = _first_policy(_access_control(docs))
-    open_ = sorted(h for h in _guarded_hosts(docs) if policies.get(h) not in (None, "one_factor", "two_factor"))
+    access = _access_control(docs)
+    applied = {h: _applied_policy(access, h) for h in _guarded_hosts(docs)}
+    open_ = sorted(h for h, policy in applied.items() if policy not in (None, "one_factor", "two_factor"))
     assert not open_, f"{overlay}: hosts behind an Authelia ForwardAuth whose rule asks for no login: {open_}"
 
 
