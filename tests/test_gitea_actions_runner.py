@@ -88,6 +88,8 @@ def _template_vars(runner: dict) -> dict:
         gitea_bot_email="bot@example.com",
         gitea_reviewer_user="mentor",
         gitea_reviewer_email="mentor@example.com",
+        gitea_agent_user="dedalo",
+        gitea_agent_email="dedalo@example.com",
         gitea_admin_user="manu",
         gitea_admin_email="ops@example.com",
         gitea_admin_password="x",

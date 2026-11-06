@@ -4,6 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 707 | [Gitea's collaborator permission endpoint answers `read` for an account a team grants write to](lesson-707-gitea-permission-endpoint-misses-team-units.md) | 2026-11-03 |
 | 684 | [A credential minted in one system and recorded in another needs a way back from the gap between them](lesson-684-a-credential-minted-in-one-system-and-recorded-in-another-needs-a-way-back-from-the-gap.md) | 2026-11-01 |
 | 599 | [A rotation command with its own client list drifts both ways, and the env it runs in stops scoping it](lesson-599-a-rotation-command-with-its-own-client-list-drifts-both-ways-and-the-env-it-runs-in-stops-scoping-it.md) | 2026-10-18 |
 | 591 | [Gitea skips its sign-in page only when passkeys are off too](lesson-591-gitea-skips-its-sign-in-page-only-when-passkeys-are-off-too.md) | 2026-10-17 |
