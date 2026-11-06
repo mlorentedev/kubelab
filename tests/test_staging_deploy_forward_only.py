@@ -170,9 +170,9 @@ def test_a_pin_git_cannot_place_fails_the_job(tmp_path: pathlib.Path, history: t
     assert "cannot place" in proc.stdout
 
 
-@_needs_bash
-def test_an_unbuilt_app_is_not_promoted(tmp_path: pathlib.Path, history: tuple[pathlib.Path, list[str]]) -> None:
-    work, shas = history
-    proc, calls = _run(tmp_path, work, pin=_tag(shas[0]), built=shas[2], api_built="skipped")
-    assert proc.returncode == 0, proc.stderr
-    assert calls == []
+def test_only_a_successful_build_reaches_the_job() -> None:
+    """The gate that keeps an unbuilt app out is the job's `if:`. The step's own
+    `API_BUILT` check never sees anything but `success`, so running it with another
+    value would measure a state CI cannot produce."""
+    gate = " ".join(_job()["if"].split())
+    assert "needs.build-api.result == 'success'" in gate
