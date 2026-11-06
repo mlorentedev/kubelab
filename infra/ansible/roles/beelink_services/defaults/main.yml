@@ -8,3 +8,6 @@ beelink_gitea_data_dir: /opt/gitea/data
 # Gitea's resolvers: public only, see the `dns:` comment in compose.yml.j2.
 gitea_dns_servers: "{{ config.networking.public_resolvers }}"
 glances_port: 61208
+# The name the GitHub runner registers under. One value for the compose file and
+# the registration check, so the check can never look for a name nothing uses (#3080).
+runner_name: kubelab-bee
