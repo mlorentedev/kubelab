@@ -35,6 +35,7 @@ from typing import Any
 import pytest
 import yaml
 
+from tests.conftest import system_path
 from tests.ansible_jinja import ansible_env
 
 REPO = Path(__file__).resolve().parents[1]
@@ -215,7 +216,7 @@ def test_the_units_pass_systemd_analyze_verify(tmp_path: Path) -> None:
         ["systemd-analyze", "verify", "--man=no", str(tmp_path / SERVICE), str(tmp_path / TIMER)],
         capture_output=True,
         text=True,
-        env={"SYSTEMD_UNIT_PATH": f"{tmp_path}:", "PATH": "/usr/bin:/bin"},
+        env={"SYSTEMD_UNIT_PATH": f"{tmp_path}:", "PATH": system_path()},
         check=False,
     )
     assert proc.returncode == 0, proc.stderr
@@ -279,7 +280,7 @@ class Edge:
         calls.unlink(missing_ok=True)
         env = {
             **_environment(),
-            "PATH": f"{self.root / 'bin'}:/usr/bin:/bin",
+            "PATH": system_path(self.root / "bin"),
             "FAKE": str(self.root / "fake"),
             "EDGE_SYS_NET": str(self.root / "net"),
             "EDGE_SYS_MODULE": str(self.root / "module"),
