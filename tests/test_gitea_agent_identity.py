@@ -162,6 +162,7 @@ def _run_copy(tmp_path: pathlib.Path, printed: str) -> tuple[int, str | None]:
         env={**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}"},
         capture_output=True,
         text=True,
+        encoding="utf-8",
     )
     return result.returncode, received.read_text(encoding="utf-8") if received.exists() else None
 
