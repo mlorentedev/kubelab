@@ -115,6 +115,14 @@ def test_the_status_report_says_what_the_run_measured() -> None:
     assert "GH Runner kubelab-bee registered" in on
 
 
+def test_the_report_reads_the_variable_the_health_probe_registers() -> None:
+    """The report test supplies `_gitea_version` itself; this ties that name to the
+    task that registers it, so a rename there turns this red instead of `Gitea ?`."""
+    probe = _task("Verify Gitea answers on its Tailscale address")
+    assert probe["register"] == "_gitea_version"
+    assert "_gitea_version.json" in _task("Report service status")["debug"]["msg"]
+
+
 def test_a_github_that_cannot_be_reached_is_not_reported_as_unregistered() -> None:
     """`uri` reports status -1 on a timeout or refused connection. That run never
     asked GitHub, so the message must not send the operator to the runner's logs."""
