@@ -103,7 +103,7 @@ CI_WEIGHTS = {
 }
 
 
-def test_the_ci_weights_are_the_adr_070_ones_and_no_forge_order_moved_them() -> None:
+def test_the_ci_weights_are_the_adr_070_ones() -> None:
     weights = {m["pr_agent"]["model"]: m["pr_agent"]["weight"] for m in PR_AGENT_MEMBERS if "weight" in m["pr_agent"]}
     assert weights == CI_WEIGHTS
 
