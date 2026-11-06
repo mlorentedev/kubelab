@@ -16,8 +16,11 @@ name: Deploy Verify
 #   workflows. A `failure` or `error` is red at once with Argo's message.
 # - `schedule`: a status that never arrives starts nothing, so a sweep asks for
 #   master HEAD's status once HEAD is older than the merge-to-sync budget
-#   (N = 10 min, measured lag 0-6 min, `specs/GITOPS-003/proposal.md`).
-#   Prod only. Staging runs on ace1, an on-demand node: while it is off, or
+#   (N = 10 min, measured lag 0-6 min, `specs/archive/GITOPS-003/proposal.md`).
+#   The cron asks for every 30 minutes; GitHub started these runs 3 to 6 hours
+#   apart (40 runs, 2026-10-23..31, lesson-681), so the sweep is a late backstop,
+#   not the bound. The no-status case is bounded in-cluster by `delivery-watcher`
+#   and its alert rule `gitops003-argo-delivery` (#2880). Prod only. Staging runs on ace1, an on-demand node: while it is off, or
 #   while staging is repointed at a branch (`make argo-set-revision`), no
 #   commit gets a staging status, and a runner cannot tell that from a sync
 #   that never happened. A sweep red most of the day would be ignored, and
@@ -83,10 +86,14 @@ jobs:
           SHA: ${{ github.event.sha }}
           DESCRIPTION: ${{ github.event.description }}
         run: |
-          echo "$CONTEXT on $SHA: $STATE: $DESCRIPTION"
+          # env: stops shell injection, not workflow commands: a line of the
+          # message starting with `::` would be obeyed by the runner (#2942).
+          # One line, then `%` escaped as the annotation's data expects.
+          desc="${DESCRIPTION//[$'\r\n']/ }"
+          echo "$CONTEXT on $SHA: $STATE: $desc"
           case "$STATE" in
             failure|error)
-              echo "::error title=$CONTEXT failed on ${SHA:0:7}::$DESCRIPTION. Runbook: $RUNBOOK"
+              echo "::error title=$CONTEXT failed on ${SHA:0:7}::${desc//%/%25}. Runbook: $RUNBOOK"
               exit 1 ;;
           esac
 
