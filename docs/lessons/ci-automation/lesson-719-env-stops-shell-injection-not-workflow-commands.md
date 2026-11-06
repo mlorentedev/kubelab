@@ -23,9 +23,10 @@ a new line the runner obeys (signed review of GITOPS-003, #2942).
 
 **Solution**: read the variable once into a sanitized copy, with CR and LF turned into spaces
 (`desc="${DESCRIPTION//[$'\r\n']/ }"`). Every output then uses `$desc`, and the annotation data is
-escaped further with `${desc//%/%25}`. `tests/test_deploy_verify_workflow.py` runs the shipped step with
-a hostile description and asserts that the only command in its output is the step's own `::error`. It
-also asserts that `$DESCRIPTION` appears in the script exactly once.
+escaped further with `${desc//%/%25}`. The status context gets the same collapse, since the poster
+chooses it too. `tests/test_deploy_verify_workflow.py` runs the shipped step with a hostile description
+and context, and asserts three things. The only command in the output is the step's own `::error`. A
+literal `%` arrives as `%25`. Each field appears in the script exactly once.
 
 **Rule**: untrusted text printed by a step is input to the runner as well as to the shell. Collapse it
 to one line before any `echo`, and escape `%` before using it as a command's data. Pin both with a test

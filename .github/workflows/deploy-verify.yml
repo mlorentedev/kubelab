@@ -88,12 +88,14 @@ jobs:
         run: |
           # env: stops shell injection, not workflow commands: a line of the
           # message starting with `::` would be obeyed by the runner (#2942).
-          # One line, then `%` escaped as the annotation's data expects.
+          # The context is the poster's too. One line each, then `%` escaped
+          # as the annotation's data expects.
           desc="${DESCRIPTION//[$'\r\n']/ }"
-          echo "$CONTEXT on $SHA: $STATE: $desc"
+          ctx="${CONTEXT//[$'\r\n']/ }"
+          echo "$ctx on $SHA: $STATE: $desc"
           case "$STATE" in
             failure|error)
-              echo "::error title=$CONTEXT failed on ${SHA:0:7}::${desc//%/%25}. Runbook: $RUNBOOK"
+              echo "::error title=$ctx failed on ${SHA:0:7}::${desc//%/%25}. Runbook: $RUNBOOK"
               exit 1 ;;
           esac
 
