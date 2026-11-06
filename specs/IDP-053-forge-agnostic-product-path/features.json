@@ -29,15 +29,22 @@
   },
   {
     "id": "IDP-053-forge-agnostic-product-path-f4d",
-    "behavior": "AC4 (deployed): the minted token pulls a manifest of personal/imagesensortool and is refused for a package it must not reach",
-    "verification": "toolkit services gitea registry-check --app imagesensortool",
+    "behavior": "AC4 (deployed): the minted token pulls a manifest of personal/imagesensortool, and registry-check --package for a package outside its reach exits non-zero",
+    "verification": "toolkit services gitea registry-check --app imagesensortool && ! toolkit services gitea registry-check --app imagesensortool --package \"$OUT_OF_SCOPE_PACKAGE\"  # OUT_OF_SCOPE_PACKAGE: the <owner>/<name> recorded in verification.md by S2c's consequence check",
     "state": "pending",
     "evidence": ""
   },
   {
     "id": "IDP-053-forge-agnostic-product-path-f5",
     "behavior": "AC5: a contract without hostnames.prod validates, the committed schema equals the model, prod render is refused for it, and the DNS, tile and registry tests skip prod for staging-only products",
-    "verification": ".venv/bin/python -m pytest -q tests/test_product_contract.py tests/test_product_contract_schema.py tests/test_product_contract_drift.py tests/test_dns_contract_hostnames.py tests/test_platform_tiles_cover_registry.py tests/test_product_registry.py",
+    "verification": ".venv/bin/python -m pytest -q tests/test_product_contract.py tests/test_product_contract_schema.py tests/test_product_contract_drift.py tests/test_product_contract_guards.py tests/test_dns_contract_hostnames.py tests/test_platform_tiles_cover_registry.py tests/test_e2e_expectations_cover_registry.py tests/test_product_registry.py",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "IDP-053-forge-agnostic-product-path-f13",
+    "behavior": "AC13 (S3c): render refuses a staging hostname that breaks D8, web passes, and the staging hairpin blocks are generated from networking.staging_zones byte-identical for today's zones",
+    "verification": ".venv/bin/python -m pytest -q tests/test_product_staging_hostname.py tests/test_coredns_hairpin_zones.py tests/test_coredns_hairpin_answer.py",
     "state": "pending",
     "evidence": ""
   },
@@ -72,13 +79,13 @@
   {
     "id": "IDP-053-forge-agnostic-product-path-f10",
     "behavior": "AC10: the owner's decision on the Gitea-to-receiver trigger is recorded in the CI/CD runbook",
-    "verification": "grep -n 'IDP-053' docs/runbooks/cicd.md",
+    "verification": ".venv/bin/python -m pytest -q tests/test_runbook_gitea_trigger.py",
     "state": "pending",
     "evidence": ""
   },
   {
     "id": "IDP-053-forge-agnostic-product-path-f11",
-    "behavior": "AC11: release-contract works for a non-GitHub forge, refuses an unsupported or private registry with ERROR/WHY/FIX, and proves sha- tags of 7+ hex digits",
+    "behavior": "AC11: release-contract works for a non-GitHub forge, refuses an unsupported or private registry with ERROR/WHY/FIX, and proves sha- tags of 7 and 10 hex digits (both)",
     "verification": ".venv/bin/python -m pytest -q tests/test_product_release.py tests/test_registry_digest.py",
     "state": "pending",
     "evidence": ""
