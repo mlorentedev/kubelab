@@ -145,7 +145,7 @@ jobs:
           git merge-base --is-ancestor "${CURRENT#sha-}" "$GITHUB_SHA" || rc=$?
           case "$rc" in
             0) ;;
-            1) echo "master already pins api ${CURRENT}, a build newer than ${SHA}; nothing to promote"
+            1) echo "::notice::master already pins api ${CURRENT}, a build newer than ${SHA}; nothing to promote"
                exit 0 ;;
             *) echo "::error::cannot place the staging pin ${CURRENT} in master's history"
                exit 1 ;;
