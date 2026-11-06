@@ -52,6 +52,8 @@ created: "2026-10-21"
   - [x] ✓ 2026-11-02 Projection: every 10 seconds, the `forge_source` row first because of the foreign key, item and delivery mark in one transaction, and a late older delivery does not overwrite a newer read (PR-Agent finding on #2933)
   - [x] ✓ 2026-11-03 Deliver `FORGE_GITHUB_WEBHOOK_SECRET` and `FORGE_GITEA_WEBHOOK_SECRET` through SOPS and `SECRET_CATALOG`, prod only: staging is VPN-only, so no forge reaches it
   - [ ] Register the two webhooks as code
+    - [x] ✓ 2026-11-05 GitHub: the App's own hook, `make forge-github-hook` (plan; `APPLY=1` writes, `SECRET=1` resends after a rotation). The events and the Active toggle are the operator's settings step, which the command checks (lesson-714)
+    - [ ] Gitea: with the Gitea source slice. `infra.forge.sources` declares GitHub only, so every Gitea delivery would be filtered, and `repository_settings.webhooks` puts a hook on every declared repository while the Gitea source is per organization
 - [x] ✓ 2026-11-02 [AC4] Test: the same delivery twice projects once (`TestSameDeliveryProjectsOnce`, against Postgres)
 - [x] ✓ 2026-11-02 [AC4] Periodic reconcile per source every 10 minutes under the hourly call ceiling, with a guard test that counts calls. `infra.forge.sources` declares GitHub only: which Gitea repository to read is the operator's call, and the Gitea reader is wired with it
 - [ ] [AC1] Queue endpoint with the inbox reason (author, requested reviewer, failing CI, waiting on me). `GET /console/queue` serves the open items without reasons since 2026-11-04; the reasons need the operator's login per forge and check-run reads
