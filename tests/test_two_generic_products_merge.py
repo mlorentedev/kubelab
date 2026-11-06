@@ -7,16 +7,18 @@ master that already holds the first. These tests run that merge with git, in bot
 would hold the PR until its next image; a stale copy of the other product's pin would downgrade it.
 
 The values file is written by the real `promotion.promote` (the overlay generator is stubbed) for two
-generic products laid out as tightly as the writer allows. The overlay is the committed staging file,
-with each app's image line changed as its deploy PR changes it: one line per app.
+generic products laid out as tightly as the writer allows, one of them promoted for the first time.
+The whole receiver write is then run for real: `promote` and the K8s generator on a copy of the
+committed tree, one git branch per app, merged in both orders, and checked against a fresh regenerate.
 """
 
 from __future__ import annotations
 
+import difflib
 import pathlib
-import re
 import shutil
 import subprocess
+import sys
 from unittest.mock import MagicMock
 
 import pytest
@@ -26,7 +28,6 @@ from toolkit.features import product_registry, product_render, promotion
 from toolkit.features.product_contract import validate_contract
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
-OVERLAY = REPO_ROOT / "infra/k8s/overlays/staging/generated/deployments.yaml"
 
 pytestmark = pytest.mark.skipif(shutil.which("git") is None, reason="the merge is git's")
 
@@ -45,8 +46,8 @@ products:
     events: {staging: third-image-published}
 """
 
-# The tightest layout the writer produces: web's pin is its block's last line, and a product
-# promoted for the first time gets its pin inserted first, so only `third:` separates the two.
+# The tightest layout the writer produces: web's pin is its block's last line, and `third` has never
+# been promoted, so `promote` inserts its pin first and only `third:` separates the two writes.
 VALUES = """\
 apps:
   platform:
@@ -54,7 +55,6 @@ apps:
       domain: staging.mlorente.dev
       version: sha-1111111
     third:
-      version: sha-3333333
       domain: third.staging.kubelab.live
 
   # Third-party services
@@ -77,8 +77,13 @@ def _merge(base: str, ours: str, theirs: str, tmp: pathlib.Path) -> tuple[int, s
     return done.returncode, done.stdout
 
 
-def _changed_lines(before: str, after: str) -> list[str]:
-    return [b for a, b in zip(before.splitlines(), after.splitlines(), strict=True) if a != b]
+def _diff(before: str, after: str) -> list[str]:
+    """The lines a write removed (``-``) and added (``+``), in order."""
+    return [
+        line
+        for line in difflib.unified_diff(before.splitlines(), after.splitlines(), lineterm="", n=0)
+        if line[:1] in "+-" and not line.startswith(("+++", "---"))
+    ]
 
 
 @pytest.fixture
@@ -112,8 +117,10 @@ def promote_into(monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path):
 def test_each_deploy_pr_writes_only_its_own_pin(promote_into) -> None:
     web = promote_into("web", "sha-2222222")
     third = promote_into("third", "sha-4444444")
-    assert _changed_lines(VALUES, web) == ["      version: sha-2222222"]
-    assert _changed_lines(VALUES, third) == ["      version: sha-4444444"]
+    assert _diff(VALUES, web) == ["-      version: sha-1111111", "+      version: sha-2222222"]
+    # The first promotion inserts the pin as the block's first key, right under `third:`.
+    assert _diff(VALUES, third) == ["+      version: sha-4444444"]
+    assert third.splitlines()[5:7] == ["    third:", "      version: sha-4444444"]
 
 
 @pytest.mark.parametrize("first", ["web", "third"])
@@ -187,17 +194,75 @@ def test_the_merge_does_report_a_conflict(tmp_path: pathlib.Path) -> None:
     assert conflicts == 1
 
 
-def _repin(text: str, image: str, tag: str) -> str:
-    out, n = re.subn(rf"(image: \S+/{re.escape(image)}:)\S+", rf"\g<1>{tag}", text)
-    assert n == 1, f"{image}: expected one image line in the overlay, found {n}"
-    return out
+# What a receiver run copies: the generator reads the values and the platform tree, and the api
+# lane's migrations Job is rendered from `apps/api/migrations`.
+TREE = ("infra", "toolkit", "edge", "apps/api/migrations", "pyproject.toml")
+PROMOTE = """
+import sys
+from unittest.mock import MagicMock
+from toolkit.features import promotion
+promotion.tag_exists = MagicMock(return_value=True)  # the registry lookup is the only network call
+promotion.promote("staging", sys.argv[1], sys.argv[2])
+"""
+REGENERATE = """
+from toolkit.features.generator_k8s import K8sGenerator
+assert K8sGenerator().generate("staging")["success"]
+"""
 
 
-@pytest.mark.parametrize("first", ["kubelab-web", "kubelab-api"])
-def test_the_overlay_merges_cleanly_in_either_order(tmp_path: pathlib.Path, first: str) -> None:
-    base = OVERLAY.read_text(encoding="utf-8")
-    branches = {name: _repin(base, name, "sha-9999999") for name in ("kubelab-web", "kubelab-api")}
-    second = "kubelab-api" if first == "kubelab-web" else "kubelab-web"
-    conflicts, merged = _merge(base, branches[first], branches[second], tmp_path)
-    assert conflicts == 0, merged
-    assert merged.count(":sha-9999999") == 2
+def _git(tree: pathlib.Path, *args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", "-c", "user.name=t", "-c", "user.email=t@t", *args],
+        cwd=tree,
+        capture_output=True,
+        encoding="utf-8",
+    )
+
+
+def _python(tree: pathlib.Path, code: str, *args: str) -> None:
+    # The copy's own toolkit: settings.PROJECT_ROOT follows the package file, so every write lands
+    # in the copy and never in this checkout.
+    done = subprocess.run(
+        [sys.executable, "-c", code, *args],
+        cwd=tree,
+        env={"PATH": "/usr/bin:/bin", "PYTHONPATH": str(tree), "HOME": str(tree)},
+        capture_output=True,
+        encoding="utf-8",
+    )
+    assert done.returncode == 0, done.stdout + done.stderr
+
+
+@pytest.fixture
+def committed_tree(tmp_path: pathlib.Path) -> pathlib.Path:
+    tree = tmp_path / "tree"
+    tree.mkdir()
+    archive = subprocess.run(["git", "-C", str(REPO_ROOT), "archive", "HEAD", *TREE], capture_output=True)
+    assert archive.returncode == 0, archive.stderr
+    subprocess.run(["tar", "-x", "-C", str(tree)], input=archive.stdout, check=True)
+    for args in (("init", "-q", "-b", "master"), ("add", "-A"), ("commit", "-qm", "base")):
+        assert _git(tree, *args).returncode == 0
+    return tree
+
+
+@pytest.mark.parametrize("first", ["web", "api"])
+def test_the_whole_receiver_write_merges_in_either_order(committed_tree: pathlib.Path, first: str) -> None:
+    tree = committed_tree
+    tags = {"web": "sha-2222222", "api": "sha-4444444"}
+    for app, tag in tags.items():
+        assert _git(tree, "checkout", "-q", "-b", f"deploy/staging-{app}", "master").returncode == 0
+        _python(tree, PROMOTE, app, tag)
+        written = _git(tree, "diff", "--name-only").stdout.split()
+        assert written == ["infra/config/values/staging.yaml", "infra/k8s/overlays/staging/generated/deployments.yaml"]
+        assert _git(tree, "commit", "-qam", f"deploy {app}").returncode == 0
+    second = "api" if first == "web" else "web"
+    assert _git(tree, "checkout", "-q", "master").returncode == 0
+    for app in (first, second):
+        merged = _git(tree, "merge", "-q", "--no-edit", f"deploy/staging-{app}")
+        assert merged.returncode == 0, merged.stdout + merged.stderr
+    deployments = (tree / "infra/k8s/overlays/staging/generated/deployments.yaml").read_text(encoding="utf-8")
+    for app, tag in tags.items():
+        assert f"/kubelab-{app}:{tag}" in deployments
+    # A shared line the merge got wrong, a digest or an index the generator derives from every pin,
+    # shows here: the merged tree is not what the generator writes from the merged values.
+    _python(tree, REGENERATE)
+    assert _git(tree, "status", "--porcelain").stdout == ""
