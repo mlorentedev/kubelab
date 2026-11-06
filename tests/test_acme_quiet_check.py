@@ -22,6 +22,7 @@ def _rendered(env: str) -> list[dict]:
         ["kubectl", "kustomize", str(ROOT / "infra" / "k8s" / "overlays" / env)],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=True,
     )
     return [doc for doc in yaml.safe_load_all(out.stdout) if doc]

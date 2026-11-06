@@ -119,6 +119,7 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit infra k8s access connect` | Bring up the cluster-access transport (idempotent). |
 | `toolkit infra k8s access disconnect` | Tear down the cluster-access transport (idempotent; no-op for prod). |
 | `toolkit infra k8s access status` | Report whether the transport is up and which transport was resolved. |
+| `toolkit infra k8s acme-quiet-check` | Prove the ACME failure rule stays quiet on Traefik's heartbeat (OBS-033). |
 | `toolkit infra k8s alert-smoke` | Prove the certificate-alerting path still works, end to end (OBS-007). |
 | `toolkit infra k8s apply-middleware-secrets` | Render Traefik Middleware CRDs from templates + SOPS, then kubectl apply. |
 | `toolkit infra k8s apply-secrets` | Decrypt SOPS secrets and apply as K8s Secrets. |
