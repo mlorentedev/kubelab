@@ -22,7 +22,8 @@ created: "2026-11-01"
 - [x] [P] [AC4] Failing test: `.github/workflows/renovate.yml` carries no literal `renovate-version`, and the step that sets it reads the `common.yaml` image key (`tests/test_renovate_engine_version.py`) ✓ 2026-11-04
 - [x] [AC4] Declare `ghcr.io/renovatebot/renovate:<version>` in `common.yaml` (`ci.renovate.image`) and make the workflow read the tag from it (a `.github/**` change, so the owner merges it) ✓ 2026-11-04
 - [ ] [P] [AC1] Failing test: the rendered repository list equals the repositories in `apps.services.core.gitea.organizations`
-- [ ] [AC1] [AC3] Template the global config (`onboarding: false`, `requireConfig: optional`, the shared repository settings) and the repository list in `beelink_services`
+- [ ] [AC1] [AC3] Template the global config (`extends` the `ci-workflows` preset at a pinned tag, `onboarding: false`, `requireConfig: optional`) and the repository list in `beelink_services`, once the `ci-workflows` session publishes the preset's path and tag
+- [ ] [AC3] Dry run against one Gitea repository: the `github>` preset resolves, and a `github.com` host rule is added only if the run needs it
 - [ ] [AC6] Declare the bot identity and its organization membership; mint and record its token with the role's existing mint-then-record pair, the mint gated on the SOPS entry being absent; register it in `SECRET_CATALOG`
 - [ ] [AC2] Timer and oneshot service (`OnCalendar=hourly`, `Persistent=true`, after the forge's compose unit and a Gitea readiness wait, a container memory limit)
 - [ ] [AC2] Provision Beelink twice: first run applies, second reports `changed=0`
