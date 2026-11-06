@@ -409,7 +409,7 @@ def _gitea_clients(env: str) -> tuple["GiteaClient", "GiteaClient", str, str]:
     )
 
 
-def _report_machine_ownership(admin: "GiteaClient", bot_username: str, criterion: str = "AC4") -> None:
+def _report_machine_ownership(admin: "GiteaClient", bot_username: str, criterion: str = "AC4") -> bool:
     """Print what the machine identity owns — ADR-065 D1 / TOOL-035 AC4, every run.
 
     Called for the PR reviewer too (TOOL-080 AC5, `criterion` names it): the same
@@ -427,6 +427,10 @@ def _report_machine_ownership(admin: "GiteaClient", bot_username: str, criterion
     looked and it is empty". A reconcile that converged still converged; what is
     lost is the check, and the message says so rather than printing `(none)` and
     letting an unread state pass for a verified one.
+
+    Returns True only for a VIOLATION read from the forge (AUTH-024): the caller
+    exits non-zero on it, after every account has been reported. An unread state
+    returns False for the reason above, and is printed as unchecked instead.
     """
     from toolkit.features.gitea_client import GiteaError
 
@@ -439,7 +443,7 @@ def _report_machine_ownership(admin: "GiteaClient", bot_username: str, criterion
             f"A 403 here means the admin token predates `read:user` in "
             f"`apps.services.core.gitea.token_scopes.admin`; rotate and re-provision."
         )
-        return
+        return False
 
     if owned:
         console.print(
@@ -447,9 +451,10 @@ def _report_machine_ownership(admin: "GiteaClient", bot_username: str, criterion
             f"machine identity to own nothing, so that retiring it is a membership deletion "
             f"rather than a data migration."
         )
-        return
+        return True
 
     console.print(f"\n[dim]{criterion} ok — {bot_username} owns: (none)[/dim]")
+    return False
 
 
 @gitea_app.command("reconcile")
@@ -490,12 +495,21 @@ def gitea_reconcile(
     # writes where a repository declares it, and owns nothing.
     agent = merged["apps"]["auth"]["identities"].get("agent")
 
+    owners: list[str] = []
+
     def report_ownership() -> None:
-        _report_machine_ownership(admin, bot_username)
-        if reviewer:
-            _report_machine_ownership(admin, str(reviewer), criterion="TOOL-080 AC5")
-        if agent:
-            _report_machine_ownership(admin, str(agent), criterion="AUTH-022 AC3")
+        # Every account is reported before anything fails, so one run names all of them.
+        accounts = [(bot_username, "AC4"), (reviewer, "TOOL-080 AC5"), (agent, "AUTH-022 AC3")]
+        for login, criterion in accounts:
+            if login and _report_machine_ownership(admin, str(login), criterion=criterion):
+                owners.append(str(login))
+
+    def fail_on_owned_repos() -> None:
+        # Last at every exit, so the other failures still print. Printing VIOLATED and
+        # exiting 0 was a detector nothing could act on (AUTH-024, #3148).
+        if owners:
+            logger.error(f"machine account(s) {owners} own repositories; ADR-065 D1 requires they own none.")
+            raise typer.Exit(1)
 
     if not declared:
         logger.warning("no `gitea.organizations` declared in common.yaml — nothing to reconcile")
@@ -504,6 +518,7 @@ def gitea_reconcile(
         # look, and a machine identity that has acquired a repository is worth
         # hearing about whether or not this run had anything to reconcile.
         report_ownership()
+        fail_on_owned_repos()
         raise typer.Exit(0)
 
     # BEFORE the forge reads, not after: a malformed or absent `repository_settings`
@@ -644,6 +659,7 @@ def gitea_reconcile(
         fail_on_absent_native_repos()
         fail_on_lost_content()
         fail_on_unfilled_migrations()
+        fail_on_owned_repos()
         # Drift does not make the plan non-idempotent -- nothing here would act on
         # it -- but it must not be reported as a match either. "Nothing to create"
         # is the honest claim; "forge matches the declaration" was not, and was
@@ -667,6 +683,7 @@ def gitea_reconcile(
         fail_on_absent_native_repos()
         fail_on_lost_content()
         fail_on_unfilled_migrations()
+        fail_on_owned_repos()
         return
 
     # Read only when a migration is actually planned. Its absence is a hard error
@@ -776,6 +793,7 @@ def gitea_reconcile(
     fail_on_unfilled_migrations()
     if not report.ok:
         raise typer.Exit(1)
+    fail_on_owned_repos()
 
 
 @gitea_app.command("drop-empty")
