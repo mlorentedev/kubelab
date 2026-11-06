@@ -32,10 +32,19 @@ jobs:
         with:
           persist-credentials: false
 
+      # The engine pin lives in common.yaml (ci.renovate.image), shared with the
+      # Gitea run on the Beelink node, so the two forges cannot drift (IDP-036).
+      - id: engine
+        run: |
+          ref="$(yq -e '.ci.renovate.image' infra/config/values/common.yaml)"
+          echo "image=${ref%:*}" >> "$GITHUB_OUTPUT"
+          echo "version=${ref##*:}" >> "$GITHUB_OUTPUT"
+
       - uses: renovatebot/github-action@1c0cf989c02653fba0efe7ca5772338860ca71dc  # v46.3.12
         with:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
-          renovate-version: 44.199.2
+          renovate-image: ${{ steps.engine.outputs.image }}
+          renovate-version: ${{ steps.engine.outputs.version }}
         env:
           RENOVATE_REPOSITORIES: ${{ github.repository }}
           RENOVATE_ONBOARDING: "false"

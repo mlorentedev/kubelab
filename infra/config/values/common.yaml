@@ -650,6 +650,11 @@ ci:
         required_contexts:
           - PR gate
           - GitGuardian Security Checks
+  # The Renovate engine, one pin for both forges (IDP-036): the GitHub workflow
+  # reads it, and the Gitea run on the Beelink node will. Not reconciled by the
+  # branch-protection tool: the common.yaml image manager in renovate.json bumps it.
+  renovate:
+    image: ghcr.io/renovatebot/renovate:44.199.2
 
 # ===========================================================================
 # K3S CLUSTER

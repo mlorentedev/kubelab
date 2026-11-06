@@ -84,7 +84,7 @@ def test_a_kubectl_skip_stays_a_skip_outside_ci(tmp_path: Path) -> None:
 
 def _workflow_env() -> dict[str, str]:
     workflow = yaml.safe_load((REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8"))
-    return workflow["jobs"]["tests"]["env"]
+    return workflow["jobs"]["test-shards"]["env"]
 
 
 def test_ci_pins_kubectl_to_the_cluster_version() -> None:
@@ -108,8 +108,8 @@ def test_ci_pins_kubectl_to_the_cluster_version() -> None:
 
 
 @pytest.mark.parametrize("step", ["Install kubectl", "kubectl is present"])
-def test_the_tests_job_installs_and_requires_kubectl_before_make_test(step: str) -> None:
+def test_every_test_shard_installs_and_requires_kubectl_before_make_test(step: str) -> None:
     workflow = yaml.safe_load((REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8"))
-    names = [s.get("name") for s in workflow["jobs"]["tests"]["steps"]]
+    names = [s.get("name") for s in workflow["jobs"]["test-shards"]["steps"]]
     assert step in names, names
     assert names.index(step) < names.index("Tests"), names

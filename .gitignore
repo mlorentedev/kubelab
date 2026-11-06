@@ -50,6 +50,9 @@ ehthumbs.db
 htmlcov/
 .coverage
 .coverage.*
+# CI shard outputs (#3111); the committed record is tests/shard_durations.json
+shard-durations*.json
+.shard-durations/
 coverage.xml
 .pytest_cache/
 *.cover

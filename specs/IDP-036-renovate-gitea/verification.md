@@ -9,9 +9,13 @@ created: "2026-11-01"
 
 Map every acceptance criterion from `proposal.md` to concrete proof (commit hash, test name, or observed behavior).
 
-- [ ] Criterion 1 -> commit `<hash>` / test `<name>`
-- [ ] Criterion 2 -> commit `<hash>` / test `<name>`
-- [ ] Criterion 3 -> commit `<hash>` / test `<name>`
+- [ ] AC1 -> pending
+- [ ] AC2 -> pending
+- [ ] AC3 -> pending
+- [x] AC4 -> `tests/test_renovate_engine_version.py`. The pin is `ci.renovate.image` in `common.yaml`; the workflow's `engine` step feeds `renovate-image` and `renovate-version`. `make mutate` RED for a literal `renovate-version` and for a wrong key. Renovate 44.199.2 `--dry-run=extract` reports `ghcr.io/renovatebot/renovate` 44.199.2 from the `common.yaml` image manager.
+- [ ] AC5 -> pending
+- [ ] AC6 -> pending
+- [ ] AC7 -> pending
 
 ## Test status
 
@@ -23,8 +27,7 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 
 Brief log of non-obvious trade-offs or course corrections taken during the work. Routine choices belong in commit messages, not here.
 
--
--
+- AC4: the pin sits under `ci` (CI / forge policy), not `apps.services`, which would make it a service with location and promotion axes and their gates.
 
 ## Promotion candidates
 

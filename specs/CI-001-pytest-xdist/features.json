@@ -1,0 +1,37 @@
+[
+  {
+    "id": "CI-001-pytest-xdist-f1",
+    "behavior": "the make test recipe asks for -n auto and a --dist mode that, run on a probe, keeps a file on one worker in order; neither the recipe nor addopts carries a deselecting option (the full-suite count and coverage match is AC1 evidence in verification.md)",
+    "verification": ".venv/bin/pytest -q --no-cov -p no:cacheprovider tests/test_pytest_parallel_config.py",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CI-001-pytest-xdist-f2",
+    "behavior": "the wiki generator writes under the project root it holds at generate time, never into the checkout",
+    "verification": ".venv/bin/pytest -q --no-cov -p no:cacheprovider tests/test_wiki_generator_follows_project_root.py",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CI-001-pytest-xdist-f3",
+    "behavior": "the required check keeps the name Tests",
+    "verification": "grep -qE '^    name: Tests$' .github/workflows/ci.yml",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CI-001-pytest-xdist-f4",
+    "behavior": "the shard plan runs every test file on exactly one shard, a file the durations record lacks included, whatever the collection order; the plugin deselects the other shards' files end to end",
+    "verification": ".venv/bin/pytest -q --no-cov -p no:cacheprovider tests/test_test_shards.py -k 'exactly_one_shard or collection_order or plugin_deselects or heaviest_file'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CI-001-pytest-xdist-f5",
+    "behavior": "ci.yml runs one shard per matrix entry with the matching SHARD=I/N, and the required Tests job needs the shards, runs always() and fails unless they all succeeded",
+    "verification": ".venv/bin/pytest -q --no-cov -p no:cacheprovider tests/test_test_shards.py -k 'ci_runs_every_shard or required_check_fails or uploads_its_coverage'",
+    "state": "pending",
+    "evidence": ""
+  }
+]
