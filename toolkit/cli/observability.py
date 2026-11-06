@@ -287,7 +287,7 @@ def _echo_kuma_down() -> None:
         return
     typer.echo("--- Uptime Kuma: DOWN ---")
     for d in down:
-        typer.echo(f"[DOWN] {d['name']} since {d['since']}" + (f": {d['msg']}" if d["msg"] else ""))
+        typer.echo(f"[DOWN] {d['name']} (last check {d['checked']})" + (f": {d['msg']}" if d["msg"] else ""))
 
 
 @app.command("slack")
