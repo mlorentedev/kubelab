@@ -101,7 +101,7 @@ def test_the_container_name_comes_from_the_declaration() -> None:
     """The removal, the probe and the render must all name the declared container.
     A literal in one of them means a rename in `common.yaml` leaves that one
     addressing a container that no longer exists, and `docker rm -f` on a missing
-    name reports nothing (lesson-715)."""
+    name reports nothing (lesson-718)."""
     text = PLAYBOOK.read_text(encoding="utf-8")
     assert 'runner_container_name: "{{ config.apps.services.automation.github_runner.name }}"' in text
     assert _task("Verify GitHub Runner container is running")["command"].endswith("{{ runner_container_name }}")

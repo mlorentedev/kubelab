@@ -1,5 +1,5 @@
 ---
-id: lesson-715-docker-rm-f-exits-0-for-a-container-that-does-not-exist
+id: lesson-718-docker-rm-f-exits-0-for-a-container-that-does-not-exist
 type: lesson
 status: active
 title: "`docker rm -f` exits 0 for a container that does not exist, so its exit code cannot say whether anything changed"

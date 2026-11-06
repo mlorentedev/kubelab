@@ -4,7 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
-| 715 | [`docker rm -f` exits 0 for a container that does not exist, so its exit code cannot say whether anything changed](lesson-715-docker-rm-f-exits-0-for-a-container-that-does-not-exist.md) | 2026-11-06 |
+| 718 | [`docker rm -f` exits 0 for a container that does not exist, so its exit code cannot say whether anything changed](lesson-718-docker-rm-f-exits-0-for-a-container-that-does-not-exist.md) | 2026-11-06 |
 | 702 | [A container port key must reach the server, not only its client](lesson-702-a-container-port-key-must-reach-the-server-not-only-its-client.md) | 2026-11-02 |
 | 692 | [Open WebUI's Pyodide runs get 60 seconds, including the package download](lesson-692-open-webuis-pyodide-runs-get-60-seconds-including-the-package-download.md) | 2026-11-01 |
 | 690 | [Measure the model before tuning Open WebUI's background calls](lesson-690-measure-the-model-before-tuning-open-webuis-background-calls.md) | 2026-11-01 |
