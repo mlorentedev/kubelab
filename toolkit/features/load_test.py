@@ -212,7 +212,7 @@ def knee(steps: list[dict[str, Any]]) -> dict[str, Any]:
     return {
         "measured": measured,
         "last_healthy_rps": last,
-        "first_degraded_rps": bad["rate"] if bad else None,
+        "first_degraded_rps": bad["rate"] if bad and measured else None,
         "reasons": bad["reasons"] if bad else [],
         "lower_bound_only": measured and (bad is None or "generator" in bad["reasons"]),
         "vus_at_last_healthy": next((s["vus_peak"] for s in steps if s["rate"] == last), None)

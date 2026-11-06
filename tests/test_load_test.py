@@ -207,6 +207,9 @@ class TestVerdict:
         assert got["measured"] is False
         assert got["lower_bound_only"] is False
         assert got["vus_at_last_healthy"] is None
+        # The rate the stop happened at is not a capacity figure either; the
+        # reason says why the run stopped.
+        assert got["first_degraded_rps"] is None and got["reasons"] == [reason]
 
     @pytest.mark.parametrize("reasons", [[[], ["generator"]], [[], []], [[], ["latency"]]])
     def test_a_ramp_that_reached_a_step_measured_it(self, reasons: list) -> None:
@@ -541,6 +544,11 @@ def test_the_edge_measure_comment_sits_on_its_own_target() -> None:
     # #3012: the load-test block had landed between edge-measure's comment and target.
     lines = (REPO / "Makefile").read_text(encoding="utf-8").splitlines()
     target = lines.index(".PHONY: edge-measure")
-    assert "line rate" in lines[target - 3] + lines[target - 2] + lines[target - 1]
+    block = []
+    for line in reversed(lines[:target]):
+        if not line.startswith("#"):
+            break
+        block.append(line)
+    assert any("line rate" in line for line in block), "edge-measure has no comment directly above it"
     load = lines.index(".PHONY: load-test load-test-clear")
     assert "line rate" not in "".join(lines[load - 4 : load])
