@@ -1,0 +1,64 @@
+# Arming envelope for one unattended run. The run reads the committed copy only.
+version: 1
+run_id: "ap-20261106-kubelab-auth-edge"
+armed_by: manu
+armed_at: 2026-11-06T06:51:37Z
+expires_at: 2026-11-06T14:51:37Z
+objective: >-
+  Restore and verify Argo CD (land #3154), land #3138 and verify prod Authelia,
+  then close #3156 (the Argo CD monitor and make alerts) and #3135 (remove the
+  two unserved staging routes).
+scope:
+  write_paths:
+    - "infra/k8s/overlays/prod/argocd.yaml"
+    - "infra/k8s/overlays/staging/**"
+    - "infra/k8s/base/**"
+    - "infra/config/uptime-kuma/monitors.json"
+    - "toolkit/features/**"
+    - "toolkit/cli/**"
+    - "tests/**"
+    - "docs/lessons/**"
+    - "docs/runbooks/**"
+    - ".agent/runs/**"
+  frozen_paths:
+    - ".github/**"
+    - "harness/**"
+    - "**/AGENTS.md"
+    - "**/CLAUDE.md"
+    - ".agent/unattended.yml"
+    - "infra/config/secrets/**"
+    - "toolkit/features/secrets_manager.py"
+    - "toolkit/features/oidc_clients.py"
+    - "toolkit/features/backup_*"
+  max_files: 16
+  max_loc: 300
+allowed_commands: [dotf, gh, git, make, poetry, caffeinate, curl, dig, kubectl]
+queue:
+  source: bitacora
+  filter: >-
+    In order: #3154 (triage, land, verify /api/version JSON and the anonymous /
+    redirect in prod); #3138 (land after #3154 is verified, then verify the
+    Authelia portal, the guarded hosts' 302s and Authelia startup logs in prod;
+    on a regression, open a revert PR and land it); #3156 (Argo CD monitor
+    checks /api/version with a keyword, description names gcp1, make alerts
+    lists Uptime Kuma DOWN monitors; after merge run make monitoring-apply
+    CHECK=1, then without PRUNE); #3135 (remove the staging dev.kubelab.live
+    and loki.kubelab.live routes and their UNSERVED entries; validate in
+    staging).
+  max_items: 4
+budget:
+  max_iterations: 8
+  max_minutes_per_iteration: 60
+  max_consecutive_failures: 2
+authority:
+  merge: standing-grant
+  push: true
+  open_pr: true
+  advisor_tier: top
+# Operator decisions 2026-11-06 (in session, before arming): #3154 and #3138 may
+# merge although both land in prod (Argo CD restore; Authelia restart). #3156:
+# make monitoring-apply may write Uptime Kuma on the RPi3, plan first, never
+# PRUNE. #3135: remove both routes. kubectl is read-only (get, logs); no apply,
+# exec, port-forward or restart against prod. Out of this run: #1067 (needs an
+# architecture session and ADR), #1814 (upstream-blocked), #2087, #2478, #260,
+# #272, #392, #404, #283. Wake lock: caffeinate held to expires_at.
