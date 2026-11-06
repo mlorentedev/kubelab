@@ -21,6 +21,8 @@ created: "2026-11-01"
 
 - [x] [P] [AC4] Failing test: `.github/workflows/renovate.yml` carries no literal `renovate-version`, and the step that sets it reads the `common.yaml` image key (`tests/test_renovate_engine_version.py`) ✓ 2026-11-04
 - [x] [AC4] Declare `ghcr.io/renovatebot/renovate:<version>` in `common.yaml` (`ci.renovate.image`) and make the workflow read the tag from it (a `.github/**` change, so the owner merges it) ✓ 2026-11-04
+- [ ] [AC4] Interim only: once `ci-workflows` holds the engine version, the PR that moves kubelab's caller to the reusable workflow removes `ci.renovate.image` and `tests/test_renovate_engine_version.py` (owned by the `ci-workflows` session)
+- [ ] [P] [AC4] Failing test: the `beelink_services` role carries no literal engine version and reads it from `ci-workflows` at the pinned tag
 - [ ] [P] [AC1] Failing test: the rendered repository list equals the repositories in `apps.services.core.gitea.organizations`
 - [ ] [AC1] [AC3] Template the global config (`extends` the `ci-workflows` preset at a pinned tag, `onboarding: false`, `requireConfig: optional`) and the repository list in `beelink_services`, once the `ci-workflows` session publishes the preset's path and tag
 - [ ] [AC3] Dry run against one Gitea repository: the `github>` preset resolves, and a `github.com` host rule is added only if the run needs it
