@@ -321,6 +321,42 @@
   ignore_errors: "{{ ansible_check_mode }}"
   changed_when: false
 
+# A running container is not a registered runner: on 2026-11-06 the container had
+# been up while GitHub listed none, and nothing said so (#3080). This asks GitHub,
+# which is the only party that knows. EPHEMERAL=1 deregisters the runner after each
+# job and registers it again, so a short absence is retried before it fails.
+- name: Verify GitHub lists the declared runner as registered
+  when: runner_enabled | bool
+  uri:
+    url: "https://api.github.com/repos/{{ runner_repo_url | urlsplit('path') | trim('/') }}/actions/runners?per_page=100"
+    headers:
+      Authorization: "Bearer {{ runner_access_token }}"
+      Accept: application/vnd.github+json
+    return_content: true
+  register: _runner_registration
+  no_log: true
+  check_mode: false
+  retries: 6
+  delay: 10
+  until: >-
+    ((_runner_registration.json | default({})).runners | default([]) | selectattr('name', 'equalto', runner_name) | list | length) > 0
+  changed_when: false
+  # The token must stay out of the log, and no_log censors the failure with it. So
+  # this task never fails; the one below says why, from what it registered.
+  ignore_errors: true
+
+- name: Fail when GitHub does not list the declared runner
+  when:
+    - runner_enabled | bool
+    - ((_runner_registration.json | default({})).runners | default([]) | selectattr('name', 'equalto', runner_name) | list | length) == 0
+  fail:
+    msg: >-
+      github_runner.enabled is true, but GitHub lists no runner named '{{ runner_name }}'
+      (HTTP {{ _runner_registration.status | default('none') }}).
+      {{ 'The runner token was refused: it has likely expired (#1248).'
+         if (_runner_registration.status | default(0)) in [401, 403]
+         else 'The container runs but has not registered; read its logs.' }}
+
 # --- Gitea (ADR-061 singleton) ---
 - name: Wait for Gitea to report healthy
   command: docker inspect --format '{% raw %}{{.State.Health.Status}}{% endraw %}' gitea

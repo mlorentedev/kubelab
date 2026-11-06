@@ -236,7 +236,7 @@ services:
     restart: {{ restart_policy }}
     environment:
       REPO_URL: "{{ runner_repo_url }}"
-      RUNNER_NAME: "kubelab-bee"
+      RUNNER_NAME: "{{ runner_name }}"
       ACCESS_TOKEN: "{{ runner_access_token }}"
       RUNNER_WORKDIR: /tmp/runner
       RUNNER_GROUP: "{{ runner_group }}"
