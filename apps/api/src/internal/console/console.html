@@ -34,7 +34,7 @@
 // Every forge value is written with textContent, never as HTML: titles and labels are user input.
 const el = (tag, text, cls) => { const e = document.createElement(tag); if (text !== undefined) e.textContent = text; if (cls) e.className = cls; return e; };
 const ago = (iso) => { const m = Math.round((Date.now() - new Date(iso)) / 60000); return m < 60 ? m + " min" : m < 2880 ? Math.round(m / 60) + " h" : Math.round(m / 1440) + " d"; };
-let items = [], total = 0, next = null, pages = 0, readAt = null;
+let items = [], total = 0, next = null, pages = 0, readAt = null, busy = false;
 
 function render() {
   const q = document.getElementById("filter").value.toLowerCase();
@@ -55,8 +55,14 @@ function render() {
   document.getElementById("more").hidden = next === null;
 }
 
-// load reads the first page, or appends the next one when more is true.
+// load reads the first page, or appends the next one when more is true. With more
+// than one page loaded, a reread of the first page refreshes the sources and the total
+// and keeps the rows, so the health banner stays live without dropping what was loaded.
+// One read at a time: a refresh landing during an append would replace its rows.
 async function load(more) {
+  if (busy) return;
+  busy = true;
+  const keepRows = !more && pages > 1;
   try {
     const url = more && next ? "queue?after=" + encodeURIComponent(next) : "queue";
     // Authelia answers an expired session with a redirect to its portal; do not follow it as data.
@@ -70,10 +76,12 @@ async function load(more) {
       const when = s.as_of ? "read " + ago(s.as_of) + " ago" : "never read";
       box.append(el("span", s.source + " - " + when + (s.reachable ? "" : " - unreachable"), s.reachable ? "source" : "source down"));
     }
-    items = more ? items.concat(data.items) : data.items;
-    pages = more ? pages + 1 : 1;
     total = data.total;
-    next = data.next;
+    if (!keepRows) {
+      items = more ? items.concat(data.items) : data.items;
+      pages = more ? pages + 1 : 1;
+      next = data.next;
+    }
     readAt = new Date();
     document.getElementById("error").textContent = "";
     document.getElementById("items").classList.remove("stale");
@@ -83,14 +91,15 @@ async function load(more) {
     const last = readAt ? " The rows below are the last good read, " + ago(readAt) + " ago." : "";
     document.getElementById("error").textContent = "Could not load the queue: " + e.message + "." + last;
     document.getElementById("items").classList.add("stale");
+  } finally {
+    busy = false;
   }
 }
 
 document.getElementById("filter").addEventListener("input", render);
 document.getElementById("more").addEventListener("click", () => load(true));
 load(false);
-// The refresh rereads the first page; once more pages are loaded it would drop them, so it stops.
-setInterval(() => { if (pages <= 1) load(false); }, 60000);
+setInterval(() => load(false), 60000);
 </script>
 </body>
 </html>

@@ -189,3 +189,21 @@ func TestConsolePageIsServed(t *testing.T) {
 		t.Fatalf("status = %d type = %q", w.Code, w.Header().Get("Content-Type"))
 	}
 }
+
+// Every key the server can emit as `next` must be one it accepts back: an item whose
+// update time is the zero time would otherwise leave "Load more" answering 400 forever.
+func TestEveryEmittedCursorDecodes(t *testing.T) {
+	src := forge.Source{Forge: "github", Owner: "mlorentedev", Repo: "kubelab"}
+	for _, k := range []forge.QueueKey{
+		{UpdatedAt: time.Date(2026, 11, 5, 0, 0, 0, 0, time.UTC), Source: src, Number: 3},
+		{Source: src, Number: 3},
+	} {
+		got, err := decodeCursor(encodeCursor(k))
+		if err != nil {
+			t.Fatalf("cursor for %+v refused: %v", k, err)
+		}
+		if !got.UpdatedAt.Equal(k.UpdatedAt) || got.Source != k.Source || got.Number != k.Number {
+			t.Fatalf("cursor for %+v decoded as %+v", k, *got)
+		}
+	}
+}

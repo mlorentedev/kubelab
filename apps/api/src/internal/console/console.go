@@ -60,7 +60,7 @@ func decodeCursor(s string) (*forge.QueueKey, error) {
 		return nil, err
 	}
 	src, err := forge.ParseSources(c.Source)
-	if err != nil || len(src) != 1 || c.UpdatedAt.IsZero() || c.Number <= 0 {
+	if err != nil || len(src) != 1 || c.Number <= 0 {
 		return nil, errors.New("not a queue cursor")
 	}
 	return &forge.QueueKey{UpdatedAt: c.UpdatedAt, Source: src[0], Number: c.Number}, nil
