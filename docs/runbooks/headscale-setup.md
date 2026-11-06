@@ -855,7 +855,7 @@ Before it renders, the role refuses a segment that is malformed, owned by a priv
 
 ### 9.3 Not covered here
 
-How a tenant node is issued its key and tag, and what the tenant runs on its side, are not documented in this repository: there is no runbook for onboarding a tenant node, so do not infer one from the contractor steps this phase used to carry. For the tagged-key mechanics Headscale requires, see [onboard-vpn-fleet-agent](onboard-vpn-fleet-agent.md) (agents, not tenants).
+Onboarding a tenant node — readiness checklist, key minting, the handoff contract, and the ACL matrix that verifies the segment — is [onboard-tenant-node](onboard-tenant-node.md). What the tenant runs on its side (ts-bridge host-mode invocation, supervisor, local state) stays outside this repository. For the tagged-key mechanics Headscale requires, see [onboard-vpn-fleet-agent](onboard-vpn-fleet-agent.md) (agents, not tenants).
 
 ### 9.4 Revoke access
 
