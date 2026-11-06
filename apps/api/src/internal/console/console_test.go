@@ -207,3 +207,21 @@ func TestEveryEmittedCursorDecodes(t *testing.T) {
 		}
 	}
 }
+
+// Until apps/console serves the host's root (ADR-074 D5), the bare host sends the
+// operator to the page. The redirect is temporary on purpose: a browser caches a 301
+// for good, and `/` will become the frontend's.
+func TestConsoleHostRootRedirectsToThePage(t *testing.T) {
+	w := serve(t, &fakeQueue{}, "", "/")
+	if w.Code != http.StatusFound || w.Header().Get("Location") != "/console/" {
+		t.Fatalf("console host /: status = %d, location = %q, want 302 to /console/", w.Code, w.Header().Get("Location"))
+	}
+	for _, c := range []struct{ name, domain, host string }{
+		{"public api host", consoleHost, "api.kubelab.live"},
+		{"no console host declared", "", consoleHost},
+	} {
+		if w := serveHost(t, &fakeQueue{}, "", c.domain, c.host, "/"); w.Code != http.StatusNotFound {
+			t.Fatalf("%s /: status = %d, want 404", c.name, w.Code)
+		}
+	}
+}
