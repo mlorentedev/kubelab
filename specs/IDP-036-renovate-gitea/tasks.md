@@ -19,8 +19,10 @@ created: "2026-11-01"
 
 ## Implementation
 
-- [x] [P] [AC4] Failing test: `.github/workflows/renovate.yml` carries no literal `renovate-version`, and the step that sets it reads the `common.yaml` image key (`tests/test_renovate_engine_version.py`) ✓ 2026-11-04
-- [x] [AC4] Declare `ghcr.io/renovatebot/renovate:<version>` in `common.yaml` (`ci.renovate.image`) and make the workflow read the tag from it (a `.github/**` change, so the owner merges it) ✓ 2026-11-04
+Spec ACs, not #1384's: `[AC<n>]` below names this proposal's criteria, which are numbered independently of the ticket's.
+
+- [x] [P] [AC4] Interim, closed by the deletion task below: `.github/workflows/renovate.yml` carries no literal `renovate-version`, and the step that sets it reads the `common.yaml` image key (`tests/test_renovate_engine_version.py`) ✓ 2026-11-04
+- [x] [AC4] Interim, closed by the deletion task below: declare `ghcr.io/renovatebot/renovate:<version>` in `common.yaml` (`ci.renovate.image`) and make the workflow read the tag from it (a `.github/**` change, so the owner merges it) ✓ 2026-11-04
 - [ ] [AC4] Interim only: the `ci-workflows` session's kubelab PR deletes `renovate.yml`, `ci.renovate.image` and `tests/test_renovate_engine_version.py`, since the weekly `ci-workflows` run autodiscovers kubelab (mlorentedev/ci-workflows#35)
 - [ ] [P] [AC4] Failing test: the `beelink_services` role carries no literal engine version and reads it from `ci-workflows` at the pinned tag
 - [ ] [P] [AC1] Failing test: the rendered repository list equals the repositories in `apps.services.core.gitea.organizations`
