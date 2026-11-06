@@ -4,9 +4,14 @@ package console
 import (
 	"context"
 	_ "embed"
+	"encoding/base64"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -26,7 +31,60 @@ var consolePage []byte
 
 // QueueReader is the console's view of the read model.
 type QueueReader interface {
-	Queue(ctx context.Context, sources []forge.Source) ([]forge.SourceState, []forge.Item, error)
+	Queue(ctx context.Context, sources []forge.Source, after *forge.QueueKey, limit int) (forge.QueuePage, error)
+}
+
+// maxPage bounds one answer, and is the page size when the request names none.
+const maxPage = 500
+
+// cursor is a QueueKey as the client carries it: opaque, URL-safe, and checked
+// on the way back in, since it is client input.
+type cursor struct {
+	UpdatedAt time.Time `json:"u"`
+	Source    string    `json:"s"`
+	Number    int       `json:"n"`
+}
+
+func encodeCursor(k forge.QueueKey) string {
+	b, _ := json.Marshal(cursor{UpdatedAt: k.UpdatedAt, Source: k.Source.String(), Number: k.Number})
+	return base64.RawURLEncoding.EncodeToString(b)
+}
+
+func decodeCursor(s string) (*forge.QueueKey, error) {
+	b, err := base64.RawURLEncoding.DecodeString(s)
+	if err != nil {
+		return nil, err
+	}
+	var c cursor
+	if err := json.Unmarshal(b, &c); err != nil {
+		return nil, err
+	}
+	src, err := forge.ParseSources(c.Source)
+	if err != nil || len(src) != 1 || c.Number <= 0 {
+		return nil, errors.New("not a queue cursor")
+	}
+	return &forge.QueueKey{UpdatedAt: c.UpdatedAt, Source: src[0], Number: c.Number}, nil
+}
+
+// pageRequest reads `after` and `limit`; an absent value takes its default.
+func pageRequest(c *gin.Context) (*forge.QueueKey, int, error) {
+	var after *forge.QueueKey
+	if s := c.Query("after"); s != "" {
+		k, err := decodeCursor(s)
+		if err != nil {
+			return nil, 0, err
+		}
+		after = k
+	}
+	limit := maxPage
+	if s := c.Query("limit"); s != "" {
+		n, err := strconv.Atoi(s)
+		if err != nil || n < 1 || n > maxPage {
+			return nil, 0, fmt.Errorf("limit must be 1..%d", maxPage)
+		}
+		limit = n
+	}
+	return after, limit, nil
 }
 
 type sourceView struct {
@@ -106,18 +164,35 @@ func queueHandler(c *gin.Context, deps Deps) {
 		c.Status(http.StatusServiceUnavailable)
 		return
 	}
+	after, limit, err := pageRequest(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	// Next is the cursor of the following page, null on the last one. Total counts
+	// every open item of the declared sources, so the page can say "N of M".
 	out := struct {
 		Sources []sourceView `json:"sources"`
 		Items   []itemView   `json:"items"`
+		Total   int          `json:"total"`
+		Next    *string      `json:"next"`
 	}{Sources: []sourceView{}, Items: []itemView{}}
 	if len(sources) > 0 {
-		states, items, err := reader.Queue(c.Request.Context(), sources)
+		// One more than the page tells whether another page exists, without a count.
+		page, err := reader.Queue(c.Request.Context(), sources, after, limit+1)
 		if err != nil {
 			log.Printf("console queue: %v", err)
 			c.Status(http.StatusServiceUnavailable)
 			return
 		}
-		for _, st := range states {
+		items := page.Items
+		if len(items) > limit {
+			items = items[:limit]
+			next := encodeCursor(items[limit-1].Key())
+			out.Next = &next
+		}
+		out.Total = page.Total
+		for _, st := range page.States {
 			out.Sources = append(out.Sources, sourceView{Source: st.Source.String(), AsOf: st.AsOf, Reachable: st.Reachable})
 		}
 		for _, it := range items {

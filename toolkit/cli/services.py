@@ -485,11 +485,16 @@ def gitea_reconcile(
     # The PR reviewer (TOOL-080), resolved through the identity map like the bot.
     # Absent until its row is declared, and then the plan carries its read team.
     reviewer = merged["apps"]["auth"]["identities"].get("reviewer")
+    # The agents' authoring account (AUTH-022) is held to the same rule: it
+    # writes where a repository declares it, and owns nothing.
+    agent = merged["apps"]["auth"]["identities"].get("agent")
 
     def report_ownership() -> None:
         _report_machine_ownership(admin, bot_username)
         if reviewer:
             _report_machine_ownership(admin, str(reviewer), criterion="TOOL-080 AC5")
+        if agent:
+            _report_machine_ownership(admin, str(agent), criterion="AUTH-022 AC3")
 
     if not declared:
         logger.warning("no `gitea.organizations` declared in common.yaml — nothing to reconcile")
@@ -558,6 +563,25 @@ def gitea_reconcile(
                 review_team = admin.get_team(org, READ_TEAM.name) if org in existing_orgs else None
                 members = tuple(admin.list_team_members(int(review_team["id"]))) if review_team else ()
                 existing_review_teams[org] = (review_team, members)
+        # Each declared writer's collaborator row and access mode (AUTH-022), for the
+        # repositories that declare writers. Both, because the mode alone reads `read`
+        # on a public repository for an account with no grant (`get_collaborator_permission`).
+        existing_collaborators = {
+            f"{org}/{spec.name}": (
+                {
+                    login: (
+                        admin.is_collaborator(org, spec.name, login),
+                        admin.get_collaborator_permission(org, spec.name, login),
+                    )
+                    for login in spec.writers
+                }
+                if f"{org}/{spec.name}" in existing_repos
+                else None
+            )
+            for org, specs in declared.items()
+            for spec in specs
+            if spec.writers
+        }
     except GiteaError as exc:
         logger.error(f"could not read forge state from {base_url}: {exc}")
         raise typer.Exit(1) from exc
@@ -574,6 +598,7 @@ def gitea_reconcile(
         reviewer=str(reviewer) if reviewer else None,
         existing_review_teams=existing_review_teams,
         existing_repo_refs=existing_repo_refs,
+        existing_collaborators=existing_collaborators,
     )
     console.print(f"\n[bold]Gitea reconcile[/bold] — {base_url} ({env})\n")
     console.print(format_plan(plan))
@@ -657,7 +682,7 @@ def gitea_reconcile(
     # established the same way -- by asking every credential to do it and reading
     # which answered. Built once when EITHER kind of work is planned, so an ordinary
     # reconcile still depends on no credential it does not use.
-    if plan.repos_to_migrate or plan.repos_to_configure or plan.repos_to_hook:
+    if plan.repos_to_migrate or plan.repos_to_configure or plan.repos_to_hook or plan.collaborators_to_grant:
         from toolkit.features.gitea_client import GiteaBasicAuthClient
 
         gitea_cfg = merged["apps"]["services"]["core"]["gitea"]
@@ -720,6 +745,8 @@ def gitea_reconcile(
     # signed with the wrong value delivers, gets 200 from n8n and is dropped
     # silently — so the only proof is a downstream effect, and the wording here must
     # not read as though this line were it.
+    for granted, login in report.collaborators_granted:
+        logger.success(f"collaborator granted: {granted} -> {login} (write, read back)")
     for hooked, url in report.repos_hooked:
         logger.success(f"webhook registered: {hooked} -> {url}")
     # Each written hook's own proof, from its declaration (#1849): the advice for
@@ -1041,6 +1068,60 @@ def check_gitea_token_scopes(
             f"  make gitea-rotate-token TOKEN=<label> ENV={env} APPLY=1   then   make provision NODE=bee ENV={env}"
         )
     return 1 if failures else 0
+
+
+forge_app = typer.Typer(help="The console's forge integrations (CONSOLE-004)")
+app.add_typer(forge_app, name="forge")
+
+
+@forge_app.command("github-hook")
+def forge_github_hook(
+    apply: Annotated[bool, typer.Option("--apply", help="Write the config. Without it, plan only.")] = False,
+    resend_secret: Annotated[
+        bool, typer.Option("--resend-secret", help="Write the secret even with no visible drift (after a rotation)")
+    ] = False,
+) -> None:
+    """Converge the kubelab-console GitHub App's webhook to the API's receiver.
+
+    Plan only by default. The events the App subscribes to and the hook's Active
+    toggle are App settings the API cannot set: the operator's step.
+
+    Prod only, with no --env: the App has one hook, and staging is VPN-only, so
+    pointing it at staging would stop every delivery.
+    """
+    from toolkit.features.github_app_hook import GitHubAppHooks, HookConfigError, converge, declared_hook
+
+    merged = ConfigurationManager("prod", get_settings().project_root).get_merged_config()
+    app_id = merged["infra"]["forge"]["github"]["app_id"]
+    key = merged.get("apps", {}).get("services", {}).get("core", {}).get("github_app", {}).get("private_key", "")
+    secret = merged.get("apps", {}).get("platform", {}).get("api", {}).get("forge_github_webhook_secret", "") or ""
+    if not key:
+        logger.error("no apps.services.core.github_app.private_key in SOPS (common.enc.yaml)")
+        raise typer.Exit(1)
+    spec = declared_hook(merged)
+    console.print(f"webhook URL: {spec.url}")
+    try:
+        result = converge(
+            GitHubAppHooks(app_id, key), spec, secret=str(secret), apply=apply, resend_secret=resend_secret
+        )
+    except HookConfigError as e:
+        logger.error(str(e))
+        raise typer.Exit(1) from e
+    for field, live, want in result.changes:
+        console.print(f"  {field}: {live!r} -> {want!r}")
+    if result.wrote:
+        console.print(f"[green]written and read back[/green]: {spec.url} (secret sent, not readable back)")
+    elif result.changes:
+        console.print("[yellow]drift, not written[/yellow]: rerun with --apply")
+    else:
+        console.print(f"[green]in sync[/green]: {spec.url}")
+    if result.missing_events:
+        console.print(
+            f"[yellow]not subscribed[/yellow]: {', '.join(result.missing_events)}. In the App's settings, "
+            "Permissions & events > Subscribe to events, tick them and save; the API cannot set this."
+        )
+    if result.missing_events or (result.changes and not result.wrote):
+        raise typer.Exit(2)
 
 
 vikunja_app = typer.Typer(help="Audit the Vikunja task platform")

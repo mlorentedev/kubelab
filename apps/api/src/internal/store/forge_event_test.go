@@ -13,17 +13,27 @@ import (
 	"github.com/mlorentedev/kubelab/apps/api/pkg/config"
 )
 
-// Runs against a real database when FORGE_TEST_POSTGRES_PORT names a local one with the
-// migrations applied, because the guarantee lives in the SQL and not in the Go around it.
-func TestStoreEventTwiceKeepsOneRow(t *testing.T) {
+// testPostgres is the database the store tests run against: a local one with the
+// migrations applied, named by FORGE_TEST_POSTGRES_PORT, because the guarantee lives
+// in the SQL and not in the Go around it. Without one the tests skip, except in CI,
+// where a skip would let the job go green with the store untested (#3117).
+func testPostgres(t *testing.T) config.Postgres {
+	t.Helper()
 	port := os.Getenv("FORGE_TEST_POSTGRES_PORT")
 	if port == "" {
+		if os.Getenv("CI") != "" {
+			t.Fatal("FORGE_TEST_POSTGRES_PORT is not set in CI: the store tests would not run")
+		}
 		t.Skip("FORGE_TEST_POSTGRES_PORT is not set")
 	}
 	if _, err := strconv.Atoi(port); err != nil {
 		t.Fatal(err)
 	}
-	conf := config.Postgres{Host: "127.0.0.1", Port: port, Tenant: "api", Password: "fixture"}
+	return config.Postgres{Host: "127.0.0.1", Port: port, Tenant: "api", Password: "fixture"}
+}
+
+func TestStoreEventTwiceKeepsOneRow(t *testing.T) {
+	conf := testPostgres(t)
 	ctx := context.Background()
 	for i := 0; i < 2; i++ {
 		if err := store.StoreEvent(ctx, conf, "gitea", "d1", "issues", []byte(`{"a":1}`)); err != nil {
@@ -45,11 +55,7 @@ func TestStoreEventTwiceKeepsOneRow(t *testing.T) {
 }
 
 func TestReadModelRoundTrip(t *testing.T) {
-	port := os.Getenv("FORGE_TEST_POSTGRES_PORT")
-	if port == "" {
-		t.Skip("FORGE_TEST_POSTGRES_PORT is not set")
-	}
-	conf := config.Postgres{Host: "127.0.0.1", Port: port, Tenant: "api", Password: "fixture"}
+	conf := testPostgres(t)
 	ctx := context.Background()
 	model := store.ForgeModel{Conf: conf}
 	src := forge.Source{Forge: "github", Owner: "o", Repo: "r"}
@@ -74,11 +80,7 @@ func TestReadModelRoundTrip(t *testing.T) {
 }
 
 func TestSameDeliveryProjectsOnce(t *testing.T) {
-	port := os.Getenv("FORGE_TEST_POSTGRES_PORT")
-	if port == "" {
-		t.Skip("FORGE_TEST_POSTGRES_PORT is not set")
-	}
-	conf := config.Postgres{Host: "127.0.0.1", Port: port, Tenant: "api", Password: "fixture"}
+	conf := testPostgres(t)
 	ctx := context.Background()
 	model := store.ForgeModel{Conf: conf}
 	cleanup, err := pgx.Connect(ctx, conf.DSN())
@@ -151,15 +153,85 @@ func TestQueueReadsDeclaredOpenItemsNewestFirst(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	states, items, err := model.Queue(ctx, []forge.Source{read, never})
+	page, err := model.Queue(ctx, []forge.Source{read, never}, nil, 500)
 	if err != nil {
 		t.Fatal(err)
 	}
+	states, items := page.States, page.Items
 	if len(states) != 2 || states[0].Source != read || !states[0].Reachable || states[0].AsOf == nil ||
 		states[1].Source != never || states[1].Reachable || states[1].AsOf != nil {
 		t.Fatalf("states = %+v", states)
 	}
-	if len(items) != 2 || items[0].Number != 2 || items[1].Number != 1 || items[0].Source != read {
-		t.Fatalf("items = %+v, want open items 2 then 1 of the declared source", items)
+	if len(items) != 2 || items[0].Number != 2 || items[1].Number != 1 || items[0].Source != read || page.Total != 2 {
+		t.Fatalf("page = %+v, want open items 2 then 1 of the declared source, 2 in all", page)
+	}
+}
+
+// Walking the queue page by page returns every open item once, in order, even
+// when items share an update time: the key breaks ties by identity.
+func TestQueuePagesNeitherSkipNorRepeat(t *testing.T) {
+	port := os.Getenv("FORGE_TEST_POSTGRES_PORT")
+	if port == "" {
+		t.Skip("FORGE_TEST_POSTGRES_PORT is not set")
+	}
+	conf := config.Postgres{Host: "127.0.0.1", Port: port, Tenant: "api", Password: "fixture"}
+	ctx := context.Background()
+	conn, err := pgx.Connect(ctx, conf.DSN())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close(ctx)
+	if _, err := conn.Exec(ctx, `TRUNCATE forge_event, forge_item, forge_source`); err != nil {
+		t.Fatal(err)
+	}
+	model := store.ForgeModel{Conf: conf}
+	a := forge.Source{Forge: "github", Owner: "o", Repo: "a"}
+	b := forge.Source{Forge: "github", Owner: "o", Repo: "b"}
+	t0 := time.Date(2026, 11, 3, 8, 0, 0, 0, time.UTC)
+	var seed []forge.Item
+	for n := 1; n <= 7; n++ { // n%3 makes several items share each update time
+		seed = append(seed, forge.Item{Number: n, Kind: forge.KindIssue, Title: "t", State: "open", Author: "a",
+			URL: "u", UpdatedAt: t0.Add(time.Duration(n%3) * time.Minute)})
+	}
+	for _, s := range []forge.Source{a, b} {
+		if err := model.SaveRead(ctx, s, seed, t0); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var got []forge.QueueKey
+	var after *forge.QueueKey
+	for pages := 0; ; pages++ {
+		if pages > 14 {
+			t.Fatal("the walk does not end")
+		}
+		page, err := model.Queue(ctx, []forge.Source{a, b}, after, 3)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if page.Total != 14 {
+			t.Fatalf("total = %d, want 14", page.Total)
+		}
+		if len(page.Items) == 0 {
+			break
+		}
+		for _, it := range page.Items {
+			got = append(got, it.Key())
+		}
+		last := page.Items[len(page.Items)-1].Key()
+		after = &last
+	}
+	if len(got) != 14 {
+		t.Fatalf("walked %d items, want 14: %+v", len(got), got)
+	}
+	seen := map[forge.QueueKey]bool{}
+	for i, k := range got {
+		if seen[k] {
+			t.Fatalf("item %+v repeated", k)
+		}
+		seen[k] = true
+		if i > 0 && k.UpdatedAt.After(got[i-1].UpdatedAt) {
+			t.Fatalf("item %d is newer than the one before it", i)
+		}
 	}
 }

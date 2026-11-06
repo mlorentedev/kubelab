@@ -19,7 +19,7 @@ created: "2026-10-21"
 
 ## Decisions before code
 
-- [x] ✓ 2026-10-22 UI is served from the `apps/api` binary (ADR-057 D2). Corrected 2026-11-04: Authelia did not front `api.kubelab.live`, whose rule is `bypass`; the console got a host of its own instead. The ADR corrections to A2 and A8 are in #2623
+- [x] ✓ 2026-10-22 UI is served from the `apps/api` binary (ADR-057 D2). Corrected 2026-11-04: Authelia did not front `api.kubelab.live`, whose rule is `bypass`; the console got a host of its own instead. The ADR corrections to A2 and A8 are in #2623. Amended 2026-11-05 by ADR-074 D1: the backend stays in `apps/api`, and the frontend becomes `apps/console`, so the page served from the binary is transitional
 - [x] ✓ 2026-10-22 Label set lives at `infra.forge.labels` (ADR-036: read by more than one component), shared with CONSOLE-006 (#2588), with an `area_repos` map and `fallback: knowledge`
 - [x] ✓ 2026-10-22 GitHub is read with a GitHub App installation token (its own rate pool, not shared with a user PAT); the ceiling is 1000 calls per hour, a conservative start to tighten after measurement
 - [x] ✓ 2026-10-22 Reconcile runs every 10 minutes per source and the alert fires when a source has not been read for 20 minutes. The period and the bound are one decision: `as_of` only advances on a successful read, so a bound shorter than the period would fire every cycle
@@ -52,6 +52,8 @@ created: "2026-10-21"
   - [x] ✓ 2026-11-02 Projection: every 10 seconds, the `forge_source` row first because of the foreign key, item and delivery mark in one transaction, and a late older delivery does not overwrite a newer read (PR-Agent finding on #2933)
   - [x] ✓ 2026-11-03 Deliver `FORGE_GITHUB_WEBHOOK_SECRET` and `FORGE_GITEA_WEBHOOK_SECRET` through SOPS and `SECRET_CATALOG`, prod only: staging is VPN-only, so no forge reaches it
   - [ ] Register the two webhooks as code
+    - [x] ✓ 2026-11-05 GitHub: the App's own hook, `make forge-github-hook` (plan; `APPLY=1` writes, `SECRET=1` resends after a rotation). The events and the Active toggle are the operator's settings step, which the command checks (lesson-714)
+    - [ ] Gitea: with the Gitea source slice. `infra.forge.sources` declares GitHub only, so every Gitea delivery would be filtered, and `repository_settings.webhooks` puts a hook on every declared repository while the Gitea source is per organization
 - [x] ✓ 2026-11-02 [AC4] Test: the same delivery twice projects once (`TestSameDeliveryProjectsOnce`, against Postgres)
 - [x] ✓ 2026-11-02 [AC4] Periodic reconcile per source every 10 minutes under the hourly call ceiling, with a guard test that counts calls. `infra.forge.sources` declares GitHub only: which Gitea repository to read is the operator's call, and the Gitea reader is wired with it
 - [ ] [AC1] Queue endpoint with the inbox reason (author, requested reviewer, failing CI, waiting on me). `GET /console/queue` serves the open items without reasons since 2026-11-04; the reasons need the operator's login per forge and check-run reads
@@ -92,6 +94,8 @@ created: "2026-10-21"
   - [x] ✓ 2026-11-02 `forge.AppTokens`: RS256 JWT with the standard library, exchanged at `/app/installations/{id}/access_tokens`, cached until five minutes before expiry; `GitHub.Tokens` takes it per read, and a failed mint is a `SourceError`
   - [x] ✓ 2026-11-02 Read once with the deployed image: on staging at `sha-75346a3` the first full read returned 2936 items, and each of the four counts (issues and pull requests, open and closed) equals GitHub's search count. The pod used 11 MiB. The App's grant needs nothing more
 - [ ] [AC7] Runbook: rebuild, restore, rotate tokens; token expiry dates in the SOPS catalog
+- [ ] A8 usage counter (ADR-066 A8, ADR-074 sequence step 2): one daily row per operator identity read from `Remote-User`, in its own table outside the rebuildable projection and covered by the backup. It ships with the first prod promote of the console or right after it: A8's 14 days run from the day the console is live in prod (`console.kubelab.live`, api 1.4.0), and a day of use that was not recorded cannot be replayed
+- [ ] Hand over to the Vikunja retirement (#2587) only when both of its gates hold: parity, meaning the narrow writes of section 3 have shipped, and the operator has opened the console on at least 5 of 14 consecutive days, read from the counter. Until then Vikunja keeps running as the fallback A8 reverts to
 
 ### 6. End to end
 

@@ -113,9 +113,39 @@ jobs:
         working-directory: ./apps/api/src
         run: go vet ./...
 
+      # The store tests run against a real Postgres with the migrations applied; without
+      # one they skip, and in CI a skip fails them (#3117). Same image as the cluster's
+      # (infra/k8s/base/services/postgres.yaml, held equal by tests/test_ci_store_postgres_image.py);
+      # the password is a fixture, not a secret.
+      - name: Start Postgres for the API store tests
+        if: steps.changes.outputs.should_build == 'true' && inputs.app == 'api'
+        run: |
+          docker rm -f api-store-pg >/dev/null 2>&1 || true  # a self-hosted runner keeps containers
+          docker run -d --name api-store-pg -p 127.0.0.1:55439:5432 \
+            -e POSTGRES_USER=api -e POSTGRES_DB=api -e POSTGRES_PASSWORD=fixture postgres:16-alpine
+          # Probe over TCP: the image's entrypoint first runs a socket-only init server,
+          # which a socket probe reports ready before the real server and the database exist.
+          ready=""
+          for _ in $(seq 1 30); do
+            if docker exec api-store-pg pg_isready -h 127.0.0.1 -p 5432 -U api -d api -q; then
+              ready=1; break
+            fi
+            sleep 1
+          done
+          if [ -z "$ready" ]; then
+            echo "Postgres for the API store tests was not ready after 30s"
+            docker logs api-store-pg
+            exit 1
+          fi
+          for f in apps/api/migrations/*.sql; do
+            docker exec -i api-store-pg psql -v ON_ERROR_STOP=1 -q -U api -d api < "$f"
+          done
+
       - name: Test API code
         if: steps.changes.outputs.should_build == 'true' && inputs.app == 'api'
         working-directory: ./apps/api/src
+        env:
+          FORGE_TEST_POSTGRES_PORT: "55439"
         run: go test -race ./...
 
       - name: Build API binary

@@ -66,7 +66,10 @@ touches disjoint files, and gates nothing in Track 1.
   prod snapshot and no prod values block, `promote --env prod` refuses it, and the DNS, tile
   and registry tests skip prod for it. The onboarding PR for `imagesensortool` (registry
   entry, snapshot, staging values block, platform tile, e2e expectation, staging DNS zone) is
-  its own slice.
+  its own slice. Before it, **S3c makes a product's staging zone a declaration**: the hostname
+  convention (owner ruling, 2026-11-05) is checked at render time, and the per-zone hairpin
+  block is generated from `networking.staging_zones` instead of hand-written, so the next
+  product on its own domain adds one line, not an edge edit.
 - **S4, the first deploy** by a hand-run `toolkit deployment promote` and a deploy PR, with the
   runbook updated.
 
@@ -79,8 +82,8 @@ touches disjoint files, and gates nothing in Track 1.
   token catalogued (not the admin token).
 - **S6, the receiver** drops the `forge != github` refusal, moves its forge logic into toolkit
   commands that go through the adapter, and picks `runs-on` per forge through a `route` job.
-- **S7, the trigger** from Gitea CI to the receiver. **Open decision (D1)**: the evidence for
-  each option is below; this spec does not choose.
+- **S7, the trigger** from Gitea CI to the receiver. D1 is deferred to S7 by the owner: the
+  beta needs no trigger, and the evidence for each option is below.
 - **S8, the prod half** (owner ruling #2449 Q4(A)): an authenticated, forge-neutral
   `release-contract` and digest read, closing #2627 AC2 and AC1.
 - **S9, later:** `deploy_shape` provenance through the adapter, after DELIVERY-004 (#3063)
@@ -101,7 +104,8 @@ Full per-slice detail (files, tests, commands, size, merge owner) is in `tasks.m
 | S2b | `imagePullSecrets` in the Deployment template | S1b, S2a | owner (`infra/`) | ~50 |
 | S2c | Gitea pull-token catalog entry, mint, `registry-check` | none | owner (`infra/`, mint) | ~140 |
 | S3a | optional `hostnames.prod`, staging-only guards | none | agent, under the merge grant | ~90 |
-| S3b | onboarding PR for `imagesensortool` | S1, S2, S3a, product `kubelab.yaml` | owner (`infra/`) | ~70 + data |
+| S3c | hostname convention check, hairpin generated from `staging_zones`, ADR-067 amendment | S3a | owner (`infra/`) | ~120 |
+| S3b | onboarding PR for `imagesensortool` | S1, S2, S3a, S3c, product `kubelab.yaml` | owner (`infra/`) | ~70 + data |
 | S4 | first deploy by hand, runbook | S3b merged, image published | owner | ~80 (doc) |
 | S5a | forge adapter, GitHub implementation, `product resolve` | none | agent, under the merge grant | ~200 |
 | S5b | Gitea implementation | S5a, API note | agent, under the merge grant | ~170 |
@@ -163,13 +167,19 @@ files are excluded. A slice that lands over 300 splits before review.
   (`..._three_kubelab_repositories`). `test_dns_contract_hostnames` is already safe
   (`host and host not in records`); S3a pins that with a case.
 
-## Open decisions
+## Decisions
 
-Each one is stated with the evidence and a recommendation. D1 and D2 need the owner (or the
-architect) before the slice that carries them; D3 to D7 are decided in this spec and
-reversible.
+Each one is stated with the evidence and a recommendation. The owner ruled D1 and D2 on
+2026-11-05 (below each); D3 to D7 are decided in this spec and reversible; D8 is the owner's
+convention and is not reversible by this spec.
 
-### D1 (open, owner): how an image published from Gitea CI reaches the receiver (S7)
+### D1 (decided 2026-11-05, owner: deferred to S7): how an image published from Gitea CI reaches the receiver (S7)
+
+**Ruling** (under the owner's standing instruction of 2026-11-05 to apply the advisor's
+recommendation). No trigger is built for the beta. S4 is a hand-run `promote`, so until S7 each new
+image reaches staging by the same hand-run step, and no dispatch token is minted. The choice
+between (a) and (b) is made when S7 starts, with Track 2's adapter and receiver in place and
+the minimum-permission spike done; the recommendation below stands as the starting point.
 
 The receiver is a GitHub `repository_dispatch` consumer. Gitea Actions cannot call it without
 a GitHub credential somewhere. Evidence for each option:
@@ -197,7 +207,14 @@ interim, replaced by the `forge-ci` provider when ADR-073 is accepted. Reopen (b
 Gitea product arrives or the owner does not want a GitHub credential in product CI. S7 is not
 on the beta's critical path: S4 is a hand-run promote.
 
-### D2 (open, owner/architect): which Gitea account holds the pull token and the repo reader token (S2c, S5c)
+### D2 (decided 2026-11-05, owner: the reviewer account): which Gitea account holds the pull token and the repo reader token (S2c, S5c)
+
+**Ruling** (owner, direct). The recommendation below, as written, including the consequence
+check as S2c's first task.
+
+Note (spec, not the owner's): the agents' forge account (AUTH-022, #3085) is not a fallback if
+the check fails. It is a writer identity, and a pull credential on it would join deploy and
+authorship. A failed check still goes back to the architect.
 
 Recommendation: two **new tokens on the reviewer account** (`registry_pull`: `read:package`;
 `repo_reader`: `read:repository`), each pinned by equality, one token per consumer. That is the
@@ -211,6 +228,29 @@ to the architect; the spec does not settle it.
 The pull token's SOPS file is also open: Gitea tokens live in `prod.enc.yaml`
 (`envs=("prod",)`), but the staging cluster applies staging plus common. Recommendation:
 `common.enc.yaml`, audited for staging, like `ghcr.pull_token`.
+
+### D8 (decided 2026-11-05, owner): one hostname convention for every hosted product
+
+- **Staging:** `staging.<product domain>`, reachable on the VPN only (Headscale split DNS);
+  testers join the mesh.
+- **Prod:** `<product domain>`, public, its zone in `infra/terraform/dns/zones.json`.
+- **A product with no domain yet:** `<product>.staging.kubelab.live`, under the existing
+  wildcard, as the exception.
+- `web` already follows it (`staging.mlorente.dev`, `mlorente.dev`); nothing migrates.
+
+The rule binds today's contract, so it is written as an amendment to ADR-067 D2 (accepted),
+not only in ADR-073 D8 (proposed), which replaces it with the domain registry on acceptance.
+It is enforced, not remembered: S3c's render-time check refuses a `hostnames.staging` that
+breaks it. Considered: the platform wildcard for every product, which needs no zone work but
+leaves `web` the odd one out and the staging name unrelated to prod's. Consequence, raised to
+the owner before the ruling: issuing a certificate for `staging.<domain>` writes that name to
+the public Certificate Transparency logs before launch.
+
+Placing the work in this spec as S3c, rather than a spec of its own, was ruled under the
+owner's standing instruction to apply the advisor's recommendation (2026-11-05): S3b depends
+on it, and a new spec would add to a WIP count already over its limit.
+
+For `imagesensortool` this gives `staging.imagesensortool.com`, so risk 7 applies to it.
 
 ### D3 (decided): `tag_exists` for non-`docker.io` registries
 
@@ -286,8 +326,10 @@ Must be resolved before the named slice starts; none blocks writing the others.
    product, and two generic products force-push deploy branches that rewrite the same
    `values/staging.yaml`. #2611 has an acceptance test but no decided shape. S4 (a hand-run
    promote) does not touch the receiver's force-push, so **#2611 does not block S1 to S4**; it
-   blocks the first generic receipt of `imagesensortool`. S6b merges dormant (no registry entry
-   has `receiver: generic` for a Gitea product until #2611 is settled) or is held.
+   blocks the first generic receipt of `imagesensortool`. The registry entry declares
+   `receiver: generic` from S3b (`Product` requires `receiver` with `repository`), and it stays
+   dormant by construction: the receiver refuses `forge != github` until S6b, and no trigger
+   exists until S7. So #2611 gates S6b's go-live, and S6b merges dormant or is held.
 4. **Self-hosted runner exposure (S6b).** A dispatch-triggered `promote` job holding
    `RELEASE_PLEASE_TOKEN` would run on `kubelab-bee`, a runner with the Docker socket mounted
    (ADR-030). `repository_dispatch` runs master's code only and the contract is parsed by the
@@ -298,20 +340,20 @@ Must be resolved before the named slice starts; none blocks writing the others.
 5. **The homelab is on demand (ADR-028).** A Gitea product's receipt waits for `kubelab-bee`,
    and a queued self-hosted job on GitHub fails after 24 hours. Accepted and documented in the
    runbook (S4, S6b), as the issue states.
-6. **Unknown product facts:** the staging hostname, the auth level for the beta, and
-   whether `/healthz` answers a kubelet probe. They come from the product's `kubelab.yaml`, not
-   from this spec; S3b is blocked until that file exists. The hostname has two shapes with
-   different costs. A name under the existing zone (`imagesensortool.staging.kubelab.live`)
-   reuses the VPN-only staging wildcard and needs none of risk 7, so it is the cheaper choice
-   for the beta. A name in the product's own domain (`staging.imagesensortool.com`;
-   `imagesensortool.com` is in `zones.json` with no records) needs all of risk 7.
+6. **Unknown product facts:** the auth level for the beta and whether `/healthz` answers a
+   kubelet probe. They come from the product's `kubelab.yaml`, not from this spec; S3b is
+   blocked until that file exists. The staging hostname is no longer open: D8 gives
+   `staging.imagesensortool.com` (`imagesensortool.com` is in `zones.json` with no records),
+   so risk 7 applies.
 7. **Staging DNS and TLS for a new zone, only when the hostname is outside
    `staging.kubelab.live`.** `networking.staging_zones` (`common.yaml`) feeds
    Headscale split DNS, the RPi4 CoreDNS and Pi-hole; the hairpin block in
-   `coredns-custom.yaml` is hand-written per staging zone. A new staging zone needs a provision
-   run on the VPS and the RPi4 (not verifiable from a diff), and an ACME DNS-01 certificate
-   whose token must cover `imagesensortool.com` (`toolkit secrets acme-token-scope` asks
-   Cloudflare).
+   `coredns-custom.yaml` is hand-written per staging zone until S3c generates it. A new staging
+   zone needs a provision run on the VPS and the RPi4 (not verifiable from a diff), and an ACME
+   DNS-01 certificate whose token must cover `imagesensortool.com` (`toolkit secrets
+   acme-token-scope` asks Cloudflare). That token (`kubelab-acme-dns`, #2459) is scoped to named
+   zones and is not managed by Terraform, so widening it is an owner step in Cloudflare per new
+   domain; deriving its zones from `zones.json` is a separate ticket, not this spec.
 
 ## Acceptance criteria
 
@@ -338,14 +380,26 @@ recorded in `verification.md`. Test files marked (new) are created by the slice.
 - [ ] **AC4 (S2c).** The pull token is catalogued, pinned by equality to `read:package`, minted
   once (gated on the SOPS key being absent) and rotatable.
   `.venv/bin/python -m pytest -q tests/test_gitea_registry_pull_token.py tests/test_gitea_token_rotation_registry.py tests/test_gitea_token_scopes.py`.
-  **(deployed)** after the owner's mint: `toolkit secrets audit --env staging` counts the key,
-  and `toolkit services gitea registry-check --app imagesensortool` exits 0 by pulling a
-  manifest with the token and non-zero for a package the token must not reach.
+  **(deployed)** after the owner's mint: `toolkit secrets audit --env staging` counts the key;
+  `toolkit services gitea registry-check --app imagesensortool` exits 0 by pulling a manifest
+  with the token; and `toolkit services gitea registry-check --app imagesensortool --package
+  <owner>/<package outside the token's reach>` exits non-zero with the registry's denial
+  status. Both runs are recorded.
 - [ ] **AC5 (S3a).** A contract with no `hostnames.prod` validates; the committed JSON Schema
   equals the model; `product render --env prod` refuses it; a product with no `events.prod` has
   no prod snapshot and no prod values block; the DNS, tile and registry tests skip prod for
   it.
-  `.venv/bin/python -m pytest -q tests/test_product_contract.py tests/test_product_contract_schema.py tests/test_product_contract_drift.py tests/test_dns_contract_hostnames.py tests/test_platform_tiles_cover_registry.py tests/test_product_registry.py`
+  `.venv/bin/python -m pytest -q tests/test_product_contract.py tests/test_product_contract_schema.py tests/test_product_contract_drift.py tests/test_product_contract_guards.py tests/test_dns_contract_hostnames.py tests/test_platform_tiles_cover_registry.py tests/test_e2e_expectations_cover_registry.py tests/test_product_registry.py`
+- [ ] **AC13 (S3c).** `product render` accepts a `hostnames.staging` only if it is exactly a
+  zone in `networking.staging_zones` (other than `staging.kubelab.live`) or a single label
+  under `staging.kubelab.live`; when `hostnames.prod` is declared, `hostnames.staging` must
+  also equal `staging.` + `hostnames.prod`. Anything else is refused with an ERROR / WHY / FIX
+  naming D8 and, for a missing zone, the `staging_zones` line to add. `web` passes, and
+  staging-only `staging.imagesensortool.com` passes once its zone is listed.
+  The staging server blocks of `coredns-custom.yaml` are rendered from
+  `networking.staging_zones`, byte-identical to today's for the current two zones, and a third
+  zone in the list yields a third block. ADR-067 carries the D8 amendment.
+  `.venv/bin/python -m pytest -q tests/test_product_staging_hostname.py tests/test_coredns_hairpin_zones.py tests/test_coredns_hairpin_answer.py` (the first two new)
 - [ ] **AC6 (S3b).** The onboarding PR leaves the tree green:
   `make test`, `make validate-sync ENV=staging`, and
   `toolkit product render --contract infra/config/products/contracts/imagesensortool.yaml --env staging --check`
@@ -367,12 +421,15 @@ recorded in `verification.md`. Test files marked (new) are created by the slice.
   `.venv/bin/python -m pytest -q tests/test_product_image_receiver_workflow.py tests/test_receiver_pr_step.py && actionlint`.
   **(deployed)** a `workflow_dispatch` dry run for the Gitea product succeeds on the
   self-hosted runner and writes nothing (S6b, after #2611).
-- [ ] **AC10 (S7).** The owner's decision on D1 is recorded on #2612 and in
-  `docs/runbooks/cicd.md` with the documented firing step for the chosen option.
-  `grep -n 'IDP-053' docs/runbooks/cicd.md` finds it.
+- [ ] **AC10 (S7).** The chosen D1 option is recorded on #2612 and in `docs/runbooks/cicd.md`
+  under a heading `Gitea product trigger (IDP-053 D1)`, whose section names the option, the
+  credential's catalog key and the command or CI step that fires it.
+  `.venv/bin/python -m pytest -q tests/test_runbook_gitea_trigger.py` (new): the heading exists,
+  and its section names a catalog key present in `secrets_manager.py` and a firing step.
 - [ ] **AC11 (S8).** `toolkit product release-contract` works for a non-GitHub forge; an
   unsupported or private registry is refused with an ERROR / WHY / FIX naming the registry
-  (#2627 AC2); a `sha-` tag of 7 or more hex digits is proven (#2627 AC1).
+  (#2627 AC2); `sha-` tags of 7 and of 10 hex digits are both proven, so a check that only
+  accepts 7 fails (#2627 AC1).
   `.venv/bin/python -m pytest -q tests/test_product_release.py tests/test_registry_digest.py` (the second is new)
 - [ ] **AC12 (S9).** `deploy-shape` answers `mechanical` for a Gitea product's deploy PR with
   provenance proven against Gitea.
@@ -386,8 +443,9 @@ Each new test that guards a boundary is mutation-checked with
 | Property | Command that settles it | When |
 |---|---|---|
 | The reviewer-account token reaches the package | `toolkit services gitea registry-check --app imagesensortool` | after S2c mint |
+| The receiver can read `repo_reader` (S5c): `forge_actions` writes Gitea Actions secrets only (`gitea_client` `PUT /repos/{owner}/{name}/actions/secrets`), so the owner sets the `mlorentedev/kubelab` GitHub Actions secret by hand from SOPS | `gh secret list -R mlorentedev/kubelab` names it; the S6b dry run's `resolve` job reads a commit | after S5c mint |
 | Staging pulls from `gitea.kubelab.live` (DNS and TLS from the node, credential accepted) | `kubectl -n kubelab describe pod -l app.kubernetes.io/name=imagesensortool` shows `Pulled`, not `Failed` | S4 |
-| Split DNS and the staging certificate for the new zone (only for a hostname outside `staging.kubelab.live`, risk 7) | `dig +short <staging host> @<rpi4>` returns the staging node; `toolkit secrets acme-token-scope` names `imagesensortool.com` | after S3b provision |
+| Split DNS and the staging certificate for the new zone (risk 7) | `dig +short <staging host> @<rpi4>` returns the staging node; `toolkit secrets acme-token-scope` names `imagesensortool.com` | after S3b provision |
 | The Gitea 1.27.3 API behaves as the adapter assumes | S5b's verification note, measured on a local Gitea 1.27.3 | before S5b code |
 | The self-hosted runner accepts the `route`-selected label and reaches Gitea | the dry run in AC9 | S6b |
 | The minimum GitHub permission for a dispatch token | dispatch with a token narrower than `repo`, record the status | before D1 is decided |

@@ -105,6 +105,7 @@ def _plan(refs: dict[str, bool], empty: dict[str, bool] | None = None) -> Reconc
         existing_repo_hooks=hooks_for(_NATIVE),
         declared_webhooks=N8N_HOOK_ONLY,
         existing_repo_refs=refs,
+        existing_collaborators={},
     )
 
 

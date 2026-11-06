@@ -191,12 +191,13 @@ fi
 # EditUserOption and NOT in CreateUserOption, so the account cannot be created
 # already blocked. It exists briefly loginable, which is why the block is applied
 # immediately after creation and before any token is minted.
-# One function, two accounts: the bot (`GITEA_BOT_USER`) and, since TOOL-080, the
-# PR reviewer (`GITEA_REVIEWER_USER`). Both are machine identities under ADR-062 D1
-# as amended 2026-09-24, and both need exactly this: created with a password nobody
-# keeps, and the login flag driven OFF so their API token authenticates. What
-# differs between them is the token's grant and the team they join, and neither of
-# those lives here -- the grant is minted by Ansible, the team by the reconciler.
+# One function, three accounts: the bot (`GITEA_BOT_USER`), since TOOL-080 the
+# PR reviewer (`GITEA_REVIEWER_USER`), and since AUTH-022 the agents' authoring
+# account (`GITEA_AGENT_USER`). All are machine identities under ADR-062 D1
+# as amended, and all need exactly this: created with a password nobody keeps, and
+# the login flag driven OFF so their API token authenticates. What differs between
+# them is the token's grant and the team or collaborator rights they get, and none
+# of those lives here -- the grant is minted by Ansible, the rest by the reconciler.
 # curl reads `user = "name:password"` from its config; double quotes and
 # backslashes are escaped so any password survives the round trip.
 admin_curl_config() {
@@ -244,7 +245,9 @@ ensure_machine_account() {
   #   - it is absent from Authelia, so the SSO path cannot resolve it;
   #   - it holds no administrative scope, so a compromise is bounded by its
   #     token's grant: write:repository and write:user for the bot,
-  #     write:issue and read:repository for the reviewer.
+  #     write:issue and read:repository for the reviewer, write:issue and
+  #     write:repository for the agent, whose repository write reaches only
+  #     the repositories that name it as a collaborator (AUTH-022).
   # None of those is Gitea refusing a login. An admin can set a password on this
   # account at any time, exactly as on any other.
   #
@@ -278,4 +281,10 @@ fi
 # declared, so a node provisioned before then runs exactly as it did.
 if [ -n "${GITEA_REVIEWER_USER:-}" ]; then
   ensure_machine_account "$GITEA_REVIEWER_USER" "$GITEA_REVIEWER_EMAIL"
+fi
+
+# The agents' authoring account (AUTH-022). Absent until
+# `apps.auth.identities.agent` is declared, like the reviewer above.
+if [ -n "${GITEA_AGENT_USER:-}" ]; then
+  ensure_machine_account "$GITEA_AGENT_USER" "$GITEA_AGENT_EMAIL"
 fi

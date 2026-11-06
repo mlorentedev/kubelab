@@ -61,6 +61,9 @@ spec:
         format: json
         filters:
           minduration: "{{ k3s_traefik_access_log_min_duration }}"
+          # ORed with minduration by Traefik: every server error, fast or slow,
+          # which the 5xx alerts in grafana-alerting/slo-rules.yaml count (#3140).
+          statuscodes: "500-599"
         fields:
           general:
             defaultmode: drop
