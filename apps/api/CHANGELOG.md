@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.0](https://github.com/mlorentedev/kubelab/compare/api-v1.5.0...api-v1.6.0) (2026-11-06)
+
+
+### Features
+
+* **console:** open the page from the console host's root ([#3159](https://github.com/mlorentedev/kubelab/issues/3159)) ([38c9038](https://github.com/mlorentedev/kubelab/commit/38c9038ea88d5c200c24a9ce4c49ce7af3cc23c2))
+
 ## [1.5.0](https://github.com/mlorentedev/kubelab/compare/api-v1.4.0...api-v1.5.0) (2026-11-06)
 
 
