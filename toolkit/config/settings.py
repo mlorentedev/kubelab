@@ -83,8 +83,6 @@ class EnvironmentConfig(BaseModel):
     name: str
     description: str
     requires_confirmation: bool = False
-    ansible_inventory: str | None = None
-    terraform_workspace: str | None = None
 
 
 def _load_environments() -> dict[str, EnvironmentConfig]:
@@ -110,15 +108,11 @@ def _load_environments() -> dict[str, EnvironmentConfig]:
             name="staging",
             description="Staging environment",
             requires_confirmation=True,
-            ansible_inventory="inventories/staging.yml",
-            terraform_workspace="staging",
         ),
         "prod": EnvironmentConfig(
             name="prod",
             description="Production environment",
             requires_confirmation=True,
-            ansible_inventory="inventories/prod.yml",
-            terraform_workspace="prod",
         ),
     }
 
