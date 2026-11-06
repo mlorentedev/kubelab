@@ -6,7 +6,7 @@ Armed 2026-11-06T06:51:32Z, expires 14:51:32Z. Host: `caffeinate -i -t 28800` st
 
 | # | Item | Outcome |
 |---|---|---|
-| 1 | console host root redirect | #3159 (draft, CI running) |
+| 1 | console host root redirect | #3159 merged (dotf pr land, 09:36Z) |
 | 2 | A8 usage counter (the objective) | parked: scope-violation, see below |
 | 3 | AC1 down-source regression test | #3161 (draft) |
 | 4 | AC7 rebuild test + runbook | #3162 (draft) |
