@@ -1,5 +1,5 @@
 ---
-id: lesson-719-env-stops-shell-injection-not-workflow-commands
+id: lesson-722-env-stops-shell-injection-not-workflow-commands
 type: lesson
 status: active
 created: "2026-11-06"
