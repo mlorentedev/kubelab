@@ -150,3 +150,15 @@ def test_security_rules_stay_retired_until_the_bouncer_can_see_client_ips() -> N
         "any rule about bans has no true-positive path. If #1067 has landed, "
         "update this test to assert the new rule instead of removing it."
     )
+
+
+@pytest.mark.parametrize("uid", ["obs015-slo-fast-burn-rate", "obs015-slo-medium-burn-rate"])
+def test_5xx_rules_filter_only_on_fields_the_access_log_keeps(uid: str) -> None:
+    # The edge drops every access-log field it does not list; a rule filtering on a
+    # dropped field would count zero lines and never fire, with no error.
+    from tests.test_traefik_access_log_slow_only import _access
+
+    kept = {name for name, mode in _access()["fields"]["general"]["names"].items() if mode == "keep"}
+    used = set(re.findall(r"\|\s*([A-Z][A-Za-z]+)\s*(?:>=|!~|=~|==|!=|>|<)", _slo_query(uid)))
+    assert used == {"DownstreamStatus", "RouterName"}, used
+    assert used <= kept, used - kept
