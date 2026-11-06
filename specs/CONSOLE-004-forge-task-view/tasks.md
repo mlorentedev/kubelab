@@ -45,7 +45,7 @@ created: "2026-10-21"
   - [x] ✓ 2026-11-01 [AC4] Deliver `issue_reader_token` to the API: `FORGE_GITEA_TOKEN` in `api-secrets` (optional, since staging has no Gitea token and the API starts without it), read by `config.Forge`, with `tests/test_forge_credentials_delivery.py` pinning that no credential lands in a ConfigMap. No NetworkPolicy is needed: NET-002 is ingress-only and the API is the caller, so egress is not restricted
   - [ ] [AC4] Measure the grant: the first live read of an issue list with `type=pulls` confirms `read:issue` alone suffices; a 403 widens `token_scopes.issue_reader` deliberately, with `ISSUE_READER_SCOPES`
   - [x] ✓ 2026-11-01 [AC4] The webhook receiver's host passes Gitea's `ALLOWED_HOST_LIST` without widening it: #2887 pinned Gitea's container to public resolvers (lesson-682), so the receiver needs a name that resolves to a public address. That also means Gitea cannot resolve `*.staging.kubelab.live`, so a Gitea webhook never reaches staging, and AC5's probe must account for it
-- [ ] [AC1] Regression test: a source that is down renders unreachable with its last read time, never empty
+- [x] [AC1] Regression test: a source that is down renders unreachable with its last read time, never empty ✓ 2026-11-06
 - [ ] [P] [AC4] Webhook receiver: reject an invalid HMAC, store the event before projecting it
   - [x] ✓ 2026-10-22 Signature verification for both forges, GitHub `sha256=` prefix and Gitea bare hex (#2636)
   - [x] ✓ 2026-11-02 Receiver endpoint and the event store: `POST /api/forge/webhooks/:forge`, HMAC before any write, a redelivery is a no-op. Until the webhook secrets reached prod, every delivery was refused
