@@ -146,6 +146,30 @@ pending period, and recovery needs the failures to age out of its own 10-minute
 window. Confirm both Telegram messages afterwards — there is no Telegram
 read-back yet.
 
+That proves the rule fires. The other half, that it stays quiet on Traefik's
+own `Testing certificate renew...` heartbeat (about daily) and `Starting provider
+*acme.Provider` (every boot), is a separate, read-only check, so it runs in prod
+too:
+
+```bash
+make acme-quiet-check ENV=prod
+```
+
+It evaluates the rule's expression, read from the rendered overlay, one minute
+after the newest of each of those two lines in Loki, searched with the rule's own
+stream selector, and passes (exit 0) only when the rule answers empty at both.
+Exit 1, `REGRESSION`, is the only answer that blames the rule: it matched
+Traefik's own line and would page, so fix the rule. Exit 3, `NOT MEASURED`,
+says nothing about the rule: the line is not within Loki's 7-day retention (a
+Traefik up for more than a week leaves no boot line), or a real ACME failure
+shares its window (for example right after `alert-smoke`). Rerunning re-reads
+the same window, so the output names what moves it: the next heartbeat (about
+daily), or the next Traefik restart. Exit 2 means it never ran: the rule is
+missing from the rendered overlay, or its window disagrees with its query range
+or carries a `to` offset, so there is no expression Grafana would evaluate to
+test. `make` reports any non-zero exit as its
+own `Error`, so read the label rather than make's code.
+
 Two properties worth knowing rather than rediscovering:
 
 - **It refuses to run against prod**, and exits non-zero if you try. Prod's

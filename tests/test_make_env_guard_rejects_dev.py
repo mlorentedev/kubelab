@@ -96,6 +96,7 @@ GUARDED: dict[str, str] = {
     "n8n-probe": "staging",
     "notify-smoke": "staging",
     "alert-smoke": "staging",
+    "acme-quiet-check": "staging",
     "flush-sessions": "staging",
     "pods": "staging",
     "deploy-k8s": "staging",

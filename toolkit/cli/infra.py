@@ -1264,6 +1264,50 @@ def k8s_alert_smoke(
         raise typer.Exit(1)
 
 
+@k8s_app.command("acme-quiet-check")
+def k8s_acme_quiet_check(
+    env: Annotated[str, typer.Option("--env", "-e", help="Target environment (staging|prod)")],
+) -> None:
+    """Prove the ACME failure rule stays quiet on Traefik's heartbeat (OBS-033).
+
+    Evaluates the rule's own expression, read from the rendered overlay, one
+    minute after the newest `Testing certificate renew` line and again after the
+    newest `Starting provider *acme.Provider` line in Loki. Exits 0 quiet at
+    both, 1 when the rule matches Traefik's own line, 3 when an anchor cannot be
+    measured (no such line within retention, or a real ACME failure shares it),
+    2 when it cannot run (bad env, or the rule cannot be read). Read-only,
+    so prod is allowed: prod is where a noisy rule would page.
+    """
+    if env not in ("staging", "prod"):
+        logger.error("acme-quiet-check: --env must be staging or prod")
+        raise typer.Exit(2)
+    validate_environment_config(env)
+
+    from toolkit.cli.observability import _loki_client
+    from toolkit.features.acme_quiet_check import QuietCheckError, run_acme_quiet_check
+    from toolkit.features.break_glass import render
+    from toolkit.features.observability import LogsUnavailableError
+
+    try:
+        with _loki_client(env) as loki:
+            result = run_acme_quiet_check(loki, render(env, settings.project_root))
+    except QuietCheckError as exc:
+        # The rule cannot be read the way Grafana reads it, so the check never ran.
+        # 2, not 1: exit 1 says the rule matched Traefik's own line, nothing else.
+        logger.error(f"acme-quiet-check: cannot run: {exc}")
+        raise typer.Exit(2) from exc
+    except LogsUnavailableError as exc:
+        logger.error(f"acme-quiet-check: not measured: {exc}")
+        raise typer.Exit(3) from exc
+    for anchor in result.anchors:
+        label = "REGRESSION" if anchor.regression else "ok" if anchor.ok else "NOT MEASURED"
+        typer.echo(f"{label} `{anchor.anchor}`: {anchor.reason}")
+        for line in anchor.matched_lines[:20]:
+            typer.echo(f"  matched: {line}")
+    if result.exit_code:
+        raise typer.Exit(result.exit_code)
+
+
 # =============================================================================
 # BACKUP COMMANDS
 # =============================================================================
