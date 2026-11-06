@@ -40,6 +40,15 @@ Independent reviewer, 2026-11-06, on `7b18f34e`: **PASS-WITH-GAPS**, no Blocker.
 | Minor: proposal ACs and `tasks.md` out of sync with the evidence; AC2's blocker not named. | Applied. |
 | Minor: a mint that succeeds while the record fails leaves an orphan token. | Declined: the #2902 orphan guard revokes it on the next run, the same accepted path as the reviewer's tokens. |
 
+Pool review (`review.md`), 2026-11-06: **PASS WITH GAPS**, no Blocker.
+
+| Finding | Disposition |
+|---|---|
+| Major (theoretical): the guards that keep machine identities out of Authelia list `machine` and `reviewer`, not `agent`. | Applied: both `MACHINE_IDENTITY_KEYS` now include `agent`. |
+| Minor: `gitea rotate-token --token` help names only `bot or admin`. | Applied: derived from `ROTATABLE_TOKENS`, pinned by `tests/test_gitea_rotate_token_help.py`. |
+| Minor: the ownership check reports `VIOLATED` and exits 0. | Fixed in #3163 (AUTH-024 AC3). |
+| Minor (theoretical): repository creation, forks and unprotected direct pushes. | Tracked in #3148, decisions pending with the owner. |
+
 ## Promotion candidates
 
 Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`. `dotf spec archive` refuses a line left unanswered, a `no` without a reason, and a `yes` whose file does not exist; a `00_meta/` path is looked up in the vault.
