@@ -12,7 +12,7 @@ One attempt per identity per run. Prod bans a username after 3 failures in 2
 minutes (`regulation`), and CrowdSec reads the same failures. A third run inside
 2 minutes bans the machine username for 5 minutes. That costs nothing, since
 neither account ever signs in. It bans no address: `regulation` sets no `modes`,
-so Authelia counts by username only.
+and Authelia's default is `['user']` (configuration/security/regulation).
 """
 
 from __future__ import annotations
@@ -23,6 +23,8 @@ import secrets
 import httpx
 import pytest
 import yaml
+
+from toolkit.features.configuration import ConfigurationManager
 
 pytestmark = pytest.mark.infra
 
@@ -37,7 +39,9 @@ def _load(name: str) -> dict:
 
 
 def _machine_usernames() -> list[str]:
-    identities = _load("common.yaml")["apps"]["auth"]["identities"]
+    # The merged prod config, as the static half reads it: an override in
+    # prod.yaml must change the name probed here too.
+    identities = ConfigurationManager("prod").get_plaintext_values()["apps"]["auth"]["identities"]
     return [identities[key] for key in MACHINE_IDENTITY_KEYS]
 
 
