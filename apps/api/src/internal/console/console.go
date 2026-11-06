@@ -132,6 +132,9 @@ func Register(r *gin.Engine, deps Deps, domain func() string) {
 	g.GET("", func(c *gin.Context) { c.Redirect(http.StatusMovedPermanently, "/console/") })
 	g.GET("/", func(c *gin.Context) { c.Data(http.StatusOK, "text/html; charset=utf-8", consolePage) })
 	g.GET("/queue", func(c *gin.Context) { queueHandler(c, deps) })
+	// The bare host opens the page until apps/console serves `/` (ADR-074 D5). A 302,
+	// not a 301: browsers keep a 301 indefinitely, and `/` will become the frontend's.
+	r.GET("/", onlyHost(domain), func(c *gin.Context) { c.Redirect(http.StatusFound, "/console/") })
 }
 
 // onlyHost answers 404 unless the request names the console's host. Traefik routes

@@ -233,6 +233,9 @@ EXPECTATIONS: dict[str, ServiceExpectation] = {
     ),
     "headscale": ServiceExpectation(
         skip_in_envs=("dev", "staging"),  # VPN on VPS only
+        # Headscale's own health handler (`{"status":"pass"}`), not the errors
+        # service, whose `/health` is plain text: #3010, measured 2026-11-06.
+        api_json_keys={"/health": ["status"]},
     ),
     # -- Data -- (empty since OPS-023 retired the object store)
     # -- AI / ML -- (empty since AI-007 retired Ollama; see ADR-029)

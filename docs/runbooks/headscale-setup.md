@@ -141,7 +141,14 @@ A second run with nothing changed reports `changed=0` for the Headscale tasks.
 
 ### 1.6 Verify
 
-Headscale v0.28 has no HTTP `/health` endpoint: `curl https://vpn.kubelab.live/health` does not return `{"status":"pass"}`, so do not use it. The container's own health state is the check (its healthcheck runs `headscale version`, 1.2):
+Headscale v0.28 answers `/health` with its own handler (measured 2026-11-06, #3010; this section said the opposite until then). The errors service also has a `/health`, but it answers plain `OK`, so the media type tells the two apart:
+
+```bash
+curl -s -w ' %{content_type}\n' https://vpn.kubelab.live/health
+# → {"status":"pass"} application/health+json; charset=utf-8
+```
+
+`make test-e2e ENV=prod` asserts the `status` key on every run. The container's health state is a weaker check: its healthcheck runs `headscale version` (1.2), which passes without a running server (#3164 moves it to `headscale health`):
 
 ```bash
 # On VPS (ssh vps-pub)

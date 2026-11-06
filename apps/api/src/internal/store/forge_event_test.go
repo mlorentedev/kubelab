@@ -2,6 +2,7 @@ package store_test
 
 import (
 	"context"
+	"errors"
 	"os"
 	"strconv"
 	"testing"
@@ -123,11 +124,7 @@ func TestSameDeliveryProjectsOnce(t *testing.T) {
 }
 
 func TestQueueReadsDeclaredOpenItemsNewestFirst(t *testing.T) {
-	port := os.Getenv("FORGE_TEST_POSTGRES_PORT")
-	if port == "" {
-		t.Skip("FORGE_TEST_POSTGRES_PORT is not set")
-	}
-	conf := config.Postgres{Host: "127.0.0.1", Port: port, Tenant: "api", Password: "fixture"}
+	conf := testPostgres(t)
 	ctx := context.Background()
 	conn, err := pgx.Connect(ctx, conf.DSN())
 	if err != nil {
@@ -170,11 +167,7 @@ func TestQueueReadsDeclaredOpenItemsNewestFirst(t *testing.T) {
 // Walking the queue page by page returns every open item once, in order, even
 // when items share an update time: the key breaks ties by identity.
 func TestQueuePagesNeitherSkipNorRepeat(t *testing.T) {
-	port := os.Getenv("FORGE_TEST_POSTGRES_PORT")
-	if port == "" {
-		t.Skip("FORGE_TEST_POSTGRES_PORT is not set")
-	}
-	conf := config.Postgres{Host: "127.0.0.1", Port: port, Tenant: "api", Password: "fixture"}
+	conf := testPostgres(t)
 	ctx := context.Background()
 	conn, err := pgx.Connect(ctx, conf.DSN())
 	if err != nil {
@@ -233,5 +226,61 @@ func TestQueuePagesNeitherSkipNorRepeat(t *testing.T) {
 		if i > 0 && k.UpdatedAt.After(got[i-1].UpdatedAt) {
 			t.Fatalf("item %d is newer than the one before it", i)
 		}
+	}
+}
+
+// flakyReader answers its items until it is told the forge is down.
+type flakyReader struct {
+	items []forge.Item
+	down  bool
+}
+
+func (f *flakyReader) ListItems(_ context.Context, s forge.Source, _ time.Time) ([]forge.Item, error) {
+	if f.down {
+		return nil, &forge.SourceError{Source: s, Err: errors.New("connection refused")}
+	}
+	return f.items, nil
+}
+
+// CONSOLE-004 AC1: a forge that goes down after a good read is shown as
+// unreachable with that read's time, and its items stay on the page. Through the
+// reconciler and the real SQL, because "never empty" is a property of both.
+func TestADownSourceShowsItsLastReadNeverEmpty(t *testing.T) {
+	conf := testPostgres(t)
+	ctx := context.Background()
+	conn, err := pgx.Connect(ctx, conf.DSN())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close(ctx)
+	if _, err := conn.Exec(ctx, `TRUNCATE forge_event, forge_item, forge_source`); err != nil {
+		t.Fatal(err)
+	}
+	src := forge.Source{Forge: "gitea", Owner: "o", Repo: "r"}
+	read := time.Date(2026, 11, 6, 8, 0, 0, 0, time.UTC)
+	now := read
+	reader := &flakyReader{items: []forge.Item{{Number: 7, Kind: forge.KindIssue, Title: "t", State: "open",
+		Author: "a", URL: "u", UpdatedAt: read}}}
+	r := forge.Reconciler{Readers: map[string]forge.Reader{"gitea": reader}, Sources: []forge.Source{src},
+		Model: store.ForgeModel{Conf: conf}, Now: func() time.Time { return now }}
+
+	if failed := r.Once(ctx); len(failed) != 0 {
+		t.Fatalf("first read failed: %v", failed)
+	}
+	reader.down, now = true, read.Add(time.Hour)
+	if failed := r.Once(ctx); len(failed) != 1 {
+		t.Fatalf("down forge not reported: %v", failed)
+	}
+
+	page, err := store.ForgeModel{Conf: conf}.Queue(ctx, []forge.Source{src}, nil, 500)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.States) != 1 || page.States[0].Reachable || page.States[0].AsOf == nil ||
+		!page.States[0].AsOf.Equal(read) {
+		t.Fatalf("state = %+v, want unreachable as of %v", page.States, read)
+	}
+	if len(page.Items) != 1 || page.Items[0].Number != 7 || page.Total != 1 {
+		t.Fatalf("page = %+v, want the last read's item", page)
 	}
 }
