@@ -110,6 +110,14 @@ DRILL_ALERT_NAME = "PersistentVolumeClaim unbound or failed"
 DEFAULT_TIMEOUT_S = 3600
 DEFAULT_POLL_S = 60
 
+#: The rule's `for:`. The claim's instance must stay pending that long after the
+#: claim exists, so a firing sooner than this was not caused by it (#2998). It is
+#: what catches the precheck's blind spot: for a few minutes after a Grafana
+#: restart the alerts list is empty, and an earlier run's instance comes back at
+#: the next evaluation. Staging, 2026-11-02, reported `FIRING after 3.0m` and
+#: `FIRING after 1.0m` that way. Pinned to disk-rules.yaml by a test.
+EARLIEST_OWN_FIRING_S = 15 * 60
+
 
 class DrillTeardownError(Exception):
     """The claim could not be removed -- residue is live and needs a human.
@@ -135,6 +143,8 @@ class DrillResult:
     #: caller must not collapse, since collapsing it is how a borrowed firing
     #: gets reported as proof.
     measured: bool = True
+    #: Why `measured` is False, in words the caller can print.
+    reason: str = ""
 
 
 def drill_pvc_manifest(
@@ -231,6 +241,7 @@ def run_drill(
     fetch_alerts: Callable[[], list[dict[str, Any]]],
     timeout_s: float = DEFAULT_TIMEOUT_S,
     poll_s: float = DEFAULT_POLL_S,
+    min_fire_s: float = EARLIEST_OWN_FIRING_S,
     sleep: Callable[[float], None] = time.sleep,
     now: Callable[[], float] = time.monotonic,
     log: Callable[[str], None] = print,
@@ -277,6 +288,7 @@ def run_drill(
             absorbed_residue=absorbed,
             polls=0,
             measured=False,
+            reason="the alert was already firing before this drill created anything",
         )
 
     started = now()
@@ -292,6 +304,15 @@ def run_drill(
                 break
             sleep(poll_s)
         waited = now() - started
+        if fired and waited < min_fire_s:
+            reason = (
+                f"the alert fired after {waited / 60:.1f}m, sooner than the rule's for: "
+                f"{min_fire_s / 60:.0f}m allows a new claim to, so an earlier instance came back"
+            )
+            log(f"{DRILL_ALERT_NAME}: {reason}. Not counted.")
+            return DrillResult(
+                fired=False, waited_s=waited, absorbed_residue=absorbed, polls=polls, measured=False, reason=reason
+            )
         if fired:
             log(f"{DRILL_ALERT_NAME}: FIRING after {waited / 60:.1f}m ({polls} polls)")
         else:

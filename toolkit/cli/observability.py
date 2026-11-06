@@ -432,9 +432,8 @@ def drill_pvc_unbound_cmd(
         # into the same conclusion -- which is the exact failure this command
         # exists to remove, reproduced in its own exit status.
         typer.echo(
-            "✗ Could not measure: the alert was already firing before this drill "
-            "created anything, so a firing now proves nothing. This is NOT a "
-            f"failing rule. The claim is cleared; re-run in ~{RESOLVE_LATENCY_MIN}m.",
+            f"✗ Could not measure: {result.reason}, so a firing now proves nothing. "
+            f"This is NOT a failing rule. The claim is cleared; re-run in ~{RESOLVE_LATENCY_MIN}m.",
             err=True,
         )
         raise typer.Exit(3)

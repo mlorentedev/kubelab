@@ -79,6 +79,9 @@ FIRING = [{"name": pvc_drill.DRILL_ALERT_NAME, "state": "alerting"}]
 
 
 def _run(spy: Spy, **kw):
+    # The tests below that are not about timing let a firing count at any moment;
+    # `TestAFiringSoonerThanTheRuleAllowsIsNotProof` sets the real floor.
+    kw.setdefault("min_fire_s", 0)
     return pvc_drill.run_drill(
         exists=spy.exists,
         create=spy.create,
@@ -88,6 +91,58 @@ def _run(spy: Spy, **kw):
         log=lambda _m: None,
         **kw,
     )
+
+
+class _Clock:
+    """Advances only when the drill sleeps, so elapsed time is what the polls say."""
+
+    def __init__(self) -> None:
+        self.t = 0.0
+
+    def now(self) -> float:
+        return self.t
+
+    def sleep(self, seconds: float) -> None:
+        self.t += seconds
+
+
+class TestAFiringSoonerThanTheRuleAllowsIsNotProof:
+    """#2998: right after a Grafana restart the alerts list is empty for a few
+    minutes, so the precheck passes, and an instance from an earlier run comes
+    back at the next evaluation. Staging, 2026-11-02: `FIRING after 3.0m` and
+    `FIRING after 1.0m` on a rule with `for: 15m`. The claim enters Loki and then
+    has to stay pending for `for:`, so nothing it causes can fire sooner."""
+
+    def _drill(self, firing_from_poll: int) -> tuple[pvc_drill.DrillResult, Spy, list[str]]:
+        clock, logs = _Clock(), []
+        spy = Spy(alerts=FIRING)
+        polls = iter(range(10_000))
+        spy.fetch_alerts = lambda: [] if next(polls) < firing_from_poll else FIRING  # type: ignore[method-assign]
+        result = pvc_drill.run_drill(
+            exists=spy.exists, create=spy.create, delete=spy.delete, fetch_alerts=spy.fetch_alerts,
+            sleep=clock.sleep, now=clock.now, log=logs.append, poll_s=60,
+        )  # fmt: skip
+        return result, spy, logs
+
+    def test_an_alert_at_the_first_poll_after_an_empty_precheck_is_not_measured(self) -> None:
+        result, spy, _logs = self._drill(firing_from_poll=1)  # poll 0 is the precheck
+        assert result.measured is False
+        assert result.fired is False
+        assert spy.calls[-1] == "delete", "the claim must still be removed"
+
+    def test_the_refusal_names_the_rule_s_for(self) -> None:
+        _result, _spy, logs = self._drill(firing_from_poll=4)
+        assert any(f"{pvc_drill.EARLIEST_OWN_FIRING_S // 60}m" in line for line in logs), logs
+
+    def test_a_firing_after_the_rule_s_for_is_measured(self) -> None:
+        result, _spy, _logs = self._drill(firing_from_poll=pvc_drill.EARLIEST_OWN_FIRING_S // 60 + 1)
+        assert result.measured is True
+        assert result.fired is True
+
+    def test_the_floor_is_the_rule_s_own_for(self) -> None:
+        doc = yaml.safe_load(DISK_RULES.read_text(encoding="utf-8"))
+        rule = next(r for g in doc["groups"] for r in g["rules"] if r["uid"] == "obs015-pvc-unbound-failure")
+        assert pvc_drill.EARLIEST_OWN_FIRING_S == int(re.fullmatch(r"(\d+)m", rule["for"]).group(1)) * 60
 
 
 class TestTheClaimAlwaysGoesAway:
