@@ -22,6 +22,8 @@ real.
 
 from __future__ import annotations
 
+import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -49,6 +51,9 @@ UNSERVED = {
 
 def _render(overlay: str) -> list[dict]:
     if shutil.which("kubectl") is None:
+        # In CI a missing kubectl must fail: a skip would pass every guard here unchecked.
+        if os.environ.get("CI"):
+            pytest.fail("kubectl not on PATH in CI: the Authelia access rules went unchecked")
         pytest.skip("kubectl not on PATH: cannot render the overlay (a skip is CANNOT CHECK, not OK)")
     out = subprocess.run(
         ["kubectl", "kustomize", str(REPO / "infra/k8s/overlays" / overlay)],
@@ -107,7 +112,8 @@ def _guarded_hosts(docs: list[dict]) -> set[str]:
 
 
 def _hosts(match: str) -> list[str]:
-    return [part.split("`")[1] for part in match.split("Host(")[1:]]
+    """Every name in every `Host(...)`, including a multi-argument one."""
+    return [name for args in re.findall(r"\bHost\(([^)]*)\)", match) for name in re.findall(r"`([^`]+)`", args)]
 
 
 def _explicit_domains(access: dict) -> set[str]:
