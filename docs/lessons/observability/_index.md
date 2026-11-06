@@ -4,6 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 718 | [The errors service answers 200 on /health for any host, so a health monitor through the edge is blind](lesson-718-the-errors-service-answers-200-on-health-for-any-host-so-a-health-monitor-through-the-edge-is-blind.md) | 2026-11-06 |
 | 705 | [A Grafana range query keeps a missing series alive for its whole range, and a misspelled provisioning key changes nothing silently](lesson-705-a-grafana-range-query-keeps-a-missing-series-alive-for-its-whole-range.md) | 2026-11-04 |
 | 693 | [Grafana 13's contact-point test cannot prove a custom webhook payload; fire a real rule instead](lesson-693-grafana-contact-point-test-cannot-prove-a-payload-template.md) | 2026-11-02 |
 | 678 | [A retry inside one request cannot outlive an outage of the path it takes](lesson-678-a-retry-inside-one-request-cannot-outlive-an-outage-of-its-path.md) | 2026-10-30 |
