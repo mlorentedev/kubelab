@@ -4,7 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
-| 717 | [Passing untrusted text through `env:` stops shell injection, not workflow commands](lesson-717-env-stops-shell-injection-not-workflow-commands.md) | 2026-11-06 |
+| 719 | [Passing untrusted text through `env:` stops shell injection, not workflow commands](lesson-719-env-stops-shell-injection-not-workflow-commands.md) | 2026-11-06 |
 | 715 | [A generated PR must be written on the branch tip, and that checkout alone lets an older build write a downgrade](lesson-715-a-generated-pr-must-be-written-on-the-tip-and-only-forward.md) | 2026-11-05 |
 | 714 | [A GitHub App's webhook is half API and half settings page, and an App created without one answers 404](lesson-714-github-app-webhook-is-half-api-half-settings.md) | 2026-11-05 |
 | 713 | [A required check that waits on a matrix must run when a shard fails, and each shard's coverage must leave the directory before the next run](lesson-713-a-sharded-required-check-must-run-when-a-shard-fails.md) | 2026-11-05 |
