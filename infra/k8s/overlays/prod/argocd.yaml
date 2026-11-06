@@ -64,9 +64,11 @@ spec:
       services:
         - name: argocd
           port: 30080
+    # No explicit priority: Traefik ranks this rule by its length, above the catch-all's 1
+    # and below the redirect's 100. Declaring 1 tied it with the catch-all, and a Traefik
+    # restart sent all of Argo CD to the errors service (lesson-717).
     - match: Host(`argo.kubelab.live`)
       kind: Rule
-      priority: 1
       middlewares:
         - name: secure-headers
           namespace: kubelab
