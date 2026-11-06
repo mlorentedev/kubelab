@@ -14,7 +14,7 @@ owner: manu
 - [x] AC1 -> commit `b2f24b48` / `tests/test_gitea_agent_identity.py`, `tests/test_gitea_token_scope_drift.py`, `tests/test_gitea_token_rotation_registry.py` (green locally and in CI).
 - [ ] AC2 -> first prod run 2026-11-05: `ok=59 changed=4 failed=0`, the changes being the bootstrap (creates `dedalo`), the mint, the record and the Gitea restart. `agent_token` committed in `055983b0`; read back by length only (40). The idempotence run (`changed=0`) is still pending.
 - [x] AC3 -> `make gitea-reconcile ENV=prod APPLY=1`: `collaborator granted: personal/imagesensortool -> dedalo (write, read back)`; the next plan: `nothing to do — forge matches the declaration`. With the agent's token, `GET /repos/personal/imagesensortool` reports `permissions {admin: false, push: true}`. `AUTH-022 AC3 ok — dedalo owns: (none)`, printed by the reconcile since `feat(gitea): report what the agent account owns`.
-- [ ] AC4 -> pending dotfiles#3152 merging, then `make secrets-copy-gitea-agent-token` and `dotf secrets verify`.
+- [x] AC4 -> `make secrets-copy-gitea-agent-token` created Bitwarden item `gitea-kubelab-agent` (2026-11-05; the first run needs `--yes`, since `dotf secrets set` refuses to create an absent item without it). `dotf secrets verify` exits 0 with `OK GITEA_KUBELAB_AGENT_TOKEN bw`; the token injected by `dotf secrets run --only GITEA_KUBELAB_AGENT_TOKEN` reads `personal/imagesensortool` as `{admin: false, push: true}`. Never printed.
 - [x] AC5 -> personal/imagesensortool#152, `.user.login == dedalo`, opened through the API with the agent token. Closed, not merged, once #114 had its measurement (comment 6443): `created=true` returns 1 PR (#152) for `dedalo` and 607 PRs, all `manu`'s and not #152, for `manu`'s token.
 
 ## Test status

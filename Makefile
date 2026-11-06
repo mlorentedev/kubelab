@@ -550,7 +550,7 @@ secrets-copy-nan-key: ## Copy NAN_API_KEY from Bitwarden into prod SOPS for PR-A
 secrets-copy-gitea-agent-token: ## Copy the agents' Gitea token from prod SOPS into Bitwarden for dotf (re-run after each re-mint)
 	@V=$$(ENV=dev $(TOOLKIT) secrets show apps.services.core.gitea.agent_token --env prod 2>/dev/null | tail -1) && \
 		test -n "$$V" && test "$${#V}" -ge 40 || { echo "agent_token absent from prod SOPS; provision first" >&2; exit 1; }; \
-		printf %s "$$V" | dotf secrets set GITEA_KUBELAB_AGENT_TOKEN
+		printf %s "$$V" | dotf secrets set --yes GITEA_KUBELAB_AGENT_TOKEN
 
 # -----------------------------------------------------------------------------
 # Monitoring (Uptime Kuma)

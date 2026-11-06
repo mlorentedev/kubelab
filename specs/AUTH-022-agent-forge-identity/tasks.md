@@ -29,7 +29,7 @@ owner: manu
 - [x] [AC4] `make secrets-copy-gitea-agent-token`; dotfiles registry entry (mlorentedev/dotfiles#3152)
 - [ ] [AC2] Provision twice, second `changed=0`
 - [x] [AC3] Reconcile apply, then plan no-op ✓ 2026-11-05
-- [ ] [AC4] Copy into Bitwarden after dotfiles#3152 merges; `dotf secrets verify`
+- [x] [AC4] Copy into Bitwarden after dotfiles#3152 merges; `dotf secrets verify` ✓ 2026-11-05
 - [x] [AC5] Open one PR on `personal/imagesensortool` with the agent token; check its author ✓ 2026-11-05 (#152)
 
 ## Closing

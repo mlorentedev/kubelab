@@ -140,7 +140,7 @@ def test_the_bitwarden_copy_never_puts_the_value_in_argv() -> None:
     makefile = MAKEFILE.read_text(encoding="utf-8")
     start = makefile.index("secrets-copy-gitea-agent-token:")
     recipe = makefile[start : makefile.index("\n\n", start)]
-    assert 'printf %s "$$V" | dotf secrets set GITEA_KUBELAB_AGENT_TOKEN' in recipe
+    assert 'printf %s "$$V" | dotf secrets set --yes GITEA_KUBELAB_AGENT_TOKEN' in recipe
     assert "test -n" in recipe, "an empty read must not overwrite the Bitwarden copy"
 
 
