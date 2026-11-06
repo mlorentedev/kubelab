@@ -1,6 +1,6 @@
 # Run report 20261106-console
 
-Armed 2026-11-06T06:51:32Z, expires 14:51:32Z. Host: `caffeinate -i -t 28800` started at arming; the lid had to stay open.
+Armed 2026-11-06T06:51:32Z, expires 14:51:32Z. Host: `caffeinate -i -t 28800` started at arming; the lid had to stay open. That process was killed (exit 144) around 07:10Z; another `caffeinate` (pid 20549, 28800 s, started about 07:03Z) held the wake lock from then, past expiry.
 
 ## Items
 
