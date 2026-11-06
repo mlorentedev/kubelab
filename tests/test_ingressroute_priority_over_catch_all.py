@@ -13,6 +13,7 @@ went to the errors service while the hub was healthy (lesson-717).
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -60,6 +61,16 @@ def _catch_all(routes: list[tuple[str, dict]]) -> list[tuple[str, dict]]:
     ]
 
 
+def _claimable(route: dict, catch_all: list[tuple[str, dict]]) -> bool:
+    """Whether the catch-all could take this rule's traffic: one of its hosts matches a catch-all regexp.
+
+    A rule naming no literal host is judged too, since it may match anything.
+    """
+    hosts = [h for args in re.findall(r"\bHost\(([^)]*)\)", route["match"]) for h in re.findall(r"`([^`]+)`", args)]
+    patterns = [p for _, r in catch_all for p in re.findall(r"HostRegexp\(`([^`]+)`\)", r["match"])]
+    return not hosts or any(re.fullmatch(p, h) for p in patterns for h in hosts)
+
+
 @pytest.mark.parametrize("overlay", OVERLAYS)
 def test_the_render_has_a_catch_all(overlay: str) -> None:
     """Without one, the check below compares against nothing and passes."""
@@ -74,7 +85,7 @@ def test_every_route_outranks_the_catch_all(overlay: str) -> None:
     tied = sorted(
         f"{name}: {route['match']} (priority {_priority(route)})"
         for name, route in routes
-        if (name, route) not in catch_all and _priority(route) <= ceiling
+        if (name, route) not in catch_all and _claimable(route, catch_all) and _priority(route) <= ceiling
     )
     assert not tied, (
         f"{overlay}: these rules do not outrank the catch-all (priority {ceiling}), so a Traefik "
