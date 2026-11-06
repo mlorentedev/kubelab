@@ -156,12 +156,13 @@ make acme-quiet-check ENV=prod
 ```
 
 It evaluates the rule's expression, read from the rendered overlay, one minute
-after the newest heartbeat in Loki. It passes only when the rule's selector sees
-the heartbeat in the window and the rule answers empty. A failure says which of
-two things it saw: the rule matching the heartbeat (fix the rule, it would page
-daily) or a real ACME failure in the window (after `alert-smoke`, rerun once it
-ages out of the 10-minute window). No heartbeat in the last 48 hours is a
-failure too, not a pass.
+after the newest of each of those two lines in Loki, searched with the rule's own
+stream selector, and passes only when the rule answers empty at both. A failure
+says which of two things it saw: the rule matching Traefik's own line (fix the
+rule, it would page) or a real ACME failure in the window (after `alert-smoke`,
+rerun once it ages out of the 10-minute window). A line not found within Loki's
+7-day retention is a failure too, not a pass: a Traefik that has not restarted
+for a week leaves no boot line to evaluate, so rerun after its next restart.
 
 Two properties worth knowing rather than rediscovering:
 

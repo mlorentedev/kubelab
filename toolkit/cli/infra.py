@@ -1271,8 +1271,9 @@ def k8s_acme_quiet_check(
     """Prove the ACME failure rule stays quiet on Traefik's heartbeat (OBS-033).
 
     Evaluates the rule's own expression, read from the rendered overlay, one
-    minute after the newest `Testing certificate renew` line in Loki, and fails
-    unless the heartbeat is in the window and the rule answers empty. Read-only,
+    minute after the newest `Testing certificate renew` line and again after the
+    newest `Starting provider *acme.Provider` line in Loki, and fails unless both
+    lines are found and the rule answers empty at both. Read-only,
     so prod is allowed: prod is where a noisy rule would page.
     """
     if env not in ("staging", "prod"):
@@ -1291,12 +1292,10 @@ def k8s_acme_quiet_check(
     except (QuietCheckError, LogsUnavailableError) as exc:
         logger.error(f"acme-quiet-check: not measured: {exc}")
         raise typer.Exit(1) from exc
-    typer.echo(
-        f"heartbeats in window: {result.heartbeats_in_window}, boot lines in window: {result.boot_lines_in_window}"
-    )
-    for line in result.matched_lines:
-        typer.echo(f"  matched: {line}")
-    typer.echo(f"{'ok' if result.ok else 'FAIL'}: {result.reason}")
+    for anchor in result.anchors:
+        typer.echo(f"{'ok' if anchor.measured and anchor.quiet else 'FAIL'} `{anchor.anchor}`: {anchor.reason}")
+        for line in anchor.matched_lines[:20]:
+            typer.echo(f"  matched: {line}")
     if not result.ok:
         raise typer.Exit(1)
 

@@ -74,70 +74,79 @@ class TestRuleQuery:
             q.rule_query([{"kind": "ConfigMap", "metadata": {"name": "grafana-alerting-x"}, "data": {}}])
 
 
+ALERT = [{"value": [0, "1"]}]
+
+
 class TestVerdict:
-    def test_no_heartbeat_found_is_not_measured(self) -> None:
-        result = q.verdict(heartbeat_ns=None, heartbeats_in_window=0, alert_series=[], matched_lines=[])
-        assert not result.measured and not result.ok
-        assert "no heartbeat" in result.reason
+    def test_no_line_found_is_not_measured(self) -> None:
+        result = q.verdict(q.HEARTBEAT, None, [], [])
+        assert not result.measured and not result.quiet
+        assert "no `Testing certificate renew` line" in result.reason
 
-    def test_a_window_the_selector_cannot_see_the_heartbeat_in_is_not_measured(self) -> None:
-        # An empty answer from a selector that sees nothing is not quiet.
-        result = q.verdict(heartbeat_ns=1, heartbeats_in_window=0, alert_series=[], matched_lines=[])
-        assert not result.measured and not result.ok
+    def test_line_in_window_and_empty_result_is_quiet(self) -> None:
+        result = q.verdict(q.HEARTBEAT, 1, [], [])
+        assert result.measured and result.quiet
+        assert result.at_ns == 1 + q.EVAL_OFFSET_S * 10**9
 
-    def test_heartbeat_in_window_and_empty_result_is_quiet(self) -> None:
-        result = q.verdict(heartbeat_ns=1, heartbeats_in_window=1, alert_series=[], matched_lines=[])
-        assert result.measured and result.quiet and result.ok
-
-    def test_a_matched_heartbeat_is_a_rule_regression(self) -> None:
-        line = "INF Testing certificate renew... acmeCA=x"
-        result = q.verdict(heartbeat_ns=1, heartbeats_in_window=1, alert_series=[{"value": [0, "1"]}], matched_lines=[line])
+    @pytest.mark.parametrize("line", ["INF Testing certificate renew... acmeCA=x", "INF Starting provider *acme.Provider"])
+    def test_a_matched_traefik_line_is_a_rule_regression(self, line: str) -> None:
+        result = q.verdict(q.BOOT_LINE, 1, ALERT, [line])
         assert result.measured and not result.quiet
-        assert "matches the heartbeat" in result.reason
-
-    def test_a_matched_boot_line_is_a_rule_regression(self) -> None:
-        line = "INF Starting provider *acme.Provider"
-        result = q.verdict(heartbeat_ns=1, heartbeats_in_window=1, alert_series=[{"value": [0, "1"]}], matched_lines=[line])
-        assert "matches the heartbeat" in result.reason
+        assert "regression of the rule" in result.reason
 
     def test_a_real_failure_in_the_window_is_not_called_a_regression(self) -> None:
-        line = "ERR Unable to obtain ACME certificate domains=[\"x.kubelab.local\"]"
-        result = q.verdict(heartbeat_ns=1, heartbeats_in_window=1, alert_series=[{"value": [0, "1"]}], matched_lines=[line])
-        assert not result.ok
+        line = 'ERR Unable to obtain ACME certificate domains=["x.kubelab.local"]'
+        result = q.verdict(q.HEARTBEAT, 1, ALERT, [line])
+        assert not result.quiet
         assert "real ACME failure" in result.reason
 
 
 class _Loki:
-    def __init__(self, heartbeat_ns: int | None, control: str, alert: list, lines: list[str]) -> None:
-        self.heartbeat_ns, self.control, self.alert, self.lines = heartbeat_ns, control, alert, lines
+    """Each anchor's newest line at its own instant; the rule answers per instant."""
+
+    def __init__(self, newest: dict[str, int | None], alert_at: dict[int, list], lines: list[str]) -> None:
+        self.newest, self.alert_at, self.lines = newest, alert_at, lines
         self.instant: list[tuple[str, int]] = []
+        self.sample: list[dict] = []
 
     def query_range(self, query: str, **kwargs):  # noqa: ANN003, ANN201
-        if q.HEARTBEAT in query:
-            return [] if self.heartbeat_ns is None else [{"ts_ns": self.heartbeat_ns, "line": "hb"}]
-        assert kwargs["end_ns"] == self.heartbeat_ns + q.EVAL_OFFSET_S * 10**9
+        for anchor, ts in self.newest.items():
+            if f'|= "{anchor}"' in query:
+                assert kwargs["since"] == q.LOOKBACK
+                return [] if ts is None else [{"ts_ns": ts, "line": anchor}]
+        self.sample.append(kwargs)
         return [{"ts_ns": 0, "line": line} for line in self.lines]
 
     def query_instant(self, query: str, at_ns: int):  # noqa: ANN201
         self.instant.append((query, at_ns))
-        if "|= " in query:
-            return [{"value": [0, self.control]}]
-        return self.alert
+        return self.alert_at.get(at_ns, [])
+
+
+S = 10**9
 
 
 class TestRun:
-    def test_it_evaluates_the_rule_one_minute_after_the_heartbeat(self) -> None:
-        loki = _Loki(heartbeat_ns=5 * 10**9, control="1", alert=[], lines=[])
+    def test_the_rule_is_evaluated_one_minute_after_each_anchor(self) -> None:
+        loki = _Loki({q.HEARTBEAT: 5 * S, q.BOOT_LINE: 100 * S}, {}, [])
         result = q.run_acme_quiet_check(loki, _docs(EXPR))
         assert result.ok
-        assert (EXPR, 65 * 10**9) in loki.instant
+        assert loki.instant == [(EXPR, 65 * S), (EXPR, 160 * S)]
 
-    def test_it_reads_the_matching_lines_when_the_rule_answers(self) -> None:
-        loki = _Loki(5 * 10**9, "1", [{"value": [0, "1"]}], ["INF Testing certificate renew..."])
+    def test_quiet_on_the_heartbeat_but_matching_the_boot_line_fails(self) -> None:
+        # The boot line rarely shares the heartbeat's window, so it needs its own instant.
+        loki = _Loki({q.HEARTBEAT: 5 * S, q.BOOT_LINE: 100 * S}, {160 * S: ALERT}, ["INF Starting provider *acme.Provider"])
         result = q.run_acme_quiet_check(loki, _docs(EXPR))
-        assert not result.ok and result.matched_lines
+        assert not result.ok
+        assert [a.quiet for a in result.anchors] == [True, False]
+        assert loki.sample[0]["end_ns"] == 160 * S and loki.sample[0]["limit"] == q.SAMPLE_LIMIT
 
-    def test_no_heartbeat_skips_the_evaluation(self) -> None:
-        loki = _Loki(None, "0", [], [])
+    def test_no_boot_line_in_retention_is_not_a_pass(self) -> None:
+        loki = _Loki({q.HEARTBEAT: 5 * S, q.BOOT_LINE: None}, {}, [])
         result = q.run_acme_quiet_check(loki, _docs(EXPR))
-        assert not result.measured and loki.instant == []
+        assert not result.ok
+        assert [a.measured for a in result.anchors] == [True, False]
+        assert loki.instant == [(EXPR, 65 * S)]
+
+    def test_lookback_is_lokis_retention(self) -> None:
+        loki_yaml = (ROOT / "infra" / "k8s" / "base" / "services" / "loki.yaml").read_text()
+        assert f"retention_period: {q.LOOKBACK}" in loki_yaml

@@ -1,23 +1,24 @@
-"""OBS-033 (#2195): prove the ACME failure rule stays quiet on Traefik's heartbeat.
+"""OBS-033 (#2195): prove the ACME failure rule stays quiet on Traefik's own lines.
 
 `make alert-smoke` proves the rule fires and clears. It cannot prove the rule
 stays quiet, and that is the half that pages: Traefik logs `Testing certificate
 renew...` about once a day and `Starting provider *acme.Provider` on every boot,
-so a rule edit that starts matching either would page prod daily.
+so a rule edit that starts matching either would page prod.
 
-The check takes the newest heartbeat in Loki, evaluates the rule's own
-expression one minute after it (so the heartbeat sits inside the rule's window),
-and requires an empty answer. The expression is read from the rendered overlay,
-never copied, so the check runs against whatever the rule says today.
+For each of those two lines the check takes the newest one in Loki, evaluates
+the rule's own expression one minute after it (so the line sits inside the
+rule's window), and requires an empty answer. The expression is read from the
+rendered overlay, never copied, so the check runs against whatever the rule says
+today. The lines are searched with the rule's own stream selector, so a selector
+that no longer sees Traefik finds no line and fails rather than reading quiet.
 
 Two answers are not "quiet", and both fail:
 
-- No heartbeat found, or the rule's stream selector does not see it in the
-  window: an empty result from a selector that sees nothing proves nothing.
+- No such line within Loki's retention: nothing was evaluated, which is not quiet.
 - A non-empty result. The matching lines are read back so the report can say
-  whether the rule matched the heartbeat (a regression of the rule) or a real
-  ACME failure happened in the window (staging's alert-smoke induces those):
-  the two call for opposite actions.
+  whether the rule matched Traefik's own line (a regression of the rule) or a
+  real ACME failure happened in the window (staging's alert-smoke induces
+  those): the two call for opposite actions.
 
 Read-only, so it runs in prod as well as staging.
 """
@@ -34,10 +35,15 @@ RULE_UID = "obs007-acme-failure"
 CONFIGMAP_PREFIX = "grafana-alerting"
 HEARTBEAT = "Testing certificate renew"
 BOOT_LINE = "Starting provider *acme.Provider"
-#: Seconds after the heartbeat to evaluate at: inside any window over a minute.
+#: The lines the rule must never match, each evaluated on its own.
+ANCHORS = (HEARTBEAT, BOOT_LINE)
+#: Seconds after an anchor line to evaluate at: inside any window over a minute.
 EVAL_OFFSET_S = 60
-#: How far back to look for a heartbeat. Traefik logs one about every 24h.
-HEARTBEAT_LOOKBACK = "48h"
+#: How far back to look for an anchor: Loki's `retention_period` (loki.yaml), so
+#: a boot line is found whenever Loki still holds one.
+LOOKBACK = "168h"
+#: Matched lines read back to explain a non-empty answer.
+SAMPLE_LIMIT = 500
 
 
 class QuietCheckError(RuntimeError):
@@ -68,18 +74,22 @@ class RuleQuery:
 
 
 @dataclass(frozen=True)
-class QuietResult:
+class AnchorResult:
+    anchor: str
     measured: bool
     quiet: bool
     reason: str
-    heartbeat_ns: int | None = None
-    heartbeats_in_window: int = 0
-    boot_lines_in_window: int = 0
+    at_ns: int | None = None
     matched_lines: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class QuietResult:
+    anchors: list[AnchorResult]
 
     @property
     def ok(self) -> bool:
-        return self.measured and self.quiet
+        return bool(self.anchors) and all(a.measured and a.quiet for a in self.anchors)
 
 
 def _find_rule(docs: list[dict[str, Any]]) -> dict[str, Any]:
@@ -112,51 +122,36 @@ def rule_query(docs: list[dict[str, Any]]) -> RuleQuery:
 
 
 def verdict(
-    heartbeat_ns: int | None,
-    heartbeats_in_window: int,
-    alert_series: list[dict[str, Any]],
-    matched_lines: list[str],
-    boot_lines_in_window: int = 0,
-) -> QuietResult:
-    if heartbeat_ns is None:
-        measured, quiet, reason = False, False, f"no heartbeat in Loki in the last {HEARTBEAT_LOOKBACK}"
-    elif heartbeats_in_window < 1:
-        measured, quiet, reason = False, False, "the rule's selector does not see the heartbeat in its window"
+    anchor: str, anchor_ns: int | None, alert_series: list[dict[str, Any]], matched_lines: list[str]
+) -> AnchorResult:
+    at_ns = None if anchor_ns is None else anchor_ns + EVAL_OFFSET_S * 10**9
+    if anchor_ns is None:
+        measured, quiet, reason = False, False, f"no `{anchor}` line in Loki in the last {LOOKBACK}"
     elif not alert_series:
-        measured, quiet, reason = True, True, "quiet: heartbeat in the window, rule answered empty"
-    elif any(HEARTBEAT in line or BOOT_LINE in line for line in matched_lines):
+        measured, quiet, reason = True, True, "quiet: the line is in the window, the rule answered empty"
+    elif any(a in line for a in ANCHORS for line in matched_lines):
         measured, quiet = True, False
-        reason = "the rule matches the heartbeat: a regression of the rule, it would page daily"
+        reason = "the rule matches Traefik's own line: a regression of the rule, it would page"
     else:
         measured, quiet, reason = True, False, "a real ACME failure is in the window; rerun once it ages out"
-    return QuietResult(
-        measured,
-        quiet,
-        reason,
-        heartbeat_ns=heartbeat_ns,
-        heartbeats_in_window=heartbeats_in_window,
-        boot_lines_in_window=boot_lines_in_window,
-        matched_lines=matched_lines,
-    )
+    return AnchorResult(anchor, measured, quiet, reason, at_ns=at_ns, matched_lines=matched_lines)
 
 
-def _count(loki: LokiLike, query: str, at_ns: int) -> int:
-    return sum(int(float(s["value"][1])) for s in loki.query_instant(query, at_ns))
-
-
-def run_acme_quiet_check(loki: LokiLike, docs: list[dict[str, Any]]) -> QuietResult:
-    rule = rule_query(docs)
-    newest = loki.query_range(f'{rule.selector} |= "{HEARTBEAT}"', since=HEARTBEAT_LOOKBACK, limit=1)
+def _evaluate(loki: LokiLike, rule: RuleQuery, anchor: str) -> AnchorResult:
+    newest = loki.query_range(f'{rule.selector} |= "{anchor}"', since=LOOKBACK, limit=1)
     if not newest:
-        return verdict(None, 0, [], [])
-    heartbeat_ns = int(newest[0]["ts_ns"])
-    at_ns = heartbeat_ns + EVAL_OFFSET_S * 10**9
-    window = f"[{rule.window_s}s]"
-    heartbeats = _count(loki, f'sum(count_over_time({rule.selector} |= "{HEARTBEAT}" {window}))', at_ns)
-    boots = _count(loki, f'sum(count_over_time({rule.selector} |= "{BOOT_LINE}" {window}))', at_ns)
+        return verdict(anchor, None, [], [])
+    anchor_ns = int(newest[0]["ts_ns"])
+    at_ns = anchor_ns + EVAL_OFFSET_S * 10**9
     series = loki.query_instant(rule.expr, at_ns)
     lines: list[str] = []
     if series:
         start_ns = at_ns - rule.window_s * 10**9
-        lines = [e["line"] for e in loki.query_range(rule.log_query, start_ns=start_ns, end_ns=at_ns, limit=20)]
-    return verdict(heartbeat_ns, heartbeats, series, lines, boot_lines_in_window=boots)
+        found = loki.query_range(rule.log_query, start_ns=start_ns, end_ns=at_ns, limit=SAMPLE_LIMIT)
+        lines = [e["line"] for e in found]
+    return verdict(anchor, anchor_ns, series, lines)
+
+
+def run_acme_quiet_check(loki: LokiLike, docs: list[dict[str, Any]]) -> QuietResult:
+    rule = rule_query(docs)
+    return QuietResult([_evaluate(loki, rule, anchor) for anchor in ANCHORS])
