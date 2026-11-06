@@ -104,7 +104,9 @@ def test_the_status_step_is_red_only_on_failure_or_error(wf: dict, state: str, r
 
 # Argo's message is written by whatever made the sync fail, so a line of it that
 # starts with `::` would be read by the runner as a workflow command (#2942).
-HOSTILE = "sync failed at 50%\n::add-mask::hidden\r\n::stop-commands::x\n::error::forged"
+# A bare CR before `::` matters on its own: Python's text mode turns it into a newline, so the
+# `commands` assertion below goes red if the step strips LF but not CR.
+HOSTILE = "sync failed at 50%\n::add-mask::hidden\r::add-mask::cr\r\n::stop-commands::x\n::error::forged"
 # The context passes the job's prefix filter and is whatever the status poster sent after it.
 HOSTILE_CONTEXT = "argocd/kubelab-staging\n::add-mask::ctx"
 
@@ -125,7 +127,6 @@ def test_no_line_of_the_status_can_begin_a_workflow_command(wf: dict, state: str
     commands = [line for line in done.stdout.splitlines() if line.startswith("::")]
     # The step's own annotation is the only command it may emit, and only when red.
     assert [c.split("::", 2)[1].split(" ")[0] for c in commands] == (["error"] if state == "failure" else [])
-    assert "\r" not in done.stdout
     assert "add-mask" in done.stdout, "the description is still printed, not dropped"
     if state == "failure":
         # The runner decodes %XX in a command's data, so a literal % must arrive as %25.
