@@ -52,11 +52,11 @@ One or more services fail to start or become unhealthy after a deployment.
 ### Diagnostic Steps
 
 ```bash
-# Check container status
-make status ENV=production
+# Check pod and deployment status in the kubelab namespace
+poetry run toolkit infra k8s status --env prod
 
-# View service logs
-toolkit apps logs api -f
+# View service logs (Loki keeps history across pod restarts)
+poetry run toolkit obs logs --env prod --service api
 ```
 
 ### Solution
@@ -64,10 +64,9 @@ toolkit apps logs api -f
 ```bash
 # Restart specific service
 make restart-service SVC=api ENV=prod
-
-# Emergency rollback
-make emergency-rollback ENV=production
 ```
+
+To roll back, revert the deploy or promotion PR's merge commit on `master`. Argo CD then reconciles the env back to the previous immutable tag. See `docs/runbooks/gitops-delivery-promotion.md`, section Rollback. No make target does this: the rollback is a git change, so it is reviewed like any other.
 
 ### Prevention
 
@@ -118,29 +117,24 @@ volumeMounts:
 
 ## Emergency Procedures
 
-### Complete System Down
+### Complete System Down (local dev stack)
 
 ```bash
 # Quick restart
 make down-dev && make up-dev
 
-# Nuclear option (kills all containers)
-docker kill $(docker ps -q)
-docker rm $(docker ps -aq)
-make clean && make up-dev
+# Nuclear option: stop the stack, then prune EVERY unused Docker volume and
+# container on this host (`docker volume prune -f`), not only the dev stack's
+make dev-full-clean && make up-dev
 ```
 
 ### Rollback Deployment
 
-```bash
-make emergency-rollback ENV=production
-```
+Revert the deploy or promotion PR's merge commit on `master`. Argo CD reconciles back to the previous tag (`docs/runbooks/gitops-delivery-promotion.md`, section Rollback).
 
 ### Restore from Backup
 
-```bash
-make restore BACKUP=backup-<date>.tar.gz ENV=production
-```
+Node backups are restic snapshots in Cloudflare R2, not a tarball. Restore one with `docs/runbooks/offsite-backup-restore.md`, section "Restoring — normal case".
 
 ### Emergency Contacts
 

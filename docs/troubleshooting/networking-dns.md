@@ -197,7 +197,7 @@ sudo dscacheutil -flushcache           # macOS
 
 ### Prevention
 
-- Always verify DNS before deploying: `make verify-dns ENVIRONMENT=prod`
+- Always verify DNS before deploying: `make tf-dns-plan` (prod records are Terraform; a plan with no changes means Cloudflare matches the SSOT), then `make test-e2e ENV=prod`, which reaches each service by its public name
 - Use `.localhost` for development, avoid real domains
 - Document all DNS changes in infrastructure changelog
 
