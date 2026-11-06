@@ -81,7 +81,11 @@ def _dev_config(monkeypatch: pytest.MonkeyPatch) -> dict:
     monkeypatch.setattr(manager, "_decrypt_sops", lambda _path: {})
     context = {
         **manager.get_env_vars(),
-        "apps": [],
+        # One app per auth level, so the per-app rules render too.
+        "apps": [
+            {"name": f"app-{level}", "host": f"{level}.kubelab.test", "auth_level": level}
+            for level in ("bypass", "one_factor", "two_factor")
+        ],
         "authelia_users": [],
         "oidc_clients": [],
         **{name: getattr(AUTHELIA_CONFIG, name) for name in dir(AUTHELIA_CONFIG) if name.startswith("ARGON2_")},
@@ -117,11 +121,18 @@ def _hosts(match: str) -> list[str]:
 
 
 def _explicit_domains(access: dict) -> set[str]:
-    domains = set()
+    return set(_first_policy(access))
+
+
+def _first_policy(access: dict) -> dict[str, str]:
+    """The policy of the first rule naming each host, which is the one Authelia applies."""
+    policies: dict[str, str] = {}
     for rule in access.get("rules", []):
         listed = rule["domain"] if isinstance(rule["domain"], list) else [rule["domain"]]
-        domains.update(d for d in listed if "*" not in d)
-    return domains
+        for domain in listed:
+            if "*" not in domain:
+                policies.setdefault(domain, rule["policy"])
+    return policies
 
 
 @pytest.mark.parametrize("overlay", OVERLAYS)
@@ -140,6 +151,15 @@ def test_every_guarded_host_has_its_own_rule(overlay: str) -> None:
         f"{overlay}: hosts behind an Authelia ForwardAuth with no explicit Authelia rule get "
         f"default_policy deny: {gaps}"
     )
+
+
+@pytest.mark.parametrize("overlay", OVERLAYS)
+def test_no_guarded_host_is_waved_through(overlay: str) -> None:
+    """A rule existing is not a host being protected: `bypass` behind the ForwardAuth lets everyone in."""
+    docs = _render(overlay)
+    policies = _first_policy(_access_control(docs))
+    open_ = sorted(h for h in _guarded_hosts(docs) if policies.get(h) not in (None, "one_factor", "two_factor"))
+    assert not open_, f"{overlay}: hosts behind an Authelia ForwardAuth whose rule asks for no login: {open_}"
 
 
 def test_no_unserved_entry_is_stale() -> None:
@@ -163,6 +183,7 @@ def test_no_rule_trusts_a_network_while_the_client_address_is_masqueraded(overla
 def test_the_dev_template_trusts_no_network(monkeypatch: pytest.MonkeyPatch) -> None:
     """The dev generator rendered `networking.trusted_cidrs` as `internal`; that list is the egress deny list."""
     access = _dev_config(monkeypatch)["access_control"]
+    assert len(access["rules"]) >= 5, "the per-app rules did not render, so this would check nothing"
     assert "networks" not in access
     assert not [r["domain"] for r in access.get("rules", []) if "networks" in r]
     assert "trusted_cidrs" not in TEMPLATE.read_text(encoding="utf-8")
