@@ -1,0 +1,65 @@
+"""Infrastructure: prod Authelia refuses a first factor for each machine identity (#2504).
+
+The static half, `tests/test_machine_identities_not_authelia_users.py`, holds the
+declaration. This half records the refusal on the running portal, because AUTH-004
+asked for a demonstration rather than an absence.
+
+A refusal here cannot tell "no such user" from "wrong password": Authelia answers
+both with the same 401, on purpose. The password is random, so the test shows
+that the first factor fails, not why. The static half shows why.
+
+One attempt per identity per run. Prod bans a username after 3 failures in 2
+minutes (`regulation`), and CrowdSec reads the same failures. Neither machine
+account ever signs in, and two attempts stay below both.
+"""
+
+from __future__ import annotations
+
+import os
+import secrets
+
+import httpx
+import pytest
+import yaml
+
+pytestmark = pytest.mark.infra
+
+_VALUES = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "infra/config/values"))
+FIRST_FACTOR = "/api/firstfactor"
+MACHINE_IDENTITY_KEYS = ("machine", "reviewer")
+
+
+def _load(name: str) -> dict:
+    with open(os.path.join(_VALUES, name), encoding="utf-8") as handle:
+        return yaml.safe_load(handle)
+
+
+def _machine_usernames() -> list[str]:
+    identities = _load("common.yaml")["apps"]["auth"]["identities"]
+    return [identities[key] for key in MACHINE_IDENTITY_KEYS]
+
+
+@pytest.fixture(scope="module")
+def base_url() -> str:
+    url = f"https://{_load('prod.yaml')['apps']['services']['security']['authelia']['domain']}"
+    try:
+        health = httpx.get(f"{url}/api/health", timeout=15.0)
+    except httpx.HTTPError as exc:
+        pytest.skip(f"Authelia unreachable at {url} ({exc})")
+    if health.status_code != 200:
+        # A 502 through error-pages also "refuses": without this skip the test
+        # would pass against an Authelia that is not running.
+        pytest.skip(f"Authelia not healthy: /api/health returned {health.status_code}")
+    return url
+
+
+@pytest.mark.parametrize("username", _machine_usernames())
+def test_a_first_factor_as_a_machine_identity_is_refused(base_url: str, username: str) -> None:
+    response = httpx.post(
+        f"{base_url}{FIRST_FACTOR}",
+        json={"username": username, "password": secrets.token_urlsafe(24), "keepMeLoggedIn": False},
+        timeout=15.0,
+        follow_redirects=False,
+    )
+    assert response.status_code == 401, f"{username}: first factor answered {response.status_code}"
+    assert response.json().get("status") == "KO", response.text
