@@ -100,9 +100,10 @@ fingerprint came from.
   is visible to every node but unreachable under the policy. The acceptance recorded
   for the first tenant node does **not** carry over — each additional node needs the
   decision repeated (VPN-ACL-014 risk register). Retirement is OPS-019.
-- [ ] **0.6 A qualified ts-bridge host-mode build exists** for the node's OS, with
-  its checksum recorded by the lane that produced it. An unqualified build is a
-  stop, not a workaround.
+- [ ] **0.6 (hosts only) A qualified ts-bridge host-mode build exists** for the
+  node's OS, with its checksum recorded by the lane that produced it. An
+  unqualified build is a stop, not a workaround. Clients do not use host mode;
+  this item does not gate them.
 
 ## Steps
 
@@ -112,8 +113,10 @@ Follow [headscale-setup 10.2](headscale-setup.md#102-enrol-a-machine) verbatim: 
 dedicated ed25519 key per machine, public line into
 `apps.services.core.headscale.bootstrap_ssh_keys.client-<N>` (SOPS), then
 `make deploy TARGET=vps ENV=prod`. One key per machine is what makes revocation per
-machine. Verify from the machine: `ts-bridge connect --bootstrap-ssh hs-bootstrap`
-reaches `READY`; `ssh hs-bootstrap` gets no shell.
+machine. Verify from the machine: `ssh hs-bootstrap` gets no shell (the key
+authenticates and is restricted), and the SOCKS forward to `vpn.kubelab.live:443`
+is permitted. `READY` is not reachable yet — the tenant key does not exist until
+step 2; the join in step 3 is where `READY` is checked.
 
 Enforcement has two independent layers, and only the first is guaranteed by the
 key itself: every authorized_keys line carries
@@ -134,14 +137,18 @@ repurposed:
 
 ```bash
 # <owner-id> from checklist 0.3; <hosts_tag> or <clients_tag> from the segment
-# entry in SOPS — the tag matches the role decided above
+# entry in SOPS — the tag matches the role decided above. SOPS values already
+# carry the tag: prefix; pass them as-is (never write tag:<...> again here).
 ssh vps-pub "sudo docker exec headscale headscale preauthkeys create \
-  -u <owner-id> -e 1h --tags tag:<hosts_tag-or-clients_tag>"
+  -u <owner-id> -e 1h --tags <hosts_tag-or-clients_tag>"
 ```
 
+- **Record the key's ID at mint**: `preauthkeys list` shows it in the ID column;
+  the tenant inventory keeps it (step 7) — revocation expires by ID, not by owner.
 - **One-time**: consumed by a *successful* registration; a rejected attempt does
-  not consume it. Expire an unused or compromised key:
-  `headscale preauthkeys expire -u <owner-id>` (list first with `preauthkeys list`).
+  not consume it. Expire an unused or compromised key by its ID:
+  `headscale preauthkeys expire --id <preauth-key-id>` — v0.28 `expire` takes
+  `--id`, not `-u` (there is no `-u` on expire; `-u` belongs to `create`).
 - **The key carries the tag** — the node must NOT pass `--advertise-tags` (two
   tagging paths fail together; see [onboard-vpn-fleet-agent](onboard-vpn-fleet-agent.md) gotchas,
   which apply verbatim here).
@@ -157,8 +164,10 @@ server, the key as a **file** for the binary's `auth_key_file` (never `--authkey
 on argv), the VPS host-key fingerprint to pin, and — client on a filtered network
 only — the bootstrap SSH alias. The tenant side provisions and joins; a host runs
 `host serve --config <host.yaml>` under its supervisor, a client connects
-natively. When it succeeds, the node appears in `nodes list` under the segment
-owner with its role's tag.
+natively. When it succeeds, the node appears in `nodes list` under `tagged-devices`
+with its role's tag — a tagged node has no user; the owner binding happened at
+mint (the key was created with `-u <owner-id>` and the tag is owned by `owner@`
+in tagOwners).
 
 ### 4. Verify registration and issue the receipt
 
@@ -168,7 +177,7 @@ verified; this receipt is what the tenant side's acceptance cites:
 
 | Field | Source | PASS condition |
 |---|---|---|
-| Owner | `nodes list`, User column | exactly the segment owner user |
+| Owner | `nodes list`, User column | `tagged-devices` — a tagged node has no user; the owner binding is the mint (`-u <owner-id>` + tagOwners), not this column |
 | Node identity | `nodes list`, ID + hostname | exactly one node for the expected machine — no duplicate registration |
 | Tag | `nodes list`, Tags column | exactly the role's tag (`hosts_tag` for a host, `clients_tag` for a client) — not merely any tag |
 
@@ -202,7 +211,8 @@ Next section. The enrolment is not done until every cell is proven.
 
 ### 7. Record for revocation
 
-The tenant's inventory keeps: node identity, node ID from `nodes list`, bootstrap
+The tenant's inventory keeps: node identity, node ID from `nodes list`, preauth
+key ID (from `preauthkeys list` at mint — revocation expires by ID), bootstrap
 key serial (`client-<N>`), mint date. This repository keeps nothing (tenant data
 rule). Revocation then needs no archaeology: [Revoke](#revoke-a-tenant-node).
 
@@ -228,8 +238,10 @@ interpretive). Cells marked **mesh** run from any private node over the tailnet.
 Notes:
 
 - A **host is a destination only; a client is a source only**. Each cell names the
-  role it applies to; a node that must switch roles needs a new key with the other
-  tag — never a policy change.
+  role it applies to; a node that must switch roles must be deleted first
+  (`nodes delete -i <NODE_ID>`) and re-enrolled fresh with a new key carrying the
+  other tag — re-registering a tagged node keeps its old tag and silently consumes
+  the new key (upstream headscale #3370). Never a policy change.
 - D3/D4 are policy-level facts (no rule grants them); the network probes make them
   observable rather than trusted. If any deny cell connects, stop: the rendered
   policy is not the one this document describes — re-run
@@ -247,21 +259,25 @@ Three independent revocations; do all that apply:
 # 1. The node itself (headscale-setup 9.4)
 ssh vps-pub "sudo docker exec headscale headscale nodes delete -i <NODE_ID>"
 
-# 2. An unused/leaked preauth key
-ssh vps-pub "sudo docker exec headscale headscale preauthkeys expire -u <owner-id>"
+# 2. An unused/leaked preauth key (ID from the tenant inventory, recorded at mint)
+ssh vps-pub "sudo docker exec headscale headscale preauthkeys expire --id <preauth-key-id>"
 
 # 3. The bootstrap SSH key (headscale-setup 10.3): remove the SOPS entry and
 #    deploy — that blocks every NEW session authenticated with it. Live sessions
 #    are not re-checked; end only this node's, by PID resolved from its source
 #    address — never the whole account:
-ssh vps-pub "sudo ss -tnp | grep 'sshd.*<node-source-ip>'"   # find this node's PID(s)
+ssh vps-pub "sudo ss -tnp | grep '<node-source-ip>'"         # find this node's PID(s)
 ssh vps-pub "sudo kill <PID>"                                # end those sessions only
 ```
 
 Killing every session on the account (`pkill -u hs-bootstrap sshd`) drops **all**
 tenant nodes' tunnels at once and is reserved for a globally authorized window,
-not a per-machine revocation. A revoked node loses its tag and its grants
-immediately; a running tunnel keeps forwarding until its own session is ended.
+not a per-machine revocation. If the node's source IP is shared (several tenant
+nodes behind one NAT), the IP alone is ambiguous: identify the node's session
+from the sshd journal (`journalctl -u ssh`) by its accepted-publickey line — one
+key per machine makes the key fingerprint identify the machine — before killing.
+A revoked node loses its tag and its grants immediately; a running tunnel keeps
+forwarding until its own session is ended.
 
 ## Gotchas
 
