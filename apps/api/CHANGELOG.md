@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.0](https://github.com/mlorentedev/kubelab/compare/api-v1.4.0...api-v1.5.0) (2026-11-06)
+
+
+### Features
+
+* **api:** page the console queue with a keyset cursor ([#3116](https://github.com/mlorentedev/kubelab/issues/3116)) ([9a4a029](https://github.com/mlorentedev/kubelab/commit/9a4a0295da6d8a6af44662b0d69f85463bad95bf))
+
 ## [1.4.0](https://github.com/mlorentedev/kubelab/compare/api-v1.3.2...api-v1.4.0) (2026-11-06)
 
 
