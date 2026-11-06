@@ -100,7 +100,12 @@ def test_the_compose_file_and_the_check_name_the_same_runner() -> None:
 
 def _report(**variables: object) -> str:
     msg = _task("Report service status")["debug"]["msg"]
-    base = {"tailscale_ip": "100.64.0.3", "gitea_http_port": 3000, "gitea_ssh_port": 2222}
+    common = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
+    base = {
+        "tailscale_ip": common["networking"]["nodes"]["beelink"]["tailscale_ip"],
+        "gitea_http_port": 3000,
+        "gitea_ssh_port": 2222,
+    }
     return _env().from_string(msg).render(**{**base, **variables})
 
 
