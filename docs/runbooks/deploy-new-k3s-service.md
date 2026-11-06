@@ -14,7 +14,7 @@ created: "2026-03-28"
 
 ## Prerequisites
 
-- [ ] SOPS access configured (`make sops-check`)
+- [ ] SOPS access configured (`make secrets-audit` decrypts every env vault and lists missing keys; a vault it cannot decrypt reads as every key missing)
 - [ ] K3s cluster access via kubeconfig (`~/.kube/kubelab-config`)
 - [ ] DNS wildcard `*.staging.kubelab.live` resolves to K3s ingress (100.64.0.4 via CoreDNS)
 - [ ] Authelia running and healthy on the cluster
