@@ -651,7 +651,8 @@ def _imports(path: Path) -> list[dict]:
         ("rpi3_services", ["{{ uptime_kuma_image }}"]),
         (
             "beelink_services",
-            "{{ [gitea_image, runner_image] + ([act_runner_image] if act_runner_enabled | bool else []) }}",
+            "{{ [gitea_image] + ([runner_image] if runner_enabled | bool else [])"
+            " + ([act_runner_image] if act_runner_enabled | bool else []) }}",
         ),
     ],
 )

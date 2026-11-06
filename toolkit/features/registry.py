@@ -29,8 +29,16 @@ from toolkit.core.logging import logger
 from toolkit.features import product_registry
 
 _HUB = "https://hub.docker.com/v2"
+_ANONYMOUS_HOST = "docker.io/"  # the one registry whose tags are read here, anonymously
 SHA_TAG_PREFIX = "sha-"  # immutable per-commit staging tag scheme (ADR-046)
+#: The hex lengths a ``sha-`` tag may carry: what the product image receiver admits (``sha-[0-9a-f]{7,}``).
+SHA_TAG_HEX_LENGTHS = range(7, 41)
 _RC_MARKER = "-rc."  # dropped scheme; any remaining are dead
+
+
+def reads_digests(registry: str) -> bool:
+    """Whether ``tag_digest`` can read this registry at all (only Docker Hub, anonymously)."""
+    return registry.startswith(_ANONYMOUS_HOST)
 
 
 @dataclass(frozen=True)
@@ -93,7 +101,7 @@ def tag_digest(registry: str, image_name: str, tag: str) -> str | None:
     Unlike ``tag_exists`` this never answers "skip": a caller proving two tags are
     one image treats ``None`` as no proof.
     """
-    if not registry.startswith("docker.io/"):
+    if not reads_digests(registry):
         return None
     namespace = registry.split("/", 1)[1]
     try:

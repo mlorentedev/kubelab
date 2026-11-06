@@ -136,6 +136,52 @@ def test_an_unreadable_digest_is_refused_not_skipped(gh, digests, tmp_path: path
     assert answer["ok"] is False and missing in answer["error"]
 
 
+@pytest.mark.parametrize("length", [7, 10, 40])
+def test_the_proof_finds_the_sha_tag_the_product_publishes(gh, digests, tmp_path: pathlib.Path, length: int) -> None:
+    """The receiver admits `sha-<7..40 hex>` (#2627), so the proof accepts any prefix of the commit in that range."""
+    digests.answers = {VERSION: DIGEST, f"sha-{FULL[:length]}": DIGEST}
+
+    code, answer = _fetch(tmp_path / "web.yaml")
+
+    assert code == 0, answer
+    assert digests.seen[-1][2] == f"sha-{FULL[:length]}"
+    assert [tag for _, _, tag in digests.seen[1:]] == [f"sha-{FULL[:n]}" for n in range(7, length + 1)]
+
+
+def test_a_missing_release_tag_reads_no_sha_tag(gh, digests, tmp_path: pathlib.Path) -> None:
+    """An unreadable `<version>` already decides the refusal: the sha search is not run behind it."""
+    digests.answers[VERSION] = None
+
+    code, _ = _fetch(tmp_path / "web.yaml")
+
+    assert code == 1
+    assert [tag for _, _, tag in digests.seen] == [VERSION]
+
+
+def test_an_unread_release_tag_names_a_private_repository_as_a_cause(gh, digests, tmp_path: pathlib.Path) -> None:
+    """Docker Hub answers a private repository like an absent tag; the message says so (#2627)."""
+    digests.answers[VERSION] = None
+
+    _, answer = _fetch(tmp_path / "web.yaml")
+
+    assert "private" in answer["why"]
+
+
+def test_a_registry_the_proof_cannot_read_is_refused_by_name(
+    gh, digests, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Not 'check that the tag exists': the tag may exist where the proof cannot look (#2627)."""
+    elsewhere = "ghcr.io/acme/web"
+    monkeypatch.setattr(product_release.product_registry, "derived_image", lambda app, registry=None: elsewhere)
+
+    code, answer = _fetch(tmp_path / "web.yaml")
+
+    assert code == 1
+    assert "ghcr.io/acme" in answer["error"]
+    assert "exists" not in answer["fix"]
+    assert digests.seen == [], "an unsupported registry must be refused before any read"
+
+
 def test_a_version_with_no_release_tag_is_refused(gh, digests, tmp_path: pathlib.Path, monkeypatch) -> None:
     monkeypatch.setenv("STUB_COMMIT_ERROR", "1")
 

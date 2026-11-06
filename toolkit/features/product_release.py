@@ -23,7 +23,7 @@ from pathlib import Path
 from toolkit.features import product_ready, product_registry
 from toolkit.features.product_contract import ContractError
 from toolkit.features.product_guards import validate_registered
-from toolkit.features.registry import SHA_TAG_PREFIX, tag_digest
+from toolkit.features.registry import SHA_TAG_HEX_LENGTHS, SHA_TAG_PREFIX, reads_digests, tag_digest
 
 #: The git tag a product's release-please cuts for image ``<version>``.
 RELEASE_TAG_PREFIX = "v"
@@ -77,15 +77,35 @@ def _prove_image(app: str, version: str, sha: str, registry: Path | None) -> str
     """The digest of ``<image>:<version>``, once it is shown to be the build of ``sha``."""
     image = product_registry.derived_image(app, registry)
     host, image_name = image.rsplit("/", 1)
-    built = f"{SHA_TAG_PREFIX}{sha[:7]}"
-    released, at_commit = tag_digest(host, image_name, version), tag_digest(host, image_name, built)
-    if released is None or at_commit is None:
-        unread = version if released is None else built
+    if not reads_digests(host):
         raise ContractError(
-            f"the digest of {image}:{unread} cannot be read",
+            f"the release proof cannot read digests from {host}",
+            "the proof reads tags through Docker Hub's anonymous API, the only registry the toolkit reads, "
+            "so a tag there may exist and still be unprovable.",
+            f"publish {image_name} to Docker Hub, or teach toolkit/features/registry.py to read {host}.",
+        )
+    released = tag_digest(host, image_name, version)
+    if released is None:
+        raise ContractError(
+            f"the digest of {image}:{version} cannot be read",
+            "the proof reads Docker Hub anonymously, and Docker Hub answers a private repository the same way "
+            "as an absent tag, so the tag is missing or the repository is private.",
+            f"check that {image}:{version} exists in a public repository, then run the promotion again.",
+        )
+    # The product's CI picks the hex length; the receiver admits 7 to 40, so any prefix in that range is the build.
+    built, at_commit = f"{SHA_TAG_PREFIX}{sha[:7]}", None
+    for length in SHA_TAG_HEX_LENGTHS:
+        built = f"{SHA_TAG_PREFIX}{sha[:length]}"
+        at_commit = tag_digest(host, image_name, built)
+        if at_commit is not None:
+            break
+    if at_commit is None:
+        first, last = SHA_TAG_HEX_LENGTHS[0], SHA_TAG_HEX_LENGTHS[-1]
+        raise ContractError(
+            f"no tag of {image} from sha-{sha[:first]} to sha-{sha[:last]} can be read",
             "the release's contract is the one prod runs only if the release image is the build of its commit, "
-            "and without both digests nothing proves it.",
-            f"check that {image}:{unread} exists, then run the promotion again.",
+            "and without a digest of that build nothing proves it.",
+            f"check that {image} carries a sha- tag of commit {sha}, then run the promotion again.",
         )
     if released != at_commit:
         raise ContractError(

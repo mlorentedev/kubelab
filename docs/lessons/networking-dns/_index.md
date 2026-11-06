@@ -4,6 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 720 | [A gotcha nobody re-measures turns into work against a defect that does not exist](lesson-720-a-gotcha-nobody-re-measures-becomes-work.md) | 2026-11-06 |
 | 689 | [netplan merges nameservers across files, so a leftover file rewrites your resolvers](lesson-689-netplan-merges-nameservers-across-files-so-a-leftover-file-rewrites-your-resolvers.md) | 2026-11-02 |
 | 682 | [A container that inherits a mixed resolver set gets the answer of whichever server is current](lesson-682-a-container-that-inherits-a-mixed-resolver-set-gets-the-answer-of-whichever-is-current.md) | 2026-10-31 |
 | 680 | [A Wi-Fi uplink is bounded by its receive MCS, not its signal](lesson-680-a-wifi-uplink-is-bounded-by-its-receive-mcs-not-its-signal.md) | 2026-10-31 |
@@ -50,7 +51,7 @@ Newest first. Back to [all categories](../_index.md).
 | 132 | [Tailscale netfilter-mode flag location: tailscale up, NOT tailscaled daemon](lesson-132-tailscale-netfilter-mode-flag-location-tailsc.md) | 2026-03-17 |
 | 130 | [Tailscale subnet routes intercept LAN traffic from workstation](lesson-130-tailscale-subnet-routes-intercept-lan-traffic.md) | 2026-03-17 |
 | 129 | [tailscale up hangs without --timeout waiting for DERP mesh](lesson-129-tailscale-up-hangs-without-timeout-waiting-fo.md) | 2026-03-17 |
-| 114 | [Headscale v0.28 has no HTTP /health endpoint](lesson-114-headscale-v0-28-has-no-http-health-endpoint.md) | 2026-03-15 |
+| 114 | [Headscale v0.28 does answer /health; this lesson first said it did not](lesson-114-headscale-v0-28-has-no-http-health-endpoint.md) | 2026-03-15 |
 | 040 | [Headscale extra_records only work for domains under its zones](lesson-040-headscale-extra-records-only-work-for-domains.md) | 2026-03-15 |
 | 039 | [Headscale v0.28 works with HTTP proxy (not TCP passthrough)](lesson-039-headscale-v0-28-works-with-http-proxy-not-tcp.md) | 2026-03-15 |
 | 113 | [Headscale IP change requires updates in 6+ locations](lesson-113-headscale-ip-change-requires-updates-in-6-loc.md) | 2026-03-14 |
