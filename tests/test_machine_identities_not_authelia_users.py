@@ -45,8 +45,11 @@ def test_no_machine_identity_is_an_authelia_user(env: str) -> None:
     config = _config(env)
     identities = config["apps"]["auth"]["identities"]
     machines = {identities[key] for key in MACHINE_IDENTITY_KEYS}
-    users = config["apps"]["services"]["security"]["authelia"].get("users") or []
+    # Indexed, not `.get(...) or []`: a moved or renamed key must fail here, not
+    # leave an empty set that every intersection passes.
+    users = config["apps"]["services"]["security"]["authelia"]["users"]
     declared = {resolve_user_identity(user, config) for user in users}
+    assert declared, f"{env}: no Authelia user resolved, so the check below would compare nothing"
     assert not machines & declared, (
         f"{env}: {sorted(machines & declared)} would get an Authelia password and could sign in "
         "interactively; machine identities authenticate with scoped tokens only (#2504)"

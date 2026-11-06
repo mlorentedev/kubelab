@@ -9,8 +9,10 @@ answers both with the same 401, on purpose. The password is random, so the test 
 that the first factor fails, not why. The static half shows why.
 
 One attempt per identity per run. Prod bans a username after 3 failures in 2
-minutes (`regulation`), and CrowdSec reads the same failures. Neither machine
-account ever signs in, and two attempts stay below both.
+minutes (`regulation`), and CrowdSec reads the same failures. A third run inside
+2 minutes bans the machine username for 5 minutes. That costs nothing, since
+neither account ever signs in. It bans no address: `regulation` sets no `modes`,
+so Authelia counts by username only.
 """
 
 from __future__ import annotations
