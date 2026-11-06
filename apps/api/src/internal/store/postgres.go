@@ -193,17 +193,20 @@ func nonNil(s []string) []string {
 	return s
 }
 
-// queueLimit bounds one answer; the queue is read by one operator, newest first.
-const queueLimit = 500
-
-// Queue reads the open items of the declared sources, newest first, and each
-// declared source's state. A source never read comes back unreachable with no
-// time, so the page shows it rather than dropping it. Rows of a source no longer
-// declared stay in the table and out of the answer.
-func (m ForgeModel) Queue(ctx context.Context, sources []forge.Source) ([]forge.SourceState, []forge.Item, error) {
+// Queue reads one page of the declared sources' open items, newest first, after
+// a key (nil for the first page), at most limit of them; each declared source's
+// state; and how many open items they hold in all. A source never read comes
+// back unreachable with no time, so the page shows it rather than dropping it.
+// Rows of a source no longer declared stay in the table and out of the answer.
+//
+// The page is a keyset: the order is (updated_at, forge, owner, repo, number),
+// all descending, which is unique per item, so a page boundary between items
+// that share an update time neither skips nor repeats one.
+func (m ForgeModel) Queue(ctx context.Context, sources []forge.Source, after *forge.QueueKey, limit int) (forge.QueuePage, error) {
+	var page forge.QueuePage
 	db, err := Pool(m.Conf)
 	if err != nil {
-		return nil, nil, err
+		return page, err
 	}
 	forges, owners, repos := make([]string, len(sources)), make([]string, len(sources)), make([]string, len(sources))
 	for i, s := range sources {
@@ -214,25 +217,41 @@ func (m ForgeModel) Queue(ctx context.Context, sources []forge.Source) ([]forge.
 	rows, err := db.Query(ctx, `SELECT d.forge, d.owner, d.repo, s.as_of, coalesce(s.source_reachable, false)
 		FROM `+declared+` LEFT JOIN forge_source s USING (forge, owner, repo) ORDER BY d.pos`, forges, owners, repos)
 	if err != nil {
-		return nil, nil, err
+		return page, err
 	}
-	states, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (forge.SourceState, error) {
+	page.States, err = pgx.CollectRows(rows, func(r pgx.CollectableRow) (forge.SourceState, error) {
 		var st forge.SourceState
 		err := r.Scan(&st.Source.Forge, &st.Source.Owner, &st.Source.Repo, &st.AsOf, &st.Reachable)
 		return st, err
 	})
 	if err != nil {
-		return nil, nil, err
+		return page, err
 	}
 
+	if err := db.QueryRow(ctx, `SELECT count(*) FROM forge_item i JOIN `+declared+` USING (forge, owner, repo)
+		WHERE i.state = 'open'`, forges, owners, repos).Scan(&page.Total); err != nil {
+		return page, err
+	}
+
+	// With no key, $4 is NULL and the row comparison is skipped.
+	var at *time.Time
+	var kForge, kOwner, kRepo string
+	var kNumber int
+	if after != nil {
+		at = &after.UpdatedAt
+		kForge, kOwner, kRepo, kNumber = after.Source.Forge, after.Source.Owner, after.Source.Repo, after.Number
+	}
 	rows, err = db.Query(ctx, `SELECT i.forge, i.owner, i.repo, i.number, i.kind, i.title, i.state, i.author,
 		i.assignees, i.labels, i.url, i.updated_at
 		FROM forge_item i JOIN `+declared+` USING (forge, owner, repo)
-		WHERE i.state = 'open' ORDER BY i.updated_at DESC LIMIT $4`, forges, owners, repos, queueLimit)
+		WHERE i.state = 'open'
+		  AND ($4::timestamptz IS NULL OR (i.updated_at, i.forge, i.owner, i.repo, i.number) < ($4, $5, $6, $7, $8))
+		ORDER BY i.updated_at DESC, i.forge DESC, i.owner DESC, i.repo DESC, i.number DESC LIMIT $9`,
+		forges, owners, repos, at, kForge, kOwner, kRepo, kNumber, limit)
 	if err != nil {
-		return nil, nil, err
+		return page, err
 	}
-	items, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (forge.Item, error) {
+	page.Items, err = pgx.CollectRows(rows, func(r pgx.CollectableRow) (forge.Item, error) {
 		var it forge.Item
 		var kind string
 		err := r.Scan(&it.Source.Forge, &it.Source.Owner, &it.Source.Repo, &it.Number, &kind, &it.Title,
@@ -240,5 +259,5 @@ func (m ForgeModel) Queue(ctx context.Context, sources []forge.Source) ([]forge.
 		it.Kind = forge.Kind(kind)
 		return it, err
 	})
-	return states, items, err
+	return page, err
 }
