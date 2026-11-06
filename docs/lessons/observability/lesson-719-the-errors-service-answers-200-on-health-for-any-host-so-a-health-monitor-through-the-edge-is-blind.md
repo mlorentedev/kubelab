@@ -1,5 +1,5 @@
 ---
-id: lesson-718-the-errors-service-answers-200-on-health-for-any-host-so-a-health-monitor-through-the-edge-is-blind
+id: lesson-719-the-errors-service-answers-200-on-health-for-any-host-so-a-health-monitor-through-the-edge-is-blind
 type: lesson
 status: active
 created: "2026-11-06"
