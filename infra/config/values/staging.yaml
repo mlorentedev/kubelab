@@ -38,7 +38,7 @@ apps:
   # Platform applications (custom-built)
   platform:
     api:
-      version: sha-3aaf7d8
+      version: sha-b4ace78
       domain: api.staging.kubelab.live
       site_domain: staging.kubelab.live
       site_url: https://staging.kubelab.live
