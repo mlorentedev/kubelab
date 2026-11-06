@@ -17,6 +17,20 @@ import yaml
 
 from toolkit.features import platform_manifest
 
+# The manifest reads every service row's `health_path` strictly (#3181), so a mock
+# config that renders the tables must declare them. Tests about something else
+# (versions, node status, drift) append this block and stay about that.
+_DECLARED_APPS = """\
+apps:
+  platform:
+    api: {health_path: /health}
+  services:
+    security: {authelia: {health_path: /api/health}, crowdsec: {health_path: /health}}
+    automation: {n8n: {health_path: /healthz}}
+    observability: {grafana: {health_path: /api/health}, loki: {health_path: /ready}}
+    core: {gitea: {health_path: /api/healthz}, headscale: {health_path: /health}}
+"""
+
 
 class TestPlatformManifestGeneration:
     def test_manifest_schema_and_counts(self) -> None:
@@ -263,6 +277,11 @@ apps:
       health_path: "/v2/health"
       enable_auth: false
       auth_level: "bypass"
+  services:
+    security: {authelia: {health_path: /api/health}, crowdsec: {health_path: /health}}
+    automation: {n8n: {health_path: /healthz}}
+    observability: {grafana: {health_path: /api/health}, loki: {health_path: /ready}}
+    core: {gitea: {health_path: /api/healthz}, headscale: {health_path: /health}}
 """,
             encoding="utf-8",
         )
@@ -288,7 +307,7 @@ apps:
 
     def test_drift_gate_across_simulated_commit_boundary(self, tmp_path: Path) -> None:
         mock_yaml = tmp_path / "common.yaml"
-        mock_yaml.write_text("k3s: {version: 'v1.34.4'}\napps: {}\n", encoding="utf-8")
+        mock_yaml.write_text("k3s: {version: 'v1.34.4'}\n" + _DECLARED_APPS, encoding="utf-8")
         target_json = tmp_path / "platform.json"
 
         # 1. First sync generates manifest
@@ -309,7 +328,7 @@ apps:
         assert target_json.read_text(encoding="utf-8") == initial_content
 
         # 4. Modify SSOT file
-        mock_yaml.write_text("k3s: {version: 'v1.35.0'}\napps: {}\n", encoding="utf-8")
+        mock_yaml.write_text("k3s: {version: 'v1.35.0'}\n" + _DECLARED_APPS, encoding="utf-8")
 
         # 5. Drift check must now fail
         assert platform_manifest.sync(output_path=target_json, check=True, config_path=mock_yaml) == 1
@@ -323,8 +342,8 @@ apps:
         override_cfg = {"apps": {"platform": {"total_services": 42}}}
         assert platform_manifest.compute_total_services(override_cfg) == 42
 
-        # Direct calculation from empty config: staging + prod + shared, no offset
-        count = platform_manifest.compute_total_services({})
+        # Direct calculation from a minimal config: staging + prod + shared, no offset
+        count = platform_manifest.compute_total_services(yaml.safe_load(_DECLARED_APPS))
         assert count == 33
 
     def test_total_services_counts_every_table_and_nothing_else(self) -> None:
@@ -344,8 +363,8 @@ networking:
     location: "always-on"
     status: "offline"
 clusters: {}
-apps: {}
-""",
+"""
+            + _DECLARED_APPS,
             encoding="utf-8",
         )
         manifest = platform_manifest.generate_manifest(config_path=mock_yaml)
@@ -415,7 +434,7 @@ apps: {}
     def test_a_version_already_prefixed_is_not_prefixed_twice(self, tmp_path: Path) -> None:
         """`K3s K3s v1.34.4` is the bug this branch exists to prevent."""
         mock_yaml = tmp_path / "prefixed.yaml"
-        mock_yaml.write_text('k3s:\n  version: "K3s v9.9.9"\n', encoding="utf-8")
+        mock_yaml.write_text('k3s:\n  version: "K3s v9.9.9"\n' + _DECLARED_APPS, encoding="utf-8")
 
         manifest = platform_manifest.generate_manifest(config_path=mock_yaml)
 
