@@ -465,8 +465,10 @@ class TestCliCommands:
         assert "Telemetry Logs" in result.output
         assert "auth failed" in result.output
 
+    # Kuma is asked in prod too (#3156); without this the test depends on reaching the RPi3.
+    @patch("toolkit.cli.observability.ask_down_monitors", return_value=[])
     @patch("toolkit.features.observability.GrafanaAlertClient.get_alerts")
-    def test_cli_obs_alerts(self, mock_alerts, monkeypatch):
+    def test_cli_obs_alerts(self, mock_alerts, _mock_kuma, monkeypatch):
         monkeypatch.setenv("GRAFANA_URL", "http://mock-grafana:3000")
         mock_alerts.return_value = [
             {
