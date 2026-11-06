@@ -127,7 +127,9 @@ def test_no_line_of_the_status_can_begin_a_workflow_command(wf: dict, state: str
     commands = [line for line in done.stdout.splitlines() if line.startswith("::")]
     # The step's own annotation is the only command it may emit, and only when red.
     assert [c.split("::", 2)[1].split(" ")[0] for c in commands] == (["error"] if state == "failure" else [])
-    assert "add-mask" in done.stdout, "the description is still printed, not dropped"
+    # The log line, not the annotation, still carries Argo's message: printed, not dropped.
+    log = [line for line in done.stdout.splitlines() if not line.startswith("::")]
+    assert any("sync failed at 50% ::add-mask::hidden" in line for line in log), done.stdout
     if state == "failure":
         # The runner decodes %XX in a command's data, so a literal % must arrive as %25.
         assert "50%25" in commands[0], commands
