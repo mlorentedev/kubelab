@@ -759,6 +759,54 @@ def headscale_recycle_stale(
     logger.info("MagicDNS follows the given name — re-run `make argocd-repoint` so the EndpointSlice does too")
 
 
+@headscale_app.command("authkey")
+def headscale_authkey(
+    segment: Annotated[str, typer.Option("--segment", help="Segment name in apps.services.core.headscale.segments")],
+    role: Annotated[str, typer.Option("--role", help="hosts (persistent) or clients (ephemeral)")],
+    out: Annotated[Path, typer.Option("--out", "-o", help="Owner-only file to write the key to")],
+    env: Annotated[str, typer.Option("--env", "-e", help="Environment whose SOPS segment declares the tag")] = "prod",
+    expiration: Annotated[str, typer.Option("--expiration", help="Headscale duration, e.g. 1h, 30m")] = "1h",
+    ssh_target: Annotated[
+        str | None,
+        typer.Option("--ssh-target", help="user@host running Headscale; defaults to the VPS from the SSOT"),
+    ] = None,
+    container: Annotated[str, typer.Option("--container", help="Headscale container name")] = "headscale",
+) -> None:
+    """Mint one single-use tagged pre-auth key from the segment declaration (VPN-ACL-016, #2863).
+
+    The tag comes from the SOPS segment for --segment; --role picks hosts or
+    clients. The key material is written to --out (owner-only, never
+    overwritten) and printed nowhere: this output names the id, the tag, the
+    expiry and the file. Run it from the authorized deploy controller (OPS-051)
+    -- it performs a mutating operation on the VPS.
+    """
+    from toolkit.features.headscale_authkey import AuthKeyRefused, MintUnavailableError, mint
+
+    logger.section(f"Headscale — mint {role} key for segment {segment}")
+    try:
+        result = mint(
+            env,
+            segment,
+            role,
+            out,
+            expiration=expiration,
+            ssh_target=ssh_target,
+            container=container,
+        )
+    except AuthKeyRefused as exc:
+        logger.error(str(exc))
+        raise typer.Exit(2) from exc
+    except MintUnavailableError as exc:
+        logger.error(str(exc))
+        raise typer.Exit(3) from exc
+
+    logger.success(
+        f"minted pre-auth key {result.key_id} for segment {segment} role {result.role} "
+        f"tag {result.tag} expires {result.expiration}"
+    )
+    logger.info(f"key written to {result.out_path}")
+
+
 @argo_app.command("set-revision")
 def argo_set_revision(
     application: Annotated[str, typer.Option("--app", help="Argo CD Application name")],

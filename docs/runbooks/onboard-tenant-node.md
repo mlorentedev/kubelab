@@ -136,9 +136,16 @@ repurposed:
   hosts on `<ports>` and is reached by nothing.
 
 ```bash
-# <owner-id> from checklist 0.3; <hosts_tag> or <clients_tag> from the segment
-# entry in SOPS — the tag matches the role decided above. SOPS values already
-# carry the tag: prefix; pass them as-is (never write tag:<...> again here).
+# Preferred: the toolkit mints from the SOPS segment declaration — the tag and
+# owner come from SOPS, never from argv (VPN-ACL-016). Run from the authorized
+# deploy controller (OPS-051); the key lands in OUT owner-only and is printed
+# nowhere. ROLE is hosts (persistent) or clients (ephemeral).
+make headscale-authkey SEGMENT=<segment> ROLE=hosts|clients OUT=<file> [ENV=prod] [EXPIRATION=1h]
+
+# Manual equivalent (controller without the toolkit): <owner-id> from checklist
+# 0.3; <hosts_tag> or <clients_tag> from the segment entry in SOPS — the tag
+# matches the role decided above. SOPS values already carry the tag: prefix;
+# pass them as-is (never write tag:<...> again here).
 ssh vps-pub "sudo docker exec headscale headscale preauthkeys create \
   -u <owner-id> -e 1h --tags <hosts_tag-or-clients_tag>"
 ```
@@ -155,7 +162,7 @@ ssh vps-pub "sudo docker exec headscale headscale preauthkeys create \
 - **TTL**: the shortest window that covers the enrolment session. A leaked unused
   key dies on its own; a long-lived one is a standing invitation.
 - Minting is per node and per session. There is no reusable tenant key by design;
-  codifying this step in the toolkit is VPN-ACL-016.
+  the toolkit path above is VPN-ACL-016.
 
 ### 3. Hand off and let the tenant side join
 
@@ -316,4 +323,5 @@ forwarding until its own session is ended.
   (agents, not tenants; gotchas apply verbatim).
 - Specs: `specs/archive/VPN-ACL-014-tenant-segments/` (segments),
   `specs/VPN-ACL-015-ssh-bootstrap-path/` (bootstrap account).
-- ADR-041 — the segmentation model. VPN-ACL-016 — codifying key minting (open).
+- ADR-041 — the segmentation model. VPN-ACL-016 — codifying key minting
+  (`toolkit infra headscale authkey` / `make headscale-authkey`).
