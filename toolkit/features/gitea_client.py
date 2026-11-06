@@ -650,8 +650,18 @@ class GiteaClient:
         public repository's floor, and so did `mentor`, who is in no write team. So
         `read` here can mean "nothing" as easily as "read", and only the
         collaborator row says whether a grant exists at all.
+
+        A 404 is `none`, as it is "no" for `is_collaborator`: Gitea answers it for a
+        user that does not exist yet, and a writer declared before its account is
+        provisioned must plan as a pending grant, not abort the plan. Anything else
+        raises.
         """
-        body = self._request("GET", f"/repos/{owner}/{name}/collaborators/{username}/permission")
+        try:
+            body = self._request("GET", f"/repos/{owner}/{name}/collaborators/{username}/permission")
+        except GiteaError as exc:
+            if exc.status_code == 404:
+                return "none"
+            raise
         return str(body.get("permission") or "none")
 
 

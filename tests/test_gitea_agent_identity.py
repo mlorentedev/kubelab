@@ -9,7 +9,9 @@ it under `writers:`, where the reconciler makes it a collaborator at `write`.
 
 from __future__ import annotations
 
+import os
 import pathlib
+import subprocess
 from typing import Any
 
 import pytest
@@ -23,6 +25,7 @@ from tests.test_gitea_repo_reconcile import (
     hooks_for,
     settings_for,
 )
+from toolkit.features.gitea_client import GiteaClient, GiteaError
 from toolkit.features.gitea_repos import (
     WRITER_PERMISSION,
     CollaboratorError,
@@ -144,6 +147,68 @@ def test_the_bitwarden_copy_never_puts_the_value_in_argv() -> None:
     assert "test -n" in recipe, "an empty read must not overwrite the Bitwarden copy"
 
 
+def _run_copy(tmp_path: pathlib.Path, printed: str) -> tuple[int, str | None]:
+    """Run the real recipe with the toolkit and dotf stubbed: what reaches Bitwarden?"""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    received = tmp_path / "received"
+    (bin_dir / "toolkit-stub").write_text(f"#!/bin/sh\nprintf '%s\\n' {printed!r}\n", encoding="utf-8")
+    (bin_dir / "dotf").write_text(f"#!/bin/sh\ncat > {received}\n", encoding="utf-8")
+    for stub in bin_dir.iterdir():
+        stub.chmod(0o755)
+    result = subprocess.run(
+        ["make", "-s", "secrets-copy-gitea-agent-token", f"TOOLKIT={bin_dir / 'toolkit-stub'}"],
+        cwd=REPO,
+        env={**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}"},
+        capture_output=True,
+        text=True,
+    )
+    return result.returncode, received.read_text(encoding="utf-8") if received.exists() else None
+
+
+def test_the_bitwarden_copy_takes_a_gitea_token(tmp_path: pathlib.Path) -> None:
+    token = "ab" * 20  # 40 hex characters, built so no scanner reads it as a credential
+    assert _run_copy(tmp_path, token) == (0, token)
+
+
+@pytest.mark.parametrize(
+    "printed",
+    ["ab" * 20 + "c", "apps.services.core.gitea.agent_token: not-a-token-value", ""],
+    ids=["41-chars", "not-hex", "empty"],
+)
+def test_the_bitwarden_copy_refuses_anything_but_a_gitea_token(tmp_path: pathlib.Path, printed: str) -> None:
+    """A Gitea token is exactly 40 hex characters; a longer or other line must never reach Bitwarden."""
+    code, received = _run_copy(tmp_path, printed)
+    assert code != 0
+    assert received is None
+
+
+class _Refuses(GiteaClient):
+    """Answers every request with one canned error."""
+
+    def __init__(self, status_code: int) -> None:
+        super().__init__("https://forge.invalid", token="unused")
+        self.status_code = status_code
+
+    def _request(self, method: str, endpoint: str, **kwargs: Any) -> Any:
+        raise GiteaError("refused", status_code=self.status_code)
+
+
+def test_a_writer_that_does_not_exist_yet_has_no_permission() -> None:
+    """Gitea answers 404 for an unknown user; `is_collaborator` reads that as no, and so must this.
+
+    Otherwise a writer declared before its account is provisioned aborts the whole read-only plan.
+    """
+    assert _Refuses(404).is_collaborator("personal", "imagesensortool", AGENT) is False
+    assert _Refuses(404).get_collaborator_permission("personal", "imagesensortool", AGENT) == "none"
+
+
+@pytest.mark.parametrize("status_code", [403, 500])
+def test_any_other_failure_reading_the_permission_raises(status_code: int) -> None:
+    with pytest.raises(GiteaError):
+        _Refuses(status_code).get_collaborator_permission("personal", "imagesensortool", AGENT)
+
+
 # --------------------------------------------------------------------------- the declaration
 
 
@@ -159,9 +224,15 @@ def _declaring(writers: list[str]) -> dict[str, Any]:
     return {
         "apps": {
             "auth": {"identities": {"superadmin": "manu", "reviewer": "mentor", "agent": AGENT}},
-            "services": {"core": {"gitea": {"organizations": {"personal": {"repositories": [
-                {"name": "x", "origin": "native", "writers": writers}
-            ]}}}}},
+            "services": {
+                "core": {
+                    "gitea": {
+                        "organizations": {
+                            "personal": {"repositories": [{"name": "x", "origin": "native", "writers": writers}]}
+                        }
+                    }
+                }
+            },
         }
     }
 
