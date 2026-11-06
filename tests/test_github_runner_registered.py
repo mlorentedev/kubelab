@@ -129,3 +129,20 @@ def test_a_github_that_cannot_be_reached_is_not_reported_as_unregistered() -> No
     msg = _env().from_string(_task(FAIL)["fail"]["msg"]).render(_runner_registration={"status": -1}, runner_name="x")
     assert "could not be reached" in msg
     assert "has not registered" not in msg
+
+
+@pytest.mark.parametrize(
+    ("status", "says"),
+    [
+        pytest.param(200, "has not registered", id="listed without it"),
+        pytest.param(503, "registration was not checked", id="GitHub error"),
+        pytest.param(404, "registration was not checked", id="wrong repository"),
+    ],
+)
+def test_only_an_answer_that_lists_runners_blames_the_runner(status: int, says: str) -> None:
+    """A 5xx is GitHub's fault, not the runner's: only a 200 that omits the name
+    means the runner did not register."""
+    msg = (
+        _env().from_string(_task(FAIL)["fail"]["msg"]).render(_runner_registration={"status": status}, runner_name="x")
+    )
+    assert says in msg
