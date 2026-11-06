@@ -794,6 +794,13 @@ def build_service_tables(
             return override
         return "Authelia" if svc.get("auth_level") == "one_factor" else "Public"
 
+    def _health(url: str, svc: dict[str, Any], name: str) -> str:
+        # Strict on purpose (#3181): a literal default here would keep publishing
+        # a path common.yaml no longer declares, so the drift would never show.
+        if "health_path" not in svc:
+            raise KeyError(f"{name}: common.yaml declares no health_path, and the manifest has no default for it")
+        return url + svc["health_path"]
+
     def _ver(image_str: str) -> str:
         """Extract version tag from image string like 'authelia/authelia:4.39.15'."""
         if ":" in image_str:
@@ -845,7 +852,7 @@ def build_service_tables(
             _svc(
                 "API",
                 f"https://api.{prefix}",
-                f"https://api.{prefix}" + api.get("health_path", "/health"),
+                _health(f"https://api.{prefix}", api, "api"),
                 _auth(api),
                 "Platform",
                 nd,
@@ -865,7 +872,7 @@ def build_service_tables(
             _svc(
                 "Authelia",
                 f"https://auth.{prefix}",
-                f"https://auth.{prefix}" + authelia.get("health_path", "/api/health"),
+                _health(f"https://auth.{prefix}", authelia, "authelia"),
                 "Public (IdP)",
                 "Security",
                 nd,
@@ -875,7 +882,7 @@ def build_service_tables(
             _svc(
                 "CrowdSec",
                 f"https://crowdsec.{prefix}",
-                f"https://crowdsec.{prefix}" + crowdsec.get("health_path", "/health"),
+                _health(f"https://crowdsec.{prefix}", crowdsec, "crowdsec"),
                 _auth(crowdsec),
                 "Security",
                 nd,
@@ -895,7 +902,7 @@ def build_service_tables(
             _svc(
                 "n8n",
                 f"https://n8n.{prefix}",
-                f"https://n8n.{prefix}" + n8n.get("health_path", "/healthz"),
+                _health(f"https://n8n.{prefix}", n8n, "n8n"),
                 "Authelia" if env == "prod" else "Built-in",
                 "Core",
                 nd,
@@ -905,7 +912,7 @@ def build_service_tables(
             _svc(
                 "Grafana",
                 f"https://grafana.{prefix}",
-                f"https://grafana.{prefix}" + grafana.get("health_path", "/api/health"),
+                _health(f"https://grafana.{prefix}", grafana, "grafana"),
                 _auth(grafana),
                 "Observability",
                 nd,
@@ -915,7 +922,7 @@ def build_service_tables(
             _svc(
                 "Loki",
                 f"https://loki.{prefix}",
-                f"https://loki.{prefix}" + loki.get("health_path", "/ready"),
+                _health(f"https://loki.{prefix}", loki, "loki"),
                 _auth(loki),
                 "Observability",
                 nd,
@@ -990,7 +997,7 @@ def build_service_tables(
         _svc(
             "Gitea",
             f"https://gitea.{base}",
-            f"https://gitea.{base}" + gitea.get("health_path", "/api/healthz"),
+            _health(f"https://gitea.{base}", gitea, "gitea"),
             "Built-in (OIDC)",
             "Core",
             "Beelink",
@@ -1010,7 +1017,7 @@ def build_service_tables(
         _svc(
             "Headscale",
             f"https://vpn.{base}",
-            f"https://vpn.{base}" + headscale.get("health_path", "/health"),
+            _health(f"https://vpn.{base}", headscale, "headscale"),
             "Built-in",
             "Network",
             "VPS",

@@ -6,6 +6,9 @@ manifest is the consumer that remains.
 
 from __future__ import annotations
 
+import pytest
+import yaml
+
 from toolkit.features import platform_manifest
 
 
@@ -15,15 +18,7 @@ class TestBuildServiceTables:
         # n8n lives at apps.services.automation.n8n in common.yaml, but the
         # lookup read services.core.n8n — always empty, so every regeneration
         # dropped the version and read as SSOT drift on every run (any OS).
-        config = {
-            "global": {"base_domain": "kubelab.live"},
-            "apps": {
-                "services": {
-                    "automation": {"n8n": {"image": "n8nio/n8n:2.12.3"}},
-                },
-                "platform": {},
-            },
-        }
+        config = _minimal_config(services={"automation": {"n8n": {"image": "n8nio/n8n:2.12.3"}}})
         staging, prod, _shared = platform_manifest.build_service_tables(config)
         n8n_entries = [s for s in staging + prod if s["name"] == "n8n"]
         assert n8n_entries
@@ -40,10 +35,7 @@ class TestBuildServiceTables:
             "domain": "chat.example.test",
             "health_path": "/health",
         }
-        config = {
-            "global": {"base_domain": "kubelab.live"},
-            "apps": {"services": {"ai": {"open_webui": webui}}, "platform": {}},
-        }
+        config = _minimal_config(services={"ai": {"open_webui": webui}})
         _staging, _prod, shared = platform_manifest.build_service_tables(config)
         row = next(s for s in shared if s["name"] == "Open WebUI")
         assert row["url"] == "https://chat.example.test"
@@ -52,7 +44,7 @@ class TestBuildServiceTables:
         assert row["category"] == "AI"
 
     def test_no_open_webui_row_without_its_ssot_block(self) -> None:
-        config = {"global": {"base_domain": "kubelab.live"}, "apps": {"services": {}, "platform": {}}}
+        config = _minimal_config()
         _staging, _prod, shared = platform_manifest.build_service_tables(config)
         assert not any(s["name"] == "Open WebUI" for s in shared)
 
@@ -65,7 +57,7 @@ class TestBuildServiceTables:
         # fetch (custom.js checkHealth(), no-cors mode) pointed at a name
         # that now 404s, and no-cors resolves on any reachable response —
         # so the dashboard would have shown a false "up" dot for a dead link.
-        config = {"global": {"base_domain": "kubelab.live"}, "apps": {"services": {}, "platform": {}}}
+        config = _minimal_config()
         _staging, _prod, shared = platform_manifest.build_service_tables(config)
         pihole = next(s for s in shared if s["name"] == "Pi-hole")
         assert pihole["url"] == "https://pihole.kubelab.live"
@@ -77,10 +69,65 @@ class TestBuildServiceTables:
         # #3010: the row hardcoded `/health` beside a `health_path` its siblings read.
         # The path is right (v0.28 answers it, measured 2026-11-06); the literal was not.
         headscale = {"image": "headscale/headscale:v0.28.0", "health_path": "/declared"}
-        config = {
-            "global": {"base_domain": "example.test"},
-            "apps": {"services": {"core": {"headscale": headscale}}, "platform": {}},
-        }
+        config = _minimal_config("example.test", services={"core": {"headscale": headscale}})
         _staging, _prod, shared = platform_manifest.build_service_tables(config)
         row = next(s for s in shared if s["name"] == "Headscale")
         assert row["health"] == "https://vpn.example.test/declared"
+
+
+# Where each row's `health_path` lives in common.yaml (#3181). The manifest reads
+# it strictly, so deleting one must fail the render and name the service, never
+# fall back to a literal that hides the drift.
+_HEALTH_PATH_HOMES = {
+    "api": ("platform", "api"),
+    "authelia": ("services", "security", "authelia"),
+    "crowdsec": ("services", "security", "crowdsec"),
+    "n8n": ("services", "automation", "n8n"),
+    "grafana": ("services", "observability", "grafana"),
+    "loki": ("services", "observability", "loki"),
+    "gitea": ("services", "core", "gitea"),
+    "headscale": ("services", "core", "headscale"),
+}
+
+
+def _minimal_config(base: str = "kubelab.live", services: dict | None = None) -> dict:
+    """The smallest config the tables render: each row's `health_path`, then `services` merged in."""
+    apps: dict = {"services": {}, "platform": {}}
+    for home in _HEALTH_PATH_HOMES.values():
+        node = apps
+        for key in home:
+            node = node.setdefault(key, {})
+        node["health_path"] = "/health"
+    for group, blocks in (services or {}).items():
+        for name, block in blocks.items():
+            apps["services"].setdefault(group, {}).setdefault(name, {}).update(block)
+    return {"global": {"base_domain": base}, "apps": apps}
+
+
+def _real_config() -> dict:
+    return yaml.safe_load(platform_manifest.COMMON_YAML_PATH.read_text(encoding="utf-8"))
+
+
+def _block(config: dict, home: tuple[str, ...]) -> dict:
+    node = config["apps"]
+    for key in home:
+        node = node[key]
+    return node
+
+
+class TestHealthPathIsReadStrictly:
+    def test_every_row_reads_the_declared_path(self) -> None:
+        config = _real_config()
+        for home in _HEALTH_PATH_HOMES.values():
+            _block(config, home)["health_path"] = "/declared-" + home[-1]
+        staging, prod, shared = platform_manifest.build_service_tables(config)
+        healths = [s["health"] for s in staging + prod + shared]
+        for home in _HEALTH_PATH_HOMES.values():
+            assert any(h.endswith("/declared-" + home[-1]) for h in healths), home[-1]
+
+    @pytest.mark.parametrize("service", sorted(_HEALTH_PATH_HOMES))
+    def test_a_removed_health_path_fails_and_names_the_service(self, service: str) -> None:
+        config = _real_config()
+        del _block(config, _HEALTH_PATH_HOMES[service])["health_path"]
+        with pytest.raises(KeyError, match=service):
+            platform_manifest.build_service_tables(config)
