@@ -66,7 +66,9 @@ def test_the_query_never_logs_the_token_and_leaves_failing_to_the_next_task() ->
 
 
 def test_the_query_asks_for_the_repository_the_runner_is_declared_for() -> None:
-    url = _env().from_string(_task(QUERY)["uri"]["url"]).render(runner_repo_url="https://github.com/mlorentedev/kubelab")
+    url = (
+        _env().from_string(_task(QUERY)["uri"]["url"]).render(runner_repo_url="https://github.com/mlorentedev/kubelab")
+    )
     assert url == "https://api.github.com/repos/mlorentedev/kubelab/actions/runners?per_page=100"
 
 
