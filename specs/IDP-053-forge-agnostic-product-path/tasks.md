@@ -15,10 +15,10 @@ owner: manu
 > criterion `<n>` in `proposal.md`.
 >
 > **Order.** Wave 1 (all parallel, disjoint files): S1a, S2c, S3a, S5a. Wave 2: S1b and S2a
-> (after S1a), S5b (after S5a and the API note), S5c (after S2c, to avoid a shared-file
-> conflict), S6a (after S5a). Wave 3: S2b (after S1b and S2a), S3b (after S1, S2, S3a and the
-> product's `kubelab.yaml`), S6b (after S6a, S5b, S5c), S8. Then S4 (after S3b merges and an
-> image exists), S7 (after the owner decides D1), S9 (after #3063).
+> (after S1a), S3c (after S3a), S5b (after S5a and the API note), S5c (after S2c, to avoid a
+> shared-file conflict), S6a (after S5a). Wave 3: S2b (after S1b and S2a), S3b (after S1, S2,
+> S3a, S3c and the product's `kubelab.yaml`), S6b (after S6a, S5b, S5c), S8. Then S4 (after S3b
+> merges and an image exists), S7 (D1 deferred to it by the owner), S9 (after #3063).
 >
 > **Merge owner.** ADR-073 D13: anything under `infra/` or `.github/workflows/`, and every
 > secrets PR and mint, is the owner's to merge or run. Slices marked "agent" touch neither and
@@ -30,7 +30,7 @@ owner: manu
 
 - [ ] Branch created from master: `feat/idp-053-<slice>` (one branch per slice)
 - [ ] `proposal.md` acceptance criteria are testable (they name commands)
-- [ ] D1 and D2 are decided before the slices that carry them (S7, S2c/S5c); the rest are not blocked
+- [x] D1 and D2 are decided before the slices that carry them (owner, 2026-11-05: D1 deferred to S7, D2 the reviewer account)
 
 ## Implementation
 
@@ -102,10 +102,10 @@ First task, before any code: the consequence check for D2, run against the live 
 owner (or by the agent with the owner's read-only token if they hand one over). Record the
 result on #2612.
 
-- [ ] [AC4] Consequence check (D2): create a throwaway `read:package` token on the reviewer account, pull a manifest for `personal/imagesensortool`, record status. Fail means go back to the architect (ADR-062/065), and the rest of S2c/S5c wait
+- [ ] [AC4] Consequence check (D2): create a throwaway `read:package` token on the reviewer account, pull a manifest for `personal/imagesensortool`, record status. Also pick one package the reviewer account must not read and record its `<owner>/<name>` in `verification.md` as `OUT_OF_SCOPE_PACKAGE`, with the denial status it answers; f4d's negative half uses that value. Fail means go back to the architect (ADR-062/065), and the rest of S2c/S5c wait
 - [ ] [P] [AC4] Failing tests in `tests/test_gitea_registry_pull_token.py`, copying the shape of `tests/test_gitea_issue_reader_token.py`: the grant in `token_scopes` equals `read:package` exactly; the mint is gated on the SOPS key being absent; the revoke-then-unset rotation covers it
 - [ ] [AC4] Add `registry_pull` to `ROTATABLE_TOKENS` (`gitea_tokens.py`), `SCOPE_BY_METHOD` if a client method is needed (`gitea_client.py`), the catalog entry (`secrets_manager.py`, `forge_actions` for the Kubernetes apply path, file per D2), the `common.yaml` `token_scopes` grant, and the Ansible mint task in `beelink_services`
-- [ ] [AC4] Failing test then implement `toolkit services gitea registry-check --app <app>`: pulls a manifest by consequence, prints status, never the token; exit 0 / non-zero
+- [ ] [AC4] Failing test then implement `toolkit services gitea registry-check --app <app> [--package <owner>/<name>]`: pulls a manifest by consequence (the app's own package by default, the named one with `--package`), prints status, never the token; exit 0 / non-zero. The test covers both: the app's package answers 200, a package outside the token's reach answers a denial and exits non-zero
 - [ ] [AC4] Owner operation: mint, then `toolkit secrets audit --env staging` and `registry-check` (deployed)
 
 Acceptance: `.venv/bin/python -m pytest -q tests/test_gitea_registry_pull_token.py tests/test_gitea_token_rotation_registry.py tests/test_gitea_token_scopes.py tests/test_gitea_token_scope_drift.py`
@@ -125,22 +125,42 @@ Files: `toolkit/features/product_contract.py`, `toolkit/features/product_guards.
 
 Acceptance: `.venv/bin/python -m pytest -q tests/test_product_contract.py tests/test_product_contract_schema.py tests/test_product_contract_drift.py tests/test_product_contract_guards.py tests/test_dns_contract_hostnames.py tests/test_platform_tiles_cover_registry.py tests/test_e2e_expectations_cover_registry.py tests/test_product_registry.py`
 
+### S3c. A product's staging zone is a declaration (owner merges, `infra/`, ~120 LOC)
+
+Depends on S3a (both touch `product_render.py`'s hostname checks). Implements D8. Files:
+`toolkit/features/product_render.py` (or `product_guards.py`, wherever S3a leaves
+`_check_hostnames`), `toolkit/features/k8s_render.py` (the render step that already fills
+`RESOLVE_RPI4_TAILSCALE_IP` in `coredns-custom.yaml`), `infra/k8s/base/edge/coredns-custom.yaml`
+(the staging server blocks become one templated block over `networking.staging_zones`; the
+prod rewrite blocks stay hand-written until a product declares prod),
+`docs/adr/adr-067-product-contract-and-agent-access.md` (amendment), tests.
+
+- [ ] [P] [AC13] Failing tests in `tests/test_product_staging_hostname.py` (new): `web` passes; staging-only `staging.imagesensortool.com` passes with its zone in `networking.staging_zones`; the same name with the zone missing is refused, naming the line to add; `beta.imagesensortool.com` is refused; `<label>.staging.kubelab.live` passes; a product declaring `hostnames.prod: x.dev` with `hostnames.staging: staging.y.dev` is refused even when both zones are listed
+- [ ] [AC13] Implement the check at render time (the contract model cannot read `common.yaml`, so the contract schema does not change)
+- [ ] [P] [AC13] Failing tests in `tests/test_coredns_hairpin_zones.py` (new): the rendered staging blocks equal today's two blocks byte for byte; a third zone in a fixture `staging_zones` yields a third `forward` block; a zone that is not a lowercase FQDN is refused
+- [ ] [AC13] Implement the templated block; `tests/test_coredns_hairpin_answer.py` stays green
+- [ ] [AC13] ADR-067 amendment: the D8 convention, the wildcard exception, `web` already conforming, and the note that ADR-073 D8 replaces it with the domain registry on acceptance
+- [ ] Ticket, not code: derive the ACME token's zones (`kubelab-acme-dns`, #2459) from `zones.json` in Terraform, so a new domain needs no Cloudflare UI step (proposal risk 7)
+
+Acceptance: `.venv/bin/python -m pytest -q tests/test_product_staging_hostname.py tests/test_coredns_hairpin_zones.py tests/test_coredns_hairpin_answer.py`, each new boundary test mutation-checked.
+
 ### S3b. Onboarding PR for `imagesensortool` (owner merges, ~70 LOC plus data)
 
 Blocked until `personal/imagesensortool` commits a valid `kubelab.yaml` (image, port 8080,
 `/healthz`, `hostnames.staging`, auth level) and its CI has pushed one `sha-<12hex>` image.
-Depends on S1, S2 and S3a merged. Files: `infra/config/products.yaml`,
+Depends on S1, S2, S3a and S3c merged. `hostnames.staging` is `staging.imagesensortool.com`
+(D8). Files: `infra/config/products.yaml`,
 `infra/config/products/contracts/imagesensortool.yaml`, `infra/config/values/staging.yaml`
 (staging-only block, `version` set), the platform tile file, the e2e expectation file,
-regenerated overlays. Only if `hostnames.staging` is outside `staging.kubelab.live`
-(proposal risk 7): `infra/config/values/common.yaml` (`networking.staging_zones`) and the
-hairpin block in `infra/k8s/base/edge/coredns-custom.yaml`.
+regenerated overlays, and one line in `infra/config/values/common.yaml`
+(`networking.staging_zones`: `staging.imagesensortool.com`); the hairpin block follows from
+S3c.
 
 - [ ] [AC6] Registry entry: `forge: gitea`, `repository: personal/imagesensortool`, `receiver: generic` held back until #2611 settles (S6b), `image_registry: gitea.kubelab.live/personal`, `private: true`, `pull_credential`, `events: {staging: ...}` and no `events.prod`
 - [ ] [AC6] Snapshot: `toolkit product render --contract ... --env staging` and commit the snapshot
-- [ ] [AC6] Staging values block with a pinned `version` (never `:latest`), platform tile, e2e expectation, and the staging zone only for a hostname outside `staging.kubelab.live`
+- [ ] [AC6] Staging values block with a pinned `version` (never `:latest`), platform tile, e2e expectation, and the staging zone line
 - [ ] [AC6] `make test`, `make validate-sync ENV=staging`, `product render --check` exit 0
-- [ ] Only for a hostname outside `staging.kubelab.live`: owner provisions the staging zone (VPS, RPi4) and confirms the ACME token covers the domain (see "What cannot be verified")
+- [ ] Owner widens the ACME token (`kubelab-acme-dns`) to `imagesensortool.com` in Cloudflare, provisions the staging zone (VPS, RPi4), and confirms with `toolkit secrets acme-token-scope` (see "What cannot be verified")
 
 ### S4. First deploy by hand (owner, ~80 LOC of runbook)
 
@@ -213,7 +233,7 @@ Acceptance: `.venv/bin/python -m pytest -q tests/test_product_image_receiver_wor
 
 ### S7. Trigger (owner decides D1; implementation per option)
 
-- [ ] [AC10] Owner rules on D1; the decision is commented on #2612 and the loser's reason recorded
+- [ ] [AC10] D1 was deferred to S7 (owner, 2026-11-05); at S7's start the owner picks (a) or (b), the choice is commented on #2612 and the loser's reason recorded
 - [ ] [AC10] Option (a): `forge_actions` catalog entry for the dispatch token (`personal/imagesensortool` target), the product CI step that fires `repository_dispatch` with `{tag}`, a runbook paragraph in `docs/runbooks/cicd.md`; spike first: the minimum token permission
 - [ ] [AC10] Option (b): a separate spec (Go API outbound dispatch plus Gitea webhook registration); out of this one's size budget
 
@@ -224,7 +244,7 @@ Depends on S5b and S1b. Closes #2627 AC1 and AC2. Files: `toolkit/features/produ
 
 - [ ] [P] [AC11] Failing tests in `tests/test_registry_digest.py` (new): authenticated manifest digest read for GHCR and for the Gitea registry; unsupported or private registry without a credential is refused with ERROR / WHY / FIX naming the registry
 - [ ] [AC11] Implement `tag_digest` for non-`docker.io` hosts using the catalogued pull credential (D3's authenticated half)
-- [ ] [AC11] Failing test then implement: `release-contract` reads the contract through the adapter for any forge; `sha-` tags of 7 or more hex digits are proven (#2627 AC1)
+- [ ] [AC11] Failing test then implement: `release-contract` reads the contract through the adapter for any forge; a 7-hex and a 10-hex `sha-` tag are both proven, so a check fixed at 7 fails (#2627 AC1)
 
 Acceptance: `.venv/bin/python -m pytest -q tests/test_product_release.py tests/test_registry_digest.py`
 
