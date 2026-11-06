@@ -19,7 +19,7 @@ created: "2026-10-21"
 
 ## Decisions before code
 
-- [x] ✓ 2026-10-22 UI is served from the `apps/api` binary (ADR-057 D2). Corrected 2026-11-04: Authelia did not front `api.kubelab.live`, whose rule is `bypass`; the console got a host of its own instead. The ADR corrections to A2 and A8 are in #2623
+- [x] ✓ 2026-10-22 UI is served from the `apps/api` binary (ADR-057 D2). Corrected 2026-11-04: Authelia did not front `api.kubelab.live`, whose rule is `bypass`; the console got a host of its own instead. The ADR corrections to A2 and A8 are in #2623. Amended 2026-11-05 by ADR-074 D1: the backend stays in `apps/api`, and the frontend becomes `apps/console`, so the page served from the binary is transitional
 - [x] ✓ 2026-10-22 Label set lives at `infra.forge.labels` (ADR-036: read by more than one component), shared with CONSOLE-006 (#2588), with an `area_repos` map and `fallback: knowledge`
 - [x] ✓ 2026-10-22 GitHub is read with a GitHub App installation token (its own rate pool, not shared with a user PAT); the ceiling is 1000 calls per hour, a conservative start to tighten after measurement
 - [x] ✓ 2026-10-22 Reconcile runs every 10 minutes per source and the alert fires when a source has not been read for 20 minutes. The period and the bound are one decision: `as_of` only advances on a successful read, so a bound shorter than the period would fire every cycle
