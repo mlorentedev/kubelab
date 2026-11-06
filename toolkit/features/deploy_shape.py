@@ -269,21 +269,40 @@ def _head(api: Api, repo: str, number: int) -> tuple[str, str, str]:
     return pr["head"]["sha"], pr["base"]["ref"], pr["base"]["repo"]["default_branch"]
 
 
-def _provenance(api: Api, repository: str, tag: str) -> str | None:
-    """None when the tag's commit is on the repository's default branch, else why not.
-
-    The same checks the receiver runs on its input (product-image-receiver.yml),
-    run again on the output, which is all a `pull_request` check can know of the
-    dispatch.
-    """
+def _commit(api: Api, repository: str, tag: str) -> tuple[str, str | None]:
+    """The full commit sha a `sha-<short>` tag names in `repository`, or why it names none."""
+    if not re.fullmatch(r"sha-[0-9a-f]{7,40}", tag):
+        return "", f"{tag!r} is not a sha-<short> tag"
     short = tag.split("-", 1)[1]
     sha = api.json(f"repos/{repository}/commits/{short}")["sha"]
     if not re.fullmatch(r"[0-9a-f]{40}", sha or "") or not sha.startswith(short):
-        return f"{tag} resolved to {sha!r} in {repository}, not a commit starting with {short}"
+        return "", f"{tag} resolved to {sha!r} in {repository}, not a commit starting with {short}"
+    return sha, None
+
+
+def _provenance(api: Api, repository: str, old: str, new: str) -> str | None:
+    """None when `new` is on the default branch and moves `old` forward, else why not.
+
+    The first half is the receiver's own check on its input (product-image-receiver.yml),
+    run again on the output, which is all a `pull_request` check can know of the
+    dispatch. The second half refuses a rollback (#796): a pin moved back to an older
+    commit is a clean version move too, and it comes from a stale or out-of-order PR,
+    never from a generator. A revert rolls back by building a newer commit, which
+    passes; going back to an older image is a merge a human makes.
+    """
+    sha, why = _commit(api, repository, new)
+    if why:
+        return why
     branch = api.json(f"repos/{repository}")["default_branch"]
     status = api.json(f"repos/{repository}/compare/{branch}...{sha}")["status"]
     if status not in ("identical", "behind"):
         return f"{sha} is not on {repository}'s {branch} (compare: {status})"
+    previous, why = _commit(api, repository, old)
+    if why:
+        return f"the current pin cannot be placed: {why}"
+    order = api.json(f"repos/{repository}/compare/{previous}...{sha}")["status"]
+    if order != "ahead":
+        return f"{new} does not move {old} forward in {repository} (compare: {order}); a rollback is merged by hand"
     return None
 
 
@@ -313,7 +332,7 @@ def evaluate(number: int, repo: str, api: Api, decl: Declaration, products: Mapp
                     repository = product.repository
                 else:
                     return Shape(NOT_MECHANICAL, f"{shape.app}'s forge ({product.forge}) cannot be proven here")
-                why = _provenance(api, repository, shape.new or "")
+                why = _provenance(api, repository, shape.old or "", shape.new or "")
                 if why:
                     shape = Shape(NOT_MECHANICAL, why, app=shape.app, old=shape.old, new=shape.new)
         if _head(api, repo, number)[0] != head:
