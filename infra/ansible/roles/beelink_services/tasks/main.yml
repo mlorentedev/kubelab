@@ -351,7 +351,7 @@
     - ((_runner_registration.json | default({})).runners | default([]) | selectattr('name', 'equalto', runner_name) | list | length) == 0
   fail:
     msg: >-
-      github_runner.enabled is true, but GitHub did not list a runner named '{{ runner_name }}'
+      github_runner.enabled is true, but the run could not confirm that GitHub lists a runner named '{{ runner_name }}'
       (HTTP {{ _runner_registration.status | default('none') }}).
       {{ 'GitHub could not be reached (timeout or refused connection), so registration was not checked; rerun the provision.'
          if (_runner_registration.status | default(-1) | int) < 0

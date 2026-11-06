@@ -151,3 +151,11 @@ def test_only_an_answer_that_lists_runners_blames_the_runner(status: int, says: 
         _env().from_string(_task(FAIL)["fail"]["msg"]).render(_runner_registration={"status": status}, runner_name="x")
     )
     assert says in msg
+
+
+@pytest.mark.parametrize("status", [-1, 503, 404])
+def test_a_status_that_never_listed_runners_does_not_claim_github_omitted_one(status: int) -> None:
+    msg = (
+        _env().from_string(_task(FAIL)["fail"]["msg"]).render(_runner_registration={"status": status}, runner_name="x")
+    )
+    assert "did not list" not in msg
