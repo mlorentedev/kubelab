@@ -124,7 +124,10 @@ def converge(
     hooks.patch_config({**spec.visible(), "secret": secret})
     after = hook_changes(hooks.get_config(), spec)
     if after:
-        raise HookConfigError(f"GitHub accepted the write but the read back still differs: {after}")
+        raise HookConfigError(
+            f"the write was sent and GitHub accepted it, but the read back still differs: {after}; "
+            "rerunning sends it again, which is safe (the secret is the same value)"
+        )
     return ConvergeResult(changes=changes, wrote=True, missing_events=missing)
 
 
