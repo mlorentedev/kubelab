@@ -67,6 +67,12 @@ def test_the_errors_service_still_answers_health_itself() -> None:
     assert _answered_by_errors("/") == []
 
 
+def test_the_parser_models_every_2xx_the_errors_service_answers() -> None:
+    """A 2xx in a construct the parser misses (regex location, nested block) would pass the check below vacuously."""
+    conf = ERRORS_NGINX.read_text(encoding="utf-8")
+    assert len(re.findall(r"return\s+2\d\d\b", conf)) == len(_errors_2xx())
+
+
 def test_no_edge_monitor_is_satisfied_by_the_errors_service() -> None:
     blind = []
     for monitor in _edge_monitors():

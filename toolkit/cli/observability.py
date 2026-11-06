@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import os
-from contextlib import ExitStack, contextmanager
+from contextlib import ExitStack, contextmanager, suppress
 from typing import Annotated, Generator, Optional
 
 import typer
@@ -235,7 +235,7 @@ def alerts_cmd(
     ] = "prod",
     json_output: Annotated[
         bool,
-        typer.Option("--json", "-j", help="Output results in JSON format"),
+        typer.Option("--json", "-j", help="Output the Grafana alerts as JSON (Uptime Kuma is not included)"),
     ] = False,
 ) -> None:
     """List active Grafana alerts and their firing states."""
@@ -252,6 +252,11 @@ def alerts_cmd(
         else:
             typer.echo(f"✗ Could not ask Grafana: {exc}", err=True)
             typer.echo("  This is NOT 'no alerts' — the question went unanswered.", err=True)
+            if env == "prod":
+                # Kuma is the second source, and it matters most when Grafana is blind.
+                # The exit is 1 either way, so a Kuma failure here changes nothing.
+                with suppress(typer.Exit):
+                    _echo_kuma_down()
         raise typer.Exit(1) from exc
 
     if json_output:

@@ -103,6 +103,25 @@ def test_alerts_reports_kuma_answered_with_nothing_down(quiet_grafana) -> None:
     assert "No Uptime Kuma monitor is DOWN" in result.stdout
 
 
+def test_kuma_is_still_asked_when_grafana_cannot_be(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The second source matters most exactly when the first is blind."""
+    from toolkit.features.observability import AlertsUnavailableError
+
+    monkeypatch.setenv("GRAFANA_URL", "http://mock-grafana:3000")
+    down = [{"name": "Services · Auth · Argo CD", "msg": "404 - Not Found", "checked": "2026-11-06 06:10:00.000"}]
+    with (
+        patch(
+            "toolkit.features.observability.GrafanaAlertClient.get_alerts",
+            side_effect=AlertsUnavailableError("connection refused"),
+        ),
+        patch("toolkit.cli.observability.ask_down_monitors", return_value=down),
+    ):
+        result = _invoke()
+    assert result.exit_code == 1
+    assert "Could not ask Grafana" in result.output
+    assert "[DOWN] Services · Auth · Argo CD" in result.output
+
+
 def test_staging_does_not_ask_uptime_kuma(quiet_grafana) -> None:
     """Kuma is not per-environment: it is prod's external half (ADR-028)."""
     with patch("toolkit.cli.observability.ask_down_monitors") as ask:
