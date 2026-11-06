@@ -125,6 +125,13 @@ class TestHealthPathIsReadStrictly:
         for home in _HEALTH_PATH_HOMES.values():
             assert any(h.endswith("/declared-" + home[-1]) for h in healths), home[-1]
 
+    def test_no_row_reads_health_path_with_a_default(self) -> None:
+        # The map above only covers the rows it names. A row added later with
+        # `svc.get("health_path", ...)` would escape both other tests, so the
+        # source itself must not contain the fallback shape.
+        source = platform_manifest.Path(platform_manifest.__file__).read_text(encoding="utf-8")
+        assert '.get("health_path"' not in source
+
     @pytest.mark.parametrize("service", sorted(_HEALTH_PATH_HOMES))
     def test_a_removed_health_path_fails_and_names_the_service(self, service: str) -> None:
         config = _real_config()
