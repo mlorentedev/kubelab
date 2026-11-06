@@ -68,18 +68,19 @@ created: "2026-09-03"
 - Operator 2026-10-21: attestation adopts the content predicate in PR 1; every registry app is in the class (api proven against this repository); names `deploy-shape`.
 - Check-run, not commit status: only a check-run can answer `neutral` for a normal PR.
 - Consumers recompute from master's code; the check is visible, not authoritative.
+- Traceability (final review, Minor): `features.json` breaks out only f1 and f2 (AC1, AC2). AC3–AC8 are proven in the Evidence section above and stay unlisted there, because the review's contract digest froze `features.json`.
 
 ## Promotion candidates
 
 Before archiving, flag what (if anything) should be promoted to the vault. If all three are "no", archive in repo is the only persistence.
 
-- [x] Lesson for the repo's `docs/lessons/`? yes, already written: lesson-613 (check-run vs status) and lesson-699 (`unstable`).
-- [x] ADR-worthy decision? yes: ADR-037's "leaving the PR open holds staging" no longer holds for staging. Amended in this PR.
+- [x] Lesson for the repo's `docs/lessons/`? yes: docs/lessons/ci-automation/lesson-613-an-exemption-keyed-on-which-files-changed-exempts-whatever-those-files-say.md, docs/lessons/ci-automation/lesson-699-unstable-stops-enforcing-every-check-not-required.md, docs/lessons/ci-automation/lesson-711-an-anchored-pattern-and-python-equality-both-admit-more-than-they-read.md
+- [x] ADR-worthy decision? yes: docs/adr/adr-037-environment-promotion-strategy.md (its "leaving the PR open holds staging" no longer holds for staging; amended)
 - [x] New pattern candidate? no: the "diff nobody wrote" rule already lives in the global harness.
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/DELIVERY-004-exempt-generated-deploy-prs/` -> `specs/archive/DELIVERY-004-exempt-generated-deploy-prs/`
-- [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
-- [ ] Promotions above executed (if any)
+- [x] `proposal.md` frontmatter set to `status: archived`
+- [x] Folder moved: `specs/DELIVERY-004-exempt-generated-deploy-prs/` -> `specs/archive/DELIVERY-004-exempt-generated-deploy-prs/`
+- [x] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018): #1619 closes with the archive PR. ✓ 2026-11-05
+- [x] Promotions above executed (if any)

@@ -542,6 +542,16 @@ secrets-hash:
 secrets-copy-nan-key: ## Copy NAN_API_KEY from Bitwarden into prod SOPS for PR-Agent (re-run after each rotation)
 	@dotf secrets run --only NAN_API_KEY -- $(TOOLKIT) secrets set apps.services.automation.pr_agent.nan_api_key --env prod --from-env NAN_API_KEY
 
+# The reverse direction (AUTH-022): Ansible mints the agents' forge token into prod
+# SOPS, and `dotf` reads it from Bitwarden. Re-run after each re-mint. The value is
+# held in a shell variable and handed over by `printf`, a builtin, so it reaches no
+# argv and no stdout; the length test refuses to write an empty value over a good one.
+.PHONY: secrets-copy-gitea-agent-token
+secrets-copy-gitea-agent-token: ## Copy the agents' Gitea token from prod SOPS into Bitwarden for dotf (re-run after each re-mint)
+	@V=$$(ENV=dev $(TOOLKIT) secrets show apps.services.core.gitea.agent_token --env prod 2>/dev/null | tail -1) && \
+		test -n "$$V" && printf %s "$$V" | grep -Eqx '[0-9a-f]{40}' || { echo "agent_token absent from prod SOPS, or not a 40-hex Gitea token; provision first" >&2; exit 1; }; \
+		printf %s "$$V" | dotf secrets set --yes GITEA_KUBELAB_AGENT_TOKEN
+
 # -----------------------------------------------------------------------------
 # Monitoring (Uptime Kuma)
 # -----------------------------------------------------------------------------
@@ -575,6 +585,13 @@ secrets-audit:
 .PHONY: acme-token-scope
 acme-token-scope:
 	@$(TOOLKIT) secrets acme-token-scope $(if $(LIVE),--live,)
+
+# Plan only. `APPLY=1` points the kubelab-console GitHub App's webhook at the
+# API's receiver (CONSOLE-004); `SECRET=1` also resends the secret after a
+# rotation. Prod only: the App has one hook. Events and Active are App settings.
+.PHONY: forge-github-hook
+forge-github-hook:
+	@$(TOOLKIT) services forge github-hook $(if $(APPLY),--apply,) $(if $(SECRET),--resend-secret,)
 
 # Plan only. `APPLY=1` is what creates organizations and repositories for real —
 # opt-in because the first run mutates a live forge (TOOL-035, #1076).
@@ -1986,8 +2003,8 @@ edge-soak: ## Read the edge's uplink soak: 48 h of this boot with no adapter res
 # the lower reading. Exits 0 measured, 2 shaper binding (lift it), 3 cannot tell.
 # Staging only: the toolkit refuses any other ENV. docs/runbooks/load-test.md
 .PHONY: load-test load-test-clear
-load-test: ## Measure staging's capacity with k6 on ace2 (ENV=staging) [REPEATS=3 SECONDS=60 MAX_RATE=6400 MIN_RATE=0]
-	@$(TOOLKIT) infra load-test run --env $(ENV) $(if $(REPEATS),--repeats $(REPEATS)) $(if $(SECONDS),--seconds $(SECONDS)) $(if $(MAX_RATE),--max-rate $(MAX_RATE)) $(if $(MIN_RATE),--min-rate $(MIN_RATE))
+load-test: ## Measure staging's capacity with k6 on ace2 (ENV=staging) [REPEATS=3 SECONDS=60 MAX_RATE=6400 MIN_RATE=0 ACCEPT_ENCODING=]
+	@$(TOOLKIT) infra load-test run --env $(ENV) $(if $(REPEATS),--repeats $(REPEATS)) $(if $(SECONDS),--seconds $(SECONDS)) $(if $(MAX_RATE),--max-rate $(MAX_RATE)) $(if $(MIN_RATE),--min-rate $(MIN_RATE)) $(if $(ACCEPT_ENCODING),--accept-encoding $(ACCEPT_ENCODING))
 
 load-test-clear: ## Remove the limiter-bypass route a dead load test left in staging (ENV=staging)
 	@$(TOOLKIT) infra load-test clear --env $(ENV)

@@ -3,6 +3,12 @@
 # Follows Google SRE / Rob Ewaschuk error budget burn rate alerting doctrine.
 # Evaluates HTTP 5xx errors from Traefik ingress access logs.
 #
+# Counts parsed access-log lines with DownstreamStatus >= 500. The K3s edge logs
+# every 5xx and every request slower than 1 s, nothing else (k3s_server role), so
+# this is a count of server errors, not a ratio. The load test's own route
+# (`load-test`, toolkit/features/load_test.py) is excluded: it overloads staging
+# on purpose (#3140).
+#
 # - Fast Burn (14.4x budget consumption): 1-hour window, for: 2m -> immediate page in prod
 # - Medium Burn (6x budget consumption): 6-hour window, for: 15m -> notice in prod/staging
 ---
@@ -42,7 +48,10 @@ groups:
                 sum(
                   count_over_time(
                     {container="traefik"}
-                      |~ `(?i)\b(500|502|503|504)\b`
+                      | json
+                      | __error__=""
+                      | DownstreamStatus >= 500
+                      | RouterName !~ ".*load-test.*"
                     [1h]
                   )
                 )
@@ -104,7 +113,10 @@ groups:
                 sum(
                   count_over_time(
                     {container="traefik"}
-                      |~ `(?i)\b(500|502|503|504)\b`
+                      | json
+                      | __error__=""
+                      | DownstreamStatus >= 500
+                      | RouterName !~ ".*load-test.*"
                     [6h]
                   )
                 )

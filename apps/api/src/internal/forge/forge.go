@@ -48,6 +48,27 @@ type SourceState struct {
 	Reachable bool
 }
 
+// QueueKey is an item's place in the queue: newest first, ties broken by the
+// item's identity, so a page boundary never skips or repeats an item.
+type QueueKey struct {
+	UpdatedAt time.Time
+	Source    Source
+	Number    int
+}
+
+// Key is the item's place in the queue.
+func (it Item) Key() QueueKey {
+	return QueueKey{UpdatedAt: it.UpdatedAt, Source: it.Source, Number: it.Number}
+}
+
+// QueuePage is one page of the queue: every declared source's state, the open
+// items after a key, and how many open items the declared sources hold in all.
+type QueuePage struct {
+	States []SourceState
+	Items  []Item
+	Total  int
+}
+
 // Reader lists the items of one source changed since a point in time. A zero
 // since lists everything.
 type Reader interface {

@@ -10,8 +10,9 @@ and `dig A` said the name was fine.
 
 The other types must get NODATA: NOERROR, no answer, the zone's SOA in the
 authority section (RFC 2308). This runs the rendered zone in the CoreDNS image
-the role pins and asks it over UDP, because the failure lives in how CoreDNS
-chains plugins, which no reading of the Corefile can show.
+the role pins and asks it, because the failure lives in how CoreDNS chains
+plugins, which no reading of the Corefile can show. It asks over UDP, the
+transport the incident lived on, except on macOS (see `TRANSPORT`).
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ import shutil
 import socket
 import struct
 import subprocess
+import sys
 import time
 import uuid
 from collections.abc import Iterator
@@ -36,6 +38,11 @@ from tests.test_coredns_staging_zone_hosts import APEX, _staging_zone
 
 TYPES = {"A": 1, "SOA": 6, "AAAA": 28, "HTTPS": 65}
 NOERROR = 0
+# Colima, the macOS Docker VM, forwards published TCP ports and drops UDP
+# (measured 2026-11-05, #3072). The plugin chain answers both transports alike,
+# so macOS asks over TCP. CI and Linux keep UDP: a fallback from UDP to TCP would
+# hide a UDP-only failure exactly where it can be seen.
+TRANSPORT = "tcp" if sys.platform == "darwin" else "udp"
 SUBDOMAIN = f"auth.{APEX}"
 
 
@@ -67,14 +74,29 @@ def _records(packet: bytes, offset: int, count: int) -> tuple[list[tuple[int, by
     return records, offset
 
 
+def _recv_exactly(sock: socket.socket, size: int) -> bytes:
+    data = b""
+    while len(data) < size:
+        chunk = sock.recv(size - len(data))
+        if not chunk:
+            raise ConnectionError("the server closed the connection mid-reply")
+        data += chunk
+    return data
+
+
 def _query(port: int, name: str, qtype: str) -> Reply:
     query_id = random.randrange(1 << 16)
     question = b"".join(bytes([len(label)]) + label.encode() for label in name.split(".")) + b"\x00"
     packet = struct.pack("!HHHHHH", query_id, 0, 1, 0, 0, 0) + question + struct.pack("!HH", TYPES[qtype], 1)
-    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
-        sock.settimeout(2)
-        sock.sendto(packet, ("127.0.0.1", port))
-        reply = sock.recv(4096)
+    if TRANSPORT == "udp":
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.settimeout(2)
+            sock.sendto(packet, ("127.0.0.1", port))
+            reply, _ = sock.recvfrom(4096)
+    else:
+        with socket.create_connection(("127.0.0.1", port), timeout=2) as sock:
+            sock.sendall(struct.pack("!H", len(packet)) + packet)
+            reply = _recv_exactly(sock, struct.unpack("!H", _recv_exactly(sock, 2))[0])
     reply_id, flags, qdcount, ancount, nscount, _ar = struct.unpack("!HHHHHH", reply[:12])
     assert reply_id == query_id, "a reply to another query"
     offset = 12
@@ -87,7 +109,7 @@ def _query(port: int, name: str, qtype: str) -> Reply:
 
 @pytest.fixture
 def coredns(docker_mount_dir: Path) -> Iterator[int]:
-    """The rendered staging apex zone, served by the role's pinned image; yields its UDP port."""
+    """The rendered staging apex zone, served by the role's pinned image; yields its port for `TRANSPORT`."""
     if shutil.which("docker") is None:
         # In CI a missing docker must fail: a skip would hide the only check of this.
         if os.environ.get("CI"):
@@ -104,7 +126,7 @@ def coredns(docker_mount_dir: Path) -> Iterator[int]:
     subprocess.run(
         [
             "docker", "run", "-d", "--rm", "--name", name,
-            "-p", "127.0.0.1::1053/udp",
+            "-p", f"127.0.0.1::1053/{TRANSPORT}",
             "-v", f"{docker_mount_dir}:/etc/coredns:ro",
             image, "-conf", "/etc/coredns/Corefile",
         ],
@@ -112,7 +134,7 @@ def coredns(docker_mount_dir: Path) -> Iterator[int]:
     )  # fmt: skip
     try:
         published = subprocess.run(
-            ["docker", "port", name, "1053/udp"], check=True, capture_output=True, text=True, encoding="utf-8"
+            ["docker", "port", name, f"1053/{TRANSPORT}"], check=True, capture_output=True, text=True, encoding="utf-8"
         )
         port = int(published.stdout.split()[0].rsplit(":", 1)[1])
         deadline = time.monotonic() + 30

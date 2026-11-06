@@ -139,6 +139,11 @@ the same account that n8n uses to tell a PR its review failed (TOOL-093). That s
 the new value. Both live on one account, so a listing shows two tokens there and the scope check tells
 them apart by name.
 
+`TOKEN=agent` rotates the agents' authoring token (`kubelab-agent` on `dedalo`, AUTH-022). After
+re-minting, run `make secrets-copy-gitea-agent-token`, which copies the new value from prod SOPS into
+the Bitwarden item `dotf` reads (`GITEA_KUBELAB_AGENT_TOKEN`). Never rotate it with `dotf secrets
+rotate`: that changes the Bitwarden copy and leaves the forge holding the old token.
+
 **Order is revoke-then-unset, and it is not arbitrary.** The two failure modes are not symmetric:
 revoke-then-failed-unset leaves the bot down *loudly*, with the remedy printed on screen;
 unset-then-failed-revoke leaves the gate open while the old token is still live, so the next

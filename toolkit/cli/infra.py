@@ -355,6 +355,9 @@ def load_test_run(
     seconds: Annotated[int, typer.Option("--seconds", help="Length of each step")] = 60,
     max_rate: Annotated[int, typer.Option("--max-rate", help="Highest step, requests per second")] = 6400,
     min_rate: Annotated[int, typer.Option("--min-rate", help="Lowest step, to rerun at the knee")] = 0,
+    accept_encoding: Annotated[
+        str | None, typer.Option("--accept-encoding", help="gzip or identity; unset, k6 sends gzip")
+    ] = None,
     output: Annotated[str, typer.Option("--output", help="Results directory")] = "docs/load-test",
 ) -> None:
     """Measure staging: a baseline under the limiter, then ramps to the first degraded step.
@@ -389,7 +392,20 @@ def load_test_run(
             base.with_suffix(".md").write_text(render(result), encoding="utf-8")
 
         image = staging["load_test"]["image"]
-        save(run(lab, image, targets, address, repeats, seconds, max_rate, checkpoint=save, min_rate=min_rate))
+        save(
+            run(
+                lab,
+                image,
+                targets,
+                address,
+                repeats,
+                seconds,
+                max_rate,
+                checkpoint=save,
+                min_rate=min_rate,
+                accept_encoding=accept_encoding,
+            )
+        )
     except (LoadTestRefused, subprocess.SubprocessError, OSError) as e:
         logger.error(str(e))
         raise typer.Exit(1) from e

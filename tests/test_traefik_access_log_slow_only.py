@@ -53,7 +53,13 @@ def test_slow_requests_are_logged_as_json_and_only_slow_ones() -> None:
     assert access["enabled"] is True
     assert access["format"] == "json"
     assert access["filters"]["minduration"] == _defaults()["k3s_traefik_access_log_min_duration"]
-    assert set(access["filters"]) == {"minduration"}, "another filter would widen what is logged"
+    assert set(access["filters"]) == {"minduration", "statuscodes"}, "another filter would widen what is logged"
+
+
+def test_every_server_error_is_logged_whatever_its_duration() -> None:
+    # Traefik keeps a line when ANY filter matches (`keepAccessLog`, v3.6.7), so this
+    # adds the 5xx answered fast, which the 5xx alerts count (#3140), and nothing else.
+    assert _access()["filters"]["statuscodes"] == "500-599"
 
 
 def test_the_threshold_is_a_positive_duration() -> None:

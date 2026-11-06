@@ -99,6 +99,10 @@ SCOPE_BY_METHOD: dict[str, frozenset[str]] = {
     "commit_exists": frozenset({"read:repository"}),
     # The reconcile's content probe (#2144): git refs are repository content.
     "has_refs": frozenset({"read:repository"}),
+    # The reconcile's collaborator reads (AUTH-022): repository metadata, so
+    # `read:repository`. The write is basic auth (`add_collaborator`).
+    "is_collaborator": frozenset({"read:repository"}),
+    "get_collaborator_permission": frozenset({"read:repository"}),
     # Writes.
     "create_org": frozenset({"write:organization"}),
     "create_repo": frozenset({"write:organization"}),
@@ -145,6 +149,9 @@ ADMIN_METHODS: tuple[str, ...] = (
     "commit_exists",
     # The reconcile reads refs alongside `empty` (#2144), with this token.
     "has_refs",
+    # And each declared writer's collaborator row and access mode (AUTH-022).
+    "is_collaborator",
+    "get_collaborator_permission",
 )
 
 
@@ -619,6 +626,44 @@ class GiteaClient:
             raise
         return bool(refs)
 
+    def is_collaborator(self, owner: str, name: str, username: str) -> bool:
+        """Whether `username` is an explicit collaborator on the repository (AUTH-022).
+
+        204 is yes and 404 is no; anything else raises, because "could not look" is
+        not "not a collaborator".
+        """
+        try:
+            self._request("GET", f"/repos/{owner}/{name}/collaborators/{username}")
+        except GiteaError as exc:
+            if exc.status_code == 404:
+                return False
+            raise
+        return True
+
+    def get_collaborator_permission(self, owner: str, name: str, username: str) -> str:
+        """The account's EFFECTIVE access mode on the repository: `none`, `read`, `write`, `admin`, `owner`.
+
+        READ TOGETHER WITH `is_collaborator`, never alone. This is the effective
+        mode, not the collaborator row, and it does not see unit-based team grants:
+        measured on prod 2026-11-03 against `personal/imagesensortool`, `hefesto`
+        (in the `reconcilers` team, write on every unit) answered `read`, the
+        public repository's floor, and so did `mentor`, who is in no write team. So
+        `read` here can mean "nothing" as easily as "read", and only the
+        collaborator row says whether a grant exists at all.
+
+        A 404 is `none`, as it is "no" for `is_collaborator`: Gitea answers it for a
+        user that does not exist yet, and a writer declared before its account is
+        provisioned must plan as a pending grant, not abort the plan. Anything else
+        raises.
+        """
+        try:
+            body = self._request("GET", f"/repos/{owner}/{name}/collaborators/{username}/permission")
+        except GiteaError as exc:
+            if exc.status_code == 404:
+                return "none"
+            raise
+        return str(body.get("permission") or "none")
+
 
 class GiteaBasicAuthClient(GiteaClient):
     """The subset of the API that REFUSES tokens and requires a password.
@@ -790,6 +835,15 @@ class GiteaBasicAuthClient(GiteaClient):
         had stopped working. Sending the secret unconditionally costs one field.
         """
         return self._request("PATCH", f"/repos/{owner}/{name}/hooks/{hook_id}", json=dict(payload))
+
+    def add_collaborator(self, owner: str, name: str, username: str, permission: str) -> None:
+        """Make `username` a collaborator with `permission` (AUTH-022). PUT is idempotent.
+
+        ON THIS CLASS because adding a collaborator is gated on repo-ADMIN, the
+        same gate as `edit_repo`, whose table above says no token here holds it on
+        a repository the bot did not create.
+        """
+        self._request("PUT", f"/repos/{owner}/{name}/collaborators/{username}", json={"permission": permission})
 
     def revoke_token(self, username: str, token_name: str) -> bool:
         """Delete a named token. True if it was there, False if it already was not.
