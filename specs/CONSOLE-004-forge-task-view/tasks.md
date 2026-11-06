@@ -87,7 +87,7 @@ created: "2026-10-21"
 - [ ] [P] [AC7] Declare the read model in the Postgres backup coverage and rehearse one restore
   - [x] ✓ 2026-11-02 Covered: the prod dump is `pg_dumpall`, so the `api` database is in it without a change
   - [ ] Rehearse one restore
-- [ ] [AC7] Test that the read model rebuilds from the forges alone
+- [x] [AC7] Test that the read model rebuilds from the forges alone ✓ 2026-11-06
 - [x] ✓ 2026-11-01 [AC4] [AC7] Create the GitHub App for the read adapter, store its credential in SOPS with a catalog entry (App `kubelab-console`, App ID 5573076, installed on `mlorentedev/kubelab` only as installation 177667607; Issues, Pull requests and Metadata read-only, webhooks off; private key at `apps.services.core.github_app.private_key` in `common.enc.yaml`; GitHub App keys carry no expiry, so the catalog entry is `Expiry.NEVER`)
 - [x] ✓ 2026-11-01 [AC4] Deliver the App ID, installation ID and private key to the API: the two IDs at `infra.forge.github.*` reach the ConfigMap as `INFRA_FORGE_GITHUB_APP_ID` and `INFRA_FORGE_GITHUB_INSTALLATION_ID`; the key reaches `api-secrets` as `FORGE_GITHUB_PRIVATE_KEY`
 - [x] ✓ 2026-11-02 [AC4] Mint an installation token from the App ID, installation ID and key, then read once to measure the App's grant
