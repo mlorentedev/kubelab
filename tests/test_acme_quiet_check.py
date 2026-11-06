@@ -184,5 +184,5 @@ class TestRun:
         assert loki.instant == [(EXPR, 65 * S)]
 
     def test_lookback_is_lokis_retention(self) -> None:
-        loki_yaml = (ROOT / "infra" / "k8s" / "base" / "services" / "loki.yaml").read_text()
+        loki_yaml = (ROOT / "infra" / "k8s" / "base" / "services" / "loki.yaml").read_text(encoding="utf-8")
         assert f"retention_period: {q.LOOKBACK}" in loki_yaml
