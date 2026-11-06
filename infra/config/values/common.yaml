@@ -116,7 +116,7 @@ networking:
       reservations: ["rpi3"]
   # Trusted CIDRs — consumed by Authelia access_control as "internal" networks.
   # Single source for all services that need a trusted-network definition.
-  trusted_cidrs:
+  trusted_cidrs:  # agent egress deny list only (provision-ace2); no component trusts it since #2669
   - "10.0.0.0/8"
   - "172.16.0.0/12"
   - "192.168.0.0/16"

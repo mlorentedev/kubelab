@@ -60,17 +60,11 @@ webauthn:
 #   OWN AUTH (bypass): gitea
 #   INTERNAL (no ingress): loki, vector, redis, crowdsec
 access_control:
+  # One explicit rule per host; anything unlisted is denied. No rule is scoped by
+  # `networks`: every client reaches Authelia from the pod CIDR (klipper-lb
+  # masquerade, #1067), so `internal` matched everyone and `vpn` no one (#2669).
+  # tests/test_authelia_access_rules.py holds both.
   default_policy: deny
-
-  networks:
-    - name: internal
-      networks:
-        - '10.0.0.0/8'
-        - '172.16.0.0/12'
-        - '192.168.0.0/16'
-    - name: vpn
-      networks:
-        - '100.64.0.0/10'  # Must match networking.tailscale_cidr
 
   rules:
     # Authelia portal (always bypass — login page)
@@ -101,13 +95,6 @@ access_control:
     # The forge console (CONSOLE-004), its own host.
     - domain: 'console.kubelab.live'
       policy: one_factor
-
-    # VPN users get one_factor for everything else
-    - domain: '*.kubelab.live'
-      policy: one_factor
-      networks:
-        - vpn
-        - internal
 
 # ---- Session ----
 session:

@@ -80,14 +80,9 @@ identity_providers:
 # ACCESS CONTROL
 # =============================================================================
 access_control:
-  default_policy: deny # Hardcoded, could be variable
-
-  networks:
-    - name: internal
-      networks:
-        {% for cidr in trusted_cidrs %}
-        - '{{ cidr }}'
-        {% endfor %}
+  # One rule per app; anything unlisted is denied. No `networks`: the K8s envs
+  # cannot see a client address (#1067), and this template follows them (#2669).
+  default_policy: deny
 
   rules:
     # Dummy rule to satisfy default_policy: deny when no other rules are present
@@ -109,12 +104,6 @@ access_control:
     # Authelia portal itself (always bypass)
     - domain: '{{ APPS_SERVICES_SECURITY_AUTHELIA_DOMAIN }}'
       policy: bypass
-
-    # Internal network fallback (catch-all for kubelab.live from internal IPs)
-    - domain: '*.{{ APPS_SERVICES_SECURITY_AUTHELIA_DEFAULT_DOMAIN_ROOT }}'
-      policy: one_factor
-      networks:
-        - internal
 
 # =============================================================================
 # SESSION MANAGEMENT
