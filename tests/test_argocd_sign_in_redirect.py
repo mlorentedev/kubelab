@@ -84,7 +84,8 @@ def test_the_redirect_outranks_the_passthrough_and_keeps_every_guard(prod: list[
     redirect = _redirect(prod)
     passthrough = [r for r in _routes(prod) if r is not redirect]
     assert len(passthrough) == 1
-    assert redirect["priority"] > passthrough[0].get("priority", 0)
+    # Traefik ranks a rule with no priority by the length of its match.
+    assert redirect["priority"] > (passthrough[0].get("priority") or len(passthrough[0]["match"]))
     guards = {"secure-headers", "rate-limit", "crowdsec-bouncer"}
     assert guards <= {m["name"] for m in redirect["middlewares"]}
     assert guards <= {m["name"] for m in passthrough[0]["middlewares"]}
