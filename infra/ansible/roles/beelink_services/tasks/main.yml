@@ -883,6 +883,6 @@
 - name: Report service status
   debug:
     msg: >-
-      Gitea {{ _gitea_version.json.version | default('?') }} on
+      Gitea {{ (_gitea_version.json | default({})).status | default('?') }} on
       {{ tailscale_ip }}:{{ gitea_http_port }} (ssh {{ gitea_ssh_port }}),
-      GH Runner running
+      GH Runner {{ (runner_name ~ ' registered') if runner_enabled | bool else 'off' }}

@@ -94,3 +94,20 @@ def test_the_compose_file_and_the_check_name_the_same_runner() -> None:
     compose = (ROLE / "templates/compose.yml.j2").read_text(encoding="utf-8")
     assert 'RUNNER_NAME: "{{ runner_name }}"' in compose
     assert "kubelab-bee" not in compose
+
+
+def _report(**variables: object) -> str:
+    msg = _task("Report service status")["debug"]["msg"]
+    base = {"tailscale_ip": "100.64.0.3", "gitea_http_port": 3000, "gitea_ssh_port": 2222}
+    return _env().from_string(msg).render(**{**base, **variables})
+
+
+def test_the_status_report_says_what_the_run_measured() -> None:
+    """The report printed `GH Runner running` as a literal, and so said it on the
+    first provision after #3149 removed the runner; and `Gitea ?`, because the
+    health probe it reads answers a status, never a version."""
+    off = _report(_gitea_version={"json": {"status": "pass"}}, runner_enabled=False, runner_name="kubelab-bee")
+    assert "Gitea pass" in off
+    assert "GH Runner off" in off and "running" not in off
+    on = _report(_gitea_version={"json": {"status": "pass"}}, runner_enabled=True, runner_name="kubelab-bee")
+    assert "GH Runner kubelab-bee registered" in on
