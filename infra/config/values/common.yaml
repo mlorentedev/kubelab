@@ -1721,6 +1721,13 @@ apps:
 
       github_runner:
         name: github-runner
+        # Off since #3080, and off means ABSENT: the role removes the container,
+        # because Ansible is additive and `compose up -d` never removes an orphan.
+        # Nothing used it (`RUNNER_DOCKER` is hosted, ADR-030 amendment) and no
+        # runner was registered; on 2026-11-06 its self-update had deleted
+        # `/actions-runner/bin`, so it crash-looped and broke the role's
+        # idempotence. Turning it back on is #2064's decision, on its own host.
+        enabled: false
         image: myoung34/github-runner:2.338.0-ubuntu-noble
         repo_url: https://github.com/mlorentedev/kubelab
         runner_group: default

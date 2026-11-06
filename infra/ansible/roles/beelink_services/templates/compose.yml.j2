@@ -228,10 +228,11 @@ services:
     networks:
       - kubelab
 {% endif %}
+{% if runner_enabled | bool %}
 
   github-runner:
     image: {{ runner_image }}
-    container_name: github-runner
+    container_name: {{ runner_container_name }}
     restart: {{ restart_policy }}
     environment:
       REPO_URL: "{{ runner_repo_url }}"
@@ -252,6 +253,7 @@ services:
           memory: "{{ runner_memory_limit }}"
     networks:
       - kubelab
+{% endif %}
 
 # Glances extracted to the shared `roles/glances/` role (DASH-DT-014b).
 # Invoked from provision-bee.yml separately so this role only owns Gitea
