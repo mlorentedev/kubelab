@@ -338,6 +338,8 @@
         gitea_admin_scopes: "{{ gitea_config.apps.services.core.gitea.token_scopes.admin }}"
         gitea_admin_token: "{{ gitea_secrets.apps.services.core.gitea.admin_token | default('') }}"
         # GitHub Actions Runner
+        runner_enabled: "{{ config.apps.services.automation.github_runner.enabled }}"
+        runner_container_name: "{{ config.apps.services.automation.github_runner.name }}"
         runner_image: "{{ config.apps.services.automation.github_runner.image }}"
         runner_repo_url: "{{ config.apps.services.automation.github_runner.repo_url }}"
         runner_access_token: "{{ secrets.apps.services.automation.github_runner.token }}"

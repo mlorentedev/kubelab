@@ -44,8 +44,6 @@ TEMPLATE = REPO / "infra/config/authelia/templates/configuration.yml.j2"
 
 #: (overlay, host): routes behind the ForwardAuth that no rule serves, each with its ticket.
 UNSERVED = {
-    ("staging", "dev.kubelab.live"): "#3135: resolves nowhere, outside the staging cookie scope",
-    ("staging", "loki.kubelab.live"): "#3135: resolves nowhere, outside the staging cookie scope",
     ("prod", "loki.internal.kubelab.local"): "#3135: a .local name no browser reaches; Vector pushes in-cluster",
 }
 

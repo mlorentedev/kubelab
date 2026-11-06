@@ -105,7 +105,7 @@ result on #2612.
 - [ ] [AC4] Consequence check (D2): create a throwaway `read:package` token on the reviewer account, pull a manifest for `personal/imagesensortool`, record status. Also pick one package the reviewer account must not read and record its `<owner>/<name>` in `verification.md` as `OUT_OF_SCOPE_PACKAGE`, with the denial status it answers; f4d's negative half uses that value. Fail means go back to the architect (ADR-062/065), and the rest of S2c/S5c wait
 - [ ] [AC4] Failing tests in `tests/test_gitea_registry_pull_token.py`, copying the shape of `tests/test_gitea_issue_reader_token.py`: the grant in `token_scopes` equals `read:package` exactly; the mint is gated on the SOPS key being absent; the revoke-then-unset rotation covers it
 - [ ] [AC4] Add `registry_pull` to `ROTATABLE_TOKENS` (`gitea_tokens.py`), `SCOPE_BY_METHOD` if a client method is needed (`gitea_client.py`), the catalog entry (`secrets_manager.py`, read from SOPS by `apply-secrets`, no `forge_actions`: that field writes Gitea Actions secrets, not the cluster; file per D2), the `common.yaml` `token_scopes` grant, and the Ansible mint task in `beelink_services`
-- [ ] [AC4] Failing test then implement `toolkit services gitea registry-check --app <app> [--package <owner>/<name>]`: pulls a manifest by consequence (the app's own package by default, the named one with `--package`), prints status, never the token; exit 0 / non-zero. The test covers both: the app's package answers 200, a package outside the token's reach answers a denial and exits non-zero
+- [ ] [AC4] Failing test then implement `toolkit services gitea registry-check --app <app> [--package <owner>/<name>] [--expect-denied]`: pulls a manifest by consequence (the app's own package by default, the named one with `--package`), prints status, never the token. Without `--expect-denied` it exits 0 only on 200; with it, 0 only on 401 or 403. An empty `--package` exits non-zero. The tests cover 200, 401/403, another status (500), an empty package, and a denied pull run without the flag
 - [ ] [AC4] Owner operation: mint, then `toolkit secrets audit --env staging` and `registry-check` (deployed)
 
 Acceptance: `.venv/bin/python -m pytest -q tests/test_gitea_registry_pull_token.py tests/test_gitea_token_rotation_registry.py tests/test_gitea_token_scopes.py tests/test_gitea_token_scope_drift.py`
@@ -220,7 +220,7 @@ Acceptance: `.venv/bin/python -m pytest -q tests/test_product_receiver.py tests/
 
 ### S6b. Receiver workflow: `route` job and per-forge runner (owner merges, ~120 LOC)
 
-Depends on S6a, S5b, S5c. Dormant until #2611 settles (Risks 3). Files:
+Depends on S6a, S5b, S5c. Held, not merged, until #2611 settles (proposal risk 3); AC9's dry run gates its merge. Files:
 `.github/workflows/product-image-receiver.yml`, `tests/test_product_image_receiver_workflow.py`,
 `tests/test_receiver_pr_step.py`.
 

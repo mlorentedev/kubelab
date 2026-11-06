@@ -72,3 +72,15 @@ class TestBuildServiceTables:
         assert pihole["health"] == "https://pihole.kubelab.live/admin/"
         assert "staging" not in pihole["url"]
         assert "staging" not in pihole["health"]
+
+    def test_headscale_health_is_its_declared_health_path(self) -> None:
+        # #3010: the row hardcoded `/health` beside a `health_path` its siblings read.
+        # The path is right (v0.28 answers it, measured 2026-11-06); the literal was not.
+        headscale = {"image": "headscale/headscale:v0.28.0", "health_path": "/declared"}
+        config = {
+            "global": {"base_domain": "example.test"},
+            "apps": {"services": {"core": {"headscale": headscale}}, "platform": {}},
+        }
+        _staging, _prod, shared = platform_manifest.build_service_tables(config)
+        row = next(s for s in shared if s["name"] == "Headscale")
+        assert row["health"] == "https://vpn.example.test/declared"

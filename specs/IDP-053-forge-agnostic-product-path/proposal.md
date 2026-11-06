@@ -329,7 +329,10 @@ Must be resolved before the named slice starts; none blocks writing the others.
    blocks the first generic receipt of `imagesensortool`. The registry entry declares
    `receiver: generic` from S3b (`Product` requires `receiver` with `repository`), and it stays
    dormant by construction: the receiver refuses `forge != github` until S6b, and no trigger
-   exists until S7. So #2611 gates S6b's go-live, and S6b merges dormant or is held.
+   exists until S7. **S6b is held, not merged dormant, until #2611 settles**: once S6b drops the
+   refusal, a manual `workflow_dispatch` reaches the generic receipt path with no trigger at
+   all, so dormancy would no longer hold by construction. AC9's dry run is therefore S6b's own
+   gate, run before it merges.
 4. **Self-hosted runner exposure (S6b).** A dispatch-triggered `promote` job holding
    `RELEASE_PLEASE_TOKEN` would run on `kubelab-bee`, a runner with the Docker socket mounted
    (ADR-030). `repository_dispatch` runs master's code only and the contract is parsed by the
@@ -352,7 +355,10 @@ Must be resolved before the named slice starts; none blocks writing the others.
    zone needs a provision run on the VPS and the RPi4 (not verifiable from a diff), and an ACME
    DNS-01 certificate whose token must cover `imagesensortool.com` (`toolkit secrets
    acme-token-scope` asks Cloudflare). That token (`kubelab-acme-dns`, #2459) is scoped to named
-   zones and is not managed by Terraform, so widening it is an owner step in Cloudflare per new
+   zones and is not managed by Terraform: #2459 is closed, and its closing comment records the
+   in-cluster Secret on both clusters as token `cee3a546` (`kubelab-acme-dns`, not Terraform's
+   `dde8b6cb`), answering 403 on zone settings for `kubelab.live` and `mlorente.dev`
+   (2026-11-02). S3b re-runs `acme-token-scope` before widening it. Widening is an owner step in Cloudflare per new
    domain; deriving its zones from `zones.json` is a separate ticket, not this spec.
 
 ## Acceptance criteria
@@ -383,8 +389,9 @@ recorded in `verification.md`. Test files marked (new) are created by the slice.
   **(deployed)** after the owner's mint: `toolkit secrets audit --env staging` counts the key;
   `toolkit services gitea registry-check --app imagesensortool` exits 0 by pulling a manifest
   with the token; and `toolkit services gitea registry-check --app imagesensortool --package
-  <owner>/<package outside the token's reach>` exits non-zero with the registry's denial
-  status. Both runs are recorded.
+  <owner>/<package outside the token's reach> --expect-denied` exits 0 only when the registry
+  answers 401 or 403 for that package (any other status, an empty `--package`, or a pull that
+  succeeds exits non-zero). Both runs are recorded.
 - [ ] **AC5 (S3a).** A contract with no `hostnames.prod` validates; the committed JSON Schema
   equals the model; `product render --env prod` refuses it; a product with no `events.prod` has
   no prod snapshot and no prod values block; the DNS, tile and registry tests skip prod for
@@ -420,7 +427,7 @@ recorded in `verification.md`. Test files marked (new) are created by the slice.
   all forge reads go through `toolkit product resolve` and `toolkit product fetch-contract`.
   `.venv/bin/python -m pytest -q tests/test_product_image_receiver_workflow.py tests/test_receiver_pr_step.py && actionlint`.
   **(deployed)** a `workflow_dispatch` dry run for the Gitea product succeeds on the
-  self-hosted runner and writes nothing (S6b, after #2611).
+  self-hosted runner and writes nothing; it is S6b's merge gate, run after #2611 settles.
 - [ ] **AC10 (S7).** The chosen D1 option is recorded on #2612 and in `docs/runbooks/cicd.md`
   under a heading `Gitea product trigger (IDP-053 D1)`, whose section names the option, the
   credential's catalog key and the command or CI step that fires it.

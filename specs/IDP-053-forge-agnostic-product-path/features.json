@@ -29,8 +29,8 @@
   },
   {
     "id": "IDP-053-forge-agnostic-product-path-f4d",
-    "behavior": "AC4 (deployed): the minted token pulls a manifest of personal/imagesensortool, and registry-check --package for a package outside its reach exits non-zero",
-    "verification": "toolkit services gitea registry-check --app imagesensortool && ! toolkit services gitea registry-check --app imagesensortool --package \"$OUT_OF_SCOPE_PACKAGE\"  # OUT_OF_SCOPE_PACKAGE: the <owner>/<name> recorded in verification.md by S2c's consequence check",
+    "behavior": "AC4 (deployed): the minted token pulls a manifest of personal/imagesensortool (200), and the registry denies it (401 or 403) for the out-of-scope package recorded by S2c",
+    "verification": "test -n \"$OUT_OF_SCOPE_PACKAGE\" && toolkit services gitea registry-check --app imagesensortool && toolkit services gitea registry-check --app imagesensortool --package \"$OUT_OF_SCOPE_PACKAGE\" --expect-denied  # OUT_OF_SCOPE_PACKAGE: the <owner>/<name> S2c records in verification.md",
     "state": "pending",
     "evidence": ""
   },

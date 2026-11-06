@@ -1010,7 +1010,7 @@ def build_service_tables(
         _svc(
             "Headscale",
             f"https://vpn.{base}",
-            f"https://vpn.{base}/health",
+            f"https://vpn.{base}" + headscale.get("health_path", "/health"),
             "Built-in",
             "Network",
             "VPS",
