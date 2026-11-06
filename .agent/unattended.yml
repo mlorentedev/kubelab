@@ -1,0 +1,47 @@
+# Arming envelope for one unattended run. Read from the committed copy only.
+version: 1
+run_id: ""
+armed_by: manu
+armed_at: 2026-11-06T06:52:25Z
+expires_at: 2026-11-06T14:52:25Z
+objective: >-
+  Close observability, alerting and load-test debt tickets from the queue below,
+  each landed with tests and its knowledge recorded.
+scope:
+  write_paths:
+    - "toolkit/**"
+    - "tests/**"
+    - "docs/**"
+    - "specs/**"
+    - "infra/ansible/**"
+    - "infra/k8s/**"
+    - "infra/load-test/**"
+    - "infra/config/values/*.yaml"
+    - "Makefile"
+  frozen_paths:
+    - ".github/**"
+    - "harness/**"
+    - "**/AGENTS.md"
+    - "**/CLAUDE.md"
+    - ".agent/**"
+    - "infra/config/secrets/**"
+    - "release-please-config.json"
+    - ".release-please-manifest.json"
+  max_files: 12
+  max_loc: 300
+allowed_commands: [dotf, gh, git, make, poetry, kubectl-readonly]
+queue:
+  source: bitacora
+  filter: "issues #3010, #3012, #2998, #2942, #3156, #2391, #2195, #2207 (observability, alerting, load test)"
+  max_items: 5
+budget:
+  max_iterations: 8
+  max_minutes_per_iteration: 60
+  max_consecutive_failures: 2
+authority:
+  merge: standing-grant
+  push: true
+  open_pr: true
+  advisor_tier: top
+  staging_deploy: true          # homelab stays on; check Argo kubelab-staging targetRevision first
+  prod_ansible: true            # provision CHECK=1, apply, re-run changed=0, then make test-e2e ENV=prod
