@@ -6,7 +6,7 @@
 import http from 'k6/http';
 import { Counter } from 'k6/metrics';
 
-const { LT_HOST, LT_PATH, LT_ADDRESS, LT_RATE, LT_SECONDS, LT_BYPASS_HEADER, LT_BYPASS_VALUE } = __ENV;
+const { LT_HOST, LT_PATH, LT_ADDRESS, LT_RATE, LT_SECONDS, LT_BYPASS_HEADER, LT_BYPASS_VALUE, LT_ACCEPT_ENCODING } = __ENV;
 
 // Second lock behind the toolkit's: this file refuses a host that is not a staging
 // name, and `hosts` below sends the name to the staging node whatever DNS says.
@@ -17,6 +17,8 @@ if (!/(^|\.)staging\.[a-z0-9.-]+$/.test(LT_HOST || '') || !LT_ADDRESS) {
 const rate = Number(LT_RATE);
 const status429 = new Counter('status_429');
 const headers = LT_BYPASS_HEADER ? { [LT_BYPASS_HEADER]: LT_BYPASS_VALUE } : {};
+// Unset, k6 sends its own `Accept-Encoding: gzip`; set, it replaces that (an A/B on compression).
+if (LT_ACCEPT_ENCODING) headers['Accept-Encoding'] = LT_ACCEPT_ENCODING;
 
 export const options = {
   hosts: { [LT_HOST]: LT_ADDRESS },
