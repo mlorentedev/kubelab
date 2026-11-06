@@ -1,7 +1,8 @@
 ---
-id: lesson-720-deploy-branches-sharing-a-file-merge-because-each-app-owns-a-block
+id: lesson-721-deploy-branches-sharing-a-file-merge-because-each-app-owns-a-block
 type: lesson
 status: active
+title: "Deploy branches that rewrite the same files merge in either order, because each app's writes stay inside its own block"
 created: "2026-11-06"
 owner: manu
 category: gitops-delivery
