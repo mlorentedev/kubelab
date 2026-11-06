@@ -13,17 +13,27 @@ import (
 	"github.com/mlorentedev/kubelab/apps/api/pkg/config"
 )
 
-// Runs against a real database when FORGE_TEST_POSTGRES_PORT names a local one with the
-// migrations applied, because the guarantee lives in the SQL and not in the Go around it.
-func TestStoreEventTwiceKeepsOneRow(t *testing.T) {
+// testPostgres is the database the store tests run against: a local one with the
+// migrations applied, named by FORGE_TEST_POSTGRES_PORT, because the guarantee lives
+// in the SQL and not in the Go around it. Without one the tests skip, except in CI,
+// where a skip would let the job go green with the store untested (#3117).
+func testPostgres(t *testing.T) config.Postgres {
+	t.Helper()
 	port := os.Getenv("FORGE_TEST_POSTGRES_PORT")
 	if port == "" {
+		if os.Getenv("CI") != "" {
+			t.Fatal("FORGE_TEST_POSTGRES_PORT is not set in CI: the store tests would not run")
+		}
 		t.Skip("FORGE_TEST_POSTGRES_PORT is not set")
 	}
 	if _, err := strconv.Atoi(port); err != nil {
 		t.Fatal(err)
 	}
-	conf := config.Postgres{Host: "127.0.0.1", Port: port, Tenant: "api", Password: "fixture"}
+	return config.Postgres{Host: "127.0.0.1", Port: port, Tenant: "api", Password: "fixture"}
+}
+
+func TestStoreEventTwiceKeepsOneRow(t *testing.T) {
+	conf := testPostgres(t)
 	ctx := context.Background()
 	for i := 0; i < 2; i++ {
 		if err := store.StoreEvent(ctx, conf, "gitea", "d1", "issues", []byte(`{"a":1}`)); err != nil {
@@ -45,11 +55,7 @@ func TestStoreEventTwiceKeepsOneRow(t *testing.T) {
 }
 
 func TestReadModelRoundTrip(t *testing.T) {
-	port := os.Getenv("FORGE_TEST_POSTGRES_PORT")
-	if port == "" {
-		t.Skip("FORGE_TEST_POSTGRES_PORT is not set")
-	}
-	conf := config.Postgres{Host: "127.0.0.1", Port: port, Tenant: "api", Password: "fixture"}
+	conf := testPostgres(t)
 	ctx := context.Background()
 	model := store.ForgeModel{Conf: conf}
 	src := forge.Source{Forge: "github", Owner: "o", Repo: "r"}
@@ -74,11 +80,7 @@ func TestReadModelRoundTrip(t *testing.T) {
 }
 
 func TestSameDeliveryProjectsOnce(t *testing.T) {
-	port := os.Getenv("FORGE_TEST_POSTGRES_PORT")
-	if port == "" {
-		t.Skip("FORGE_TEST_POSTGRES_PORT is not set")
-	}
-	conf := config.Postgres{Host: "127.0.0.1", Port: port, Tenant: "api", Password: "fixture"}
+	conf := testPostgres(t)
 	ctx := context.Background()
 	model := store.ForgeModel{Conf: conf}
 	cleanup, err := pgx.Connect(ctx, conf.DSN())
