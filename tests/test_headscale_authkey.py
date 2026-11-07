@@ -297,7 +297,11 @@ class TestKeyDelivery:
         out = tmp_path / "key.out"
         write_owner_only(out, KEY_MATERIAL)
         listing = subprocess.run(  # noqa: S603
-            ["icacls", str(out)], capture_output=True, text=True, check=True
+            ["icacls", str(out)],
+            capture_output=True,
+            text=True,
+            check=True,
+            encoding=None,  # icacls prints in the locale code page
         ).stdout
         # Inheritance removed: no inherited ACE marker survives.
         assert "(I)" not in listing

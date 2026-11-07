@@ -208,6 +208,9 @@ def write_owner_only(path: Path, key: str) -> None:
             ["icacls", str(path), "/inheritance:r", "/grant:r", f"{os.environ.get('USERNAME', '')}:F"],
             check=True,
             capture_output=True,
+            # icacls prints in the locale code page, not UTF-8; None is the
+            # honest name for that (tests/test_subprocess_names_its_encoding.py).
+            encoding=None,
         )
     else:
         os.chmod(path, 0o600)
@@ -242,6 +245,8 @@ def _run_headscale(ssh_target: str, container: str, args: str) -> subprocess.Com
         ],
         capture_output=True,
         text=True,
+        # headscale answers protojson, which is UTF-8 by spec.
+        encoding="utf-8",
     )
 
 
