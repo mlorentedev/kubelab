@@ -179,6 +179,8 @@ ENV_TARGETS: dict[str, tuple[str, str]] = {
     "drill-pvc-unbound": ("--env", "staging"),
     # Added with the target (NET-005 task 32): the key is minted on prod's Headscale.
     "headscale-rejoin": ("--env", "prod"),
+    # Added with the target (VPN-ACL-016, #2863): minted on that env's Headscale.
+    "headscale-authkey": ("--env", "prod"),
 }
 
 #: Resolves an environment but passes it under no flag at all, so the

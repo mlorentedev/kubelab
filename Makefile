@@ -1202,6 +1202,19 @@ headscale-rejoin: ## Rejoin a node to the mesh with a single-use key (NODE=rpi4)
 	@test -n "$(NODE)" || (echo "Usage: make headscale-rejoin NODE=<node> [ENV=prod|staging]" && exit 1)
 	@$(TOOLKIT) infra headscale rejoin --node $(NODE) --env $(or $(filter staging prod,$(ENV)),prod)
 
+# Mint one single-use tagged pre-auth key from the segment declaration
+# (VPN-ACL-016, #2863). The tag comes from the SOPS segment, never from argv;
+# ROLE picks hosts (persistent) or clients (ephemeral). The key is written to
+# OUT owner-only and printed nowhere. Run from the authorized deploy controller
+# (OPS-051) — this performs a mutating operation on the VPS.
+.PHONY: headscale-authkey
+headscale-authkey: ## Mint a one-off tagged pre-auth key (SEGMENT=... ROLE=hosts|clients OUT=...)
+	@test -n "$(SEGMENT)" || (echo "Usage: make headscale-authkey SEGMENT=<name> ROLE=hosts|clients OUT=<file> [ENV=prod] [EXPIRATION=1h]" && exit 1)
+	@test -n "$(OUT)" || (echo "Usage: make headscale-authkey SEGMENT=<name> ROLE=hosts|clients OUT=<file> [ENV=prod] [EXPIRATION=1h]" && exit 1)
+	@test -n "$(ROLE)" || (echo "Usage: make headscale-authkey SEGMENT=<name> ROLE=hosts|clients OUT=<file> [ENV=prod] [EXPIRATION=1h]" && exit 1)
+	@test -n "$(filter hosts clients,$(ROLE))" || (echo "ROLE must be hosts or clients" && exit 1)
+	@$(TOOLKIT) infra headscale authkey --segment $(SEGMENT) --role $(ROLE) --out $(OUT) --env $(or $(filter staging prod,$(ENV)),prod) $(if $(EXPIRATION),--expiration $(EXPIRATION),)
+
 # Disk ceiling on a live node (GCP-001 AC8). Random 4K, `--direct=1`, bounded
 # file, unconditional cleanup — the reasoning is in the playbook's header, where
 # it stays next to the flags it justifies.
