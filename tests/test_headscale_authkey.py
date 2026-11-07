@@ -279,6 +279,13 @@ class TestKeyDelivery:
         assert "--reusable" not in create_command
         assert "--ephemeral" not in create_command
 
+    def test_the_create_call_requests_json_output(self, mocker, tmp_path) -> None:
+        """`--output` is a global flag defaulting to human-readable; without it
+        the mint refuses on parse after the key already exists on the VPS."""
+        _result, run, _out = _mock_mint(mocker, tmp_path)
+        create_command = run.call_args_list[1].args[0][-1]
+        assert "--output json" in create_command
+
     def test_an_existing_out_file_is_never_overwritten(self, mocker, tmp_path) -> None:
         out = tmp_path / "key.out"
         out.write_text("previous-content", encoding="utf-8")
