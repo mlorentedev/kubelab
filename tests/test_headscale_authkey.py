@@ -34,7 +34,7 @@ from toolkit.features.headscale_authkey import (
     write_owner_only,
 )
 
-KEY_MATERIAL = "hskey-auth-SECRETKEYMATERIAL0001"
+KEY_MATERIAL = "hskey-auth-test-0001"
 
 SEGMENT_JSON = json.dumps(
     {
@@ -243,8 +243,8 @@ class TestOutputParsing:
 
     def test_garbage_output_is_refused_without_echoing_it(self) -> None:
         with pytest.raises(MintUnavailableError) as excinfo:
-            parse_create_output("hskey-auth-LEAKEDMATERIAL999")
-        assert "LEAKEDMATERIAL" not in str(excinfo.value)
+            parse_create_output("hskey-auth-test-9999")
+        assert "test-9999" not in str(excinfo.value)
 
 
 class TestKeyDelivery:
