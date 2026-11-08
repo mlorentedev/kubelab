@@ -280,7 +280,7 @@ def mint(
     user_id = resolve_owner_id(users.stdout, segment.owner)
 
     create_command = build_create_command(user_id, tag, expiration, ephemeral=(role == "clients"))
-    create = _run_headscale(ssh_target, container, f"preauthkeys create {create_command}")
+    create = _run_headscale(ssh_target, container, f"preauthkeys create {create_command} --output json")
     if create.returncode != 0:
         raise MintUnavailableError(f"could not mint pre-auth key on {ssh_target}: {create.stderr.strip()}")
     key, key_id = parse_create_output(create.stdout)
