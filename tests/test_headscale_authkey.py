@@ -247,6 +247,35 @@ class TestOutputParsing:
             parse_create_output("hskey-auth-test-9999")
         assert "test-9999" not in str(excinfo.value)
 
+    def test_a_non_json_output_names_the_orphan_it_may_have_left(self) -> None:
+        """The create already ran, so the key exists in headscale whether or not
+        we could read it. `key not delivered` described our delivery and read as
+        "nothing to clean up", so the operator retried and left another orphan
+        (#3198)."""
+        with pytest.raises(MintUnavailableError) as excinfo:
+            parse_create_output("WARN: a proxy injected this banner")
+        message = str(excinfo.value)
+        assert "preauthkeys list" in message
+        assert "orphan" in message
+        assert "not delivered" not in message
+
+    def test_a_missing_key_field_names_the_orphan_it_may_have_left(self) -> None:
+        with pytest.raises(MintUnavailableError) as excinfo:
+            parse_create_output(json.dumps({"id": "7"}))
+        message = str(excinfo.value)
+        assert "preauthkeys list" in message
+        assert "orphan" in message
+
+    def test_an_empty_key_field_names_the_orphan_it_may_have_left(self) -> None:
+        """A create that answered with an empty key still created one: this
+        branch carried the same false `not delivered` claim as the non-JSON one."""
+        with pytest.raises(MintUnavailableError) as excinfo:
+            parse_create_output(json.dumps({"key": "", "id": "7"}))
+        message = str(excinfo.value)
+        assert "preauthkeys list" in message
+        assert "orphan" in message
+        assert "not delivered" not in message
+
 
 class TestKeyDelivery:
     def test_the_key_lands_in_the_out_file_and_nowhere_else(self, mocker, tmp_path, capsys) -> None:
@@ -459,6 +488,28 @@ class TestTransport:
         )
         with pytest.raises(MintUnavailableError, match="could not mint"):
             mint("prod", "tenant-example", "hosts", tmp_path / "key.out", ssh_target="deployer@vps")
+
+    def test_a_partial_create_names_the_orphan_it_may_have_left(self, mocker, tmp_path) -> None:
+        """A non-zero exit can be the ssh transport dying *after* headscale ran,
+        so stdout may already carry a key we never read. Same remedy, same
+        reason: the operator has to look before retrying."""
+        mocker.patch(
+            "toolkit.features.headscale_authkey.SecretsManager",
+            return_value=mocker.Mock(show_secret=mocker.Mock(return_value=SEGMENT_JSON)),
+        )
+        mocker.patch(
+            "toolkit.features.headscale_authkey.subprocess.run",
+            side_effect=[
+                mocker.Mock(returncode=0, stdout=USERS_JSON, stderr=""),
+                mocker.Mock(returncode=1, stdout=CREATE_OUTPUT_JSON, stderr="connection reset"),
+            ],
+        )
+        with pytest.raises(MintUnavailableError) as excinfo:
+            mint("prod", "tenant-example", "hosts", tmp_path / "key.out", ssh_target="deployer@vps")
+        message = str(excinfo.value)
+        assert "preauthkeys list" in message
+        assert "orphan" in message
+        assert not (tmp_path / "key.out").exists()
 
     def test_an_unsafe_container_is_refused_before_any_ssh(self, mocker, tmp_path) -> None:
         run = mocker.patch("toolkit.features.headscale_authkey.subprocess.run")
