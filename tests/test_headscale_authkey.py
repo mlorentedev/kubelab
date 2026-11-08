@@ -18,6 +18,7 @@ import json
 import os
 import stat
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -312,6 +313,63 @@ class TestKeyDelivery:
         ).stdout
         # Inheritance removed: no inherited ACE marker survives.
         assert "(I)" not in listing
+
+    def test_the_file_is_empty_while_the_acl_is_applied(self, mocker, tmp_path) -> None:
+        """#3196: hardening runs BEFORE the secret is written, so the
+        create-to-ACL window exposes an empty file and never key material."""
+        out = tmp_path / "key.out"
+        seen: list[bytes] = []
+
+        def inspect_then_harden(path: Path) -> None:
+            seen.append(Path(path).read_bytes())
+
+        mocker.patch(
+            "toolkit.features.headscale_authkey._restrict_to_owner",
+            side_effect=inspect_then_harden,
+        )
+        write_owner_only(out, KEY_MATERIAL)
+        assert seen == [b""]
+        assert out.read_text(encoding="utf-8") == KEY_MATERIAL
+
+    def test_an_acl_failure_removes_the_file_and_names_the_key(self, mocker, tmp_path) -> None:
+        """#3196: a failed `icacls` must not leave the key readable on disk. The
+        file is unlinked, and the error names the key id -- the key was already
+        created on the VPS, so an operator who reads only "could not write"
+        leaves a live pre-auth key behind."""
+        mocker.patch(
+            "toolkit.features.headscale_authkey.SecretsManager",
+            return_value=mocker.Mock(show_secret=mocker.Mock(return_value=SEGMENT_JSON)),
+        )
+        mocker.patch(
+            "toolkit.features.headscale_authkey.subprocess.run",
+            side_effect=[
+                mocker.Mock(returncode=0, stdout=USERS_JSON, stderr=""),
+                mocker.Mock(returncode=0, stdout=CREATE_OUTPUT_JSON, stderr=""),
+            ],
+        )
+        mocker.patch(
+            "toolkit.features.headscale_authkey._restrict_to_owner",
+            side_effect=subprocess.CalledProcessError(1, "icacls"),
+        )
+        out = tmp_path / "key.out"
+        with pytest.raises(MintUnavailableError) as excinfo:
+            mint("prod", "tenant-example", "hosts", out, ssh_target="deployer@vps")
+        assert not out.exists()
+        assert "7" in str(excinfo.value)
+        assert KEY_MATERIAL not in str(excinfo.value)
+
+    def test_a_write_failure_also_removes_the_file(self, mocker, tmp_path) -> None:
+        """The cleanup is not ACL-specific: a partial secret file is no better
+        than a readable one."""
+        mocker.patch("toolkit.features.headscale_authkey._restrict_to_owner")
+        mocker.patch(
+            "toolkit.features.headscale_authkey.os.write",
+            side_effect=OSError("disk full"),
+        )
+        out = tmp_path / "key.out"
+        with pytest.raises(MintUnavailableError, match="removed"):
+            write_owner_only(out, KEY_MATERIAL)
+        assert not out.exists()
 
 
 class TestTransport:
