@@ -150,6 +150,17 @@ ssh vps-pub "sudo docker exec headscale headscale preauthkeys create \
   -u <owner-id> -e 1h --tags <hosts_tag-or-clients_tag>"
 ```
 
+- **A failed mint is not a failed create**: the toolkit refuses to guess when it
+  cannot read headscale's answer (non-JSON output, a missing or an empty `key`
+  field), and an ssh transport death can land *after* headscale already ran. In
+  both cases the key may exist on the VPS with nobody holding it. Look for it and
+  expire it **before** retrying — retrying alone leaves one more key per attempt
+  (#3198):
+
+  ```bash
+  ssh vps-pub "sudo docker exec headscale headscale preauthkeys list"
+  ssh vps-pub "sudo docker exec headscale headscale preauthkeys expire --id <preauth-key-id>"
+  ```
 - **Record the key's ID at mint**: `preauthkeys list` shows it in the ID column;
   the tenant inventory keeps it (step 7) — revocation expires by ID, not by owner.
 - **One-time**: consumed by a *successful* registration; a rejected attempt does

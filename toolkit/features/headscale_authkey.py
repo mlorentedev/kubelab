@@ -43,6 +43,15 @@ _EXPIRATION = re.compile(r"\d+[smh](?:\d+[smh])*")
 
 _SEGMENT_KEY = "apps.services.core.headscale.segments.{name}"
 
+# Every failure that comes AFTER the create command has run carries this. The key
+# exists in headscale whether or not we could read the answer, and "key not
+# delivered" described our delivery while reading as "nothing to clean up" -- so
+# the operator retried and left another orphan nobody holds (#3198).
+_ORPHAN_CAVEAT = (
+    "a pre-auth key may exist on the VPS anyway, as an orphan nobody holds: "
+    "`headscale preauthkeys list` shows it and `headscale preauthkeys expire --id <id>` retires it"
+)
+
 
 class AuthKeyRefused(Exception):
     """The mint was refused before anything was asked of the VPS."""
@@ -172,7 +181,7 @@ def parse_create_output(stdout: str) -> tuple[str, str]:
     try:
         data = json.loads(stdout.strip())
     except json.JSONDecodeError as exc:
-        raise MintUnavailableError("could not parse headscale create output (not JSON); key not delivered") from exc
+        raise MintUnavailableError(f"could not parse headscale create output (not JSON); {_ORPHAN_CAVEAT}") from exc
     obj = data
     if isinstance(obj, dict) and "key" not in obj:
         nested = [v for v in obj.values() if isinstance(v, dict)]
@@ -180,10 +189,12 @@ def parse_create_output(stdout: str) -> tuple[str, str]:
             obj = nested[0]
     if not isinstance(obj, dict) or "key" not in obj:
         fields = sorted(obj.keys()) if isinstance(obj, dict) else type(obj).__name__
-        raise MintUnavailableError(f"headscale create output has no key field; top-level fields: {fields}")
+        raise MintUnavailableError(
+            f"headscale create output has no key field; top-level fields: {fields}; {_ORPHAN_CAVEAT}"
+        )
     key = obj["key"]
     if not isinstance(key, str) or not key:
-        raise MintUnavailableError("headscale returned an empty key field; key not delivered")
+        raise MintUnavailableError(f"headscale returned an empty key field; {_ORPHAN_CAVEAT}")
     return key, str(obj.get("id", ""))
 
 
@@ -326,8 +337,19 @@ def mint(
     create_command = build_create_command(user_id, tag, expiration, ephemeral=(role == "clients"))
     create = _run_headscale(ssh_target, container, f"preauthkeys create {create_command} --output json")
     if create.returncode != 0:
-        raise MintUnavailableError(f"could not mint pre-auth key on {ssh_target}: {create.stderr.strip()}")
-    key, key_id = parse_create_output(create.stdout)
+        # A transport death can land after headscale ran, with the key already in
+        # stdout we never read; and a refused create is indistinguishable from it
+        # by exit code alone. So the orphan caveat applies here too (#3198).
+        raise MintUnavailableError(
+            f"could not mint pre-auth key on {ssh_target} via `docker exec {container} headscale`: "
+            f"{create.stderr.strip()}; {_ORPHAN_CAVEAT}"
+        )
+    try:
+        key, key_id = parse_create_output(create.stdout)
+    except MintUnavailableError as exc:
+        # The parser reads stdout and cannot know where it came from, and the
+        # remedy the caveat names is not typeable without the coordinates.
+        raise MintUnavailableError(f"{exc} (asked on {ssh_target} via `docker exec {container} headscale`)") from exc
     try:
         write_owner_only(Path(out_path), key)
     except MintUnavailableError as exc:
