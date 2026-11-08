@@ -49,7 +49,7 @@ _SEGMENT_KEY = "apps.services.core.headscale.segments.{name}"
 # the operator retried and left another orphan nobody holds (#3198).
 _ORPHAN_CAVEAT = (
     "a pre-auth key may exist on the VPS anyway, as an orphan nobody holds: "
-    "`headscale preauthkeys list` shows it and `headscale preauthkeys expire --id` retires it"
+    "`headscale preauthkeys list` shows it and `headscale preauthkeys expire --id <id>` retires it"
 )
 
 
@@ -341,9 +341,15 @@ def mint(
         # stdout we never read; and a refused create is indistinguishable from it
         # by exit code alone. So the orphan caveat applies here too (#3198).
         raise MintUnavailableError(
-            f"could not mint pre-auth key on {ssh_target}: {create.stderr.strip()}; {_ORPHAN_CAVEAT}"
+            f"could not mint pre-auth key on {ssh_target} via `docker exec {container} headscale`: "
+            f"{create.stderr.strip()}; {_ORPHAN_CAVEAT}"
         )
-    key, key_id = parse_create_output(create.stdout)
+    try:
+        key, key_id = parse_create_output(create.stdout)
+    except MintUnavailableError as exc:
+        # The parser reads stdout and cannot know where it came from, and the
+        # remedy the caveat names is not typeable without the coordinates.
+        raise MintUnavailableError(f"{exc} (asked on {ssh_target} via `docker exec {container} headscale`)") from exc
     try:
         write_owner_only(Path(out_path), key)
     except MintUnavailableError as exc:

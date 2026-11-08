@@ -258,6 +258,7 @@ class TestOutputParsing:
         assert "preauthkeys list" in message
         assert "orphan" in message
         assert "not delivered" not in message
+        assert "not created" not in message
 
     def test_a_missing_key_field_names_the_orphan_it_may_have_left(self) -> None:
         with pytest.raises(MintUnavailableError) as excinfo:
@@ -275,6 +276,7 @@ class TestOutputParsing:
         assert "preauthkeys list" in message
         assert "orphan" in message
         assert "not delivered" not in message
+        assert "not created" not in message
 
 
 class TestKeyDelivery:
@@ -510,6 +512,35 @@ class TestTransport:
         assert "preauthkeys list" in message
         assert "orphan" in message
         assert not (tmp_path / "key.out").exists()
+
+    def test_an_unreadable_answer_names_where_to_run_the_cleanup(self, mocker, tmp_path) -> None:
+        """The parser is pure and cannot know which host or container it read,
+        so `mint` -- which does -- has to add the coordinates. Otherwise the
+        remedy names a command nobody can type."""
+        mocker.patch(
+            "toolkit.features.headscale_authkey.SecretsManager",
+            return_value=mocker.Mock(show_secret=mocker.Mock(return_value=SEGMENT_JSON)),
+        )
+        mocker.patch(
+            "toolkit.features.headscale_authkey.subprocess.run",
+            side_effect=[
+                mocker.Mock(returncode=0, stdout=USERS_JSON, stderr=""),
+                mocker.Mock(returncode=0, stdout="WARNING: no colour terminal\n", stderr=""),
+            ],
+        )
+        with pytest.raises(MintUnavailableError) as excinfo:
+            mint(
+                "prod",
+                "tenant-example",
+                "hosts",
+                tmp_path / "key.out",
+                ssh_target="deployer@vps",
+                container="hs1",
+            )
+        message = str(excinfo.value)
+        assert "orphan" in message
+        assert "deployer@vps" in message
+        assert "docker exec hs1 headscale" in message
 
     def test_an_unsafe_container_is_refused_before_any_ssh(self, mocker, tmp_path) -> None:
         run = mocker.patch("toolkit.features.headscale_authkey.subprocess.run")
