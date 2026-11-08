@@ -371,6 +371,78 @@ class TestKeyDelivery:
             write_owner_only(out, KEY_MATERIAL)
         assert not out.exists()
 
+    def test_a_short_write_is_retried_until_the_whole_key_lands(self, mocker, tmp_path) -> None:
+        """`os.write` may accept fewer bytes than it is given. A truncated key
+        authenticates as nothing while a valid one waits to be expired on the
+        VPS -- the same partial-effect shape as #3196, one layer down."""
+        mocker.patch("toolkit.features.headscale_authkey._restrict_to_owner")
+        real_write = os.write
+        accepted: list[int] = []
+
+        def write_at_most_one_byte(fd: int, data: bytes) -> int:
+            accepted.append(len(data))
+            return real_write(fd, data[:1])
+
+        mocker.patch(
+            "toolkit.features.headscale_authkey.os.write",
+            side_effect=write_at_most_one_byte,
+        )
+        out = tmp_path / "key.out"
+        write_owner_only(out, KEY_MATERIAL)
+        assert out.read_text(encoding="utf-8") == KEY_MATERIAL
+        # One call per byte, and the loop stopped when the buffer was empty.
+        assert len(accepted) == len(KEY_MATERIAL)
+        assert accepted[-1] == 1
+
+    def test_a_zero_byte_write_is_a_delivery_failure_not_a_spin(self, mocker, tmp_path) -> None:
+        """A write that accepts nothing must fail closed. Retrying it forever
+        hangs the mint with the file open and the key already on the VPS."""
+        mocker.patch("toolkit.features.headscale_authkey._restrict_to_owner")
+        mocker.patch("toolkit.features.headscale_authkey.os.write", return_value=0)
+        out = tmp_path / "key.out"
+        with pytest.raises(MintUnavailableError, match="removed"):
+            write_owner_only(out, KEY_MATERIAL)
+        assert not out.exists()
+
+    def test_a_close_failure_is_a_delivery_failure_and_still_removes_the_file(self, mocker, tmp_path) -> None:
+        """A close that fails cannot be trusted to have flushed the key, so it
+        counts as a delivery failure -- but the unlink must still run, or the
+        secret stays on disk, which is the whole of #3196."""
+        mocker.patch("toolkit.features.headscale_authkey._restrict_to_owner")
+        real_close = os.close
+
+        def close_then_report_failure(fd: int) -> None:
+            real_close(fd)
+            raise OSError("close failed")
+
+        mocker.patch(
+            "toolkit.features.headscale_authkey.os.close",
+            side_effect=close_then_report_failure,
+        )
+        out = tmp_path / "key.out"
+        with pytest.raises(MintUnavailableError, match="removed"):
+            write_owner_only(out, KEY_MATERIAL)
+        assert not out.exists()
+
+    def test_an_unlink_that_fails_is_reported_without_masking_the_delivery_error(self, mocker, tmp_path) -> None:
+        """If the file cannot be removed the caller has to hear that the key is
+        still on disk, not only that the delivery failed."""
+        mocker.patch(
+            "toolkit.features.headscale_authkey._restrict_to_owner",
+            side_effect=OSError("acl failed"),
+        )
+        out = tmp_path / "key.out"
+        real_unlink = Path.unlink
+
+        def refuse_only_for_the_key_file(self: Path, *args: object, **kwargs: object) -> None:
+            if self == out:
+                raise OSError("file is locked")
+            real_unlink(self, *args, **kwargs)  # type: ignore[arg-type]
+
+        mocker.patch.object(Path, "unlink", refuse_only_for_the_key_file)
+        with pytest.raises(MintUnavailableError, match="still holds"):
+            write_owner_only(out, KEY_MATERIAL)
+
 
 class TestTransport:
     def test_a_failed_create_raises(self, mocker, tmp_path) -> None:

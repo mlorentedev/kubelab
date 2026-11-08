@@ -212,9 +212,11 @@ def write_owner_only(path: Path, key: str) -> None:
 
     The file is created empty, hardened, and only then given the key: an empty
     file has nothing to leak, so the create-to-hardening window cannot expose
-    key material (#3196). A failure at either step unlinks the file and raises,
-    because a file we cannot protect is worse than no file -- and by then the
-    key already exists on the VPS, so `mint` names it in the error.
+    key material (#3196). A failure at any step -- hardening, a write that does
+    not land in full, or a close that cannot be trusted to have flushed --
+    unlinks the file and raises, because a file we cannot protect or cannot
+    trust is worse than no file. By then the key already exists on the VPS, so
+    `mint` names it in the error.
     """
     path = Path(path)
     try:
@@ -222,19 +224,40 @@ def write_owner_only(path: Path, key: str) -> None:
     except FileExistsError as exc:
         raise AuthKeyRefused(f"refusing to overwrite: {path} already exists") from exc
     undelivered = True
+    failure: OSError | subprocess.SubprocessError | None = None
     try:
         _restrict_to_owner(path)
-        os.write(fd, key.encode("utf-8"))
+        pending = memoryview(key.encode("utf-8"))
+        while pending:
+            written = os.write(fd, pending)
+            if written <= 0:
+                raise OSError(f"short write: {len(pending)} of the key's bytes were not accepted")
+            pending = pending[written:]
         undelivered = False
     except (OSError, subprocess.SubprocessError) as exc:
-        raise MintUnavailableError(
-            f"could not deliver the key to {path} (owner-only hardening or write failed); the file was removed"
-        ) from exc
+        failure = exc
     finally:
-        # Close first: Windows refuses to unlink a file it still holds open.
-        os.close(fd)
+        # Close before unlinking: Windows refuses to unlink a file it still
+        # holds open. A close that fails cannot be trusted to have flushed the
+        # key, so it is a delivery failure too, and it must not swallow the
+        # original error nor skip the unlink.
+        try:
+            os.close(fd)
+        except OSError as exc:
+            undelivered = True
+            failure = failure or exc
         if undelivered:
-            path.unlink(missing_ok=True)
+            try:
+                path.unlink(missing_ok=True)
+            except OSError as exc:
+                raise MintUnavailableError(
+                    f"could not deliver the key to {path} and could not remove it: "
+                    f"{path} still holds it and must be deleted by hand"
+                ) from exc
+    if failure is not None:
+        raise MintUnavailableError(
+            f"could not deliver the key to {path} (owner-only hardening, write or close failed); the file was removed"
+        ) from failure
 
 
 def default_ssh_target() -> str:
