@@ -9,11 +9,13 @@ A reusable key is a standing invitation (three were found live on 2026-08-23),
 so this module never passes `--reusable`.
 
 Delivery posture: the key material is written once to an owner-only file and
-is the one value this module never prints, logs, or returns. Everything it
-reports -- the returned summary, exception text, failure diagnostics -- names
-the key's id, never its material. Failure messages about unparseable headscale
-output may list field NAMES, never values, because exception text lands in
-logs.
+is the one value this module never prints, logs, or returns. The file is
+created empty and hardened before the material is written, and a delivery that
+cannot be hardened or written is unlinked rather than left behind (#3196).
+Everything it reports -- the returned summary, exception text, failure
+diagnostics -- names the key's id, never its material. Failure messages about
+unparseable headscale output may list field NAMES, never values, because
+exception text lands in logs.
 
 Transport follows `secret_expiry`'s pattern: `ssh ... docker exec <container>
 headscale ...` with BatchMode, and guards where the remote string is built
@@ -185,24 +187,13 @@ def parse_create_output(stdout: str) -> tuple[str, str]:
     return key, str(obj.get("id", ""))
 
 
-def write_owner_only(path: Path, key: str) -> None:
-    """Write the key to a new file readable only by its owner. Never overwrites.
+def _restrict_to_owner(path: Path) -> None:
+    """Make an existing file readable only by its owner.
 
-    POSIX: O_EXCL create at 0o600, then an explicit chmod so the mode does not
-    depend on the caller's umask. Windows: mode bits are meaningless, so the
-    ACL is rewritten (inheritance removed, only the current user granted) after
-    creation -- a short create-to-ACL window that is documented rather than
-    hidden.
+    Windows mode bits are meaningless, so the ACL is rewritten: inheritance
+    removed, only the current user granted. POSIX uses an explicit chmod so the
+    mode does not depend on the caller's umask.
     """
-    path = Path(path)
-    try:
-        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    except FileExistsError as exc:
-        raise AuthKeyRefused(f"refusing to overwrite: {path} already exists") from exc
-    try:
-        os.write(fd, key.encode("utf-8"))
-    finally:
-        os.close(fd)
     if os.name == "nt":
         subprocess.run(
             ["icacls", str(path), "/inheritance:r", "/grant:r", f"{os.environ.get('USERNAME', '')}:F"],
@@ -214,6 +205,59 @@ def write_owner_only(path: Path, key: str) -> None:
         )
     else:
         os.chmod(path, 0o600)
+
+
+def write_owner_only(path: Path, key: str) -> None:
+    """Write the key to a new file readable only by its owner. Never overwrites.
+
+    The file is created empty, hardened, and only then given the key: an empty
+    file has nothing to leak, so the create-to-hardening window cannot expose
+    key material (#3196). A failure at any step -- hardening, a write that does
+    not land in full, or a close that cannot be trusted to have flushed --
+    unlinks the file and raises, because a file we cannot protect or cannot
+    trust is worse than no file. By then the key already exists on the VPS, so
+    `mint` names it in the error.
+    """
+    path = Path(path)
+    try:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError as exc:
+        raise AuthKeyRefused(f"refusing to overwrite: {path} already exists") from exc
+    undelivered = True
+    failure: OSError | subprocess.SubprocessError | None = None
+    try:
+        _restrict_to_owner(path)
+        pending = memoryview(key.encode("utf-8"))
+        while pending:
+            written = os.write(fd, pending)
+            if written <= 0:
+                raise OSError(f"short write: {len(pending)} of the key's bytes were not accepted")
+            pending = pending[written:]
+        undelivered = False
+    except (OSError, subprocess.SubprocessError) as exc:
+        failure = exc
+    finally:
+        # Close before unlinking: Windows refuses to unlink a file it still
+        # holds open. A close that fails cannot be trusted to have flushed the
+        # key, so it is a delivery failure too, and it must not swallow the
+        # original error nor skip the unlink.
+        try:
+            os.close(fd)
+        except OSError as exc:
+            undelivered = True
+            failure = failure or exc
+        if undelivered:
+            try:
+                path.unlink(missing_ok=True)
+            except OSError as exc:
+                raise MintUnavailableError(
+                    f"could not deliver the key to {path} and could not remove it: "
+                    f"{path} still holds it and must be deleted by hand"
+                ) from exc
+    if failure is not None:
+        raise MintUnavailableError(
+            f"could not deliver the key to {path} (owner-only hardening, write or close failed); the file was removed"
+        ) from failure
 
 
 def default_ssh_target() -> str:
@@ -284,5 +328,12 @@ def mint(
     if create.returncode != 0:
         raise MintUnavailableError(f"could not mint pre-auth key on {ssh_target}: {create.stderr.strip()}")
     key, key_id = parse_create_output(create.stdout)
-    write_owner_only(Path(out_path), key)
+    try:
+        write_owner_only(Path(out_path), key)
+    except MintUnavailableError as exc:
+        # The key exists on the VPS whatever happened to the file. Naming it is
+        # the only way the operator can expire it (#3196, and #3198's shape).
+        raise MintUnavailableError(
+            f"{exc}; key {key_id or '<id unreported>'} was already created on the VPS and must be expired"
+        ) from exc
     return MintedKey(key_id=key_id, out_path=str(out_path), role=role, tag=tag, expiration=expiration)

@@ -4,6 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 725 | [A secret written before its permissions land is a secret on disk, and a failed hardening leaves it there](lesson-725-a-secret-written-before-its-permissions-land-is-a-secret-on-disk.md) | 2026-11-07 |
 | 724 | [A fail-closed parse after a successful mutation reports the opposite of what happened](lesson-724-a-fail-closed-parse-after-a-successful-mutation-reports-the-opposite.md) | 2026-11-07 |
 | 694 | [A connected socket is not a server that can hear you](lesson-694-a-connected-socket-is-not-a-server-that-can-hear-you.md) | 2026-11-02 |
 | 679 | [A test that walks a directory reads what this machine left there](lesson-679-a-test-that-walks-a-directory-reads-what-this-machine-left-there.md) | 2026-10-30 |
