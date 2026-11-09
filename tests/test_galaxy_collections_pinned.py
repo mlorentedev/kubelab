@@ -96,6 +96,51 @@ def test_a_listing_that_fails_is_an_error_not_a_pass(monkeypatch: pytest.MonkeyP
         provision_freshness.collections_off_declaration(DECLARED)
 
 
+def _galaxy_stdout(monkeypatch: pytest.MonkeyPatch, stdout: str) -> None:
+    def fake(argv: list[str], **_kwargs: Any) -> SimpleNamespace:
+        assert argv[:3] == ["ansible-galaxy", "collection", "list"]
+        return SimpleNamespace(returncode=0, stdout=stdout, stderr="")
+
+    monkeypatch.setattr(provision_freshness.subprocess, "run", fake)
+
+
+@pytest.mark.parametrize(
+    ("stdout", "why"),
+    [
+        ("not json at all", "the listing is not JSON"),
+        ('["a list"]', "the listing is not a mapping"),
+        ('{"/c": "not a mapping"}', "a search path maps to something other than a mapping"),
+        ('{"/c": {"ansible.posix": "2.2.2"}}', "a collection maps to something other than a mapping"),
+    ],
+)
+def test_a_listing_it_cannot_read_is_a_refusal_not_a_crash(
+    monkeypatch: pytest.MonkeyPatch, stdout: str, why: str
+) -> None:
+    """`ansible-galaxy` output is parsed on the same path that renders a run.
+
+    A `JSONDecodeError` or an `AttributeError` here escaped as a traceback out of
+    both `make deploy` and `toolkit infra ansible doctor`, which is a crash where
+    the contract is "refuse and say why" -- and it left `FORCE=1` unreachable.
+    """
+    _galaxy_stdout(monkeypatch, stdout)
+
+    with pytest.raises(provision_freshness.FreshnessError, match="ansible-galaxy"):
+        provision_freshness.collections_off_declaration(DECLARED)
+
+
+def test_a_missing_ansible_galaxy_is_a_refusal_not_a_crash(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`ansible-playbook` on PATH does not imply `ansible-galaxy` is, and the
+    doctor checks the former before reaching this call."""
+
+    def fake(argv: list[str], **_kwargs: Any) -> SimpleNamespace:
+        raise FileNotFoundError(2, "No such file or directory", "ansible-galaxy")
+
+    monkeypatch.setattr(provision_freshness.subprocess, "run", fake)
+
+    with pytest.raises(provision_freshness.FreshnessError, match="ansible-galaxy"):
+        provision_freshness.collections_off_declaration(DECLARED)
+
+
 def test_the_declaration_read_is_the_repository_file() -> None:
     declared = provision_freshness.declared_collections(REPO)
     assert declared == {c["name"]: str(c["version"]) for c in _declared()}

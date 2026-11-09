@@ -221,6 +221,19 @@ def test_an_unreadable_galaxy_fails_instead_of_raising(monkeypatch):
     assert doctor.REQUIREMENTS in check.fix
 
 
+def test_a_galaxy_listing_it_cannot_read_is_a_failed_check_not_a_traceback(monkeypatch):
+    """Core passing does not imply the listing is readable: `ansible-galaxy` can be
+    absent or answer with something that is not the JSON the parse expects."""
+
+    def explode(_declared):
+        raise doctor.FreshnessError("ansible-galaxy collection list is not JSON")
+
+    monkeypatch.setattr(doctor, "collections_off_declaration", explode)
+    check = doctor._check_collections(REPO, _core())
+    assert not check.ok
+    assert "not JSON" in check.detail
+
+
 # --- check 4: the static inventory ----------------------------------------
 
 

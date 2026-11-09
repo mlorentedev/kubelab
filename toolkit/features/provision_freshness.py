@@ -123,18 +123,38 @@ def collections_off_declaration(declared: dict[str, str]) -> list[str]:
     collection list` walks its search paths as a set, so its output cannot say
     which copy wins, and a second copy is a stale version waiting for the
     search path to change.
+
+    Like `declared_collections`, every way the listing can be unreadable raises
+    `FreshnessError`: both callers treat that type as "refuse and say why", so a
+    bare `FileNotFoundError` or `JSONDecodeError` is a traceback where the
+    contract is a refusal -- and it takes `FORCE=1` with it.
     """
-    done = subprocess.run(  # noqa: S603 - fixed argv, no shell
-        ["ansible-galaxy", "collection", "list", "--format", "json"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    try:
+        done = subprocess.run(  # noqa: S603 - fixed argv, no shell
+            ["ansible-galaxy", "collection", "list", "--format", "json"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError as exc:
+        # `ansible-playbook` on PATH does not imply this one is, and the doctor
+        # checks only the former before it reaches this call.
+        raise FreshnessError(f"ansible-galaxy cannot be run: {exc.strerror or exc}") from exc
     if done.returncode != 0:
         raise FreshnessError(f"ansible-galaxy collection list: {done.stderr.strip() or done.stdout.strip()}")
+    try:
+        listed = json.loads(done.stdout or "{}")
+    except ValueError as exc:
+        raise FreshnessError(f"ansible-galaxy collection list is not JSON: {exc}") from exc
+    if not isinstance(listed, dict):
+        raise FreshnessError(f"ansible-galaxy collection list is a {type(listed).__name__}, not a mapping")
     held: dict[str, dict[str, list[str]]] = {}  # name -> version -> the paths holding it
-    for path, collections in json.loads(done.stdout or "{}").items():
+    for path, collections in listed.items():
+        if not isinstance(collections, dict):
+            raise FreshnessError(f"ansible-galaxy collection list: {path!r} maps to a {type(collections).__name__}")
         for name, meta in collections.items():
+            if not isinstance(meta, dict):
+                raise FreshnessError(f"ansible-galaxy collection list: {name!r} maps to a {type(meta).__name__}")
             held.setdefault(name, {}).setdefault(str(meta.get("version")), []).append(path)
     off = []
     for name, version in sorted(declared.items()):
