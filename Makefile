@@ -1095,7 +1095,11 @@ registry-prune: ## Prune stale sha-* image tags now, off the weekly schedule (DR
 # check-ansible first: `toolkit infra ansible run` shells out to ansible-playbook,
 # so a controller that cannot run it fails here with the reason, not three roles
 # deep with a role-parse error that reads as a broken playbook (TOOL-131, #3202).
-provision: check-ansible
+# Conditional on the same variable the usage guard below tests, because a
+# prerequisite runs BEFORE any recipe line: an unconditional `check-ansible`
+# answers `make provision` -- a request for the usage text -- with a doctor
+# report about a command the caller never asked to run.
+provision: $(if $(NODE),check-ansible,)
 	@test -n "$(NODE)" || (echo "Usage: make provision NODE=<x, for infra/ansible/playbooks/provision-<x>.yml> [ENV=staging|prod|hub] [BOOTSTRAP=1] [TRANSPORT=bastion] [CHECK=1] [ASK_PASS=1] [TAGS=tag1,tag2] [EXTRA='k=v k2=v2'] [FORCE=1]" && exit 1)
 	$(eval _ENV := $(or $(filter staging prod hub,$(ENV)),staging))
 	$(eval _K := $(if $(ASK_PASS),-K,))
@@ -1243,8 +1247,10 @@ benchmark-disk:
 	@$(TOOLKIT) infra ansible run -p benchmark-disk -e $(_ENV) -l $(NODE) $(_CHECK) $(_EXTRA)
 
 .PHONY: deploy
-# check-ansible first, for the reason on `provision` above.
-deploy: check-ansible
+# check-ansible first, for the reason on `provision` above -- and conditional on
+# both variables the two usage guards below test, for the same reason: the
+# doctor must not answer a call that names neither a target nor an environment.
+deploy: $(if $(and $(TARGET),$(ENV)),check-ansible,)
 	@test -n "$(TARGET)" || (echo "Usage: make deploy TARGET=vps|dns|k3s|harden-nodes ENV=staging|prod [CHECK=1] [TAGS=tag1,tag2] [FORCE=1]" && exit 1)
 	@test -n "$(filter $(ENV),staging prod)" || (echo "Usage: make deploy TARGET=vps|dns|k3s|harden-nodes ENV=staging|prod [CHECK=1] [TAGS=tag1,tag2] [FORCE=1]" && exit 1)
 	$(eval _CHECK := $(if $(CHECK),--check,))

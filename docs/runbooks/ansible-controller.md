@@ -163,6 +163,16 @@ later.
 It does not manage interpreters: if `python3` is below the floor that
 `pyproject.toml` declares, it says so and stops rather than installing one.
 
+**`--check` ends by running the doctor, and that is the point.** Whether a host
+can be a controller is not answered by `command -v`: a machine with `python3`,
+`make` and `poetry` and no `ansible-core` in the venv used to reach
+`0 check(s) failed` and be told it could be a controller. So the last step asks
+the only authority — `make check-ansible`, which reads the venv's
+`ansible-core`, `ansible.cfg` and the collection pins against
+`requirements.yml`. The doctor reports and installs nothing, so the mode stays a
+dry run. When it cannot be asked (`make` unusable, or no venv yet) the line says
+`ansible-core is unverified` instead of assuming either way.
+
 **Verified in WSL 2026-11-09** — `--check` on a host that has none of it. It
 reports, installs nothing, and exits 1:
 
@@ -179,12 +189,42 @@ Poetry 2.5.1
          would install: poetry 2.5.1
 
 ansible-core and the collections
-         --check: not running 'make setup-ansible'
-         that target installs ansible-core into the venv, the collection pins, and
-         then runs the doctor — the only authority on whether this machine works
+         --check: installs nothing; 'make setup-ansible' is what creates the venv
+         ansible-core is unverified: the doctor runs through make, unusable above
 
 [ERROR] 2 check(s) failed
 ```
+
+And on the host that is the reason for the doctor call — every prerequisite
+present, `ansible-core` missing. Driven in WSL with stub `python3`/`make`/
+`poetry` on `PATH` (`$STUB` is the stub directory; the bare `3.12.3` is the
+stub's own stdout, the version gate prints nothing), the doctor's refusal
+reaches the exit status and the verdict is withheld:
+
+```
+python3 (>= 3.12, per pyproject.toml)
+3.12.3
+  [ok]   python3 3.12.3 ($STUB/python3)
+
+GNU make
+  [ok]   GNU Make 4.3
+
+Poetry 2.5.1
+  [ok]   poetry 2.5.1 ($STUB/poetry)
+
+ansible-core and the collections
+         --check: installs nothing; 'make setup-ansible' is what creates the venv
+         running 'make check-ansible' (read-only: it reports, it does not install)
+  [FAIL] ansible-core is not importable from the venv
+  [FAIL] the doctor refused this machine; the output above names the repair
+         the doctor is the only authority on this question, so --check does not restate it
+
+[ERROR] 1 check(s) failed
+```
+
+The same stubs with `make check-ansible` exiting 0 give `[ok] the doctor
+passed: ansible-core, ansible.cfg and the collection pins agree` and exit 0 —
+so the mode is a real gate in both directions, not a step that always reports.
 
 **Not yet measured**: the install path itself (`apt-get`, the Poetry installer,
 then `make setup-ansible`), because it writes to the host and that window has

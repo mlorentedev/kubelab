@@ -195,9 +195,26 @@ fi
 
 step "ansible-core and the collections"
 if [ "$CHECK_ONLY" -eq 1 ]; then
-  note "--check: not running 'make setup-ansible'"
-  note "that target installs ansible-core into the venv, the collection pins, and"
-  note "then runs the doctor — the only authority on whether this machine works"
+  # The ansible question has an authority and it is the doctor: it reads the
+  # venv's ansible-core, ansible.cfg and the collection pins against
+  # requirements.yml. Answering it from `command -v` alone is what let a host
+  # with python3, make and poetry and no ansible-core reach FAILED=0 and be told
+  # it could be a controller.
+  note "--check: installs nothing; 'make setup-ansible' is what creates the venv"
+  if ! have_gnu_make; then
+    note "ansible-core is unverified: the doctor runs through make, unusable above"
+  elif ! poetry run toolkit version >/dev/null 2>&1; then
+    bad "the project venv is not installed, so ansible-core cannot be verified"
+    note "make setup-ansible runs 'poetry install --with ansible' first"
+  else
+    note "running 'make check-ansible' (read-only: it reports, it does not install)"
+    if make check-ansible; then
+      ok "the doctor passed: ansible-core, ansible.cfg and the collection pins agree"
+    else
+      bad "the doctor refused this machine; the output above names the repair"
+      note "the doctor is the only authority on this question, so --check does not restate it"
+    fi
+  fi
 else
   if [ "$FAILED" -ne 0 ]; then
     printf '\n[ERROR] %d prerequisite(s) above are unresolved; not handing off to make\n' "$FAILED" >&2

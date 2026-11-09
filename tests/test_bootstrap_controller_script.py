@@ -147,9 +147,64 @@ def test_check_mode_reports_and_installs_nothing():
     machine that can be a controller and one that cannot."""
     result = _run("--check")
     combined = result.stdout + result.stderr
-    assert "--check: not running 'make setup-ansible'" in combined
+    assert "--check: installs nothing" in combined
     assert "installing " not in combined
     assert result.returncode in (0, 1)
+
+
+def test_check_mode_asks_the_doctor_instead_of_assuming():
+    """`--check` used to answer the ansible question from `command -v` alone, so
+    a host with python3, make and poetry and no ansible-core reached FAILED=0
+    and was told it could be a controller. The authority on that question is the
+    doctor, so the mode has to run it — and has to be able to fail on what it
+    says."""
+    lines = SCRIPT.read_text(encoding="utf-8").splitlines()
+    start = next((i for i, ln in enumerate(lines) if ln.strip() == "if make check-ansible; then"), None)
+    assert start is not None, (
+        "--check no longer runs the doctor, so the only remaining evidence about "
+        "ansible-core is the presence of its prerequisites"
+    )
+    block = [ln.strip() for ln in lines[start + 1 : start + 6]]
+    assert any(ln.startswith("ok ") for ln in block), "the doctor's pass is not reported"
+    assert any(ln.startswith("bad ") for ln in block), (
+        "--check runs the doctor but cannot fail on its verdict, which is the same false green one level down"
+    )
+
+
+def _stub(directory: Path, name: str, body: str) -> None:
+    path = directory / name
+    path.write_text(f"#!/bin/sh\n{body}", encoding="utf-8")
+    path.chmod(0o755)
+
+
+@_needs_bash
+@_posix
+def test_check_mode_refuses_a_host_without_ansible(tmp_path: Path):
+    """The case the red-team built: python3, GNU make and Poetry all present,
+    ansible-core absent. Every `command -v` the script consults says yes, so the
+    old `--check` printed the success verdict and exited 0 — on a host that
+    cannot run a single play."""
+    stub = tmp_path / "bin"
+    stub.mkdir()
+    _stub(stub, "python3", 'echo "3.12.3"\nexit 0\n')
+    _stub(
+        stub,
+        "make",
+        'case "$1" in\n  --version) echo "GNU Make 4.3" ;;\n'
+        '  check-ansible) echo "  [FAIL] ansible-core is not importable from the venv" >&2; exit 1 ;;\n'
+        "  *) exit 2 ;;\nesac\n",
+    )
+    _stub(
+        stub,
+        "poetry",
+        'case "$1" in\n  --version) echo "Poetry (version 2.5.1)" ;;\n  run) exit 0 ;;\n  *) exit 2 ;;\nesac\n',
+    )
+
+    result = _run("--check", path_prefix=stub)
+    combined = result.stdout + result.stderr
+    assert result.returncode == 1, combined
+    assert "the doctor refused this machine" in combined
+    assert "can be a controller" not in combined, "a host whose doctor refused was still told it can be a controller"
 
 
 @_needs_bash

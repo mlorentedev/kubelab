@@ -15,6 +15,7 @@ whole contract the doctor reads.
 from __future__ import annotations
 
 import ast
+import re
 import shlex
 import sys
 from pathlib import Path
@@ -62,6 +63,12 @@ def _spawned() -> list[list[str]]:
     the previous version of `test_the_doctor_never_shells_out_to_a_remote`
     asserted `"become" not in source` while the module never spawned anything,
     so it passed for the wrong reason and would have failed on prose.
+
+    It reads the literal argument only, so it is blind to two things on purpose:
+    an argv assembled at runtime is recorded as `<not a literal>` rather than
+    guessed at, and a binary a spawned process runs itself — `ansible-galaxy`
+    behind `ansible-playbook` — is not in this list at all. A test that needs
+    either has to assert on what the spawner is asked for, not on what runs.
     """
     tree = ast.parse(Path(doctor.__file__).read_text(encoding="utf-8"))
     argvs: list[list[str]] = []
@@ -379,17 +386,44 @@ def test_setup_ansible_ends_in_the_doctor_and_never_skips():
     assert "--with ansible" in body, "ansible-core must land in this project's venv, not a system one"
 
 
+def _guarded_vars(lines: list[str], target: str) -> list[str]:
+    """The variables a target's usage guards test, read from its first recipe lines."""
+    start = next(i for i, ln in enumerate(lines) if ln.startswith(f"{target}:"))
+    found: list[str] = []
+    for line in lines[start + 1 :]:
+        if not line.startswith("\t") or "Usage:" not in line:
+            break
+        found += re.findall(r"\$\(([A-Z][A-Z0-9_]*)\)", line)
+    return found
+
+
 @pytest.mark.parametrize("target", ["provision", "deploy"])
 def test_the_ansible_entry_points_run_the_doctor_first(target):
     """The gate belongs in front of the two targets that shell out to
     ansible-playbook, not only in the target a human is expected to remember.
     `make setup-ansible` teaches; `make provision` has to enforce."""
     makefile = (REPO / "Makefile").read_text(encoding="utf-8")
-    header = next(ln for ln in makefile.splitlines() if ln.startswith(f"{target}:"))
-    assert "check-ansible" in header.split(":", 1)[1], (
+    lines = makefile.splitlines()
+    deps = next(ln for ln in lines if ln.startswith(f"{target}:")).split(":", 1)[1]
+    assert "check-ansible" in deps, (
         f"`make {target}` no longer depends on check-ansible, so a seat that "
         "cannot run ansible-playbook fails deep inside a play instead"
     )
+    # A prerequisite runs BEFORE any recipe line. An unconditional one therefore
+    # makes the doctor answer a call the usage guard was about to reject, and it
+    # answers it with a report about a command the caller never asked to run.
+    assert deps.strip().startswith("$(if "), (
+        f"`make {target}` runs check-ansible unconditionally, so `make {target}` "
+        "with no arguments reports on the doctor instead of printing its usage"
+    )
+    guarded = _guarded_vars(lines, target)
+    assert guarded, f"`make {target}` no longer has a usage guard to key the prerequisite on"
+    for var in guarded:
+        assert f"$({var})" in deps, (
+            f"`make {target}` decides whether to run the doctor from a different "
+            f"variable than its usage guard tests ($({var})), so the two disagree "
+            "about when the call is a real one"
+        )
 
 
 def test_the_doctor_is_reachable_from_the_cli():

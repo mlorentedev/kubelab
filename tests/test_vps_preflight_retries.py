@@ -115,6 +115,16 @@ class TestCiRunsTheEffectTests:
         runs = [i for i, s in enumerate(steps) if Path(__file__).name in str(s.get("run", ""))]
         assert runs, "no CI step runs this file where Ansible is installed: its effect tests skip silently"
         assert all(i > install for i in runs), "the step runs before ansible-core is installed, so the tests skip"
+        # Order alone is satisfied by a step that runs the file and cannot fail,
+        # which is the same silent skip wearing a green check.
+        for i in runs:
+            step = steps[i]
+            assert step.get("continue-on-error") in (None, False), (
+                f"CI step {step.get('name')!r} runs this file but may fail: a red result is the point"
+            )
+            assert "||" not in str(step.get("run", "")), (
+                f"CI step {step.get('name')!r} runs this file behind an `||`, which turns its red into green"
+            )
 
 
 # --- the effect: run the real include against a stand-in ssh ---------------------------
