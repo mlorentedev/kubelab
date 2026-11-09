@@ -41,7 +41,15 @@ def test_a_lesson_early_in_a_large_index_is_found(tmp_path: Path) -> None:
     # What the script pipes is the index's link targets, not its rows.
     assert len("\n".join(names)) > 2 * PIPE_BUFFER
 
-    result = subprocess.run(["bash", str(tmp_path / "scripts/check-lessons.sh")], capture_output=True, text=True)
+    # `which`, not the bare name: CreateProcess searches System32 before PATH, so a bare
+    # "bash" is C:\Windows\System32\bash.exe (the WSL launcher) on a seat that has WSL —
+    # and that launcher drops every argument after the command and cannot open a C:/ path,
+    # so bash answered 127 for a file that was there (TOOL-132). `as_posix` because MSYS
+    # bash opens C:/x but not C:\x.
+    script = (tmp_path / "scripts/check-lessons.sh").as_posix()
+    result = subprocess.run(
+        [shutil.which("bash") or "bash", script], capture_output=True, text=True
+    )
 
     assert result.returncode == 0, result.stdout[-600:] + result.stderr[-600:]
     assert f"OK ({LESSONS} lessons)" in result.stdout
@@ -97,6 +105,26 @@ def test_no_repository_script_pipes_into_a_reader_that_stops_early() -> None:
         for number in _early_readers(text)
     ]
     assert not found, f"feed the reader a here-string or a file instead: {found}"
+
+
+def test_the_guard_spawns_no_process_per_lesson() -> None:
+    """An external command per lesson file is one fork per lesson: free on Linux, ~0.22s
+    each under MSYS (measured), so the pre-commit hook that runs this script read as a hung
+    commit on Windows (723 lessons, ~3 minutes, no output — TOOL-132). Both offenders were
+    of this shape: `$(basename "$f")` to strip the path, and `grep -qxF -- "$name" <<<
+    "$targets"` to test membership. The defect is invisible on the platform CI runs on, so
+    the assertion is on the source, not on a measurement."""
+    text = SCRIPT.read_text(encoding="utf-8")
+    # A variable naming the lesson being iterated...
+    per_lesson = re.compile(r"\$\{?(?:f|file|name|lesson)\b")
+    # ...fed to something that costs a process.
+    external = re.compile(r"basename|\$\(|-exec|\bgrep\b|\bsed\b|\bawk\b|\bwc\b")
+    offenders = [
+        f"scripts/check-lessons.sh:{number}"
+        for number, line in enumerate(text.splitlines(), 1)
+        if "-exec basename" in line or (per_lesson.search(line) and external.search(line))
+    ]
+    assert not offenders, f"answer it once for the directory instead: {offenders}"
 
 
 def test_the_guard_reads_every_spelling_of_a_reader_that_stops_early() -> None:

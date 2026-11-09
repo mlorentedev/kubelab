@@ -8,6 +8,11 @@
 # (docs/lessons/<category>/ with a per-category _index.md); both layouts are checked.
 # Portable: bash and zsh, GNU and BSD find (no -printf), filenames compared as literal
 # tokens (no regex built from a filename), NUL-separated so spaces cannot split them.
+# No process per file either: a `basename`, or a membership test, per lesson is ~723
+# forks on this tree, which Linux absorbs and MSYS does not (~0.22s each, measured), so
+# the pre-commit hook that runs this script read as a hung commit (TOOL-132, lesson-727).
+# Strip a path with parameter expansion, and test membership in the shell: a fork is
+# acceptable once per directory, never once per lesson.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 LESSONS_DIR="$ROOT/docs/lessons"
@@ -29,7 +34,8 @@ index_targets() {
 }
 
 # --- 1. duplicate numbers across the whole tree (a number is unique per repo) ---
-dupes="$(find "$LESSONS_DIR" -maxdepth 2 -type f -name 'lesson-[0-9]*.md' -exec basename {} \; \
+dupes="$(find "$LESSONS_DIR" -maxdepth 2 -type f -name 'lesson-[0-9]*.md' -print \
+  | sed 's#.*/##' \
   | grep -oE '^lesson-[0-9]+' | sort | uniq -d || true)"
 if [ -n "$dupes" ]; then
   echo "check-lessons: lesson numbers used more than once:"
@@ -45,15 +51,19 @@ while IFS= read -r -d '' dir; do
   count=0
   targets=""
   [ -f "$index" ] && targets="$(index_targets "$index")"
+  # The targets newline-delimited once, so the membership test below is a whole-line one.
+  haystack=$'\n'"$targets"$'\n'
   while IFS= read -r -d '' f; do
     count=$((count + 1))
-    name="$(basename "$f")"
+    name="${f##*/}"
     if [ -f "$index" ]; then
-      # Literal, whole-line comparison against the extracted targets: no regex is built
-      # from the filename, so '+', '(' or a space in a name cannot change the match.
-      # A here-string, not a pipe: `grep -q` exits at its first match, and a writer still
-      # feeding a large index takes SIGPIPE, which pipefail reports as no match (#2765).
-      grep -qxF -- "$name" <<< "$targets" \
+      # In the shell, not an external command per file: `grep -qxF` here was one fork per
+      # lesson, and a fork costs ~0.24s under MSYS (TOOL-132, lesson-727). The name is
+      # quoted, so it is a literal — no regex and no glob is built from a filename, so
+      # '+', '(' or a space cannot change the match — and the newline delimiters make it
+      # a whole-line match, which is what a substring test would otherwise lose. No pipe
+      # feeds a reader that stops early, so the race #2765 fixed cannot come back.
+      [[ $haystack == *$'\n'"$name"$'\n'* ]] \
         || { echo "check-lessons: not in ${index#"$ROOT"/}: $name"; rc=1; }
     fi
   done < <(find "$dir" -maxdepth 1 -type f -name 'lesson-[0-9]*.md' -print0)
