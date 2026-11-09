@@ -2162,6 +2162,11 @@ def ansible_run(
 
     Loads SSOT config via include_vars at playbook level (ADR-020 Rev2).
     Inventory is generated from common.yaml networking.* section.
+
+    --require-fresh carries two guards with different scopes. The checkout guard
+    is skipped under --check, because a dry run is still a valid pre-flight of a
+    branch. The Galaxy guard is NOT, because it describes the controller rather
+    than the checkout and a dry run repairs neither.
     """
     logger.section(f"Ansible Run — {playbook} ({env})")
 
@@ -2173,8 +2178,16 @@ def ansible_run(
         logger.error(f"Playbook not found: {playbook_path}")
         raise typer.Exit(1) from None
 
-    if require_fresh and not check:
-        _refuse_if_behind_master(ansible_dir, force=force)
+    if require_fresh:
+        # The two guards on this flag are about different things, so --check
+        # exempts one and not the other. Freshness is about what THIS CHECKOUT
+        # renders, and a dry run is the operator's normal pre-flight, so it stays
+        # exempt. Collections are about what the CONTROLLER has installed, and a
+        # dry run installs nothing: exempting it made the one run an operator does
+        # before touching a host the one run that could not see it was about to
+        # run against collections off their pins (TOOL-131 AC5, VPN-ACL-015 AC5).
+        if not check:
+            _refuse_if_behind_master(ansible_dir, force=force)
         _refuse_if_collections_off_declaration(ansible_dir, force=force)
 
     if not skip_generate:

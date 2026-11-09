@@ -337,8 +337,38 @@ def test_a_declaration_nothing_can_read_names_the_file_not_the_tool(
     assert "ansible-galaxy" not in out, "the tool is not what repairs a declaration"
 
 
-def test_a_dry_run_is_not_refused_for_its_collections(calls: list, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_dry_run_is_refused_for_its_collections(
+    calls: list, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A dry run repairs no controller, so it is held to the collections all the same.
+
+    This test used to assert the opposite, and the assertion WAS the defect: it
+    made the one run an operator does before touching a host the one run that
+    could not see the host's roles would execute against collections off their
+    pins. The checkout guard keeps its exemption (above); this one does not.
+    """
     _behind(monkeypatch, [])
     _collections_off(monkeypatch, STALE_POSIX)
-    _run(check=True)
-    assert [name for name, _ in calls] == ["generate", "ansible-playbook"]
+    with pytest.raises(typer.Exit) as exited:
+        _run(check=True)
+    assert exited.value.exit_code == 1
+    assert calls == [], "the inventory and the playbook are not reached"
+    assert "ansible.posix" in _out(capsys), "the refusal names the collection, not just the flag"
+
+
+def test_a_dry_run_that_cannot_list_its_collections_refuses(calls: list, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The case the exemption actually hid: a controller with no ansible installed.
+
+    A dry run from such a controller used to proceed, which is exactly what the
+    runbook's `--check` contract promises it will not do.
+    """
+
+    def broken(_declared: dict) -> list[str]:
+        raise provision_freshness.FreshnessError("ansible-galaxy: command not found")
+
+    _behind(monkeypatch, [])
+    monkeypatch.setattr(provision_freshness, "collections_off_declaration", broken)
+    with pytest.raises(typer.Exit) as exited:
+        _run(check=True)
+    assert exited.value.exit_code == 1
+    assert calls == []
