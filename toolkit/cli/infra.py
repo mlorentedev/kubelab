@@ -2235,6 +2235,40 @@ def _restore_mesh_inventory(env: str) -> bool:
     return True
 
 
+@ansible_app.command("doctor")
+def ansible_doctor() -> None:
+    """Diagnose the Ansible controller this checkout needs — offline, no host contact.
+
+    Four local checks, no network and no SSH, so this is safe to run before a
+    host window is agreed: `ansible-playbook` resolves, the Galaxy collections
+    are the ones `requirements.yml` pins, the config file in effect is this
+    repo's, and the static inventory parses.
+
+    `make setup-ansible` ends by running this, which is what turns that target
+    from a report into a gate — it printed `skipping` and exited 0 on a machine
+    that could not run Ansible at all (TOOL-131, #3202).
+    """
+    from toolkit.features.ansible_doctor import diagnose
+
+    logger.section("Ansible Controller")
+
+    checks = diagnose(settings.project_root)
+    for check in checks:
+        if check.ok:
+            logger.success(f"{check.name}: {check.detail}")
+        else:
+            logger.error(f"{check.name}: {check.detail}")
+            if check.fix:
+                logger.info(f"    FIX: {check.fix}")
+
+    failed = [check for check in checks if not check.ok]
+    if failed:
+        logger.error(f"{len(failed)} of {len(checks)} checks failed")
+        raise typer.Exit(1) from None
+
+    logger.success(f"All {len(checks)} checks passed — this machine can run Ansible")
+
+
 @ansible_app.command("syntax-check")
 def ansible_syntax_check(
     playbook: Annotated[

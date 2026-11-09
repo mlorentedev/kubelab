@@ -192,14 +192,23 @@ setup-certs:
 	@$(TOOLKIT) tools certs generate --env dev
 
 .PHONY: setup-ansible
+# The controller Ansible needs must be in THIS project's venv: `toolkit infra
+# ansible run` shells out to `ansible-playbook`, and `poetry run toolkit` puts
+# `.venv/bin` on the PATH, so that is where it resolves from. A system-wide
+# ansible works until the venv's PATH wins or the two disagree on versions.
+#
+# It used to print `skipping` and exit 0 when ansible-galaxy was missing, which
+# made it the fix line that `collections_refusal_message()` prints while doing
+# nothing at all (TOOL-131, #3202). It now ends with `doctor`, which fails.
 setup-ansible:
-	@if command -v ansible-galaxy >/dev/null 2>&1; then \
-		echo "Installing Ansible Galaxy collections..."; \
-		ansible-galaxy collection install -r infra/ansible/requirements.yml && \
-		echo "✓ Ansible collections installed"; \
-	else \
-		echo "⚠ ansible-galaxy not found — skipping Ansible setup (install with: pip install ansible-core)"; \
-	fi
+	@$(POETRY) install --with ansible --no-interaction --no-ansi
+	@$(POETRY) run ansible-galaxy collection install -r infra/ansible/requirements.yml
+	@$(TOOLKIT) infra ansible doctor
+
+.PHONY: check-ansible
+# The doctor alone: no install, no host contact, safe to run anywhere.
+check-ansible:
+	@$(TOOLKIT) infra ansible doctor
 
 .PHONY: regen-certs
 regen-certs:
@@ -1083,7 +1092,10 @@ registry-prune: ## Prune stale sha-* image tags now, off the weekly schedule (DR
 #   make backup ENV=prod
 
 .PHONY: provision
-provision:
+# check-ansible first: `toolkit infra ansible run` shells out to ansible-playbook,
+# so a controller that cannot run it fails here with the reason, not three roles
+# deep with a role-parse error that reads as a broken playbook (TOOL-131, #3202).
+provision: check-ansible
 	@test -n "$(NODE)" || (echo "Usage: make provision NODE=<x, for infra/ansible/playbooks/provision-<x>.yml> [ENV=staging|prod|hub] [BOOTSTRAP=1] [TRANSPORT=bastion] [CHECK=1] [ASK_PASS=1] [TAGS=tag1,tag2] [EXTRA='k=v k2=v2'] [FORCE=1]" && exit 1)
 	$(eval _ENV := $(or $(filter staging prod hub,$(ENV)),staging))
 	$(eval _K := $(if $(ASK_PASS),-K,))
@@ -1231,7 +1243,8 @@ benchmark-disk:
 	@$(TOOLKIT) infra ansible run -p benchmark-disk -e $(_ENV) -l $(NODE) $(_CHECK) $(_EXTRA)
 
 .PHONY: deploy
-deploy:
+# check-ansible first, for the reason on `provision` above.
+deploy: check-ansible
 	@test -n "$(TARGET)" || (echo "Usage: make deploy TARGET=vps|dns|k3s|harden-nodes ENV=staging|prod [CHECK=1] [TAGS=tag1,tag2] [FORCE=1]" && exit 1)
 	@test -n "$(filter $(ENV),staging prod)" || (echo "Usage: make deploy TARGET=vps|dns|k3s|harden-nodes ENV=staging|prod [CHECK=1] [TAGS=tag1,tag2] [FORCE=1]" && exit 1)
 	$(eval _CHECK := $(if $(CHECK),--check,))
