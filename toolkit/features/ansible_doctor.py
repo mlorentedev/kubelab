@@ -51,6 +51,8 @@ import yaml
 
 from toolkit.features import command
 from toolkit.features.provision_freshness import (
+    COLLECTIONS_FIX,
+    COLLECTIONS_LISTING_FIX,
     REQUIREMENTS,
     FreshnessError,
     collections_off_declaration,
@@ -167,13 +169,14 @@ def _check_collections(root: Path, core: Check) -> Check:
     try:
         off = collections_off_declaration(declared)
     except FreshnessError as exc:
-        return Check(name="galaxy collections", ok=False, detail=str(exc), fix=core.fix)
+        # Nothing could be compared, so `make setup-ansible` is a guess, not the repair.
+        return Check(name="galaxy collections", ok=False, detail=str(exc), fix=COLLECTIONS_LISTING_FIX)
     if off:
         return Check(
             name="galaxy collections",
             ok=False,
             detail=f"not what {REQUIREMENTS} pins: {'; '.join(off)}",
-            fix=core.fix,
+            fix=COLLECTIONS_FIX,
         )
     return Check(
         name="galaxy collections",
@@ -193,8 +196,11 @@ def _check_config_file(ansible_dir: Path, core: Check, probe: Probe) -> Check:
         )
     found = _CONFIG_LINE.search(probe.output)
     # `config file = None` is what Ansible prints when it found nothing, and the
-    # default is the one that reports success having matched no host.
-    in_effect = Path(found.group(1).strip()).resolve() if found else None
+    # default is the one that reports success having matched no host. `None` is a
+    # word here, not an absence, so `Path("None").resolve()` would report a real
+    # path and the `or 'nothing'` fallback below could never be reached.
+    named = found.group(1).strip() if found else ""
+    in_effect = (ansible_dir / named).resolve() if named and named.lower() != "none" else None
     if in_effect != expected:
         return Check(
             name="ansible.cfg",
@@ -224,11 +230,14 @@ def _check_inventory(root: Path) -> Check:
         return Check(name="static inventory", ok=False, detail=f"{STATIC_INVENTORY} is missing", fix="restore it")
     try:
         data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    except yaml.YAMLError as exc:
+    except (OSError, yaml.YAMLError) as exc:
+        # `read_text` fails on a directory, a permission bit or a broken symlink,
+        # and `diagnose()` has to answer for all of them: a traceback here is a
+        # crash in the tool that exists to say what is wrong.
         return Check(
             name="static inventory",
             ok=False,
-            detail=f"{STATIC_INVENTORY} is not YAML: {exc}",
+            detail=f"{STATIC_INVENTORY} cannot be read: {exc}",
             fix="fix the file",
         )
     hosts = _count_hosts(data.get("all") if isinstance(data, dict) else None)

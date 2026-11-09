@@ -2236,7 +2236,12 @@ def _restore_mesh_inventory(env: str) -> bool:
 
 
 @ansible_app.command("doctor")
-def ansible_doctor() -> None:
+def ansible_doctor(
+    root: Annotated[
+        Path | None,
+        typer.Option("--root", help="Check another checkout instead of this one"),
+    ] = None,
+) -> None:
     """Diagnose the Ansible controller this checkout needs — offline, no host contact.
 
     Four local checks, no network and no SSH, so this is safe to run before a
@@ -2247,12 +2252,15 @@ def ansible_doctor() -> None:
     `make setup-ansible` ends by running this, which is what turns that target
     from a report into a gate — it printed `skipping` and exited 0 on a machine
     that could not run Ansible at all (TOOL-131, #3202).
+
+    `--root` exists because the check that reports a missing checkout names it in
+    its own FIX line: a repair command that does not exist is worse than none.
     """
     from toolkit.features.ansible_doctor import diagnose
 
     logger.section("Ansible Controller")
 
-    checks = diagnose(settings.project_root)
+    checks = diagnose((root or settings.project_root).resolve())
     for check in checks:
         if check.ok:
             logger.success(f"{check.name}: {check.detail}")

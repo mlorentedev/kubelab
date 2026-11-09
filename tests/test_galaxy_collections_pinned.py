@@ -176,6 +176,23 @@ def test_a_declaration_it_cannot_read_is_a_refusal_not_a_crash(tmp_path: Path, c
         provision_freshness.declared_collections(tmp_path)
 
 
+def test_a_declaration_with_two_documents_says_so(tmp_path: Path) -> None:
+    """`safe_load` reads exactly one document, so a second `---` arrives as
+    `ComposerError` — not as a syntax error. Reporting it as "is not YAML" sends
+    the operator looking for a broken bracket in a file that is perfectly
+    well-formed, which is the same class of dead end as a fix naming a flag that
+    does not exist."""
+    path = tmp_path / provision_freshness.REQUIREMENTS
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        "collections:\n  - name: ansible.posix\n    version: 2.2.2\n---\ncollections: []\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(provision_freshness.FreshnessError, match="more than one YAML document"):
+        provision_freshness.declared_collections(tmp_path)
+
+
 def test_a_well_formed_declaration_still_reads(tmp_path: Path) -> None:
     """The guard must refuse the malformed shapes without refusing the good one:
     a gate that rejects everything is the fail-closed twin of one that accepts

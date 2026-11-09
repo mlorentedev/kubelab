@@ -28,6 +28,7 @@ import subprocess
 from pathlib import Path
 
 import yaml
+from yaml.composer import ComposerError
 
 #: What an Ansible run renders: the playbooks and roles, the values they read, and the code that
 #: turns the values into the inventory (a change to its host vars reaches a node the same way).
@@ -37,6 +38,21 @@ MASTER_REF = "origin/master"
 
 #: The Galaxy collections the roles call, each pinned to one version.
 REQUIREMENTS = "infra/ansible/requirements.yml"
+
+#: The one repair for a collection that is not at its pin. `collections_refusal_message` and the
+#: doctor both print it: a seat that reads either has to end up at the same command, or the two
+#: diagnoses disagree about what to do and one of them is a dead end (TOOL-131).
+COLLECTIONS_FIX = (
+    "make setup-ansible and run again. It installs into the user path, so a stale copy elsewhere "
+    "stays: the full `ansible` package bundles its own, so uninstall it and keep ansible-core."
+)
+
+#: A listing nothing can read is not a version problem -- there is no version to compare, so
+#: `make setup-ansible` is only a guess and the message must not claim it is the repair.
+COLLECTIONS_LISTING_FIX = (
+    "run `ansible-galaxy collection list --format json` and fix what it reports; if it fails to run "
+    "at all, `make setup-ansible` repairs the venv it comes from."
+)
 
 
 class FreshnessError(Exception):
@@ -95,6 +111,10 @@ def declared_collections(root: Path) -> dict[str, str]:
         raise FreshnessError(f"{REQUIREMENTS}: {exc.strerror or exc}") from exc
     try:
         data = yaml.safe_load(text) or {}
+    except ComposerError as exc:
+        # `safe_load` reads exactly one document, so a second `---` is not a syntax error.
+        # Reporting it as one sends the reader looking for a typo that is not there.
+        raise FreshnessError(f"{REQUIREMENTS} is more than one YAML document: {exc}") from exc
     except yaml.YAMLError as exc:
         raise FreshnessError(f"{REQUIREMENTS} is not YAML: {exc}") from exc
     if not isinstance(data, dict):
@@ -173,7 +193,6 @@ def collections_refusal_message(off: list[str]) -> str:
         f"{shown}\n"
         "WHY: the roles run whatever version the controller has, and a stale one keeps the bugs and "
         "security fixes the pin moved past (ANSIBLE-070, authorized_key on ansible.posix 2.1.0).\n"
-        "FIX: make setup-ansible and run again. It installs into the user path, so a stale copy elsewhere "
-        "stays: the full `ansible` package bundles its own, so uninstall it and keep ansible-core. "
+        f"FIX: {COLLECTIONS_FIX} "
         "FORCE=1 only if you mean to run with these versions."
     )

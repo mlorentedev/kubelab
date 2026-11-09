@@ -169,6 +169,30 @@ def test_ansible_reading_no_config_fails():
     assert "not in effect" in check.detail
 
 
+def test_the_word_none_is_not_a_path():
+    """`None` is a word in this banner, not an absence: `Path("None").resolve()`
+    is a perfectly real path, so the operator was told Ansible reads a config
+    file called `None` in whatever directory the doctor happened to run from."""
+    check = doctor._check_config_file(
+        ANSIBLE_DIR, _core(), doctor.Probe(output=_banner("None"), located=True, error="")
+    )
+    assert "reads nothing" in check.detail
+    assert "None" not in check.detail.split("reads nothing")[0]
+
+
+def test_a_relative_config_path_is_resolved_against_the_ansible_dir(tmp_path):
+    """Ansible can print the path it was given rather than the absolute one, so
+    resolving against the doctor's own cwd would report a file that is not the
+    one in effect — and the check would fail on a healthy controller."""
+    ansible_dir = tmp_path / "infra/ansible"
+    ansible_dir.mkdir(parents=True)
+    (ansible_dir / "ansible.cfg").write_text("[defaults]\n", encoding="utf-8")
+    check = doctor._check_config_file(
+        ansible_dir, _core(), doctor.Probe(output=_banner("ansible.cfg"), located=True, error="")
+    )
+    assert check.ok, check.detail
+
+
 def test_somebody_elses_config_fails(tmp_path):
     """The property is not "a config file exists" but "it is THIS repo's"."""
     other = tmp_path / "ansible.cfg"
@@ -206,6 +230,9 @@ def test_a_collection_off_the_pin_fails(monkeypatch):
     check = doctor._check_collections(REPO, _core())
     assert not check.ok
     assert "community.docker 5.3.9" in check.detail
+    # A failed check with no FIX line is a diagnosis that stops at the symptom,
+    # and `core.fix` is empty exactly when core passed -- which is this case.
+    assert doctor.SETUP_FIX in check.fix
 
 
 def test_an_unreadable_galaxy_fails_instead_of_raising(monkeypatch):
@@ -232,6 +259,19 @@ def test_a_galaxy_listing_it_cannot_read_is_a_failed_check_not_a_traceback(monke
     check = doctor._check_collections(REPO, _core())
     assert not check.ok
     assert "not JSON" in check.detail
+    # Nothing was compared, so the repair is the listing, not a reinstall.
+    assert "collection list" in check.fix
+    assert check.fix != doctor.COLLECTIONS_FIX
+
+
+def test_the_doctor_and_the_preflight_prescribe_the_same_repair():
+    """Two entry points diagnose the same drift, so they cannot prescribe two
+    different commands: whichever one the operator reads has to land them on the
+    same fix (TOOL-131 — the doctor's own FIX line named a flag that did not exist)."""
+    from toolkit.features import provision_freshness
+
+    assert doctor.COLLECTIONS_FIX is provision_freshness.COLLECTIONS_FIX
+    assert doctor.SETUP_FIX in provision_freshness.collections_refusal_message(["x 1.0 (declared 2.0)"])
 
 
 # --- check 4: the static inventory ----------------------------------------
@@ -272,6 +312,17 @@ def test_an_empty_inventory_fails(tmp_path):
     check = doctor._check_inventory(tmp_path)
     assert not check.ok
     assert "declares no host" in check.detail
+
+
+def test_an_inventory_that_cannot_be_read_is_a_check_not_a_traceback(tmp_path):
+    """A directory in the file's place, a permission bit, a broken symlink: none
+    of them raise `YAMLError`, so the guard has to be wider than the parser.
+    `diagnose()` promises four checks, not an exception."""
+    inventory = tmp_path / "infra/ansible/inventories/homelab.yml"
+    inventory.mkdir(parents=True)
+    check = doctor._check_inventory(tmp_path)
+    assert not check.ok
+    assert "cannot be read" in check.detail
 
 
 # --- the whole diagnosis ---------------------------------------------------
@@ -334,6 +385,21 @@ def test_the_doctor_is_reachable_from_the_cli():
     assert "doctor" in {c.name for c in infra.ansible_app.registered_commands}
 
 
+def test_the_flag_the_checkout_fix_names_is_one_the_command_accepts(tmp_path):
+    """The FIX line says `toolkit infra ansible doctor --root <path>`, and for a
+    while there was no `--root`: the repair named a command line Typer rejected
+    with "No such option", which is a dead end dressed as a fix. Invoke it rather
+    than read the signature — the flag is real only if the parser accepts it."""
+    from typer.testing import CliRunner
+
+    from toolkit.cli import infra
+
+    result = CliRunner().invoke(infra.app, ["ansible", "doctor", "--root", str(tmp_path)])
+    assert "No such option" not in result.output
+    assert result.exit_code == 1, "a root that is not a checkout cannot pass"
+    assert "checkout:" in result.output
+
+
 def test_the_doctor_only_spawns_the_local_version_probe():
     """It runs before a host window is agreed, so it must not be able to reach a
     node: the only command it may start is the local version probe.
@@ -345,10 +411,17 @@ def test_the_doctor_only_spawns_the_local_version_probe():
     assert _spawned() == [["ansible-playbook", "--version"]]
 
 
-@pytest.mark.parametrize("name", ["SETUP_FIX", "POSIX_FIX"])
+@pytest.mark.parametrize(
+    "name",
+    ["SETUP_FIX", "POSIX_FIX", "COLLECTIONS_FIX", "COLLECTIONS_LISTING_FIX"],
+)
 def test_every_fix_line_is_actionable(name):
     """A fix that says "install ansible" to a Windows seat is worse than none:
-    it is a loop. Both lines name a command or a platform, never a wish."""
+    it is a loop. Every line names a command or a platform, never a wish.
+
+    The two collection lines are parametrised here as well as shared with the
+    preflight: sharing the constant keeps the two messages identical, and this
+    keeps the shared text honest."""
     fix = getattr(doctor, name)
     assert fix
     assert any(token in fix for token in ("make ", "run this from", "WSL", "Linux"))
