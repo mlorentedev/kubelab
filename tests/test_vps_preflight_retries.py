@@ -96,11 +96,22 @@ class TestCiRunsTheEffectTests:
     def _steps(self) -> list[dict[str, Any]]:
         return yaml.safe_load(CI.read_text(encoding="utf-8"))["jobs"]["tests"]["steps"]
 
+    def _install_index(self, steps: list[dict[str, Any]]) -> int:
+        """The step that puts `ansible-playbook` on the PATH, whatever it is called.
+
+        `make setup-ansible` since TOOL-131 (#3202), `pip install ansible-core`
+        before it. Both shapes are accepted so this guard outlives the command it
+        currently names; what it may not do is stop finding one.
+        """
+        for i, step in enumerate(steps):
+            run = str(step.get("run", ""))
+            if "setup-ansible" in run or ("pip install" in run and "ansible-core" in run):
+                return i
+        raise AssertionError(f"no CI step installs Ansible, so the step below cannot be ordered after it: {steps}")
+
     def test_a_step_runs_this_file_after_ansible_is_installed(self) -> None:
         steps = self._steps()
-        install = next(
-            i for i, s in enumerate(steps) if "pip install" in str(s.get("run", "")) and "ansible-core" in str(s["run"])
-        )
+        install = self._install_index(steps)
         runs = [i for i, s in enumerate(steps) if Path(__file__).name in str(s.get("run", ""))]
         assert runs, "no CI step runs this file where Ansible is installed: its effect tests skip silently"
         assert all(i > install for i in runs), "the step runs before ansible-core is installed, so the tests skip"

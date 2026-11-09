@@ -202,8 +202,8 @@ setup-certs:
 # nothing at all (TOOL-131, #3202). It now ends with `doctor`, which fails.
 setup-ansible:
 	@$(POETRY) install --with ansible --no-interaction --no-ansi
-	@$(POETRY) run ansible-galaxy collection install -r infra/ansible/requirements.yml
-	@$(TOOLKIT) infra ansible doctor
+	@$(POETRY) run ansible-galaxy collection install -r infra/ansible/requirements.yml && \
+		$(TOOLKIT) infra ansible doctor
 
 .PHONY: check-ansible
 # The doctor alone: no install, no host contact, safe to run anywhere.

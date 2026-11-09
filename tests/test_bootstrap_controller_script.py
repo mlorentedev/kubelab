@@ -54,8 +54,7 @@ def test_poetry_pin_satisfies_the_lockfile():
 
     pinned = _pin("POETRY_VERSION")
     assert _major_minor(pinned) >= _major_minor(lock_version.group(1)), (
-        f"bootstrap-controller.sh pins Poetry {pinned}, but poetry.lock needs "
-        f">= {lock_version.group(1)}"
+        f"bootstrap-controller.sh pins Poetry {pinned}, but poetry.lock needs >= {lock_version.group(1)}"
     )
 
 
@@ -102,9 +101,7 @@ def test_the_runbook_points_at_the_script():
 _needs_bash = pytest.mark.skipif(shutil.which("bash") is None, reason="the script is bash")
 # These two assert behaviour of a POSIX host: on Windows the script refuses at
 # the uname guard before reaching either path, which is its own test below.
-_posix = pytest.mark.skipif(
-    sys.platform == "win32", reason="asserts the POSIX path; Windows stops at the uname guard"
-)
+_posix = pytest.mark.skipif(sys.platform == "win32", reason="asserts the POSIX path; Windows stops at the uname guard")
 
 
 def _run(*args: str, path_prefix: Path | None = None) -> subprocess.CompletedProcess[str]:
@@ -120,6 +117,7 @@ def _run(*args: str, path_prefix: Path | None = None) -> subprocess.CompletedPro
         cwd=REPO,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         env=env,
         timeout=120,
         check=False,

@@ -81,9 +81,39 @@ def refusal_message(behind: list[str]) -> str:
 
 
 def declared_collections(root: Path) -> dict[str, str]:
-    """The version `requirements.yml` pins for each collection."""
-    data = yaml.safe_load((root / REQUIREMENTS).read_text(encoding="utf-8")) or {}
-    return {str(c["name"]): str(c["version"]) for c in data.get("collections") or []}
+    """The version `requirements.yml` pins for each collection.
+
+    Every way the declaration can be unreadable raises `FreshnessError` instead of
+    the parser's or the mapping's own exception. Both callers already treat that
+    type as "refuse and say why" -- a bare `FileNotFoundError` or `KeyError` would
+    leave the preflight as a traceback and the doctor as a crash, which is the
+    difference between a refusal and a bug.
+    """
+    try:
+        text = (root / REQUIREMENTS).read_text(encoding="utf-8")
+    except OSError as exc:
+        raise FreshnessError(f"{REQUIREMENTS}: {exc.strerror or exc}") from exc
+    try:
+        data = yaml.safe_load(text) or {}
+    except yaml.YAMLError as exc:
+        raise FreshnessError(f"{REQUIREMENTS} is not YAML: {exc}") from exc
+    if not isinstance(data, dict):
+        raise FreshnessError(f"{REQUIREMENTS} is a {type(data).__name__}, not a mapping")
+    entries = data.get("collections")
+    # An absent or empty `collections` yields an empty declaration, and an empty
+    # declaration makes `collections_off_declaration` return nothing for any
+    # controller: the gate would pass vacuously, which is the fail-open this
+    # ticket exists for. Say so instead.
+    if not isinstance(entries, list) or not entries:
+        raise FreshnessError(
+            f"{REQUIREMENTS} declares no usable `collections` list ({entries!r}), so nothing is pinned"
+        )
+    declared: dict[str, str] = {}
+    for entry in entries:
+        if not isinstance(entry, dict) or "name" not in entry or "version" not in entry:
+            raise FreshnessError(f"{REQUIREMENTS}: {entry!r} is not a `name`/`version` mapping")
+        declared[str(entry["name"])] = str(entry["version"])
+    return declared
 
 
 def collections_off_declaration(declared: dict[str, str]) -> list[str]:

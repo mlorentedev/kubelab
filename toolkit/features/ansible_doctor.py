@@ -100,6 +100,10 @@ def _probe(ansible_dir: Path) -> Probe:
     exception, which is what lets this stay a diagnosis instead of a crash.
     """
     located = shutil.which("ansible-playbook") is not None
+    if not ansible_dir.is_dir():
+        # `cwd` is resolved before the shell starts, so a missing directory raises
+        # rather than answering non-zero. A diagnosis cannot be a traceback.
+        return Probe(output=None, located=located, error=f"{ansible_dir} is not a directory")
     done = command.run(
         "ansible-playbook --version",
         cwd=ansible_dir,
@@ -149,16 +153,21 @@ def _check_collections(root: Path, core: Check) -> Check:
             detail=f"cannot be read without a working `ansible-galaxy`; {REQUIREMENTS} is unverified",
             fix=core.fix,
         )
+    # Two different repairs: the declaration is unreadable (the file is wrong),
+    # or the installed collections are not what it pins (the install is stale).
     try:
         declared = declared_collections(root)
-        off = collections_off_declaration(declared)
     except FreshnessError as exc:
         return Check(
             name="galaxy collections",
             ok=False,
             detail=str(exc),
-            fix=core.fix,
+            fix=f"repair {REQUIREMENTS}: the run is held to it, so it has to be readable",
         )
+    try:
+        off = collections_off_declaration(declared)
+    except FreshnessError as exc:
+        return Check(name="galaxy collections", ok=False, detail=str(exc), fix=core.fix)
     if off:
         return Check(
             name="galaxy collections",
@@ -233,8 +242,29 @@ def _check_inventory(root: Path) -> Check:
     return Check(name="static inventory", ok=True, detail=f"{hosts} hosts under `all`")
 
 
+def _check_checkout(root: Path) -> Check | None:
+    """The precondition the other four read through: `root` has to be a checkout.
+
+    Without it `_probe` runs with a `cwd` that does not exist, which raises before
+    any diagnosis exists to report. Naming the precondition turns a crash into the
+    one thing the operator can act on.
+    """
+    ansible_dir = root / "infra" / "ansible"
+    if ansible_dir.is_dir():
+        return None
+    return Check(
+        name="checkout",
+        ok=False,
+        detail=f"{root} has no infra/ansible, so no check below can read anything",
+        fix="run this from a kubelab checkout: `toolkit infra ansible doctor --root <path>`",
+    )
+
+
 def diagnose(root: Path) -> list[Check]:
     """Every check, in the order a fix would be applied. Offline; no host contact."""
+    missing = _check_checkout(root)
+    if missing is not None:
+        return [missing]
     ansible_dir = root / "infra" / "ansible"
     probe = _probe(ansible_dir)
     core = _check_ansible_core(probe)

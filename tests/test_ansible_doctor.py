@@ -14,6 +14,8 @@ whole contract the doctor reads.
 
 from __future__ import annotations
 
+import ast
+import shlex
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -52,15 +54,34 @@ def _completed(returncode: int = 0, stdout: str = "", stderr: str = "") -> Simpl
     return SimpleNamespace(returncode=returncode, stdout=stdout, stderr=stderr)
 
 
-def _run_returning(*results: SimpleNamespace, seen: list[str] | None = None):
-    """Fake `command.run`: pops one canned result per invocation."""
+def _spawned() -> list[list[str]]:
+    """Every argv this module hands to a spawner, read from the AST.
 
-    def fake(cmd, **_kwargs):
-        if seen is not None:
-            seen.append(cmd)
-        return results[len(seen) - 1] if seen is not None else results[0]
-
-    return fake
+    A substring search over the source cannot tell a command from a comment, a
+    docstring or a test fixture name, and this module explains itself at length:
+    the previous version of `test_the_doctor_never_shells_out_to_a_remote`
+    asserted `"become" not in source` while the module never spawned anything,
+    so it passed for the wrong reason and would have failed on prose.
+    """
+    tree = ast.parse(Path(doctor.__file__).read_text(encoding="utf-8"))
+    argvs: list[list[str]] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not node.args:
+            continue
+        func = node.func
+        owner = getattr(func, "value", None)
+        if not isinstance(func, ast.Attribute) or not isinstance(owner, ast.Name):
+            continue
+        if owner.id not in {"command", "subprocess"}:
+            continue
+        literal = node.args[0]
+        if isinstance(literal, ast.Constant) and isinstance(literal.value, str):
+            argvs.append(shlex.split(literal.value))
+        elif isinstance(literal, (ast.List, ast.Tuple)):
+            argvs.append([elt.value for elt in literal.elts if isinstance(elt, ast.Constant)])
+        else:
+            argvs.append(["<not a literal>"])
+    return argvs
 
 
 def _core(ok: bool = True, fix: str = "") -> doctor.Check:
@@ -152,9 +173,7 @@ def test_somebody_elses_config_fails(tmp_path):
     """The property is not "a config file exists" but "it is THIS repo's"."""
     other = tmp_path / "ansible.cfg"
     other.write_text("[defaults]\n", encoding="utf-8")
-    check = doctor._check_config_file(
-        ANSIBLE_DIR, _core(), doctor.Probe(output=_banner(other), located=True, error="")
-    )
+    check = doctor._check_config_file(ANSIBLE_DIR, _core(), doctor.Probe(output=_banner(other), located=True, error=""))
     assert not check.ok
     assert str(other) in check.detail
 
@@ -197,6 +216,9 @@ def test_an_unreadable_galaxy_fails_instead_of_raising(monkeypatch):
     check = doctor._check_collections(REPO, _core())
     assert not check.ok
     assert "not on PATH" in check.detail
+    # The fix names the file, not `make setup-ansible`: reinstalling does not
+    # make an unreadable declaration readable.
+    assert doctor.REQUIREMENTS in check.fix
 
 
 # --- check 4: the static inventory ----------------------------------------
@@ -299,13 +321,15 @@ def test_the_doctor_is_reachable_from_the_cli():
     assert "doctor" in {c.name for c in infra.ansible_app.registered_commands}
 
 
-def test_the_doctor_never_shells_out_to_a_remote():
-    """It runs before a host window is agreed, so it must not be able to reach
-    a node: the only command it may start is the local version probe."""
-    source = Path(doctor.__file__).read_text(encoding="utf-8")
-    assert "ansible-playbook --version" in source
-    for forbidden in ("ansible-playbook -i", "sops", "--limit", "become"):
-        assert forbidden not in source
+def test_the_doctor_only_spawns_the_local_version_probe():
+    """It runs before a host window is agreed, so it must not be able to reach a
+    node: the only command it may start is the local version probe.
+
+    Read from the AST rather than from the source text. A substring assertion
+    cannot fail for the right reason: it is satisfied by a comment, and it
+    rejects the word `become` in a sentence explaining why there is no `become`.
+    """
+    assert _spawned() == [["ansible-playbook", "--version"]]
 
 
 @pytest.mark.parametrize("name", ["SETUP_FIX", "POSIX_FIX"])
@@ -315,3 +339,32 @@ def test_every_fix_line_is_actionable(name):
     fix = getattr(doctor, name)
     assert fix
     assert any(token in fix for token in ("make ", "run this from", "WSL", "Linux"))
+
+
+# --- the precondition: a root that is not a checkout -----------------------
+
+
+def test_a_root_that_is_not_a_checkout_is_named_and_not_crashed(tmp_path):
+    """`_probe` hands `cwd=<root>/infra/ansible` to subprocess, and `cwd` is
+    resolved before the shell starts. On a root without one, subprocess raises
+    `NotADirectoryError` (POSIX: `FileNotFoundError`) and the doctor -- the one
+    command whose whole job is to answer instead of raising -- became a
+    traceback naming a path the operator never typed."""
+    checks = doctor.diagnose(tmp_path)
+
+    assert [c.name for c in checks] == ["checkout"], "every later check reads through this one"
+    assert not checks[0].ok
+    assert str(tmp_path) in checks[0].detail
+    assert "infra/ansible" in checks[0].detail
+    assert "doctor --root" in checks[0].fix, "a fix that does not name the flag is a wish"
+
+
+def test_the_probe_answers_a_missing_directory_instead_of_raising(tmp_path):
+    """The guard has to hold at `_probe` too, not only behind `diagnose`'s early
+    return: `_probe` is the function that passes the `cwd`, so it is the one that
+    owns the precondition."""
+    probe = doctor._probe(tmp_path / "infra" / "ansible")
+
+    assert probe.output is None
+    assert "is not a directory" in probe.error
+    assert probe.located in (True, False), "it still reports whether the binary is on PATH"

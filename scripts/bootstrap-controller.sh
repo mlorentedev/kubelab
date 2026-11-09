@@ -103,19 +103,34 @@ fi
 # ------------------------------------------------------------------- make ----
 
 step "GNU make"
+
+# First line of a command's output, without piping into `head`: under `pipefail`
+# a reader that exits before the writer finishes fails the whole pipeline, and a
+# version banner is exactly the output whose size this script does not control.
+first_line() {
+  local text
+  text="$("$@" 2>/dev/null)" || return 1
+  printf '%s\n' "${text%%$'\n'*}"
+}
+
 have_gnu_make() {
+  local line
   command -v make >/dev/null 2>&1 || return 1
-  make --version 2>/dev/null | head -n 1 | grep -q 'GNU Make'
+  line="$(first_line make --version)" || return 1
+  case "$line" in
+    *"GNU Make"*) return 0 ;;
+    *) return 1 ;;
+  esac
 }
 
 if have_gnu_make; then
-  ok "$(make --version | head -n 1)"
+  ok "$(first_line make --version)"
 else
   # A non-GNU make is the interesting case: BusyBox aborts on Makefile:178 before
   # any target runs, `make help` included, so the failure looks like a broken
   # Makefile rather than a wrong make.
   if command -v make >/dev/null 2>&1; then
-    bad "make is $(make --version 2>/dev/null | head -n 1) — not GNU make"
+    bad "make is $(first_line make --version) — not GNU make"
     note "BusyBox aborts on Makefile:178 ('expected separator') before any target runs"
   else
     bad "make is not installed"
@@ -127,8 +142,11 @@ else
     note "installing make via apt-get"
     as_root apt-get update -qq
     as_root env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends make
-    have_gnu_make && ok "$(make --version | head -n 1)" \
-      || bad "make is still not GNU make after install"
+    if have_gnu_make; then
+      ok "$(first_line make --version)"
+    else
+      bad "make is still not GNU make after install"
+    fi
   else
     bad "no apt-get on this host; install GNU make with the system package manager"
     note "the doctor still works without make: poetry run toolkit infra ansible doctor"

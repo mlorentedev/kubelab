@@ -101,6 +101,47 @@ def test_the_declaration_read_is_the_repository_file() -> None:
     assert declared == {c["name"]: str(c["version"]) for c in _declared()}
 
 
+@pytest.mark.parametrize(
+    ("content", "why"),
+    [
+        (None, "the file is absent"),
+        ("collections: [\n", "the YAML does not parse"),
+        ("- a list, not a mapping\n", "the document is not a mapping"),
+        ("galaxy: []\n", "the mapping declares no `collections`"),
+        ("collections: ansible.posix\n", "`collections` is not a list"),
+        ("collections:\n  - version: 2.2.2\n", "an entry names no collection"),
+        ("collections:\n  - name: ansible.posix\n", "an entry pins no version"),
+    ],
+)
+def test_a_declaration_it_cannot_read_is_a_refusal_not_a_crash(tmp_path: Path, content: str | None, why: str) -> None:
+    """Every shape below escaped this function as a different exception type.
+
+    `declared_collections` is read on the path that renders a run, before a node is
+    touched, by both `make deploy` and `toolkit infra ansible doctor`. A
+    `FileNotFoundError`, a `yaml.ParserError`, a `TypeError` or a `KeyError` there is
+    a traceback out of a gate whose entire purpose is to refuse and say why -- so a
+    controller with a damaged declaration crashed instead of being told what to fix.
+    """
+    if content is not None:
+        path = tmp_path / provision_freshness.REQUIREMENTS
+        path.parent.mkdir(parents=True)
+        path.write_text(content, encoding="utf-8")
+
+    with pytest.raises(provision_freshness.FreshnessError, match=str(provision_freshness.REQUIREMENTS)):
+        provision_freshness.declared_collections(tmp_path)
+
+
+def test_a_well_formed_declaration_still_reads(tmp_path: Path) -> None:
+    """The guard must refuse the malformed shapes without refusing the good one:
+    a gate that rejects everything is the fail-closed twin of one that accepts
+    everything."""
+    path = tmp_path / provision_freshness.REQUIREMENTS
+    path.parent.mkdir(parents=True)
+    path.write_text("collections:\n  - name: ansible.posix\n    version: 2.2.2\n", encoding="utf-8")
+
+    assert provision_freshness.declared_collections(tmp_path) == {"ansible.posix": "2.2.2"}
+
+
 def test_the_refusal_names_the_collections_the_cause_and_the_way_out() -> None:
     message = provision_freshness.collections_refusal_message(["ansible.posix 2.1.0 at /c (declared 2.2.2)"])
     assert "ansible.posix 2.1.0 at /c (declared 2.2.2)" in message

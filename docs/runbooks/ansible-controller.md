@@ -212,8 +212,11 @@ make: (makefile:178): expected separator
 
 and **no target runs at all** — not even `make help` — you have BusyBox `make`,
 not GNU make. This repo's `Makefile` uses `$(if ...)` inside a `define`
-(`require_dev_env`, line 178), which BusyBox cannot parse, so the whole file is
-rejected before any target is considered.
+(`require_dev_env`), which BusyBox cannot parse, so the whole file is rejected
+before any target is considered.
+
+The `:178` is the line where that `define` sat on the day this was measured, and
+it moves as the file grows: match `expected separator`, never the number.
 
 There is deliberately **no guard for this inside the Makefile**: a guard would
 have to run, and nothing in the file runs. The signature above is the detection.
@@ -246,7 +249,7 @@ It does **not** guarantee that on every host:
 | `galaxy collections: not what … pins: …` | drifted from the pins | `poetry run ansible-galaxy collection install -r infra/ansible/requirements.yml` |
 | `ansible.cfg: … is not in effect (Ansible reads nothing)` | wrong cwd, or no config found | run from the repo; the message names the file it found |
 | `static inventory: … declares no host` | inventory regenerated for an env with no hosts | check `infra/ansible/inventories/homelab.yml` |
-| `make: (makefile:178): expected separator` | BusyBox make | install GNU make |
+| `make: (makefile:<line>): expected separator` | BusyBox make | install GNU make |
 | `bootstrap-controller.sh: refusing to run under …` | Git Bash / MSYS shell on Windows | run it from WSL or a Linux host |
 | `set: pipefail: invalid option` or `$'\r': command not found` | CRLF working-tree copy of a `.sh` | re-checkout the file; `.gitattributes` normalises on commit, not on disk |
 
