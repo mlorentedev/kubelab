@@ -49,11 +49,18 @@ fix than it would for a genuinely broken install:
 FIX: run this from WSL or a Linux host; ansible-core has no Windows controller
 ```
 
-`make check-ansible` and `make setup-ansible` both refuse the platform up front
-and name the `WinError 87` they would otherwise surface three steps later, and
-`--require-fresh`'s Galaxy guard reports it as a controller that cannot list its
-collections rather than as drifted pins. The controller is then a WSL distro on
-the same machine, which is a Linux host as far as `ansible-core` is concerned.
+`make check-ansible` reaches that verdict without touching a host: the doctor
+probes `ansible-playbook`, takes the `WinError 87` back as the check's `detail`,
+and answers with the platform `FIX:` instead of the install one.
+`make setup-ansible` ends with the same doctor, so it refuses too — but only
+*after* the install, and after `ansible-galaxy collection install` has already
+died on the same import, which is why the doctor is the last word there and not
+a pre-flight. The one refusal that genuinely comes up front is
+`scripts/bootstrap-controller.sh`, which checks `uname -s` for `MINGW*`/`MSYS*`/
+`CYGWIN*` before it installs anything. Separately, `--require-fresh`'s Galaxy
+guard reports the same wall as a controller that cannot list its collections
+rather than as drifted pins. The controller is then a WSL distro on the same
+machine, which is a Linux host as far as `ansible-core` is concerned.
 Procedure: [`docs/runbooks/ansible-controller.md`](../../runbooks/ansible-controller.md).
 
 **Rule**: a platform refusal must be detected by platform, never by parsing the
