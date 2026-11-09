@@ -87,6 +87,7 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit info` | Show toolkit information and configuration. |
 | `toolkit infra` | Infrastructure deployment and status commands |
 | `toolkit infra ansible` | Ansible management commands |
+| `toolkit infra ansible doctor` | Diagnose the Ansible controller this checkout needs — offline, no host contact. |
 | `toolkit infra ansible generate` | Generate Ansible inventory from common.yaml (SSOT). |
 | `toolkit infra ansible run` | Run an Ansible playbook against an inventory generated for this run. |
 | `toolkit infra ansible syntax-check` | Parse every playbook without running it — the Ansible half of `make lint`. |

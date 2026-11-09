@@ -36,12 +36,25 @@ def test_ci_installs_what_the_gate_needs():
     """syntax-check loads the roles a playbook includes, so a role using
     community.docker fails to parse without the Galaxy collections — measured
     against ANSIBLE_COLLECTIONS_PATH=/nonexistent. Without this install the gate
-    would go red on every run, and the fix would look like "disable the gate"."""
+    would go red on every run, and the fix would look like "disable the gate".
+
+    The install lives in `make setup-ansible`, not in a CI step, since TOOL-131
+    (#3202): `pip install ansible-core` put the binary wherever the outer
+    interpreter pointed, while `toolkit infra ansible run` resolves it from the
+    project venv. So this asserts the CI step delegates AND that the target it
+    delegates to still does the three things the gate needs — a step pointing at
+    an empty target would read exactly as green.
+    """
     workflow = yaml.safe_load(CI.read_text(encoding="utf-8"))
     runs = " ".join(str(s.get("run", "")) for s in workflow["jobs"]["tests"]["steps"])
-    assert "ansible-core" in runs
-    assert "ansible-galaxy collection install" in runs
-    assert "requirements.yml" in runs
+    assert "make setup-ansible" in runs
+
+    makefile = (REPO / "Makefile").read_text(encoding="utf-8")
+    body = makefile[makefile.index("\nsetup-ansible:") :]
+    body = body[: body.index("\n.PHONY:", 1)]
+    assert "--with ansible" in body, "ansible-core must land in this project's venv"
+    assert "ansible-galaxy collection install" in body
+    assert "requirements.yml" in body
 
 
 def test_local_and_ci_share_one_entry_point():

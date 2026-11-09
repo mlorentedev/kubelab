@@ -28,6 +28,16 @@ ruamel-yaml = "^0.19"
 httpx = "^0.28.1" # HTTP client for registry tag verification (deployment promote)
 certifi = ">=2026.10.19" # Transitive (httpx); floor past the compromised emSign roots, GHSA-6q48-6c7w-9gw2
 
+[tool.poetry.group.ansible]
+# Optional on purpose: the toolkit shells out to `ansible-playbook` for
+# `toolkit infra ansible run`, so the controller has to share this venv — but
+# only a seat or job that provisions needs it, and the rest would carry a
+# dependency they never call (TOOL-131, #3202). Installed by `make setup-ansible`.
+optional = true
+
+[tool.poetry.group.ansible.dependencies]
+ansible-core = "^2.19"
+
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.17.2"
 mypy = "^2.4.1"

@@ -81,7 +81,7 @@ def _runbooks() -> list[Path]:
 
 def test_every_entry_surface_is_scanned() -> None:
     """A renamed README must not silently leave the scan."""
-    scanned = {str(d.relative_to(REPO)) for d in _runbooks()}
+    scanned = {d.relative_to(REPO).as_posix() for d in _runbooks()}
     assert {"README.md", "CONTRIBUTING.md", "docs/README.md", "apps/api/README.md"} <= scanned, scanned
 
 
@@ -120,6 +120,10 @@ KNOWN_STALE: dict[tuple[str, str], str] = {
     # -- Not make targets at all. The extractor reads code spans, and these live
     #    inside them while being English or commentary.
     ("docs/troubleshooting/ssl-certificates.md", "config"): "`# Fix: make config match mount` is a sentence",
+    (
+        "docs/runbooks/ansible-controller.md",
+        "is",
+    ): "`[FAIL] make is not installed` is the doctor's output, quoted verbatim",
     ("docs/runbooks/deployment.md", "deploy-prod"): "appears only in the note explaining it was retired",
     ("CLAUDE.md", "backup-pvc"): "appears only in the note recording its removal (OPS-023)",
     #
@@ -133,9 +137,12 @@ def _unexplained(doc: str, referenced: set[str], declared: set[str]) -> list[str
     return sorted(t for t in referenced if t not in declared and (doc, t) not in KNOWN_STALE)
 
 
-@pytest.mark.parametrize("doc", _runbooks(), ids=lambda p: str(p.relative_to(REPO)))
+@pytest.mark.parametrize("doc", _runbooks(), ids=lambda p: p.relative_to(REPO).as_posix())
 def test_every_make_target_a_doc_names_exists(doc: Path) -> None:
-    rel = str(doc.relative_to(REPO))
+    # as_posix(), not str(): the ledger below is keyed by hand-written paths, and
+    # on Windows str() would hand it `docs\runbooks\x.md` -- every exemption would
+    # silently stop applying, on the platform where nobody runs the suite.
+    rel = doc.relative_to(REPO).as_posix()
     missing = _unexplained(rel, _referenced(doc), _declared_targets())
     assert not missing, (
         f"{rel} tells the reader to run targets that do not exist: "
@@ -149,7 +156,7 @@ def test_an_exemption_holds_only_in_its_own_document() -> None:
     """#2261: the name exempted for one document is still caught in any other."""
     declared = _declared_targets()
     # Keyed the way the scan names a document, or no exemption could ever apply.
-    scanned = {str(d.relative_to(REPO)) for d in _runbooks()}
+    scanned = {d.relative_to(REPO).as_posix() for d in _runbooks()}
     for doc, target in KNOWN_STALE:
         assert doc in scanned, f"KNOWN_STALE names {doc}, which the scan never reads"
         assert _unexplained("docs/runbooks/a-new-runbook.md", {target}, declared) == [target]
@@ -163,7 +170,7 @@ def test_the_ledger_only_shrinks() -> None:
     suppressing a check that now has nothing to suppress.
     """
     declared = _declared_targets()
-    referenced = {(str(d.relative_to(REPO)), t) for d in _runbooks() for t in _referenced(d)}
+    referenced = {(d.relative_to(REPO).as_posix(), t) for d in _runbooks() for t in _referenced(d)}
 
     now_real = sorted(entry for entry in KNOWN_STALE if entry[1] in declared)
     assert not now_real, f"these targets now EXIST — remove them from KNOWN_STALE: {now_real}"

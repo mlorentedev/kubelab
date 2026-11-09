@@ -24,6 +24,7 @@ Project-bound knowledge (docs-as-code). The *build/operate* layer lives here, ve
 | Bootstrap a brand-new bare-metal node | [`runbooks/hardware-setup.md`](runbooks/hardware-setup.md) — **known stale** ([D9](audits/docs-audit-2026-07-07.md), pre-migration Proxmox world), not yet rewritten |
 | Set up Headscale / the VPN mesh | [`runbooks/headscale-setup.md`](runbooks/headscale-setup.md) — rewritten against `common.yaml` and VPN-ACL-014 except what [D15](audits/docs-audit-2026-07-07.md) still lists: ace1/ace2 described as Proxmox hosts (Phase 3, the note after the SSH block) and the SSH block's own known-stale entries (#1289) |
 | Onboard a tenant node into a Headscale segment | [`runbooks/onboard-tenant-node.md`](runbooks/onboard-tenant-node.md) |
+| Run Ansible from a machine that can (and find out why yours can't) | [`runbooks/ansible-controller.md`](runbooks/ansible-controller.md) — `scripts/bootstrap-controller.sh`, `make setup-ansible`, `toolkit infra ansible doctor` |
 | Debug staging/prod DNS | [`runbooks/dns-homelab.md`](runbooks/dns-homelab.md), [`runbooks/dns-and-domains.md`](runbooks/dns-and-domains.md) — **known stale** ([D18-D19](audits/docs-audit-2026-07-07.md)), not yet rewritten |
 | Understand a past gotcha or post-mortem | [`lessons/_index.md`](lessons/_index.md) — one file per lesson, grouped by category |
 

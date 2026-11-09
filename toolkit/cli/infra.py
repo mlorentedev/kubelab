@@ -2092,6 +2092,17 @@ def _refuse_if_collections_off_declaration(ansible_dir: Path, *, force: bool) ->
 
     try:
         declared = provision_freshness.declared_collections(provision_freshness.repo_root(ansible_dir))
+    except provision_freshness.DeclarationError as exc:
+        # The declaration is what the run is held to, so an unreadable one is a broken
+        # file and not a broken tool: `ansible-galaxy` answered correctly, it was asked
+        # to compare against nothing. Named separately so the repair is the file's.
+        if force:
+            logger.warning(f"Could not read the Galaxy declaration (FORCE=1, continuing): {exc}")
+            return
+        logger.error(f"Could not read the Galaxy declaration: {exc}")
+        logger.info(f"{provision_freshness.DECLARATION_FIX}, or FORCE=1 to run without the check")
+        raise typer.Exit(1) from None
+    try:
         off = provision_freshness.collections_off_declaration(declared)
     except provision_freshness.FreshnessError as exc:
         if force:
@@ -2233,6 +2244,48 @@ def _restore_mesh_inventory(env: str) -> bool:
         logger.error(f"Mesh inventory not restored, the one on disk is this run's: {restored.get('error')}")
         return False
     return True
+
+
+@ansible_app.command("doctor")
+def ansible_doctor(
+    root: Annotated[
+        Path | None,
+        typer.Option("--root", help="Check another checkout instead of this one"),
+    ] = None,
+) -> None:
+    """Diagnose the Ansible controller this checkout needs — offline, no host contact.
+
+    Four local checks, no network and no SSH, so this is safe to run before a
+    host window is agreed: `ansible-playbook` resolves, the Galaxy collections
+    are the ones `requirements.yml` pins, the config file in effect is this
+    repo's, and the static inventory parses.
+
+    `make setup-ansible` ends by running this, which is what turns that target
+    from a report into a gate — it printed `skipping` and exited 0 on a machine
+    that could not run Ansible at all (TOOL-131, #3202).
+
+    `--root` exists because the check that reports a missing checkout names it in
+    its own FIX line: a repair command that does not exist is worse than none.
+    """
+    from toolkit.features.ansible_doctor import diagnose
+
+    logger.section("Ansible Controller")
+
+    checks = diagnose((root or settings.project_root).resolve())
+    for check in checks:
+        if check.ok:
+            logger.success(f"{check.name}: {check.detail}")
+        else:
+            logger.error(f"{check.name}: {check.detail}")
+            if check.fix:
+                logger.info(f"    FIX: {check.fix}")
+
+    failed = [check for check in checks if not check.ok]
+    if failed:
+        logger.error(f"{len(failed)} of {len(checks)} checks failed")
+        raise typer.Exit(1) from None
+
+    logger.success(f"All {len(checks)} checks passed — this machine can run Ansible")
 
 
 @ansible_app.command("syntax-check")

@@ -96,9 +96,129 @@ def test_a_listing_that_fails_is_an_error_not_a_pass(monkeypatch: pytest.MonkeyP
         provision_freshness.collections_off_declaration(DECLARED)
 
 
+def _galaxy_stdout(monkeypatch: pytest.MonkeyPatch, stdout: str) -> None:
+    def fake(argv: list[str], **_kwargs: Any) -> SimpleNamespace:
+        assert argv[:3] == ["ansible-galaxy", "collection", "list"]
+        return SimpleNamespace(returncode=0, stdout=stdout, stderr="")
+
+    monkeypatch.setattr(provision_freshness.subprocess, "run", fake)
+
+
+@pytest.mark.parametrize(
+    ("stdout", "why"),
+    [
+        ("not json at all", "the listing is not JSON"),
+        ('["a list"]', "the listing is not a mapping"),
+        ('{"/c": "not a mapping"}', "a search path maps to something other than a mapping"),
+        ('{"/c": {"ansible.posix": "2.2.2"}}', "a collection maps to something other than a mapping"),
+    ],
+)
+def test_a_listing_it_cannot_read_is_a_refusal_not_a_crash(
+    monkeypatch: pytest.MonkeyPatch, stdout: str, why: str
+) -> None:
+    """`ansible-galaxy` output is parsed on the same path that renders a run.
+
+    A `JSONDecodeError` or an `AttributeError` here escaped as a traceback out of
+    both `make deploy` and `toolkit infra ansible doctor`, which is a crash where
+    the contract is "refuse and say why" -- and it left `FORCE=1` unreachable.
+    """
+    _galaxy_stdout(monkeypatch, stdout)
+
+    with pytest.raises(provision_freshness.FreshnessError, match="ansible-galaxy"):
+        provision_freshness.collections_off_declaration(DECLARED)
+
+
+def test_a_missing_ansible_galaxy_is_a_refusal_not_a_crash(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`ansible-playbook` on PATH does not imply `ansible-galaxy` is, and the
+    doctor checks the former before reaching this call."""
+
+    def fake(argv: list[str], **_kwargs: Any) -> SimpleNamespace:
+        raise FileNotFoundError(2, "No such file or directory", "ansible-galaxy")
+
+    monkeypatch.setattr(provision_freshness.subprocess, "run", fake)
+
+    with pytest.raises(provision_freshness.FreshnessError, match="ansible-galaxy"):
+        provision_freshness.collections_off_declaration(DECLARED)
+
+
 def test_the_declaration_read_is_the_repository_file() -> None:
     declared = provision_freshness.declared_collections(REPO)
     assert declared == {c["name"]: str(c["version"]) for c in _declared()}
+
+
+@pytest.mark.parametrize(
+    ("content", "why"),
+    [
+        (None, "the file is absent"),
+        ("collections: [\n", "the YAML does not parse"),
+        ("- a list, not a mapping\n", "the document is not a mapping"),
+        ("galaxy: []\n", "the mapping declares no `collections`"),
+        ("collections: ansible.posix\n", "`collections` is not a list"),
+        ("collections:\n  - version: 2.2.2\n", "an entry names no collection"),
+        ("collections:\n  - name: ansible.posix\n", "an entry pins no version"),
+    ],
+)
+def test_a_declaration_it_cannot_read_is_a_refusal_not_a_crash(tmp_path: Path, content: str | None, why: str) -> None:
+    """Every shape below escaped this function as a different exception type.
+
+    `declared_collections` is read on the path that renders a run, before a node is
+    touched, by both `make deploy` and `toolkit infra ansible doctor`. A
+    `FileNotFoundError`, a `yaml.ParserError`, a `TypeError` or a `KeyError` there is
+    a traceback out of a gate whose entire purpose is to refuse and say why -- so a
+    controller with a damaged declaration crashed instead of being told what to fix.
+    """
+    if content is not None:
+        path = tmp_path / provision_freshness.REQUIREMENTS
+        path.parent.mkdir(parents=True)
+        path.write_text(content, encoding="utf-8")
+
+    with pytest.raises(provision_freshness.DeclarationError, match=str(provision_freshness.REQUIREMENTS)):
+        provision_freshness.declared_collections(tmp_path)
+
+
+def test_a_declaration_with_two_documents_says_so(tmp_path: Path) -> None:
+    """`safe_load` reads exactly one document, so a second `---` arrives as
+    `ComposerError` — not as a syntax error. Reporting it as "is not YAML" sends
+    the operator looking for a broken bracket in a file that is perfectly
+    well-formed, which is the same class of dead end as a fix naming a flag that
+    does not exist."""
+    path = tmp_path / provision_freshness.REQUIREMENTS
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        "collections:\n  - name: ansible.posix\n    version: 2.2.2\n---\ncollections: []\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(provision_freshness.DeclarationError, match="more than one YAML document"):
+        provision_freshness.declared_collections(tmp_path)
+
+
+def test_a_listing_that_cannot_be_read_is_not_a_declaration_problem(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The two refusals name different repairs -- the file, or `ansible-galaxy` --
+    so the types have to differ. They shared one, and that is why a `requirements.yml`
+    nothing could parse was answered with "Fix ansible-galaxy": a repair for a file
+    the operator was never told was the problem."""
+    monkeypatch.setattr(
+        provision_freshness.subprocess,
+        "run",
+        lambda *_a, **_k: SimpleNamespace(returncode=0, stdout="not json", stderr=""),
+    )
+
+    with pytest.raises(provision_freshness.FreshnessError) as raised:
+        provision_freshness.collections_off_declaration(DECLARED)
+
+    assert not isinstance(raised.value, provision_freshness.DeclarationError)
+
+
+def test_a_well_formed_declaration_still_reads(tmp_path: Path) -> None:
+    """The guard must refuse the malformed shapes without refusing the good one:
+    a gate that rejects everything is the fail-closed twin of one that accepts
+    everything."""
+    path = tmp_path / provision_freshness.REQUIREMENTS
+    path.parent.mkdir(parents=True)
+    path.write_text("collections:\n  - name: ansible.posix\n    version: 2.2.2\n", encoding="utf-8")
+
+    assert provision_freshness.declared_collections(tmp_path) == {"ansible.posix": "2.2.2"}
 
 
 def test_the_refusal_names_the_collections_the_cause_and_the_way_out() -> None:
