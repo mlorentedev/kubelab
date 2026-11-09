@@ -172,7 +172,7 @@ def test_a_declaration_it_cannot_read_is_a_refusal_not_a_crash(tmp_path: Path, c
         path.parent.mkdir(parents=True)
         path.write_text(content, encoding="utf-8")
 
-    with pytest.raises(provision_freshness.FreshnessError, match=str(provision_freshness.REQUIREMENTS)):
+    with pytest.raises(provision_freshness.DeclarationError, match=str(provision_freshness.REQUIREMENTS)):
         provision_freshness.declared_collections(tmp_path)
 
 
@@ -189,8 +189,25 @@ def test_a_declaration_with_two_documents_says_so(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    with pytest.raises(provision_freshness.FreshnessError, match="more than one YAML document"):
+    with pytest.raises(provision_freshness.DeclarationError, match="more than one YAML document"):
         provision_freshness.declared_collections(tmp_path)
+
+
+def test_a_listing_that_cannot_be_read_is_not_a_declaration_problem(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The two refusals name different repairs -- the file, or `ansible-galaxy` --
+    so the types have to differ. They shared one, and that is why a `requirements.yml`
+    nothing could parse was answered with "Fix ansible-galaxy": a repair for a file
+    the operator was never told was the problem."""
+    monkeypatch.setattr(
+        provision_freshness.subprocess,
+        "run",
+        lambda *_a, **_k: SimpleNamespace(returncode=0, stdout="not json", stderr=""),
+    )
+
+    with pytest.raises(provision_freshness.FreshnessError) as raised:
+        provision_freshness.collections_off_declaration(DECLARED)
+
+    assert not isinstance(raised.value, provision_freshness.DeclarationError)
 
 
 def test_a_well_formed_declaration_still_reads(tmp_path: Path) -> None:

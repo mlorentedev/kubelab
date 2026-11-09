@@ -235,17 +235,32 @@ def test_a_collection_off_the_pin_fails(monkeypatch):
     assert doctor.SETUP_FIX in check.fix
 
 
-def test_an_unreadable_galaxy_fails_instead_of_raising(monkeypatch):
+def test_an_unreadable_declaration_fails_instead_of_raising(monkeypatch):
     def explode(_root):
-        raise doctor.FreshnessError("ansible-galaxy is not on PATH")
+        raise doctor.DeclarationError("infra/ansible/requirements.yml: No such file")
 
     monkeypatch.setattr(doctor, "declared_collections", explode)
     check = doctor._check_collections(REPO, _core())
     assert not check.ok
-    assert "not on PATH" in check.detail
+    assert "No such file" in check.detail
     # The fix names the file, not `make setup-ansible`: reinstalling does not
     # make an unreadable declaration readable.
+    assert check.fix == doctor.DECLARATION_FIX
     assert doctor.REQUIREMENTS in check.fix
+
+
+def test_any_other_freshness_error_from_the_declaration_read_still_fails(monkeypatch):
+    """The declaration read raises only its subclass, so this is the defensive branch:
+    it exists so a new raise path cannot turn the check back into a traceback."""
+
+    def explode(_root):
+        raise doctor.FreshnessError("something the split does not know about")
+
+    monkeypatch.setattr(doctor, "declared_collections", explode)
+    check = doctor._check_collections(REPO, _core())
+    assert not check.ok
+    assert "does not know about" in check.detail
+    assert doctor.COLLECTIONS_LISTING_FIX in check.fix
 
 
 def test_a_galaxy_listing_it_cannot_read_is_a_failed_check_not_a_traceback(monkeypatch):

@@ -53,7 +53,9 @@ from toolkit.features import command
 from toolkit.features.provision_freshness import (
     COLLECTIONS_FIX,
     COLLECTIONS_LISTING_FIX,
+    DECLARATION_FIX,
     REQUIREMENTS,
+    DeclarationError,
     FreshnessError,
     collections_off_declaration,
     declared_collections,
@@ -159,13 +161,13 @@ def _check_collections(root: Path, core: Check) -> Check:
     # or the installed collections are not what it pins (the install is stale).
     try:
         declared = declared_collections(root)
+    except DeclarationError as exc:
+        return Check(name="galaxy collections", ok=False, detail=str(exc), fix=DECLARATION_FIX)
     except FreshnessError as exc:
-        return Check(
-            name="galaxy collections",
-            ok=False,
-            detail=str(exc),
-            fix=f"repair {REQUIREMENTS}: the run is held to it, so it has to be readable",
-        )
+        # Unreachable today -- the declaration read raises only its subclass -- but this
+        # check answers every refusal with a repair, so a new raise path must not turn
+        # it back into a traceback.
+        return Check(name="galaxy collections", ok=False, detail=str(exc), fix=COLLECTIONS_LISTING_FIX)
     try:
         off = collections_off_declaration(declared)
     except FreshnessError as exc:

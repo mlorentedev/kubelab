@@ -140,6 +140,11 @@ def _behind(monkeypatch: pytest.MonkeyPatch, files: list[str]) -> None:
     monkeypatch.setattr(provision_freshness, "paths_behind_master", lambda *_a, **_k: files)
 
 
+def _out(capsys: pytest.CaptureFixture[str]) -> str:
+    """Everything the CLI printed, unwrapped: rich breaks long lines."""
+    return " ".join("".join(capsys.readouterr()).split())
+
+
 def _run(**overrides: Any) -> None:
     kwargs: dict[str, Any] = {
         "playbook": "provision-bee",
@@ -295,7 +300,9 @@ def test_force_runs_a_controller_off_its_collection_pins(calls: list, monkeypatc
     assert [name for name, _ in calls] == ["generate", "ansible-playbook"]
 
 
-def test_a_collection_listing_that_fails_refuses(calls: list, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_collection_listing_that_fails_refuses(
+    calls: list, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     _behind(monkeypatch, [])
 
     def broken(_declared: dict) -> list[str]:
@@ -305,6 +312,29 @@ def test_a_collection_listing_that_fails_refuses(calls: list, monkeypatch: pytes
     with pytest.raises(typer.Exit):
         _run()
     assert calls == []
+    out = _out(capsys)
+    assert "ansible-galaxy" in out, "a listing that cannot run is repaired at the tool"
+
+
+def test_a_declaration_nothing_can_read_names_the_file_not_the_tool(
+    calls: list, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Five shapes of broken `requirements.yml` reached the operator as "Fix
+    ansible-galaxy", which is not what repairs a file. The gate holds the run to
+    that declaration, so a declaration nothing can parse is the file's problem."""
+    _behind(monkeypatch, [])
+
+    def broken(_root: Path) -> dict[str, str]:
+        raise provision_freshness.DeclarationError(f"{provision_freshness.REQUIREMENTS}: not YAML")
+
+    monkeypatch.setattr(provision_freshness, "declared_collections", broken)
+    with pytest.raises(typer.Exit) as exited:
+        _run()
+    assert exited.value.exit_code == 1
+    assert calls == []
+    out = _out(capsys)
+    assert provision_freshness.DECLARATION_FIX in out
+    assert "ansible-galaxy" not in out, "the tool is not what repairs a declaration"
 
 
 def test_a_dry_run_is_not_refused_for_its_collections(calls: list, monkeypatch: pytest.MonkeyPatch) -> None:

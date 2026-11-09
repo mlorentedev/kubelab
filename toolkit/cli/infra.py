@@ -2092,6 +2092,17 @@ def _refuse_if_collections_off_declaration(ansible_dir: Path, *, force: bool) ->
 
     try:
         declared = provision_freshness.declared_collections(provision_freshness.repo_root(ansible_dir))
+    except provision_freshness.DeclarationError as exc:
+        # The declaration is what the run is held to, so an unreadable one is a broken
+        # file and not a broken tool: `ansible-galaxy` answered correctly, it was asked
+        # to compare against nothing. Named separately so the repair is the file's.
+        if force:
+            logger.warning(f"Could not read the Galaxy declaration (FORCE=1, continuing): {exc}")
+            return
+        logger.error(f"Could not read the Galaxy declaration: {exc}")
+        logger.info(f"{provision_freshness.DECLARATION_FIX}, or FORCE=1 to run without the check")
+        raise typer.Exit(1) from None
+    try:
         off = provision_freshness.collections_off_declaration(declared)
     except provision_freshness.FreshnessError as exc:
         if force:
