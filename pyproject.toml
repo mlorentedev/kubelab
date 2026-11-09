@@ -8,9 +8,9 @@ packages = [{include = "toolkit"}]
 
 [tool.poetry.dependencies]
 python = "^3.12"
-typer = "^0.27.3"
+typer = "^0.28.0"
 rich = "^15.0.0"
-pydantic = "^2.14.2"
+pydantic = "^2.14.3"
 pydantic-settings = "^2.16.2"
 jinja2 = "^3.1.6"
 argon2-cffi = "^25.1.0" # For Argon2 password hashing
@@ -21,7 +21,7 @@ mkdocs-material = "^9.7.7"
 pymdown-extensions = "^12.3"
 mkdocs-glightbox = "^0.5.2"
 mkdocs-minify-plugin = "^0.8.0"
-mkdocs-git-revision-date-localized-plugin = "^1.6.0"
+mkdocs-git-revision-date-localized-plugin = "^1.6.3"
 uptime-kuma-api = "^1.2.1"
 bcrypt = "^5.0.0"
 ruamel-yaml = "^0.19"
@@ -39,7 +39,7 @@ optional = true
 ansible-core = "^2.19"
 
 [tool.poetry.group.dev.dependencies]
-ruff = "^0.17.2"
+ruff = "^0.17.4"
 mypy = "^2.4.1"
 pre-commit = "^4.7.0"
 pytest = "^9.0.3"
