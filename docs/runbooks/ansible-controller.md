@@ -126,8 +126,6 @@ Measured 2026-11-08 on Ubuntu 24.04 / Python 3.12.3. Note what the distro does
 **not** give you: no `make`, no `poetry`, no global `ansible-core`, and `pip` is
 blocked by PEP 668.
 
-**Verified** — the doctor, run from the checkout with its venv:
-
 **Verified on the seat (Windows)** — the CLI renders and fails correctly, exit 1:
 
 ```
@@ -144,16 +142,53 @@ infra/ansible/requirements.yml is unverified
 **Verified in WSL** — the same four checks, 4/4 OK, exit 0, driven through
 `diagnose()` with `PATH` pointing at the checkout's venv.
 
-**Not verified on this seat** — the bootstrap that produces a WSL venv. Treat the
-commands below as the intended path, not as a measured one:
+**The bootstrap is a script, not a recipe** — `scripts/bootstrap-controller.sh`.
+It exists because the tools below `make` cannot be installed *by* `make`: the
+entry point has to be something that already runs. It installs GNU make and the
+pinned Poetry, then hands off to `make setup-ansible` for the venv, the
+collection pins and the doctor — those stay in one place rather than being
+copied here.
 
 ```bash
-sudo apt-get install -y make                                  # GNU make, see the BusyBox trap
-curl -sSL https://install.python-poetry.org | python3 -       # avoids the PEP 668 block
-poetry install --with ansible --no-interaction --no-ansi
-poetry run ansible-galaxy collection install -r infra/ansible/requirements.yml
-poetry run toolkit infra ansible doctor
+bash scripts/bootstrap-controller.sh --check   # report only; installs nothing
+bash scripts/bootstrap-controller.sh           # install what is missing, then setup-ansible
 ```
+
+`--check` is the safe first move on any unfamiliar host: it names what is
+missing and exits non-zero without touching the machine. Idempotent — anything
+already correct is left alone. It refuses to run in a Windows shell (Git Bash
+included), naming the `WinError 87` it would otherwise surface three steps
+later.
+
+It does not manage interpreters: if `python3` is below the floor that
+`pyproject.toml` declares, it says so and stops rather than installing one.
+
+**Verified in WSL 2026-11-09** — `--check` on a host that has none of it. It
+reports, installs nothing, and exits 1:
+
+```
+python3 (>= 3.12, per pyproject.toml)
+  [ok]   python3 3.12.3 (/usr/bin/python3)
+
+GNU make
+  [FAIL] make is not installed
+         would install: make
+
+Poetry 2.5.1
+  [FAIL] poetry is not installed
+         would install: poetry 2.5.1
+
+ansible-core and the collections
+         --check: not running 'make setup-ansible'
+         that target installs ansible-core into the venv, the collection pins, and
+         then runs the doctor — the only authority on whether this machine works
+
+[ERROR] 2 check(s) failed
+```
+
+**Not yet measured**: the install path itself (`apt-get`, the Poetry installer,
+then `make setup-ansible`), because it writes to the host and that window has
+not been opened. `--check` is the half that can be measured without one.
 
 Two caveats about the venv, both measured on the seat's Windows side and likely
 to repeat:
@@ -212,6 +247,8 @@ It does **not** guarantee that on every host:
 | `ansible.cfg: … is not in effect (Ansible reads nothing)` | wrong cwd, or no config found | run from the repo; the message names the file it found |
 | `static inventory: … declares no host` | inventory regenerated for an env with no hosts | check `infra/ansible/inventories/homelab.yml` |
 | `make: (makefile:178): expected separator` | BusyBox make | install GNU make |
+| `bootstrap-controller.sh: refusing to run under …` | Git Bash / MSYS shell on Windows | run it from WSL or a Linux host |
+| `set: pipefail: invalid option` or `$'\r': command not found` | CRLF working-tree copy of a `.sh` | re-checkout the file; `.gitattributes` normalises on commit, not on disk |
 
 ## Related
 
