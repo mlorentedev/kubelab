@@ -2231,8 +2231,6 @@ apps:
               is not in SOPS: #1796.
           traefik-dashboard:
             none: "Read-only diagnostics on api@internal; the cluster credential covers inspection."
-          dev-node:
-            none: "On-demand developer node (ADR-058): its own access path is SSH over the tailnet."
 
       crowdsec:
         name: crowdsec

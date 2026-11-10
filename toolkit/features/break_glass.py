@@ -319,6 +319,11 @@ def coverage_gaps(deps: Mapping[str, Route], decls: Mapping[str, Any]) -> list[s
     return sorted(set(deps) - set(decls))
 
 
+def stale_declarations(derived: Iterable[str], declared: Iterable[str]) -> list[str]:
+    """Declared services that no env derives as Authelia-dependent: entries that outlived their route."""
+    return sorted(set(declared) - set(derived))
+
+
 def unreachable_backends(deps: Mapping[str, Route], decls: Mapping[str, Mapping[str, Any]]) -> list[str]:
     """Dependents that claim a reachable path (`{}` or an account) on a backend no tunnel can reach."""
     return sorted(
