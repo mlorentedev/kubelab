@@ -58,6 +58,9 @@ created: "2026-10-21"
 - [x] ✓ 2026-11-02 [AC4] Periodic reconcile per source every 10 minutes under the hourly call ceiling, with a guard test that counts calls. `infra.forge.sources` declares GitHub only: which Gitea repository to read is the operator's call, and the Gitea reader is wired with it
 - [ ] [AC1] Queue endpoint with the inbox reason (author, requested reviewer, failing CI, waiting on me). `GET /console/queue` serves the open items without reasons since 2026-11-04; the reasons need the operator's login per forge and check-run reads
   - [x] ✓ 2026-11-04 The queue lists declared sources only, so a repository removed from `infra.forge.sources` leaves the view, and an item deleted upstream goes on the next full rebuild (PR-Agent finding on #3001)
+- [ ] [AC1] The sources cover every repository the board aggregates (ADR-066 A4 parity), declared explicitly: the list is the receiver's gate, so it is never derived from the App's installation
+  - [x] ✓ 2026-11-09 GitHub: the 24 repositories that carry `add-to-project.yml`, held sorted and well-formed by `tests/test_forge_sources.py`
+  - [ ] Gitea: wire the Gitea reader into the reconcile (it reads GitHub only) and derive its sources from `apps.services.core.gitea.organizations`, so a repository is declared once
 
 ### 2. Access and UI
 
