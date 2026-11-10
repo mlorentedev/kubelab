@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 from typing import Any
 
 import pytest
@@ -146,8 +147,8 @@ def _samples(walls_min: list[float]) -> ci_timing.Collected:
 
 @pytest.mark.parametrize(
     ("walls", "code"),
-    [([8.0] * 20, 0), ([12.0] * 20, 1), ([8.0] * 19, 2)],
-    ids=["within", "over", "under-sampled"],
+    [([8.0] * 20, 0), ([12.0] * 20, 1), ([8.0] * 19, 2), ([20.0] * 20 + [8.0] * 20, 0), ([8.0] * 20 + [20.0] * 20, 1)],
+    ids=["within", "over", "under-sampled", "only-the-last-window-gates", "a-slow-last-window-fails"],
 )
 def test_the_command_exit_status(monkeypatch: pytest.MonkeyPatch, walls: list[float], code: int) -> None:
     from typer.testing import CliRunner
@@ -159,13 +160,18 @@ def test_the_command_exit_status(monkeypatch: pytest.MonkeyPatch, walls: list[fl
     assert result.exit_code == code
 
 
-def test_the_command_exits_2_when_the_runs_cannot_be_read(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize(
+    "error",
+    [RuntimeError("gh api failed"), FileNotFoundError("gh"), subprocess.TimeoutExpired("gh", 60)],
+    ids=["api-error", "no-gh", "timeout"],
+)
+def test_the_command_exits_2_when_the_runs_cannot_be_read(monkeypatch: pytest.MonkeyPatch, error: Exception) -> None:
     from typer.testing import CliRunner
 
     from toolkit.cli.tools import app
 
     def boom(*a: object, **k: object) -> ci_timing.Collected:
-        raise RuntimeError("gh api failed")
+        raise error
 
     monkeypatch.setattr(ci_timing, "collect", boom)
     result = CliRunner().invoke(app, ["tests-p50", "--since", "2026-11-05T08:13:42Z"])

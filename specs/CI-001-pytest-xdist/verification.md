@@ -48,6 +48,13 @@ owner: manu
 8. #3223 burst hours. Applied: the ticket names the UTC day instead of hours that two measures place differently.
 9. `--since` is unvalidated. Applied: it is normalised to a UTC `Z` instant, and a value without a timezone is refused.
 
+`review.md`, the pooled review (nan/mimo-v2.6-flash, PASS-WITH-GAPS, `7017895d`). One disposition per finding:
+
+1. No test shows that the exit status reads the last window. Applied: two cases have a different first and last window. One passes on a fast last window after a slow first one, and one fails on the reverse. `make mutate` showed the guard goes red when the gate moves to `windows[0]`.
+2. A missing `gh` or a timeout escapes exit 2. Applied: `OSError` and `subprocess.TimeoutExpired` exit 2, and both are tested.
+3. `tests_p50` exceeds 40 lines. Applied: the table rendering moved to `_print_tests_p50`, which leaves the command at 39 lines.
+4. AC1 parity is not re-run at the reviewed sha. Declined: the `make test` recipe and `addopts` it proved are unchanged since `d2e92f4c`, and every PR run since then exercises the same options. CI on this head is the current evidence.
+
 ## Promotion candidates
 
 Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`. `dotf spec archive` refuses a line left unanswered, a `no` without a reason, and a `yes` whose file does not exist; a `00_meta/` path is looked up in the vault.

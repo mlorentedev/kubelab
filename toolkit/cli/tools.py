@@ -860,6 +860,17 @@ def branch_protection(
 # =============================================================================
 
 
+def _print_tests_p50(windows: list[Any], dropped: int) -> None:
+    """The tests-p50 table: one row per window, p50 minutes, overlapping views."""
+    columns = ("wall", "shard", "wait", "skew", "agg", "queue")
+    header = f"{'window':<10} {'runs':>4} " + " ".join(f"{c:>6}" for c in columns) + f" {'drop':>5}"
+    logger.info(f"{header}   (p50 minutes; columns overlap, do not sum; queue is outside wall)")
+    for w in windows:
+        cells = (w.p50_wall, w.p50_shard_max, w.p50_wait, w.p50_skew, w.p50_aggregate, w.p50_queue)
+        logger.info(f"{w.label:<10} {w.count:>4} " + " ".join(f"{c / 60:>6.1f}" for c in cells) + f" {w.dropped:>5}")
+    logger.info(f"{dropped} runs dropped: Tests not successful (failed or cancelled) or a rerun")
+
+
 @app.command("tests-p50")
 def tests_p50(
     since: Annotated[
@@ -887,17 +898,11 @@ def tests_p50(
     try:
         got = ci_timing.collect(GhApi(), repo, workflow, since)
         windows = ci_timing.report(got.samples, window, got.kept)
-    except (RuntimeError, ValueError, KeyError) as exc:
+    except (RuntimeError, ValueError, KeyError, OSError, subprocess.TimeoutExpired) as exc:
         logger.error(f"tests-p50: cannot measure: {exc}")
         raise typer.Exit(2) from exc
 
-    columns = ("wall", "shard", "wait", "skew", "agg", "queue")
-    header = f"{'window':<10} {'runs':>4} " + " ".join(f"{c:>6}" for c in columns) + f" {'drop':>5}"
-    logger.info(f"{header}   (p50 minutes; columns overlap, do not sum; queue is outside wall)")
-    for w in windows:
-        cells = (w.p50_wall, w.p50_shard_max, w.p50_wait, w.p50_skew, w.p50_aggregate, w.p50_queue)
-        logger.info(f"{w.label:<10} {w.count:>4} " + " ".join(f"{c / 60:>6.1f}" for c in cells) + f" {w.dropped:>5}")
-    logger.info(f"{got.dropped} runs dropped: Tests not successful (failed or cancelled) or a rerun")
+    _print_tests_p50(windows, got.dropped)
     if len(got.samples) < window:
         logger.error(f"only {len(got.samples)} samples since {since}; the windows need {window}")
         raise typer.Exit(2)
