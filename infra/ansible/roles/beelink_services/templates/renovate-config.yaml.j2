@@ -1,0 +1,18 @@
+# {{ ansible_managed }}
+#
+# Global config for the Gitea Renovate run (IDP-036). Renovate reads it through
+# RENOVATE_CONFIG_FILE.
+#
+# `repositories` is rendered from apps.services.core.gitea.organizations, the same
+# declaration the repository reconciler creates them from, so a repository
+# declared there is covered here without another edit (AC1). Organizations are
+# sorted so a re-render is byte-identical and the provision stays at changed=0.
+# An organization declared with no repositories contributes nothing, and an
+# empty declaration renders `[]`, never a null Renovate would read as unset.
+{% set _repositories = [] %}
+{% for org in renovate_gitea_organizations | dictsort | map('first') %}
+{%   for repo in ((renovate_gitea_organizations[org] or {}).get('repositories') or []) %}
+{%     set _ = _repositories.append(org ~ '/' ~ repo.name) %}
+{%   endfor %}
+{% endfor %}
+repositories: {{ _repositories | to_json }}

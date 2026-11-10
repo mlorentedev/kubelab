@@ -1,8 +1,8 @@
 [
   {
     "id": "IDP-036-renovate-gitea-f1",
-    "behavior": "Outcome 1",
-    "verification": "echo 'not implemented' && exit 1",
+    "behavior": "AC1: the Gitea Renovate run's repository list is rendered from apps.services.core.gitea.organizations, never hand-listed",
+    "verification": "poetry run pytest -q --no-cov tests/test_beelink_renovate_repositories.py",
     "state": "pending",
     "evidence": ""
   }
