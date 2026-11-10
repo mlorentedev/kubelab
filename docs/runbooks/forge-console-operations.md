@@ -52,6 +52,28 @@ the dump and not in it are lost, and that same read covers them.
 If the restore is not worth it for the console alone, rebuilding (above) gives
 the same queue without it.
 
+## Which repositories are read
+
+`infra.forge.sources` names Gitea repositories one by one and GitHub as
+`github:mlorentedev/*`: every repository of the personal account, listed each
+reconcile cycle (`GET /installation/repositories`, no forks, no archived). A
+repository created on GitHub is read from the next cycle, within
+`ReconcilePeriod` (10 minutes), with no change to the declaration.
+
+That holds only while the `kubelab-console` App is installed with
+**All repositories**: with "Only select repositories" the listing returns those
+alone and new repositories never appear. Check it at
+GitHub > Settings > Applications > Installed GitHub Apps > kubelab-console >
+Repository access.
+
+A listing that fails keeps the last set it had; at a pod start, the set is
+seeded from `forge_source`, so the console still shows what it read before. A
+failed listing appears in the API's log as `forge reconcile: listing:`. If it
+keeps failing (a revoked key), the reads fail on the same credential: every
+GitHub source shows unreachable in the console and its `as_of` stops moving. The
+Grafana alert on that bound is still to build (AC6 in the spec), so until then the
+console's reachability column is the signal.
+
 ## Rotate the credentials
 
 Each value's `rotate_note` in `SECRET_CATALOG` (`toolkit/features/secrets_manager.py`)
