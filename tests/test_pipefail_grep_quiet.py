@@ -23,8 +23,10 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 
-# Shipped code only. Workflows run with `bash -e` unless they say otherwise and
-# are tracked separately; specs/ holds one-off probes from closed work.
+# Shipped code only. Workflow steps do run under pipefail (`shell: bash` is
+# `bash -eo pipefail`); they are excluded here only because CI workflows sit
+# outside the merge grant, and their three sites are #3227. specs/ holds
+# one-off probes from closed work.
 ROOTS = ("infra", "toolkit", "edge", "scripts")
 QUIET_AFTER_PIPE = re.compile(r"\|\s*grep\s+(?:-[A-Za-z]*q[A-Za-z]*|--quiet|--silent)\b")
 
@@ -80,3 +82,19 @@ def test_the_mechanism_a_quiet_grep_fails_a_pipeline_that_matched() -> None:
     producer = "{ echo held; for _ in 1 2 3 4 5; do sleep 0.2; echo other; done; }"
     assert _status(f"{producer} | grep -qx held") == 141
     assert _status(f"{producer} | grep -x held >/dev/null") == 0
+
+
+def test_the_detector_sees_the_files_and_matches_the_known_forms() -> None:
+    """A guard that scans nothing, or matches nothing, reports the repository clean."""
+    scanned = {str(p.relative_to(REPO)) for p in _tracked()}
+    assert "Makefile" in scanned
+    assert "infra/ansible/roles/node_maintenance/templates/kubelab-maintenance.sh.j2" in scanned
+    for bad in (
+        """if ! printf '%s\\n' "$HELD_BEFORE" | grep -qx 'docker-ce'; then""",
+        """tail -n 5 "$f" | grep -qxF -- 'done'""",
+        """kubectl auth can-i list pods | grep -q "yes" ||""",
+        "cmd | grep --quiet x",
+    ):
+        assert QUIET_AFTER_PIPE.search(bad), bad
+    for good in ("""printf '%s\\n' "$L" | grep -xF 'x' >/dev/null""", "grep -q x file", "a && grep -q x f"):
+        assert not QUIET_AFTER_PIPE.search(good), good
