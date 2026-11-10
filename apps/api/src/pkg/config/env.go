@@ -35,6 +35,7 @@ type Config struct {
 	// Every field may be empty: staging carries no Gitea token, and a source without a credential
 	// is reported unreachable instead of stopping the API from starting.
 	Forge struct {
+		GiteaURL             string // the Gitea root the reader calls; empty wires no Gitea reader
 		GiteaToken           string // read:issue token on the reviewer's account
 		GitHubAppID          string
 		GitHubInstallationID string
@@ -114,6 +115,7 @@ func populateConfig() (*Config, error) {
 
 	// Forge credentials (CONSOLE-004). The two IDs come from the ConfigMap under their shared
 	// infra names (ADR-036); the token and the key come from api-secrets. None is required.
+	cfg.Forge.GiteaURL = os.Getenv("INFRA_FORGE_GITEA_URL")
 	cfg.Forge.GiteaToken = os.Getenv("FORGE_GITEA_TOKEN")
 	cfg.Forge.GitHubAppID = os.Getenv("INFRA_FORGE_GITHUB_APP_ID")
 	cfg.Forge.GitHubInstallationID = os.Getenv("INFRA_FORGE_GITHUB_INSTALLATION_ID")

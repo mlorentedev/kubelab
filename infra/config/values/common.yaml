@@ -556,14 +556,25 @@ infra:
     github:
       app_id: 5573076
       installation_id: 177667607
+    # The Gitea root the API reads, as INFRA_FORGE_GITEA_URL. Empty wires no Gitea
+    # reader, so a gitea: source reads as unreachable: staging has no Gitea Service and
+    # no token. Prod sets it to the in-cluster `gitea` Service (overlays/prod/gitea.yaml).
+    gitea_url: ""
     # What the view reads, as `forge:owner/repo` separated by commas. Read by the API as
     # INFRA_FORGE_SOURCES; a source with no credential is reported unreachable, never empty.
     # This list is also the gate: a webhook about any other repository is dropped, so
     # widening the App's installation adds nothing to the view without a change here.
     # GitHub: every repository that feeds the board (it carries `add-to-project.yml`),
     # which is the parity ADR-066 A4 sets. The App must be installed on each one, or
-    # that source reads as unreachable. Sorted; `tests/test_forge_sources.py`.
+    # that source reads as unreachable. Gitea: every repository declared under
+    # `apps.services.core.gitea.organizations`, and only those (the test holds the
+    # two equal). Sorted; `tests/test_forge_sources.py`.
     sources: >-
+      gitea:personal/imagesensortool,
+      gitea:personal/resume,
+      gitea:teledyne/fae-brain,
+      gitea:teledyne/openkm-brain,
+      gitea:teledyne/projects-toolkit,
       github:mlorentedev/boilerplates,
       github:mlorentedev/cloud-architecture-coursework,
       github:mlorentedev/dotfiles,
