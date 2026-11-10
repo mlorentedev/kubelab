@@ -241,6 +241,9 @@
         gitea_http_port: "{{ gitea_config.apps.services.core.gitea.default_port }}"
         gitea_ssh_port: "{{ gitea_config.apps.services.core.gitea.ssh_port }}"
         gitea_ssh_host: "{{ gitea_config.apps.services.core.gitea.ssh_host }}"
+        # IDP-036 AC1: the Renovate run's repository list is rendered from the
+        # declaration the reconciler creates repositories from, never a second list.
+        renovate_gitea_organizations: "{{ gitea_config.apps.services.core.gitea.organizations }}"
         # SEC-GITEA-001 (#1389). `health_path` has been declared in common.yaml
         # since the move and was read by NOTHING: the compose healthcheck
         # hardcoded /api/v1/version instead. That divergence was invisible while
