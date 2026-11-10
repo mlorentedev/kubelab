@@ -14,7 +14,7 @@ import re
 from typing import Callable, Optional
 
 from toolkit.core.logging import logger
-from toolkit.features.backup_destination import _RESTIC_PASSWORD_SECRET, RunFn
+from toolkit.features.backup_destination import RunFn
 from toolkit.features.backup_node_credentials import restic_password_path
 
 ESCROW_PREFIX = "KUBELAB_RESTIC_PASSWORD"
@@ -25,9 +25,9 @@ _PASSWORD_LINE = re.compile(r"^\s*data\.login\.password\s+len=\d+\s+([0-9a-f]{12
 _FIELD_LINE = re.compile(r"^\s*data\.\S+\s+len=\d+\s+[0-9a-f]{12}\s*$", re.MULTILINE)
 
 
-def escrow_id(node: Optional[str]) -> str:
-    """The `dotf` registry id: the shared password's, or `node`'s own."""
-    return ESCROW_PREFIX if node is None else f"{ESCROW_PREFIX}_{node.upper()}"
+def escrow_id(node: str) -> str:
+    """The `dotf` registry id of `node`'s password."""
+    return f"{ESCROW_PREFIX}_{node.upper()}"
 
 
 def fingerprint(value: str) -> str:
@@ -37,7 +37,7 @@ def fingerprint(value: str) -> str:
 
 def check(nodes: list[str], *, secret: Callable[[str], Optional[str]], run: RunFn) -> bool:
     """True iff every restic password in SOPS has a matching escrow entry."""
-    entries = [(None, _RESTIC_PASSWORD_SECRET)] + [(n, restic_password_path(n)) for n in nodes]
+    entries = [(n, restic_password_path(n)) for n in nodes]
     ok = True
     for node, path in entries:
         entry = escrow_id(node)

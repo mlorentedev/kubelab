@@ -58,7 +58,6 @@ def test_every_node_targets_the_root_of_its_own_bucket() -> None:
     for node, row in rows.items():
         assert row[0].startswith("s3:https://"), node
         assert row[0].endswith(f"/{node_bucket(node)}"), node
-        assert f"/{COMMON['backup']['r2']['bucket']}/" not in row[0], f"{node} still targets the shared bucket"
 
 
 def test_a_new_source_changes_the_render() -> None:

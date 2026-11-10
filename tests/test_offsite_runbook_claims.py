@@ -5,8 +5,8 @@ costs more than a stale line anywhere else. Until this test, the restore steps
 still pointed at `kubelab-backups`, frozen since the 2026-10-08 migration: followed
 as written, they would have restored data weeks old and reported success.
 
-`kubelab-backups` still exists, so a whole-file search for it would be wrong: the
-migration and watcher sections name it truthfully until it is deleted. The check is
+`kubelab-backups` was retired (#1920), and the section that records its retirement
+names it truthfully, so a whole-file search for it would be wrong. The check is
 scoped to the sections that tell an operator where backups are and how to read them.
 """
 

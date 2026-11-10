@@ -51,11 +51,11 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit backup drill-node` | Restore a node's newest capture from its own repository and check every declared source (BACKUP-076). |
 | `toolkit backup drill-postgres` | Restore the newest Postgres dump from R2 into a scratch container and check it is complete. |
 | `toolkit backup escrow-check` | Compare each restic password in SOPS with its Bitwarden escrow entry (BACKUP-057). |
-| `toolkit backup generate-password` | Generate the restic repository password and store it in SOPS. |
 | `toolkit backup health-check` | Run the isolation probe and the fleet coverage check, and notify Slack. |
 | `toolkit backup isolation-probe` | Fail on any R2 request a stolen node credential should be refused (BACKUP-057). |
 | `toolkit backup mint-node-tokens` | Mint each node's own R2 token and restic password into SOPS (BACKUP-057). |
 | `toolkit backup restore-window` | Pause an env's Argo CD auto-sync and stop one app, so its data can be replaced (BACKUP-070). |
+| `toolkit backup retire-bucket` | Retire an R2 bucket nothing reads: empty it, delete it, prove it gone (BACKUP-057). |
 | `toolkit backup revoke-r2-pair` | Retire an R2 pair no catalog entry owns: revoke its token, prove it gone, then unset it (BACKUP-057). |
 | `toolkit board` | Bitácora board governance: keep the Stream field true to the registry. |
 | `toolkit board deps` | Report open issues named by a dependency keyword in another open issue's body (GOV-005 AC3 guard). |

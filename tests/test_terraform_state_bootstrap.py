@@ -113,7 +113,7 @@ def _mint(api: FakeApi, store: FakeStore, run=_run_scoped, rotate: bool = False)
         account_id=ACCOUNT,
         endpoint="https://r2.example",
         bucket=BUCKET,
-        refused_bucket="kubelab-backups",
+        refused_bucket="kubelab-backup-beelink",
         http=api,
         store=store,
         run=run,

@@ -150,7 +150,7 @@ def node(tmp_path: Path, request: pytest.FixtureRequest):
             # Derived defaults are raw Jinja strings in `_defaults()` (nothing
             # expands them outside Ansible), so every one the script uses is
             # passed as the value Ansible would have produced.
-            node_backup_r2_repository="s3:https://acct.r2.cloudflarestorage.com/kubelab-backups/beelink",
+            node_backup_r2_repository="s3:https://acct.r2.cloudflarestorage.com/kubelab-backup-beelink",
             node_backup_restic_install_path=str(restic),
             node_backup_staging_dir=str(staging),
             node_backup_capture_sentinel=str(sentinel),

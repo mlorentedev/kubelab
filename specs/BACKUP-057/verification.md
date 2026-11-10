@@ -250,6 +250,17 @@ Found on the way: `backup-verify-destination` and `backup-verify-restic` still p
 
 2026-10-07, run `make backup-escrow-check ENV=prod` with Bitwarden unlocked. Five of five matched: `KUBELAB_RESTIC_PASSWORD` and the four `KUBELAB_RESTIC_PASSWORD_<NODE>` entries against their SOPS values, by sha256[:12], printing no value. This repeats the hand comparison of 2026-10-03, now as a command. I ran five mutations of `backup_escrow.py`, and each turned a test red. One did so only after the test for a password missing from SOPS was made to assert that the escrow is never queried for it.
 
+## The weekly check on every node bucket (gate for retiring `kubelab-backups`)
+
+Read on 2026-11-09 (America/Denver) for the run of Mon 2026-11-09:
+
+- beelink, ace2 and rpi3 each sent a "recovered" notice for `node-backup-ship-check` to Slack #ops-log on 2026-11-09. Their failure notices from the previous week were the check-budget timeouts that #2922 fixed.
+- rpi4 and the VPS sent no failure notice, and `make backup-schedule NODE=all ENV=prod` showed the check timer's LAST run as Mon 2026-11-09 on both.
+- The prune unit had 0 failures in the last 7 days on all five nodes.
+- The watcher reported `"healthy":1` on all five nodes and on the fleet line at 2026-11-10 00:03 UTC.
+
+This satisfies the gate: one weekly check has passed on every new bucket. The shared bucket is retired by `make backup-retire-bucket`, then its pair by `make backup-revoke-r2-pair PAIR=backup.r2 APPLY=1`, then `backup.restic_password` is unset.
+
 ## Test status
 
 - Test suite: `<command> -> <output / coverage %>`
