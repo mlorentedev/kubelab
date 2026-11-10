@@ -558,7 +558,7 @@ secrets-copy-nan-key: ## Copy NAN_API_KEY from Bitwarden into prod SOPS for PR-A
 .PHONY: secrets-copy-gitea-agent-token
 secrets-copy-gitea-agent-token: ## Copy the agents' Gitea token from prod SOPS into Bitwarden for dotf (re-run after each re-mint)
 	@V=$$(ENV=dev $(TOOLKIT) secrets show apps.services.core.gitea.agent_token --env prod 2>/dev/null | tail -1) && \
-		test -n "$$V" && printf %s "$$V" | grep -Eqx '[0-9a-f]{40}' || { echo "agent_token absent from prod SOPS, or not a 40-hex Gitea token; provision first" >&2; exit 1; }; \
+		test -n "$$V" && printf %s "$$V" | grep -Ex '[0-9a-f]{40}' >/dev/null || { echo "agent_token absent from prod SOPS, or not a 40-hex Gitea token; provision first" >&2; exit 1; }; \
 		printf %s "$$V" | dotf secrets set --yes GITEA_KUBELAB_AGENT_TOKEN
 
 # -----------------------------------------------------------------------------
@@ -969,8 +969,8 @@ register-spoke:
 		if [ "$$RESULT" = "yes" ]; then echo "  kubelab: writes OK"; break; fi; \
 		sleep 1; \
 	done
-	@kubectl auth can-i create deployments --as=system:serviceaccount:kubelab:argocd-manager -n kubelab --kubeconfig $(KUBECONFIG_PATH) | grep -q "yes" || (echo "  RBAC check failed: no create in kubelab" && exit 1)
-	@kubectl auth can-i list pods --as=system:serviceaccount:kubelab:argocd-manager --kubeconfig $(KUBECONFIG_PATH) | grep -q "yes" && echo "  cluster: reads OK" || echo "  WARNING: no cluster-wide reads"
+	@kubectl auth can-i create deployments --as=system:serviceaccount:kubelab:argocd-manager -n kubelab --kubeconfig $(KUBECONFIG_PATH) | grep "yes" >/dev/null || (echo "  RBAC check failed: no create in kubelab" && exit 1)
+	@kubectl auth can-i list pods --as=system:serviceaccount:kubelab:argocd-manager --kubeconfig $(KUBECONFIG_PATH) | grep "yes" >/dev/null && echo "  cluster: reads OK" || echo "  WARNING: no cluster-wide reads"
 	@echo "--- Extracting credentials from $(ENV) spoke ---"
 	@TOKEN=$$(kubectl get secret argocd-manager-token -n kubelab --kubeconfig $(KUBECONFIG_PATH) -o jsonpath='{.data.token}' | base64 -d) && \
 		CA=$$(kubectl get secret argocd-manager-token -n kubelab --kubeconfig $(KUBECONFIG_PATH) -o jsonpath='{.data.ca\.crt}') && \
@@ -1064,7 +1064,7 @@ promote-prod: ## Open the prod promotion PR for an app at a released semver tag 
 	@test -n "$(APP)" && test -n "$(VERSION)" || { \
 		echo "Usage: make promote-prod APP=<product> VERSION=1.12.0"; exit 2; }
 	@products="$$($(PRODUCT_LIST))" || { echo "Cannot read the product registry (infra/config/products.yaml)"; exit 2; }; \
-	printf '%s\n' $$products | grep -qxF -- '$(APP)' || { \
+	printf '%s\n' $$products | grep -xF -- '$(APP)' >/dev/null || { \
 		echo "Unknown APP '$(APP)' — expected one of:" $$products; exit 2; }
 	@[[ "$(VERSION)" =~ ^[0-9]+\.[0-9]+\.[0-9]+$$ ]] || { \
 		echo "VERSION '$(VERSION)' is not an immutable semver tag such as 1.12.0."; \
