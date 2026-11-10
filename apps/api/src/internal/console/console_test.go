@@ -247,3 +247,23 @@ func TestQueueWithoutACatalogIs503(t *testing.T) {
 		t.Fatalf("status = %d, want 503", w.Code)
 	}
 }
+
+// A wildcard the catalog has not listed yet is shown, so the page reports it
+// unreachable rather than leaving that forge out without a word.
+func TestQueueShowsAWildcardNotYetListed(t *testing.T) {
+	sources, err := forge.ParseSources("github:o/*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	q := &fakeQueue{}
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	Register(r, Live(q, &forge.Catalog{Declared: sources}), func() string { return consoleHost })
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/console/queue", nil)
+	req.Host = consoleHost
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK || len(q.asked) != 1 || !q.asked[0].Wildcard() {
+		t.Fatalf("status %d, asked %v", w.Code, q.asked)
+	}
+}

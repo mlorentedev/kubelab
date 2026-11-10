@@ -116,7 +116,9 @@ func Live(model QueueReader, catalog *forge.Catalog) Deps {
 		if catalog == nil {
 			return nil, nil, errors.New("no catalog: the forge sources did not parse")
 		}
-		return model, catalog.Current(), nil
+		// A wildcard not listed yet is shown too: the store has no row for it, so it
+		// reads unreachable and never read, rather than a forge silently missing.
+		return model, append(catalog.Current(), catalog.Unresolved()...), nil
 	}
 }
 

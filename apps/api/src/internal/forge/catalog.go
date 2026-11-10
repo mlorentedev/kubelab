@@ -69,8 +69,25 @@ func (c *Catalog) Seed(known []Source) {
 		if _, done := c.listed[pattern]; done || !pattern.Wildcard() {
 			continue
 		}
-		c.listed[pattern] = owned(pattern, known)
+		// An empty seed is no listing: the wildcard stays unresolved until one succeeds.
+		if own := owned(pattern, known); len(own) > 0 {
+			c.listed[pattern] = own
+		}
 	}
+}
+
+// Unresolved returns the wildcards with neither a listing nor a seed: nothing is
+// known about them yet, and the console shows them unreachable, never as nothing.
+func (c *Catalog) Unresolved() []Source {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	var out []Source
+	for _, pattern := range c.Declared {
+		if _, ok := c.listed[pattern]; pattern.Wildcard() && !ok {
+			out = append(out, pattern)
+		}
+	}
+	return out
 }
 
 func (c *Catalog) list(ctx context.Context, pattern Source) ([]Source, error) {

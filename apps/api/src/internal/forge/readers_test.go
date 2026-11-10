@@ -65,7 +65,7 @@ func TestEachForgeHasItsOwnCeiling(t *testing.T) {
 func TestTheGitHubListerIsTheGitHubReader(t *testing.T) {
 	readers := forge.NewReaders(forge.Credentials{GiteaURL: "http://gitea:3000"})
 	listers := forge.Listers(readers)
-	if any(listers["github"]) != any(readers["github"]) {
+	if readers["github"] == nil || any(listers["github"]) != any(readers["github"]) {
 		t.Fatalf("github lister %v is not the reader %v", listers["github"], readers["github"])
 	}
 	if _, ok := listers["gitea"]; ok {

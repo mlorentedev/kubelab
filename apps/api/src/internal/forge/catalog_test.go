@@ -207,3 +207,22 @@ func TestCatalogReadsACaseVariantOnce(t *testing.T) {
 		t.Fatalf("got %v, want kubelab once and b", names(got))
 	}
 }
+
+// A wildcard never listed, with nothing in the store to seed it, is reported as
+// such: the console shows it unreachable instead of showing no GitHub at all.
+func TestCatalogReportsAWildcardNotYetListed(t *testing.T) {
+	l := &fakeLister{err: errors.New("down")}
+	c := newCatalog(t, "github:o/*,github:p/q", l)
+	c.Seed(nil)
+	_ = c.Resolve(context.Background())
+	if got := names(c.Unresolved()); !reflect.DeepEqual(got, []string{"github:o/*"}) {
+		t.Fatalf("unresolved = %v", got)
+	}
+	l.err, l.repos = nil, map[string][]string{}
+	if err := c.Resolve(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if got := c.Unresolved(); len(got) != 0 {
+		t.Fatalf("an owner with no repositories still reads as unlisted: %v", names(got))
+	}
+}
