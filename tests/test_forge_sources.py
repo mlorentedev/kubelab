@@ -61,8 +61,12 @@ def _render(value: str) -> str:
 
 
 def test_the_template_folds_a_long_value_and_reads_it_back_unchanged():
+    declared = yaml.safe_load(COMMON.read_text(encoding="utf-8"))["infra"]["forge"]["sources"]
     long_value = ", ".join(f"github:owner/a-hyphenated-repository-name-{i}" for i in range(12))
-    assert _render(long_value) == long_value
+    # The declaration is the case that once folded at `kubelab-devnode-` and read back
+    # with a space in the name.
+    for value in (declared, long_value):
+        assert _render(value) == value
 
 
 def test_the_template_never_folds_a_value_folding_would_change():
