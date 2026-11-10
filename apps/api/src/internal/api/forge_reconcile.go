@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"log"
-	"net/http"
 
 	"github.com/mlorentedev/kubelab/apps/api/internal/forge"
 	"github.com/mlorentedev/kubelab/apps/api/internal/store"
@@ -21,20 +20,14 @@ func StartForgeReconcile(ctx context.Context, conf *config.Config) {
 	if len(sources) == 0 || !conf.Postgres.Configured() {
 		return
 	}
-	client := &http.Client{Transport: &forge.Ceiling{Limit: forge.HourlyCallCeiling}}
-	github := &forge.GitHub{BaseURL: "https://api.github.com", HTTP: client}
-	if conf.Forge.GitHubPrivateKey != "" {
-		tokens := &forge.AppTokens{
-			BaseURL:        github.BaseURL,
-			AppID:          conf.Forge.GitHubAppID,
-			InstallationID: conf.Forge.GitHubInstallationID,
-			PrivateKeyPEM:  conf.Forge.GitHubPrivateKey,
-			HTTP:           client,
-		}
-		github.Tokens = tokens.Token
-	}
 	r := &forge.Reconciler{
-		Readers: map[string]forge.Reader{"github": github},
+		Readers: forge.NewReaders(forge.Credentials{
+			GitHubAppID:          conf.Forge.GitHubAppID,
+			GitHubInstallationID: conf.Forge.GitHubInstallationID,
+			GitHubPrivateKey:     conf.Forge.GitHubPrivateKey,
+			GiteaURL:             conf.Forge.GiteaURL,
+			GiteaToken:           conf.Forge.GiteaToken,
+		}),
 		Sources: sources,
 		Model:   store.ForgeModel{Conf: conf.Postgres},
 	}

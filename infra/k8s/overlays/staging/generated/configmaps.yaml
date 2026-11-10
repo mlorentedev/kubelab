@@ -12,14 +12,16 @@ data:
   BEEHIIV_PUB_ID: "pub_bf6a0b8d-074a-45e5-a2c2-34ed87fb4b5f"
   ENVIRONMENT: "staging"
   INFRA_FORGE_CONSOLE_DOMAIN: "console.staging.kubelab.live"
+  INFRA_FORGE_GITEA_URL: ""
   INFRA_FORGE_GITHUB_APP_ID: "5573076"
   INFRA_FORGE_GITHUB_INSTALLATION_ID: "177667607"
   INFRA_FORGE_SOURCES: >-
-    github:mlorentedev/boilerplates, github:mlorentedev/cloud-architecture-coursework,
-    github:mlorentedev/dotfiles, github:mlorentedev/embedded-systems-coursework,
-    github:mlorentedev/emva1288-sensor-characterization, github:mlorentedev/garsync,
-    github:mlorentedev/hive, github:mlorentedev/iris, github:mlorentedev/kasa-provisioner,
-    github:mlorentedev/knowledge, github:mlorentedev/kubelab,
+    gitea:personal/imagesensortool, gitea:personal/resume, gitea:teledyne/fae-brain,
+    gitea:teledyne/openkm-brain, gitea:teledyne/projects-toolkit, github:mlorentedev/boilerplates,
+    github:mlorentedev/cloud-architecture-coursework, github:mlorentedev/dotfiles,
+    github:mlorentedev/embedded-systems-coursework, github:mlorentedev/emva1288-sensor-characterization,
+    github:mlorentedev/garsync, github:mlorentedev/hive, github:mlorentedev/iris,
+    github:mlorentedev/kasa-provisioner, github:mlorentedev/knowledge, github:mlorentedev/kubelab,
     github:mlorentedev/kubelab-devnode-fixture, github:mlorentedev/leaving-denver,
     github:mlorentedev/mail2markdown, github:mlorentedev/mlorentedev,
     github:mlorentedev/nan-video-pipeline, github:mlorentedev/pdf-modifier, github:mlorentedev/pollex,
@@ -62,14 +64,16 @@ data:
   GOOGLE_ANALYTICS_ID: "G-PLL8SP2YFC"
   GOOGLE_TAG_MANAGER_ID: "GTM-XXXXXX"
   INFRA_FORGE_CONSOLE_DOMAIN: "console.staging.kubelab.live"
+  INFRA_FORGE_GITEA_URL: ""
   INFRA_FORGE_GITHUB_APP_ID: "5573076"
   INFRA_FORGE_GITHUB_INSTALLATION_ID: "177667607"
   INFRA_FORGE_SOURCES: >-
-    github:mlorentedev/boilerplates, github:mlorentedev/cloud-architecture-coursework,
-    github:mlorentedev/dotfiles, github:mlorentedev/embedded-systems-coursework,
-    github:mlorentedev/emva1288-sensor-characterization, github:mlorentedev/garsync,
-    github:mlorentedev/hive, github:mlorentedev/iris, github:mlorentedev/kasa-provisioner,
-    github:mlorentedev/knowledge, github:mlorentedev/kubelab,
+    gitea:personal/imagesensortool, gitea:personal/resume, gitea:teledyne/fae-brain,
+    gitea:teledyne/openkm-brain, gitea:teledyne/projects-toolkit, github:mlorentedev/boilerplates,
+    github:mlorentedev/cloud-architecture-coursework, github:mlorentedev/dotfiles,
+    github:mlorentedev/embedded-systems-coursework, github:mlorentedev/emva1288-sensor-characterization,
+    github:mlorentedev/garsync, github:mlorentedev/hive, github:mlorentedev/iris,
+    github:mlorentedev/kasa-provisioner, github:mlorentedev/knowledge, github:mlorentedev/kubelab,
     github:mlorentedev/kubelab-devnode-fixture, github:mlorentedev/leaving-denver,
     github:mlorentedev/mail2markdown, github:mlorentedev/mlorentedev,
     github:mlorentedev/nan-video-pipeline, github:mlorentedev/pdf-modifier, github:mlorentedev/pollex,

@@ -20,6 +20,12 @@ def _sources() -> list[str]:
     return [part.strip() for part in declared.split(",") if part.strip()]
 
 
+def _api_config(env: str) -> dict:
+    path = REPO_ROOT / "infra" / "k8s" / "overlays" / env / "generated" / "configmaps.yaml"
+    docs = yaml.safe_load_all(path.read_text(encoding="utf-8"))
+    return next(d for d in docs if d and d["metadata"]["name"] == "api-config")
+
+
 def test_every_source_is_forge_owner_repo():
     for source in _sources():
         forge, _, path = source.partition(":")
@@ -43,8 +49,7 @@ def test_the_generated_configmap_carries_the_declaration_unchanged():
     # at a hyphen would read back with a space in a repository name.
     declared = yaml.safe_load(COMMON.read_text(encoding="utf-8"))["infra"]["forge"]["sources"]
     for env in ("staging", "prod"):
-        path = REPO_ROOT / "infra" / "k8s" / "overlays" / env / "generated" / "configmaps.yaml"
-        api = next(d for d in yaml.safe_load_all(path.read_text(encoding="utf-8")) if d and d["metadata"]["name"] == "api-config")
+        api = _api_config(env)
         assert api["data"]["INFRA_FORGE_SOURCES"] == declared, env
 
 
@@ -72,3 +77,30 @@ def test_the_template_folds_a_long_value_and_reads_it_back_unchanged():
 def test_the_template_never_folds_a_value_folding_would_change():
     for value in (" lead" + "x" * 120, "x" * 120 + " ", "a  b " + "x" * 120):
         assert _render(value) == value, repr(value[:12])
+
+
+def test_gitea_sources_are_exactly_the_declared_repositories():
+    # A repository is declared once, under the Gitea organizations; the sources may
+    # neither miss one nor name one the forge reconciler does not create.
+    common = yaml.safe_load(COMMON.read_text(encoding="utf-8"))
+    organizations = common["apps"]["services"]["core"]["gitea"]["organizations"]
+    declared = {
+        f"gitea:{org}/{repo['name']}" for org, spec in organizations.items() for repo in spec.get("repositories") or []
+    }
+    assert {s for s in _sources() if s.startswith("gitea:")} == declared
+
+
+def test_each_overlay_carries_its_declared_gitea_address():
+    # Staging has no `gitea` Service and no token, so it declares none; prod reads the
+    # in-cluster Service. Compared against the values files, not a copy of them.
+    def declared(name: str) -> str | None:
+        values = yaml.safe_load((COMMON.parent / name).read_text(encoding="utf-8"))
+        return ((values.get("infra") or {}).get("forge") or {}).get("gitea_url")
+
+    common = declared("common.yaml")
+    for env in ("staging", "prod"):
+        expected = declared(f"{env}.yaml")
+        expected = common if expected is None else expected
+        assert _api_config(env)["data"]["INFRA_FORGE_GITEA_URL"] == expected, env
+    assert common == "", "staging must not wire a Gitea reader"
+    assert declared("prod.yaml"), "prod must wire the Gitea reader"
