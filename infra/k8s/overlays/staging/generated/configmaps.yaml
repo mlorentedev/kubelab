@@ -14,7 +14,18 @@ data:
   INFRA_FORGE_CONSOLE_DOMAIN: "console.staging.kubelab.live"
   INFRA_FORGE_GITHUB_APP_ID: "5573076"
   INFRA_FORGE_GITHUB_INSTALLATION_ID: "177667607"
-  INFRA_FORGE_SOURCES: "github:mlorentedev/kubelab"
+  INFRA_FORGE_SOURCES: >-
+    github:mlorentedev/boilerplates, github:mlorentedev/cloud-architecture-coursework,
+    github:mlorentedev/dotfiles, github:mlorentedev/embedded-systems-coursework,
+    github:mlorentedev/emva1288-sensor-characterization, github:mlorentedev/garsync,
+    github:mlorentedev/hive, github:mlorentedev/iris, github:mlorentedev/kasa-provisioner,
+    github:mlorentedev/knowledge, github:mlorentedev/kubelab,
+    github:mlorentedev/kubelab-devnode-fixture, github:mlorentedev/leaving-denver,
+    github:mlorentedev/mail2markdown, github:mlorentedev/mlorentedev,
+    github:mlorentedev/nan-video-pipeline, github:mlorentedev/pdf-modifier, github:mlorentedev/pollex,
+    github:mlorentedev/svqtriana.github.io, github:mlorentedev/telecom-engineering,
+    github:mlorentedev/ts-bridge, github:mlorentedev/vicon-fpga-face-detection, github:mlorentedev/web,
+    github:mlorentedev/yt-metrics-cli
   INFRA_POSTGRES_DATABASE: "kubelab"
   INFRA_POSTGRES_HOST: "postgres"
   INFRA_POSTGRES_PORT: "5432"
@@ -53,7 +64,18 @@ data:
   INFRA_FORGE_CONSOLE_DOMAIN: "console.staging.kubelab.live"
   INFRA_FORGE_GITHUB_APP_ID: "5573076"
   INFRA_FORGE_GITHUB_INSTALLATION_ID: "177667607"
-  INFRA_FORGE_SOURCES: "github:mlorentedev/kubelab"
+  INFRA_FORGE_SOURCES: >-
+    github:mlorentedev/boilerplates, github:mlorentedev/cloud-architecture-coursework,
+    github:mlorentedev/dotfiles, github:mlorentedev/embedded-systems-coursework,
+    github:mlorentedev/emva1288-sensor-characterization, github:mlorentedev/garsync,
+    github:mlorentedev/hive, github:mlorentedev/iris, github:mlorentedev/kasa-provisioner,
+    github:mlorentedev/knowledge, github:mlorentedev/kubelab,
+    github:mlorentedev/kubelab-devnode-fixture, github:mlorentedev/leaving-denver,
+    github:mlorentedev/mail2markdown, github:mlorentedev/mlorentedev,
+    github:mlorentedev/nan-video-pipeline, github:mlorentedev/pdf-modifier, github:mlorentedev/pollex,
+    github:mlorentedev/svqtriana.github.io, github:mlorentedev/telecom-engineering,
+    github:mlorentedev/ts-bridge, github:mlorentedev/vicon-fpga-face-detection, github:mlorentedev/web,
+    github:mlorentedev/yt-metrics-cli
   INFRA_POSTGRES_DATABASE: "kubelab"
   INFRA_POSTGRES_HOST: "postgres"
   INFRA_POSTGRES_PORT: "5432"
