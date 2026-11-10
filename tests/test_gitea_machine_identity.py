@@ -178,7 +178,7 @@ esac
 echo "curl: $*" >> {calls}
 case "$*" in
   *PATCH*) exit 0 ;;
-  *) printf '{{"login":"{BOT}","prohibit_login":{str(prohibited).lower()}}}' ;;
+  *) printf '{{"id":2,"login":"{BOT}","prohibit_login":{str(prohibited).lower()}}}' ;;
 esac
 """,
             encoding="utf-8",
@@ -257,7 +257,7 @@ def test_an_account_already_in_the_right_state_is_not_patched_again(bot_harness)
     bot_harness.build(bot_exists=True, prohibited=False)
     # The creation limit (AUTH-024) converges by its own marker; seed it so
     # this test isolates the login state, which converges by read-back.
-    (bot_harness.calls.parent / f".kubelab-creation-limit-{BOT}").write_text("", encoding="utf-8")
+    (bot_harness.calls.parent / f".kubelab-creation-limit-{BOT}-2").write_text("", encoding="utf-8")
     result = bot_harness.run()
     assert "already correct" in result.stdout
     assert "Updated machine account" not in result.stdout, (

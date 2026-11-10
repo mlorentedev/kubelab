@@ -283,16 +283,22 @@ ensure_machine_account() {
   # marker per account, written only after the PATCH returns 0. It cannot see a
   # value changed in Gitea directly; the reconcile's ownership check (#3163) is
   # what catches a repository that got through anyway.
-  _limit_state="$CREATION_LIMIT_STATE_DIR/.kubelab-creation-limit-$_machine_user"
-  if [ -f "$_limit_state" ]; then
+  # The marker names the account's id as well as its login, so an account
+  # deleted and created again under the same login gets the limit again. With
+  # no id read, the limit is written and nothing is recorded.
+  _machine_id=$(printf '%s' "$_machine_state" | sed -n 's/.*"id":\([0-9][0-9]*\).*/\1/p')
+  _limit_state="$CREATION_LIMIT_STATE_DIR/.kubelab-creation-limit-$_machine_user-${_machine_id:-unknown}"
+  if [ -n "$_machine_id" ] && [ -f "$_limit_state" ]; then
     log "Repository creation limit already recorded ($_machine_user)"
   else
     admin_curl_config | curl -sf -K - -X PATCH \
       -H "Content-Type: application/json" \
       -d "{\"max_repo_creation\": 0, \"login_name\": \"$_machine_user\", \"source_id\": 0}" \
       "http://localhost:3000/api/v1/admin/users/$_machine_user" >/dev/null
-    : > "$_limit_state"
-    chmod 600 "$_limit_state"
+    if [ -n "$_machine_id" ]; then
+      : > "$_limit_state"
+      chmod 600 "$_limit_state"
+    fi
     log "Updated repository creation limit ($_machine_user)"
   fi
 }

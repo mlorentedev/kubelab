@@ -59,7 +59,7 @@ while [ $# -gt 0 ]; do
 done
 printf '%s %s %s\\n' "$method" "$url" "$body" >> {calls}
 [ -n "${{STUB_PATCH_FAILS:-}}" ] && [ "$method" = PATCH ] && exit 22
-[ "$method" = GET ] && printf '{{"prohibit_login":false}}'
+[ "$method" = GET ] && printf '{{"id":%s,"prohibit_login":false}}' "${{STUB_USER_ID-7}}"
 exit 0
 """,
     }
@@ -136,4 +136,24 @@ def test_a_failed_write_records_nothing(harness) -> None:
     result = harness.run(STUB_PATCH_FAILS="1")
 
     assert result.returncode != 0
+    assert not list(harness.state.glob(".kubelab-creation-limit-*"))
+
+
+def test_an_account_created_again_under_the_same_login_gets_the_limit_again(harness) -> None:
+    """A recreated account starts unlimited; a marker keyed by login alone would hide that."""
+    harness.run()
+    first = len(harness.writes())
+
+    result = harness.run(STUB_USER_ID="8")
+
+    assert len(harness.writes()) == first + len(MACHINES), "a new account id did not get the limit"
+    assert "Updated repository creation limit" in result.stdout
+
+
+def test_an_unreadable_account_is_limited_and_not_recorded(harness) -> None:
+    """With no id there is nothing to key a marker on, so the write repeats instead of converging falsely."""
+    result = harness.run(STUB_USER_ID="")
+
+    assert result.returncode == 0, result.stderr
+    assert len(harness.writes()) == len(MACHINES)
     assert not list(harness.state.glob(".kubelab-creation-limit-*"))
