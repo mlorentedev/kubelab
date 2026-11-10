@@ -72,7 +72,11 @@ def _status(pipeline: str) -> int:
 
 
 def test_the_mechanism_a_quiet_grep_fails_a_pipeline_that_matched() -> None:
-    """Deterministic form of the race: the producer writes after grep has already matched."""
-    producer = "{ echo held; sleep 0.3; echo other; }"
+    """Deterministic form of the race: the producer keeps writing after grep has matched.
+
+    Several late writes, so a grep slow to start on a loaded runner still exits
+    before the last of them.
+    """
+    producer = "{ echo held; for _ in 1 2 3 4 5; do sleep 0.2; echo other; done; }"
     assert _status(f"{producer} | grep -qx held") == 141
     assert _status(f"{producer} | grep -x held >/dev/null") == 0
