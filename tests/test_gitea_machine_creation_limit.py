@@ -84,7 +84,9 @@ exit 0
             **{key.replace("_USER", "_EMAIL"): f"{login}@example.test" for key, login in MACHINES.items()},
             **extra,
         }
-        return subprocess.run(["sh", str(SCRIPT)], env=env, capture_output=True, text=True, timeout=60)
+        return subprocess.run(
+            ["sh", str(SCRIPT)], env=env, capture_output=True, text=True, encoding="utf-8", timeout=60
+        )
 
     def limit_writes() -> list[tuple[str, dict]]:
         out = []
