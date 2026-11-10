@@ -969,8 +969,8 @@ register-spoke:
 		if [ "$$RESULT" = "yes" ]; then echo "  kubelab: writes OK"; break; fi; \
 		sleep 1; \
 	done
-	@kubectl auth can-i create deployments --as=system:serviceaccount:kubelab:argocd-manager -n kubelab --kubeconfig $(KUBECONFIG_PATH) | grep "yes" >/dev/null || (echo "  RBAC check failed: no create in kubelab" && exit 1)
-	@kubectl auth can-i list pods --as=system:serviceaccount:kubelab:argocd-manager --kubeconfig $(KUBECONFIG_PATH) | grep "yes" >/dev/null && echo "  cluster: reads OK" || echo "  WARNING: no cluster-wide reads"
+	@kubectl auth can-i create deployments --as=system:serviceaccount:kubelab:argocd-manager -n kubelab --kubeconfig $(KUBECONFIG_PATH) | grep -x "yes" >/dev/null || (echo "  RBAC check failed: no create in kubelab" && exit 1)
+	@kubectl auth can-i list pods --as=system:serviceaccount:kubelab:argocd-manager --kubeconfig $(KUBECONFIG_PATH) | grep -x "yes" >/dev/null && echo "  cluster: reads OK" || echo "  WARNING: no cluster-wide reads"
 	@echo "--- Extracting credentials from $(ENV) spoke ---"
 	@TOKEN=$$(kubectl get secret argocd-manager-token -n kubelab --kubeconfig $(KUBECONFIG_PATH) -o jsonpath='{.data.token}' | base64 -d) && \
 		CA=$$(kubectl get secret argocd-manager-token -n kubelab --kubeconfig $(KUBECONFIG_PATH) -o jsonpath='{.data.ca\.crt}') && \
