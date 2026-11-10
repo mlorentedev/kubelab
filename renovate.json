@@ -1,19 +1,8 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "config:recommended",
-    ":semanticCommits"
+    "github>mlorentedev/ci-workflows//renovate/default#v0.4.0"
   ],
-  "timezone": "Europe/Madrid",
-  "schedule": [
-    "* 0-6 * * 1"
-  ],
-  "prConcurrentLimit": 3,
-  "labels": [
-    "dependencies",
-    "renovate"
-  ],
-  "commitMessagePrefix": "fix(deps):",
   "gitIgnoredAuthors": [
     "bot@kubelab.live"
   ],

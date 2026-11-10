@@ -22,7 +22,6 @@ from toolkit.features.backup_node_credentials import restic_password_path
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
 NODES = ["beelink", "rpi3", "rpi4", "vps"]
-SHARED = "backup.restic_password"
 
 
 def _fp(value: str) -> str:
@@ -30,7 +29,7 @@ def _fp(value: str) -> str:
 
 
 def _sops() -> dict[str, str]:
-    return {SHARED: "fixture-shared"} | {restic_password_path(n): f"fixture-{n}" for n in NODES}
+    return {restic_password_path(n): f"fixture-{n}" for n in NODES}
 
 
 def _probe_output(value: str | None) -> str:
@@ -45,9 +44,7 @@ def _probe_output(value: str | None) -> str:
 
 class Escrow:
     def __init__(self) -> None:
-        self.values: dict[str, str | None] = {be.escrow_id(None): "fixture-shared"} | {
-            be.escrow_id(n): f"fixture-{n}" for n in NODES
-        }
+        self.values: dict[str, str | None] = {be.escrow_id(n): f"fixture-{n}" for n in NODES}
         self.asked: list[str] = []
         self.fail: dict[str, tuple[int, str]] = {}
 
@@ -66,7 +63,6 @@ def _check(escrow: Escrow, sops: dict[str, str] | None = None) -> bool:
 
 
 def test_the_escrow_ids_are_the_registrys() -> None:
-    assert be.escrow_id(None) == "KUBELAB_RESTIC_PASSWORD"
     assert be.escrow_id("rpi3") == "KUBELAB_RESTIC_PASSWORD_RPI3"
 
 
@@ -145,7 +141,6 @@ class _CM:
     def __init__(self, sources: list[str], in_sops: list[str]) -> None:
         self.config = {
             "backup": {
-                "restic_password": "fixture-shared",
                 "sources": {n: {} for n in sources},
                 "nodes": {n: {"restic_password": f"fixture-{n}", "r2": {}} for n in in_sops},
             }
@@ -169,10 +164,10 @@ def test_the_fleet_is_the_committed_backup_sources() -> None:
     for n in committed:
         escrow.values.setdefault(be.escrow_id(n), f"fixture-{n}")
     assert be.check_fleet("prod", cm=_CM(committed, committed), run=escrow.run) is True
-    assert sorted(escrow.asked) == sorted([be.escrow_id(None), *(be.escrow_id(n) for n in committed)])
+    assert sorted(escrow.asked) == sorted(be.escrow_id(n) for n in committed)
 
 
-def test_an_empty_fleet_fails_it_instead_of_comparing_only_the_shared_password() -> None:
+def test_an_empty_fleet_fails_it_instead_of_comparing_nothing() -> None:
     escrow = Escrow()
     assert be.check_fleet("prod", cm=_CM([], NODES), run=escrow.run) is False
     assert escrow.asked == []

@@ -48,7 +48,7 @@ REPO = pathlib.Path(__file__).resolve().parent.parent
 COMMON = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
 NODES = sorted(COMMON["backup"]["sources"])
 R2 = COMMON["backup"]["r2"]
-LEGACY = R2["bucket"]
+# The shared bucket's pair and password, retired with it (#1920): no node may read them again.
 SHARED_PATHS = ("backup.r2.access_key_id", "backup.r2.secret_access_key", "backup.restic_password")
 
 
@@ -91,15 +91,13 @@ def test_an_account_wide_resource_is_never_requested() -> None:
 
 
 def test_the_watcher_policy_names_exactly_the_backup_buckets_read_only() -> None:
-    """The node buckets and the shared one, nothing else (the shared one since PR 4)."""
-    body = bnc.watcher_token_request(
-        _nodes(), legacy_bucket="kubelab-backups", account_id="acct0123", read_group_id="pg-read"
-    )
+    """The node buckets, nothing else: the shared bucket was retired (#1920)."""
+    body = bnc.watcher_token_request(_nodes(), account_id="acct0123", read_group_id="pg-read")
     assert len(body["policies"]) == 1
     policy = body["policies"][0]
     assert set(policy["resources"]) == {
         f"com.cloudflare.edge.r2.bucket.acct0123_default_{bucket}"
-        for bucket in [*(f"kubelab-backup-{node}" for node in _nodes()), "kubelab-backups"]
+        for bucket in (f"kubelab-backup-{node}" for node in _nodes())
     }
     assert set(policy["resources"].values()) == {"*"}
     assert policy["permission_groups"] == [{"id": "pg-read"}]
@@ -125,7 +123,6 @@ def test_every_node_has_a_bucket_of_its_own() -> None:
     repos = {node: node_repository(COMMON, node) for node in NODES}
     for node, repo in repos.items():
         assert repo == f"s3:{R2['endpoint']}/{node_bucket(node)}", node
-        assert f"/{LEGACY}" not in repo, node
     assert len(set(repos.values())) == len(NODES)
 
 
@@ -184,14 +181,13 @@ def test_the_watcher_pair_is_none_of_the_nodes_pairs() -> None:
     assert {WATCHER_ACCESS_KEY_PATH, WATCHER_SECRET_KEY_PATH}.isdisjoint(node_paths)
 
 
-def test_the_watcher_token_reads_every_node_bucket_and_the_shared_one_and_writes_nothing() -> None:
-    """The shared bucket stays readable until it is deleted, so the fleet size has no blind spot."""
-    assert watcher_buckets(NODES, LEGACY) == sorted([*map(node_bucket, NODES), LEGACY])
-    body = watcher_token_request(NODES, legacy_bucket=LEGACY, account_id="acc", read_group_id="read-group")
+def test_the_watcher_token_reads_every_node_bucket_and_writes_nothing() -> None:
+    assert watcher_buckets(NODES) == sorted(map(node_bucket, NODES))
+    body = watcher_token_request(NODES, account_id="acc", read_group_id="read-group")
     (policy,) = body["policies"]
     assert [g["id"] for g in policy["permission_groups"]] == ["read-group"]
     resources = set(policy["resources"])
-    for bucket in watcher_buckets(NODES, LEGACY):
+    for bucket in watcher_buckets(NODES):
         assert any(r.endswith(f"_{bucket}") for r in resources), bucket
 
 
@@ -276,3 +272,12 @@ def test_a_drill_reads_a_node_with_its_own_pair_and_password() -> None:
     assert set(cm.asked) == {access_key_path("rpi3"), secret_key_path("rpi3"), restic_password_path("rpi3")}
     assert env["RESTIC_PASSWORD"] == f"value-of-{restic_password_path('rpi3')}"
     assert env["AWS_ACCESS_KEY_ID"] == f"value-of-{access_key_path('rpi3')}"
+
+
+# ── the bucket other tokens are proven refused on ────────────────────────────
+
+
+def test_the_refusal_proof_names_a_node_bucket_now_the_shared_one_is_gone() -> None:
+    """The documents and state tokens prove they cannot read the backups (#1920)."""
+    assert bnc.backup_bucket_to_refuse(COMMON) == node_bucket(NODES[0])
+    assert bnc.backup_bucket_to_refuse({"backup": {}}) == ""

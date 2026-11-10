@@ -331,6 +331,14 @@ class TestResticPasswords:
         assert bnc.mint_all(node=nodes[0], rotate=True, watcher_only=True) is False
         assert http.posts() == [] and store.writes == []
 
+    def test_a_single_node_fleet_mints_nothing(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A node's refusal proof is another node's bucket; with one node there is none to name."""
+        nodes = _nodes()[:1]
+        store, http = _held_fleet(monkeypatch, nodes)
+
+        assert bnc.mint_all(node=nodes[0], rotate=True) is False
+        assert http.posts() == [] and store.writes == []
+
     def test_one_node_mints_without_the_watchers_refusal_bucket(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Only the watcher's mint proves a refusal, so only it needs the outside bucket."""
         nodes = _nodes()
@@ -348,7 +356,6 @@ def _held_fleet(monkeypatch: pytest.MonkeyPatch, nodes: list[str]) -> tuple[Fake
     """Every node and the watcher already minted, with SOPS, the API and the aws CLI faked."""
     from toolkit.features import backup_destination
 
-    legacy = "kubelab-backups"
     held = {bnc.MINTER_KEY: "minter"}
     for i, node in enumerate(nodes):
         held |= {
@@ -359,7 +366,7 @@ def _held_fleet(monkeypatch: pytest.MonkeyPatch, nodes: list[str]) -> tuple[Fake
     held |= {bnc.WATCHER_ACCESS_KEY_PATH: "tok-old-w", bnc.WATCHER_SECRET_KEY_PATH: "s-old-w"}
 
     store = FakeStore(held)
-    r2 = {"account_id": ACCOUNT, "endpoint": ENDPOINT, "bucket": legacy}
+    r2 = {"account_id": ACCOUNT, "endpoint": ENDPOINT}
     store._cm = MagicMock()
     store._cm.get_merged_config.return_value = {
         "backup": {"sources": dict.fromkeys(nodes, {}), "r2": r2},
@@ -397,7 +404,6 @@ def _mint_watcher(store: FakeStore, http: FakeHttp, run, rotate: bool = False) -
         _nodes(),
         account_id=ACCOUNT,
         endpoint=ENDPOINT,
-        legacy_bucket="kubelab-backups",
         refused_bucket=OUTSIDE,
         http=http,
         store=store,

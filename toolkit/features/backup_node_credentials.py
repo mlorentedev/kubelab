@@ -134,27 +134,30 @@ def token_request(node: str, *, account_id: str, write_group_id: str) -> dict[st
     return _token_body(bucket, [bucket], account_id=account_id, group_id=write_group_id)
 
 
-def watcher_buckets(nodes: list[str], legacy_bucket: str) -> list[str]:
-    """Every node bucket and the shared one.
-
-    The shared bucket stays readable until it is deleted, so a node's old copy
-    is still sized after the node moves and the fleet total has no blind spot
-    (operator decision, 2026-10-07).
-    """
-    return sorted([*(node_bucket(n) for n in nodes), legacy_bucket])
+def watcher_buckets(nodes: list[str]) -> list[str]:
+    """Every node bucket. The shared bucket every node left was deleted by BACKUP-057's close-out (#1920)."""
+    return sorted(node_bucket(n) for n in nodes)
 
 
-def watcher_token_request(
-    nodes: list[str], *, legacy_bucket: str, account_id: str, read_group_id: str
-) -> dict[str, Any]:
+def watcher_token_request(nodes: list[str], *, account_id: str, read_group_id: str) -> dict[str, Any]:
     """The watcher's policy: Object Read on every backup bucket, nothing else."""
-    buckets = watcher_buckets(nodes, legacy_bucket)
+    buckets = watcher_buckets(nodes)
     return _token_body(WATCHER_TOKEN_NAME, buckets, account_id=account_id, group_id=read_group_id)
 
 
 # A bucket in the backup account that holds no backup: Vikunja's attachments.
 # The watcher reads every backup bucket, so its refusal has to be shown elsewhere.
 OUTSIDE_BUCKET_KEY = "apps.services.core.vikunja.storage.s3_bucket"
+
+
+def backup_bucket_to_refuse(config: dict[str, Any]) -> str:
+    """A backup bucket that a token outside the backups must be refused on, or "" with no backup node.
+
+    The first `backup.sources` node's bucket, so the proof names a bucket that holds
+    real backups and that nothing but its node writes.
+    """
+    nodes = sorted((config.get("backup") or {}).get("sources") or {})
+    return node_bucket(nodes[0]) if nodes else ""
 
 
 def _bucket_outside_backups(config: dict[str, Any]) -> str:
@@ -322,7 +325,6 @@ def mint_watcher(
     *,
     account_id: str,
     endpoint: str,
-    legacy_bucket: str,
     refused_bucket: str,
     http: HttpFn,
     store: Store,
@@ -338,13 +340,13 @@ def mint_watcher(
 
     def request() -> dict[str, Any]:
         group = permission_group_id(http, account_id, READ_GROUP)
-        return watcher_token_request(nodes, legacy_bucket=legacy_bucket, account_id=account_id, read_group_id=group)
+        return watcher_token_request(nodes, account_id=account_id, read_group_id=group)
 
     return _mint_token(
         "the watcher",
         request,
         paths=(WATCHER_ACCESS_KEY_PATH, WATCHER_SECRET_KEY_PATH),
-        readable=watcher_buckets(nodes, legacy_bucket),
+        readable=watcher_buckets(nodes),
         refused=refused_bucket,
         account_id=account_id,
         endpoint=endpoint,
@@ -392,8 +394,7 @@ def mint_all(node: Optional[str] = None, rotate: bool = False, watcher_only: boo
     """Mint every node's pair and password and the watcher's pair, one node's, or the watcher's only.
 
     True iff all completed. `watcher_only` exists so a change to the watcher's
-    scope (BACKUP-057 PR 4 added the shared bucket) rotates that pair without
-    rotating four node tokens with it.
+    scope rotates that pair without rotating every node token with it.
     """
     from toolkit.features.backup_destination import _default_run
 
@@ -416,7 +417,7 @@ def mint_all(node: Optional[str] = None, rotate: bool = False, watcher_only: boo
     http = cloudflare_http(minter)
 
     try:
-        account_id, endpoint, legacy = str(r2["account_id"]), str(r2["endpoint"]), str(r2["bucket"])
+        account_id, endpoint = str(r2["account_id"]), str(r2["endpoint"])
     except KeyError as exc:
         logger.error(f"backup.r2.{exc.args[0]} is missing from the config SSOT")
         return False
@@ -427,6 +428,12 @@ def mint_all(node: Optional[str] = None, rotate: bool = False, watcher_only: boo
         logger.error(f"{OUTSIDE_BUCKET_KEY} is missing from the config SSOT; the watcher's scope cannot be proven")
         return False
 
+    if len(nodes) < 2 and not watcher_only:
+        logger.error(
+            "a node's scope is proven by a refusal on another node's bucket, and backup.sources names fewer than two"
+        )
+        return False
+
     ok = True
     for name in [] if watcher_only else [node] if node else nodes:
         others = [n for n in nodes if n != name]
@@ -435,7 +442,7 @@ def mint_all(node: Optional[str] = None, rotate: bool = False, watcher_only: boo
                 name,
                 account_id=account_id,
                 endpoint=endpoint,
-                other_bucket=node_bucket(others[0]) if others else legacy,
+                other_bucket=node_bucket(others[0]),
                 http=http,
                 store=store,
                 run=_default_run,
@@ -454,7 +461,6 @@ def mint_all(node: Optional[str] = None, rotate: bool = False, watcher_only: boo
                 nodes,
                 account_id=account_id,
                 endpoint=endpoint,
-                legacy_bucket=legacy,
                 refused_bucket=outside,
                 http=http,
                 store=store,

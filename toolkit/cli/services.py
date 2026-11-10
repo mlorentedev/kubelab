@@ -478,10 +478,12 @@ def gitea_reconcile(
         TEAM_NAME,
         execute,
         format_plan,
+        load_branch_protection,
         load_declaration,
         load_settings,
         load_webhooks,
         plan_reconcile,
+        repo_default_branch,
         verify_hints,
     )
 
@@ -526,6 +528,10 @@ def gitea_reconcile(
     # trips reports it as though the forge were involved.
     declared_settings = load_settings(merged)
     declared_webhooks = load_webhooks(merged)
+    # Only when a repository declares writers (AUTH-024): the protection is theirs.
+    declared_protection = (
+        load_branch_protection(merged) if any(spec.writers for specs in declared.values() for spec in specs) else None
+    )
 
     try:
         # Read with the admin credential: a listing taken with the bot's token
@@ -598,6 +604,19 @@ def gitea_reconcile(
             for spec in specs
             if spec.writers
         }
+        # The live rule on each such repository's default branch, as the forge names it
+        # (AUTH-024); None for a repository the forge does not hold yet.
+        existing_branch_protections = {
+            f"{org}/{spec.name}": (
+                admin.get_branch_protection(org, spec.name, repo_default_branch(f"{org}/{spec.name}", body))
+                if body
+                else None
+            )
+            for org, specs in declared.items()
+            for spec in specs
+            if spec.writers
+            for body in (existing_repo_settings[f"{org}/{spec.name}"],)
+        }
     except GiteaError as exc:
         logger.error(f"could not read forge state from {base_url}: {exc}")
         raise typer.Exit(1) from exc
@@ -615,6 +634,8 @@ def gitea_reconcile(
         existing_review_teams=existing_review_teams,
         existing_repo_refs=existing_repo_refs,
         existing_collaborators=existing_collaborators,
+        declared_protection=declared_protection,
+        existing_branch_protections=existing_branch_protections,
     )
     console.print(f"\n[bold]Gitea reconcile[/bold] — {base_url} ({env})\n")
     console.print(format_plan(plan))
@@ -700,7 +721,13 @@ def gitea_reconcile(
     # established the same way -- by asking every credential to do it and reading
     # which answered. Built once when EITHER kind of work is planned, so an ordinary
     # reconcile still depends on no credential it does not use.
-    if plan.repos_to_migrate or plan.repos_to_configure or plan.repos_to_hook or plan.collaborators_to_grant:
+    if (
+        plan.repos_to_migrate
+        or plan.repos_to_configure
+        or plan.repos_to_hook
+        or plan.collaborators_to_grant
+        or plan.branch_protections_to_converge
+    ):
         from toolkit.features.gitea_client import GiteaBasicAuthClient
 
         gitea_cfg = merged["apps"]["services"]["core"]["gitea"]
@@ -736,6 +763,7 @@ def gitea_reconcile(
         webhook_secrets=webhook_secrets,
         migrator=superadmin,
         configurator=superadmin,
+        declared_protection=declared_protection,
     )
     for created in report.orgs_created:
         logger.success(f"org created: {created}")
@@ -765,6 +793,8 @@ def gitea_reconcile(
     # not read as though this line were it.
     for granted, login in report.collaborators_granted:
         logger.success(f"collaborator granted: {granted} -> {login} (write, read back)")
+    for protected in report.branch_protections_applied:
+        logger.success(f"branch protection applied: {protected} (read back)")
     for hooked, url in report.repos_hooked:
         logger.success(f"webhook registered: {hooked} -> {url}")
     # Each written hook's own proof, from its declaration (#1849): the advice for

@@ -48,7 +48,9 @@ else
     HELD_BY_US=""
     UNPROTECTED=""
 {% for pkg in maintenance_patch_blacklist %}
-    if ! printf '%s\n' "$HELD_BEFORE" | grep -qx '{{ pkg }}'; then
+    # grep reads all of its input: a quiet grep under pipefail can read a
+    # held package as unheld, and this would then release it (#3185).
+    if ! printf '%s\n' "$HELD_BEFORE" | grep -xF '{{ pkg }}' >/dev/null; then
         # Every package is held, installed or not. A failed hold is then
         # judged by dpkg's own state, not by apt's error text: that text
         # changes once the APT lists are gone, and this script deletes them

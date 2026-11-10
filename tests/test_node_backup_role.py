@@ -89,7 +89,7 @@ def _render(template: str, **overrides: object) -> str:
         inventory_hostname="beelink",
         node_backup_sources=BEELINK_SOURCES,
         node_backup_restic_version="0.19.1",
-        node_backup_r2_repo_prefix="s3:https://acct.r2.cloudflarestorage.com/kubelab-backups",
+        node_backup_r2_repository="s3:https://acct.r2.cloudflarestorage.com/kubelab-backup-beelink",
         # Supplied by the playbook, not by the role's defaults — deliberately, so
         # StrictUndefined catches a playbook that forgot it. An empty default
         # would render `https:///api/push/<token>`: structurally valid, reaching

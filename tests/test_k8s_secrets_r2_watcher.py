@@ -52,7 +52,7 @@ def test_the_secret_carries_exactly_what_restic_reads() -> None:
     """The watcher pair and each node's own password, and no shared `RESTIC_PASSWORD`.
 
     The probe reads no shared key (BACKUP-057 PR 5): a Secret that carried one
-    would hand the cluster a password that opens `kubelab-backups` for nothing.
+    would hand the cluster a password for a repository that no longer exists.
     """
     assert _mapping().keys == {
         "AWS_ACCESS_KEY_ID": "BACKUP_R2_WATCHER_ACCESS_KEY_ID",
@@ -99,6 +99,5 @@ def test_both_clusters_are_audited_for_every_value() -> None:
         assert spec.kind is SecretKind.EXTERNAL
         assert set(spec.envs) == {"staging", "prod"}
         assert "r2-backup-watcher" in spec.services
-    # The shared password is read by no watcher any more; claiming it is would
-    # make a rotation of it look like it needs an `apply-secrets`.
-    assert "r2-backup-watcher" not in _spec("backup.restic_password").services
+    # The shared password was retired with its bucket (#1920): it is catalogued nowhere.
+    assert not [s for s in SECRET_CATALOG if s.key_path == "backup.restic_password"]

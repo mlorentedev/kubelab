@@ -15,7 +15,6 @@ from __future__ import annotations
 import ipaddress
 import os
 import subprocess
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Optional
 
@@ -24,13 +23,6 @@ from toolkit.features.backup_node_credentials import access_key_path, restic_pas
 from toolkit.features.configuration import ConfigurationManager
 from toolkit.features.r2_tfvars import node_bucket
 
-# SSOT paths. Changing a bucket or account means editing common.yaml, not this file.
-_CFG_ROOT = ("backup", "r2")
-_ACCESS_KEY_SECRET = "backup.r2.access_key_id"
-_SECRET_KEY_SECRET = "backup.r2.secret_access_key"
-
-_RESTIC_PASSWORD_SECRET = "backup.restic_password"
-
 _TIMEOUT = 60
 
 # (argv, env) -> (returncode, stdout, stderr). Injectable so the probes are
@@ -38,50 +30,20 @@ _TIMEOUT = 60
 RunFn = Callable[[list[str], dict[str, str]], "tuple[int, str, str]"]
 
 
-@dataclass(frozen=True)
-class DestinationConfig:
-    """The non-secret half, resolved from common.yaml."""
-
-    account_id: str
-    bucket: str
-    endpoint: str
-
-
 class DestinationError(RuntimeError):
     """A precondition failed — missing config, missing credential, missing aws CLI."""
 
 
-def _default_run(argv: list[str], env: dict[str, str]) -> tuple[int, str, str]:
+def _default_run(argv: list[str], env: dict[str, str], timeout: int = _TIMEOUT) -> tuple[int, str, str]:
     # The shell's AWS_* are dropped: an AWS_SESSION_TOKEN or AWS_PROFILE sent
     # along with an R2 pair makes R2 refuse it, and the refusal reads as a
     # wrong credential (TF-007 review).
     merged = {**{k: v for k, v in os.environ.items() if not k.startswith("AWS_")}, **env}
-    proc = subprocess.run(argv, capture_output=True, text=True, timeout=_TIMEOUT, env=merged, check=False)
+    proc = subprocess.run(argv, capture_output=True, text=True, timeout=timeout, env=merged, check=False)
     return proc.returncode, proc.stdout, proc.stderr
 
 
-def load_destination(cm: ConfigurationManager) -> DestinationConfig:
-    """Resolve `backup.r2` from the merged config, or explain what is missing."""
-    node = cm.get_merged_config()
-    for key in _CFG_ROOT:
-        if not isinstance(node, dict) or key not in node:
-            raise DestinationError(f"Missing '{'.'.join(_CFG_ROOT)}' in the config SSOT (common.yaml)")
-        node = node[key]
-
-    missing = [f for f in ("account_id", "bucket", "endpoint") if not node.get(f)]
-    if missing:
-        raise DestinationError(f"'{'.'.join(_CFG_ROOT)}' is missing: {', '.join(missing)}")
-
-    return DestinationConfig(
-        account_id=str(node["account_id"]),
-        bucket=str(node["bucket"]),
-        endpoint=str(node["endpoint"]),
-    )
-
-
-def load_credentials(
-    cm: ConfigurationManager, access_path: str = _ACCESS_KEY_SECRET, secret_path: str = _SECRET_KEY_SECRET
-) -> dict[str, str]:
+def load_credentials(cm: ConfigurationManager, access_path: str, secret_path: str) -> dict[str, str]:
     """Read an S3 pair from SOPS into an env mapping. Values are never logged."""
     access = cm.get_secret_by_path(access_path)
     secret = cm.get_secret_by_path(secret_path)

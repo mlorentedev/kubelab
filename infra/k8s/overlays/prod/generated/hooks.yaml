@@ -45,9 +45,12 @@ spec:
               [ -n "$PROBE_BODY" ] && set -- "$@" --data-raw "$PROBE_BODY"
               got=$(curl "$@" "https://$PROBE_HOST$PROBE_PATH") || true
               want="$EXPECT_STATUS $EXPECT_CONTENT_TYPE"
-              case "$got" in
-                "$want"*) echo "route-probe: $PROBE_METHOD $PROBE_HOST$PROBE_PATH answered '$got'"; exit 0 ;;
-              esac
+              # Status and media type compared whole: parameters such as
+              # `; charset=utf-8` are dropped, a longer type is not a match.
+              ct="${got#* }"
+              if [ "${got%% *}" = "$EXPECT_STATUS" ] && [ "${ct%%;*}" = "$EXPECT_CONTENT_TYPE" ]; then
+                echo "route-probe: $PROBE_METHOD $PROBE_HOST$PROBE_PATH answered '$got'"; exit 0
+              fi
               echo "route-probe: $PROBE_METHOD $PROBE_HOST$PROBE_PATH answered '$got', expected '$want'" >&2
               exit 1
           env:

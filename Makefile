@@ -558,7 +558,7 @@ secrets-copy-nan-key: ## Copy NAN_API_KEY from Bitwarden into prod SOPS for PR-A
 .PHONY: secrets-copy-gitea-agent-token
 secrets-copy-gitea-agent-token: ## Copy the agents' Gitea token from prod SOPS into Bitwarden for dotf (re-run after each re-mint)
 	@V=$$(ENV=dev $(TOOLKIT) secrets show apps.services.core.gitea.agent_token --env prod 2>/dev/null | tail -1) && \
-		test -n "$$V" && printf %s "$$V" | grep -Eqx '[0-9a-f]{40}' || { echo "agent_token absent from prod SOPS, or not a 40-hex Gitea token; provision first" >&2; exit 1; }; \
+		test -n "$$V" && printf %s "$$V" | grep -Ex '[0-9a-f]{40}' >/dev/null || { echo "agent_token absent from prod SOPS, or not a 40-hex Gitea token; provision first" >&2; exit 1; }; \
 		printf %s "$$V" | dotf secrets set --yes GITEA_KUBELAB_AGENT_TOKEN
 
 # -----------------------------------------------------------------------------
@@ -969,8 +969,8 @@ register-spoke:
 		if [ "$$RESULT" = "yes" ]; then echo "  kubelab: writes OK"; break; fi; \
 		sleep 1; \
 	done
-	@kubectl auth can-i create deployments --as=system:serviceaccount:kubelab:argocd-manager -n kubelab --kubeconfig $(KUBECONFIG_PATH) | grep -q "yes" || (echo "  RBAC check failed: no create in kubelab" && exit 1)
-	@kubectl auth can-i list pods --as=system:serviceaccount:kubelab:argocd-manager --kubeconfig $(KUBECONFIG_PATH) | grep -q "yes" && echo "  cluster: reads OK" || echo "  WARNING: no cluster-wide reads"
+	@kubectl auth can-i create deployments --as=system:serviceaccount:kubelab:argocd-manager -n kubelab --kubeconfig $(KUBECONFIG_PATH) | grep -x "yes" >/dev/null || (echo "  RBAC check failed: no create in kubelab" && exit 1)
+	@kubectl auth can-i list pods --as=system:serviceaccount:kubelab:argocd-manager --kubeconfig $(KUBECONFIG_PATH) | grep -x "yes" >/dev/null && echo "  cluster: reads OK" || echo "  WARNING: no cluster-wide reads"
 	@echo "--- Extracting credentials from $(ENV) spoke ---"
 	@TOKEN=$$(kubectl get secret argocd-manager-token -n kubelab --kubeconfig $(KUBECONFIG_PATH) -o jsonpath='{.data.token}' | base64 -d) && \
 		CA=$$(kubectl get secret argocd-manager-token -n kubelab --kubeconfig $(KUBECONFIG_PATH) -o jsonpath='{.data.ca\.crt}') && \
@@ -1064,7 +1064,7 @@ promote-prod: ## Open the prod promotion PR for an app at a released semver tag 
 	@test -n "$(APP)" && test -n "$(VERSION)" || { \
 		echo "Usage: make promote-prod APP=<product> VERSION=1.12.0"; exit 2; }
 	@products="$$($(PRODUCT_LIST))" || { echo "Cannot read the product registry (infra/config/products.yaml)"; exit 2; }; \
-	printf '%s\n' $$products | grep -qxF -- '$(APP)' || { \
+	printf '%s\n' $$products | grep -xF -- '$(APP)' >/dev/null || { \
 		echo "Unknown APP '$(APP)' — expected one of:" $$products; exit 2; }
 	@[[ "$(VERSION)" =~ ^[0-9]+\.[0-9]+\.[0-9]+$$ ]] || { \
 		echo "VERSION '$(VERSION)' is not an immutable semver tag such as 1.12.0."; \
@@ -1846,6 +1846,15 @@ backup-revoke-r2-pair:
 	@test -n "$(PAIR)" || (echo "Usage: make backup-revoke-r2-pair PAIR=<prefix> (backup.r2.readonly_ or backup.r2) [APPLY=1] [FORGET=1]" && exit 1)
 	@$(TOOLKIT) backup revoke-r2-pair --pair $(PAIR) $(if $(filter 1,$(APPLY)),--apply) $(if $(filter 1,$(FORGET)),--forget)
 
+# Retires an R2 bucket nothing reads (BACKUP-057 close-out): empties it with
+# PAIR's S3 pair, deletes it with the R2 admin token, then proves a 404.
+# Refused for a node's bucket and for a bucket the config still names. Run it
+# BEFORE backup-revoke-r2-pair on the same PAIR. Reports only, unless APPLY=1.
+.PHONY: backup-retire-bucket
+backup-retire-bucket:
+	@test -n "$(BUCKET)" -a -n "$(PAIR)" || (echo "Usage: make backup-retire-bucket BUCKET=<name> PAIR=<prefix> [APPLY=1]" && exit 1)
+	@$(TOOLKIT) backup retire-bucket --bucket $(BUCKET) --pair $(PAIR) $(if $(filter 1,$(APPLY)),--apply)
+
 .PHONY: sync-terraform-backend
 sync-terraform-backend: ## Render infra/terraform/backend.s3.tfbackend from terraform.state (TF-007)
 	@$(TOOLKIT) sync terraform-backend
@@ -1942,15 +1951,6 @@ backup-drill-node:
 restore-window:
 	@test -n "$(APP)" || (echo "Usage: make restore-window APP=<deployment> ENV=staging|prod [END=1]" && exit 1)
 	@$(TOOLKIT) backup restore-window --app $(APP) --env $(or $(filter staging prod,$(ENV)),prod) $(if $(filter 1,$(END)),--end,)
-
-# Generate the restic repository password into SOPS. The value is never printed;
-# read it once with `make secrets-show KEY=backup.restic_password
-# SECRETS_ENV=common` to place the offsite escrow copy. Refuses to overwrite an
-# existing password: replacing it without `restic key add` first locks you out of
-# every existing snapshot.
-.PHONY: backup-generate-password
-backup-generate-password:
-	@$(TOOLKIT) backup generate-password --env $(or $(SECRETS_ENV),common)
 
 # End-to-end smoke of the certificate ALERTING path (OBS-007), one layer above
 # notify-smoke: that one proves the fabric can deliver, this one proves the alert
