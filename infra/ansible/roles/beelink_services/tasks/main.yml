@@ -182,6 +182,31 @@
   notify: Recreate act-runner
   tags: [gitea, runner]
 
+# --- Renovate for Gitea (IDP-036) ---
+# The global config only. Its repository list is rendered from
+# `renovate_gitea_organizations`, which the playbook sets to the forge's own
+# declaration and which has no role default on purpose: a play that forgot it
+# fails this task on an undefined variable. Do not add `| default({})`: that
+# turns the loud failure into an empty list, and Renovate would cover nothing,
+# silently. Nothing runs Renovate yet; the timer that reads this file is AC2.
+- name: Create the Renovate config directory
+  file:
+    path: "{{ beelink_deploy_dir }}/renovate"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  tags: [gitea, renovate]
+
+- name: Install the Renovate global config
+  template:
+    src: renovate-config.yaml.j2
+    dest: "{{ beelink_deploy_dir }}/renovate/config.yaml"
+    owner: root
+    group: root
+    mode: "0644"
+  tags: [gitea, renovate]
+
 # --- Boot ordering: bind address must exist before Docker publishes on it ---
 - name: Install the Tailscale address wait helper
   copy:

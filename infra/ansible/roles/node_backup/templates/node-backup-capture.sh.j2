@@ -85,7 +85,7 @@ if ! KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl exec -n {{ src.pvc.namespace }
     echo "node-backup-capture: {{ service }} ({{ src.pvc.namespace }}/{{ src.pvc.claim }}): pg_dumpall failed -- refusing to ship a backup that silently omits it" >&2
     exit 1
 fi
-if ! tail -n 5 "$PG_PARTIAL_{{ service }}" | grep -qxF -- '-- PostgreSQL database cluster dump complete'; then
+if ! tail -n 5 "$PG_PARTIAL_{{ service }}" | grep -xF -- '-- PostgreSQL database cluster dump complete' >/dev/null; then
     echo "node-backup-capture: {{ service }} ({{ src.pvc.namespace }}/{{ src.pvc.claim }}): pg_dumpall output is not complete (no completion trailer) -- refusing to ship it" >&2
     rm -f "$PG_PARTIAL_{{ service }}"
     exit 1
