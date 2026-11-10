@@ -12,7 +12,7 @@ owner: manu
 ## Evidence
 
 - [x] AC1 (same count, same coverage). Local, commit `d2e92f4c`: serial `pytest` and `make test` both 8929 passed, identical 34-item failure set (macOS environment, also present on base `98eef0d0`), 15706/20330 lines, 4276/6064 branches. CI: master `98eef0d0` 9198 passed / 33 skipped, TOTAL 20328/4624/6064/550; PR run 41954054691 9203 passed (+5 new tests) / 33 skipped, TOTAL 20330/4624/6064/549. The +2 statements are the `wiki_docs_path` property. The -1 partial is the wiki README-less branch, now hit deterministically.
-- [x] AC2 (p50 of 10 min or less over 20 PR runs): `make tests-p50 SINCE=2026-11-05T08:13:42Z` (the merge of 95e0acf), run 2026-11-09 over 139 PR runs whose `Tests` succeeded. p50 in minutes, wall / slowest shard / wait / skew: first 20 = 15.4 / 6.8 / 3.5 / 2.8; last 20 = 8.6 / 7.1 / 0.0 / 0.0; all = 14.2 / 7.1 / 2.0 / 2.5. The suite stays near 7 min in every window. The first window holds the 2026-11-06 burst, when five unattended sessions saturated the hosted runners. The operator accepted AC2 on normal load (last 20) on 2026-11-09. The saturation is recorded as #3223 and lesson-728.
+- [x] AC2 (p50 of 10 min or less over 20 PR runs): `make tests-p50 SINCE=2026-11-05T08:13:42Z` (the merge of 95e0acf), run 2026-11-09 after the review fixes. It counts first-attempt PR runs whose `Tests` succeeded: 139 samples, with 37 runs dropped as failed, cancelled or reruns. p50 in minutes, wall / slowest shard / wait / skew / aggregate job / queue before the first shard: first 20 = 15.4 / 6.8 / 3.5 / 2.8 / 1.5 / 4.2; last 20 = 8.6 / 7.2 / 0.0 / 0.0 / 1.4 / 0.1; all = 14.1 / 7.1 / 2.0 / 2.5 / 1.4 / 4.1. The suite stays near 7 min in every window. The first window holds the 2026-11-06 (UTC) burst, when five unattended sessions saturated the hosted runners. Counted from run creation, that window is longer still: its queue is outside `wall`. The operator accepted AC2 on normal load (last 20) on 2026-11-09. The saturation is recorded as #3223 and lesson-728.
 - [x] AC3 (grouped, never deselected): `tests/test_pytest_parallel_config.py` checks that the `--dist` mode keeps a file on one worker in order, by running it, and that the default marker expression is unchanged with no `--deselect`/`--ignore`/`-k`.
 - [x] AC4 (check name unchanged): `ci.yml` job `name: Tests` untouched (features f3). Phase 2 keeps it on the aggregate job (`jobs.tests.name`), and the shards are `Tests shard N`.
 - [x] AC5 (disjoint, complete): `tests/test_test_shards.py` plans the real suite's files plus a file the record does not know, for 1 to 4 shards, and runs the plugin end to end on a synthetic suite. Locally, the three shards on one tree add up to the single run exactly: 3279+2843+2860 = 8982 passed, 0+17+15 = 32 failed, 64+5+25 = 94 skipped, 2 errors, against 8982/32/94/2 (macOS environment failures, identical sets).
@@ -33,6 +33,20 @@ owner: manu
 - Splitting lint/types/validate-sync out of `Tests` deferred to #3096, because only `Tests` is a required check.
 - Phase 2: the plan's file order reaches the runners only with xdist's `loadscopereorder` off, since `loadfile` otherwise reorders files by test count. The plugin turns it off when sharding, as a measured-order test proves. The barrier probe moved out of `tests/`, where scanners on other workers read it mid-delete. The record was refreshed from run 41990181968, measured under shard conditions.
 - Phase 2: whole files per shard, a custom plugin rather than pytest-split, whose algorithms split by test and would build a module-scoped fixture on two runners. Three shards: the slowest file is 277s on CI and the suite sums to 2677s, so three shards are bounded by balance (about 223s of work per 4-vCPU shard), not by one file.
+
+## Review dispositions
+
+review.md (PASS-WITH-GAPS, `e86ed7fc`), each finding:
+
+1. The first shard's queue is invisible. Applied: a `queue` column (run creation to first shard start), kept outside `wall` because AC2 defines wall from the first shard.
+2. Reruns mix attempts. Applied: runs with `run_attempt > 1` are dropped and never fetched.
+3. Cancelled runs are excluded during saturation. Applied: the docstring states the bias, and the report prints how many runs it dropped.
+4. The CLI is untested, and under-sampling exits 0. Applied: CliRunner tests cover exits 0, 1 and 2. Fewer samples than the window now exits 2.
+5. The exit status gates on a window chosen after the fact. Applied: the command's help states that the exit status reads the last window as a current-health signal and always prints all three windows.
+6. Lesson-728 says 15.2 against 14.2. Applied: the lesson quotes the command's own output (14.1 over 139, re-measured).
+7. The aggregate time is in no column. Applied: an `agg` column.
+8. #3223 burst hours. Applied: the ticket names the UTC day instead of hours that two measures place differently.
+9. `--since` is unvalidated. Applied: it is normalised to a UTC `Z` instant, and a value without a timezone is refused.
 
 ## Promotion candidates
 

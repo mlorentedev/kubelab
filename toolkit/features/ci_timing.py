@@ -13,15 +13,23 @@ shards still ran in about 7 min while the wall time tripled. So every sample kee
 the parts apart, and the report shows the first, last and whole windows, because
 a single window chosen after the fact is a number that can be shopped for.
 
-Only runs whose `Tests` job succeeded are samples. A failed or cancelled `Tests`
-stops early and would pull the median down for the wrong reason.
+Only runs whose `Tests` job succeeded are samples. A failed `Tests` stops early
+and would pull the median down for the wrong reason. That filter has a bias of its
+own: a run that the concurrency group cancels while it is still queued is dropped
+too, and those runs cluster in exactly the saturated windows, so a saturated
+window's p50 reads lower than what PRs lived through. The report counts what it
+dropped so that bias stays visible. A rerun (`run_attempt > 1`) is dropped as
+well: its jobs endpoint mixes the attempts, so its timings span both.
+
+`wall` starts at the first shard's start, as AC2 defines it. `queue`, from the
+run's creation to that start, is reported beside it and is not part of it.
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from toolkit.features.deploy_shape import Api
@@ -37,6 +45,14 @@ class Sample:
     shard_max: float
     wait: float
     skew: float
+    queue: float = 0.0
+    aggregate: float = 0.0
+
+
+@dataclass(frozen=True)
+class Collected:
+    samples: list[Sample]
+    dropped: int
 
 
 @dataclass(frozen=True)
@@ -47,13 +63,15 @@ class Window:
     p50_shard_max: float
     p50_wait: float
     p50_skew: float
+    p50_queue: float
+    p50_aggregate: float
 
 
 def _ts(value: str) -> float:
     return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
 
 
-def sample(jobs: Sequence[dict[str, Any]], run_id: int = 0) -> Sample | None:
+def sample(jobs: Sequence[dict[str, Any]], run_id: int = 0, created_at: str | None = None) -> Sample | None:
     """One run's timing, or None when the run is not a timing sample."""
     shards = [j for j in jobs if j.get("name", "").startswith(SHARD_PREFIX)]
     aggregate = next((j for j in jobs if j.get("name") == AGGREGATE), None)
@@ -68,6 +86,8 @@ def sample(jobs: Sequence[dict[str, Any]], run_id: int = 0) -> Sample | None:
         shard_max=max(e - s for s, e in zip(starts, ends, strict=True)),
         wait=max(agg_start - max(ends), 0.0),
         skew=max(starts) - min(starts),
+        queue=max(min(starts) - _ts(created_at), 0.0) if created_at else 0.0,
+        aggregate=agg_end - agg_start,
     )
 
 
@@ -79,12 +99,21 @@ def median(values: Iterable[float]) -> float:
     return ordered[mid] if len(ordered) % 2 else (ordered[mid - 1] + ordered[mid]) / 2
 
 
-def collect(api: Api, repo: str, workflow: str, since: str) -> list[Sample]:
+def normalise_since(since: str) -> str:
+    """`since` as a UTC `...Z` instant, so no `+` offset reaches the query string."""
+    parsed = datetime.fromisoformat(since.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        raise ValueError(f"--since {since!r} has no timezone; give a UTC instant such as 2026-11-05T08:13:42Z")
+    return parsed.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def collect(api: Api, repo: str, workflow: str, since: str) -> Collected:
     """Every completed pull request run of `workflow` created at or after `since`, oldest first.
 
     REST, not GraphQL: separate rate-limit buckets, and GraphQL is the one the
     fleet exhausts (#1651).
     """
+    since = normalise_since(since)
     runs: list[dict[str, Any]] = []
     page = 1
     while True:
@@ -98,11 +127,13 @@ def collect(api: Api, repo: str, workflow: str, since: str) -> list[Sample]:
         page += 1
     samples = []
     for run in reversed(runs):
+        if run.get("run_attempt", 1) > 1:
+            continue
         jobs = api.json(f"repos/{repo}/actions/runs/{run['id']}/jobs?per_page=100")["jobs"]
-        got = sample(jobs, run_id=run["id"])
+        got = sample(jobs, run_id=run["id"], created_at=run.get("created_at"))
         if got is not None:
             samples.append(got)
-    return samples
+    return Collected(samples=samples, dropped=len(runs) - len(samples))
 
 
 def _window(label: str, samples: Sequence[Sample]) -> Window:
@@ -113,6 +144,8 @@ def _window(label: str, samples: Sequence[Sample]) -> Window:
         p50_shard_max=median(s.shard_max for s in samples),
         p50_wait=median(s.wait for s in samples),
         p50_skew=median(s.skew for s in samples),
+        p50_queue=median(s.queue for s in samples),
+        p50_aggregate=median(s.aggregate for s in samples),
     )
 
 
