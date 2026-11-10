@@ -169,7 +169,10 @@ def test_sshd_itself_limits_each_user_to_what_was_declared(tmp_path: Path) -> No
             encoding="utf-8",
             check=True,
         ).stdout
-        return dict(line.split(" ", 1) for line in out.splitlines() if " " in line)
+        # Ubuntu's OpenSSH 9.x prints the keys lowercased, macOS's 10.5 in their config
+        # spelling (`AllowTcpForwarding`): fold them so both read the same.
+        pairs = (line.split(" ", 1) for line in out.splitlines() if " " in line)
+        return {key.lower(): value for key, value in pairs}
 
     bootstrap = effective("hs-bootstrap")
     assert bootstrap["allowtcpforwarding"] == "local"
