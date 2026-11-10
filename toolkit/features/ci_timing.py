@@ -148,14 +148,18 @@ def collect(api: Api, repo: str, workflow: str, since: str) -> Collected:
 
 
 def dropped_within(kept: Sequence[bool], first: int, last: int) -> int:
-    """Runs dropped between sample `first` and sample `last` (0-based, inclusive)."""
+    """Runs dropped between sample `first` and sample `last` (0-based, inclusive).
+
+    A window that holds the first sample also owns the drops before it, and one
+    that holds the last sample owns the drops after it, so the whole span's row
+    accounts for every dropped run.
+    """
+    final = sum(kept) - 1
     seen, inside = -1, 0
     for k in kept:
         if k:
             seen += 1
-            if seen > last:
-                break
-        elif first <= seen < last:
+        elif first <= seen < last or (seen == -1 and first == 0) or (seen == final and last == final):
             inside += 1
     return inside
 

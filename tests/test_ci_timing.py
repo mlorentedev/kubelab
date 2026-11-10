@@ -190,8 +190,10 @@ def test_dropped_runs_are_counted_inside_the_window_they_fell_in() -> None:
     # runs in time order: S D S D D S S D
     kept = [True, False, True, False, False, True, True, False]
     assert ci_timing.dropped_within(kept, 0, 1) == 1  # first two samples
-    assert ci_timing.dropped_within(kept, 1, 3) == 2  # between sample 1 and sample 3
-    assert ci_timing.dropped_within(kept, 0, 3) == 3  # the trailing drop is outside every window
+    assert ci_timing.dropped_within(kept, 1, 2) == 2  # between sample 1 and sample 2
+    assert ci_timing.dropped_within(kept, 2, 3) == 1  # the last window owns the trailing drop
+    assert ci_timing.dropped_within(kept, 0, 3) == kept.count(False)  # the whole span owns every drop
+    assert ci_timing.dropped_within([False, True, True], 0, 0) == 1  # the first window owns a leading drop
 
 
 def test_the_report_carries_each_windows_drops() -> None:
