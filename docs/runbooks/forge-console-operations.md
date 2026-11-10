@@ -67,7 +67,10 @@ GitHub > Settings > Applications > Installed GitHub Apps > kubelab-console >
 Repository access.
 
 A listing that fails keeps the last set it had; at a pod start, the set is
-seeded from `forge_source`, so the console still shows what it read before. A
+seeded from `forge_source`, so the console still shows what it read before. With
+nothing listed and nothing in the store (a first deploy, or the App without
+access), the console shows the wildcard itself (`github:mlorentedev/*`) as
+unreachable and never read, not an empty GitHub. A
 failed listing appears in the API's log as `forge reconcile: listing:`. If it
 keeps failing (a revoked key), the reads fail on the same credential: every
 GitHub source shows unreachable in the console and its `as_of` stops moving. The
