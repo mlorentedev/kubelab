@@ -119,7 +119,8 @@ func (r *Reconciler) now() time.Time {
 	return time.Now()
 }
 
-// ParseSources reads `forge:owner/repo,forge:owner/repo`.
+// ParseSources reads `forge:owner/repo,forge:owner/repo`; `forge:owner/*` names
+// every repository of the owner (EveryRepo). The owner is never a wildcard.
 func ParseSources(spec string) ([]Source, error) {
 	var sources []Source
 	for _, part := range strings.Split(spec, ",") {
@@ -129,7 +130,8 @@ func ParseSources(spec string) ([]Source, error) {
 		}
 		name, path, ok := strings.Cut(part, ":")
 		owner, repo, slash := strings.Cut(path, "/")
-		if !ok || !slash || name == "" || owner == "" || repo == "" {
+		badWildcard := strings.Contains(owner, "*") || (strings.Contains(repo, "*") && repo != EveryRepo)
+		if !ok || !slash || name == "" || owner == "" || repo == "" || badWildcard {
 			return nil, fmt.Errorf("source %q is not forge:owner/repo", part)
 		}
 		sources = append(sources, Source{Forge: name, Owner: owner, Repo: repo})
