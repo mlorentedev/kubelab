@@ -157,8 +157,7 @@ def test_the_n8n_health_path_is_answered_by_n8n_not_authelia(overlay: str) -> No
     serving = [
         r
         for r in n8n["spec"]["routes"]
-        if f"Host(`{url.hostname}`)" in r["match"]
-        and ("Path" not in r["match"] or f"Path(`{url.path}`)" in r["match"])
+        if f"Host(`{url.hostname}`)" in r["match"] and ("Path" not in r["match"] or f"Path(`{url.path}`)" in r["match"])
     ]
     # Traefik picks the highest priority, then the longest rule, so take the rule it would pick.
     chosen = max(serving, key=lambda r: (r.get("priority", 0), len(r["match"])))
