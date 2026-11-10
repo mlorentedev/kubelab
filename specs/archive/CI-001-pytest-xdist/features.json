@@ -33,5 +33,12 @@
     "verification": ".venv/bin/pytest -q --no-cov -p no:cacheprovider tests/test_test_shards.py -k 'ci_runs_every_shard or required_check_fails or uploads_its_coverage'",
     "state": "pending",
     "evidence": ""
+  },
+  {
+    "id": "CI-001-pytest-xdist-f6",
+    "behavior": "tests-p50 measures each PR run from the first shard's start to Tests completion, samples only runs whose Tests succeeded, splits suite, wait and skew, and reports the first, last and whole windows",
+    "verification": ".venv/bin/pytest -q --no-cov -p no:cacheprovider tests/test_ci_timing.py",
+    "state": "pending",
+    "evidence": ""
   }
 ]

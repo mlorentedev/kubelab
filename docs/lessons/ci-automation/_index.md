@@ -4,6 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 731 | [A sharded check trades test time for runner wait, so measure the two apart](lesson-731-a-sharded-check-trades-test-time-for-runner-wait.md) | 2026-11-09 |
 | 723 | [A synthetic fixture in a real secret's format is an incident, and removing it does not clear the check](lesson-723-synthetic-fixture-in-a-real-secrets-format-is-an-incident.md) | 2026-11-07 |
 | 722 | [Passing untrusted text through `env:` stops shell injection, not workflow commands](lesson-722-env-stops-shell-injection-not-workflow-commands.md) | 2026-11-06 |
 | 715 | [A generated PR must be written on the branch tip, and that checkout alone lets an older build write a downgrade](lesson-715-a-generated-pr-must-be-written-on-the-tip-and-only-forward.md) | 2026-11-05 |

@@ -1,7 +1,7 @@
 ---
 id: "CI-001-pytest-xdist"
 type: spec
-status: implementing # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-11-04"
 issue: "mlorentedev/kubelab#3078"   # phase 2: #3111 — repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal]
@@ -44,13 +44,13 @@ wip_override: "owner-directed: #3078 is the critical path of every kubelab PR (f
 
 ## Acceptance criteria
 
-- [ ] AC1: the same number of tests passes, with the same coverage figure, as a serial run on the same commit (locally: serial vs xdist; in CI: base commit's `Tests` vs this PR's).
-- [ ] AC2: `Tests` p50 is 10 min or less, measured over 20 pull request runs (verified after merge).
-- [ ] AC3: tests that cannot run in parallel are grouped (by file, `--dist loadfile`) or fixed, never deselected; the default marker expression is unchanged and no `--deselect`/`--ignore` is added.
-- [ ] AC4: the required check name `Tests` does not change.
-- [ ] AC5 (#3111): each shard runs a disjoint set of test files and their union is the whole default selection, including a file the durations record does not know (committed test).
-- [ ] AC6 (#3111): the combined coverage `TOTAL` row equals a single-runner run on the same commit.
-- [ ] AC7 (#3111): `Tests` fails when any shard fails, is cancelled or is skipped (committed test on `ci.yml`).
+- [x] AC1: the same number of tests passes, with the same coverage figure, as a serial run on the same commit (locally: serial vs xdist; in CI: base commit's `Tests` vs this PR's). ✓ 2026-11-04
+- [x] AC2: `Tests` p50 is 10 min or less, measured over 20 pull request runs (verified after merge). ✓ 2026-11-09
+- [x] AC3: tests that cannot run in parallel are grouped (by file, `--dist loadfile`) or fixed, never deselected; the default marker expression is unchanged and no `--deselect`/`--ignore` is added. ✓ 2026-11-04
+- [x] AC4: the required check name `Tests` does not change. ✓ 2026-11-04
+- [x] AC5 (#3111): each shard runs a disjoint set of test files and their union is the whole default selection, including a file the durations record does not know (committed test). ✓ 2026-11-05
+- [x] AC6 (#3111): the combined coverage `TOTAL` row equals a single-runner run on the same commit. ✓ 2026-11-05
+- [x] AC7 (#3111): `Tests` fails when any shard fails, is cancelled or is skipped (committed test on `ci.yml`). ✓ 2026-11-05
 
 ## References
 

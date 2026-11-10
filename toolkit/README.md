@@ -244,6 +244,7 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit tools mutate` | Run the test unmutated, apply one replacement, run it again, restore the file. |
 | `toolkit tools review-attestation` | Report whether a PR was actually reviewed, and refuse it if not. |
 | `toolkit tools spec-gate` | Refuse a PR that closes a spec's issue without archiving the spec. |
+| `toolkit tools tests-p50` | Median time `Tests` keeps a pull request waiting, split into suite and runner wait. |
 | `toolkit version` | Show version and exit. |
 
 <!-- cli-reference:end -->
