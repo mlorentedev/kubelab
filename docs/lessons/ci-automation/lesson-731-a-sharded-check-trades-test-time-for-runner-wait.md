@@ -1,5 +1,5 @@
 ---
-id: lesson-730-a-sharded-check-trades-test-time-for-runner-wait
+id: lesson-731-a-sharded-check-trades-test-time-for-runner-wait
 type: lesson
 status: active
 created: "2026-11-09"
