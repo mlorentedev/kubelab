@@ -173,3 +173,24 @@ func TestGitHubListingFailsWhole(t *testing.T) {
 		t.Fatalf("got %v and no error", names(got))
 	}
 }
+
+// A pod that starts while the forge cannot be listed still reads, and shows, the
+// repositories the store already knows (AC1); a listing replaces the seed.
+func TestCatalogSeedServesUntilTheFirstListing(t *testing.T) {
+	l := &fakeLister{err: errors.New("down")}
+	c := newCatalog(t, "github:o/*", l)
+	c.Seed([]forge.Source{{Forge: "github", Owner: "o", Repo: "a"}, {Forge: "github", Owner: "org", Repo: "x"},
+		{Forge: "gitea", Owner: "o", Repo: "y"}})
+	_ = c.Resolve(context.Background())
+	if got := names(c.Current()); !reflect.DeepEqual(got, []string{"github:o/a"}) {
+		t.Fatalf("seeded: %v", got)
+	}
+	l.err, l.repos = nil, map[string][]string{"o": {"b"}}
+	if err := c.Resolve(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	c.Seed([]forge.Source{{Forge: "github", Owner: "o", Repo: "a"}})
+	if got := names(c.Current()); !reflect.DeepEqual(got, []string{"github:o/b"}) {
+		t.Fatalf("a seed overrode a listing: %v", got)
+	}
+}

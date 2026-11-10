@@ -56,6 +56,23 @@ func (c *Catalog) Resolve(ctx context.Context) error {
 	return errors.Join(errs...)
 }
 
+// Seed gives each wildcard not yet listed the sources the store already reads,
+// so a pod that starts while its forge cannot be listed still serves them. A
+// listing, once there is one, wins: Seed never replaces it.
+func (c *Catalog) Seed(known []Source) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.listed == nil {
+		c.listed = map[Source][]Source{}
+	}
+	for _, pattern := range c.Declared {
+		if _, done := c.listed[pattern]; done || !pattern.Wildcard() {
+			continue
+		}
+		c.listed[pattern] = owned(pattern, known)
+	}
+}
+
 func (c *Catalog) list(ctx context.Context, pattern Source) ([]Source, error) {
 	lister, ok := c.Listers[pattern.Forge]
 	if !ok {
@@ -65,14 +82,19 @@ func (c *Catalog) list(ctx context.Context, pattern Source) ([]Source, error) {
 	if err != nil {
 		return nil, err
 	}
-	// The wildcard names its owner and forge; a lister answering beyond them widens nothing.
-	var own []Source
-	for _, r := range repos {
+	return owned(pattern, repos), nil
+}
+
+// owned keeps the sources a wildcard names: its forge and its owner. A lister or
+// a store answering beyond them widens nothing.
+func owned(pattern Source, sources []Source) []Source {
+	own := []Source{}
+	for _, r := range sources {
 		if r.Forge == pattern.Forge && strings.EqualFold(r.Owner, pattern.Owner) && r.Repo != "" && !r.Wildcard() {
 			own = append(own, r)
 		}
 	}
-	return own, nil
+	return own
 }
 
 // Current is the set to read now: the named sources and every wildcard's last

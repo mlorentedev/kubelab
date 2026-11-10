@@ -39,7 +39,11 @@ func serveHost(t *testing.T, q QueueReader, sources, domain, host, path string) 
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	Register(r, func() (QueueReader, string, error) { return q, sources, nil }, func() string { return domain })
+	declared, err := forge.ParseSources(sources)
+	if err != nil {
+		t.Fatal(err)
+	}
+	Register(r, func() (QueueReader, []forge.Source, error) { return q, declared, nil }, func() string { return domain })
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, path, nil)
 	req.Host = host
@@ -159,8 +163,11 @@ func TestQueuePagesCarryANextCursor(t *testing.T) {
 
 // The cursor and the limit are client input.
 func TestQueueRefusesABadPageRequest(t *testing.T) {
+	// A wildcard names no one item, so a cursor carrying one is not a position.
+	wildcard := encodeCursor(forge.QueueKey{UpdatedAt: time.Now(), Number: 1,
+		Source: forge.Source{Forge: "github", Owner: "mlorentedev", Repo: forge.EveryRepo}})
 	for _, query := range []string{"after=not-base64!", "after=e30", "after=" + encodeCursor(forge.QueueKey{}),
-		"limit=0", "limit=501", "limit=ten"} {
+		"after=" + wildcard, "limit=0", "limit=501", "limit=ten"} {
 		if w := serve(t, &fakeQueue{}, "github:mlorentedev/kubelab", "/console/queue?"+query); w.Code != http.StatusBadRequest {
 			t.Fatalf("%s: status = %d, want 400", query, w.Code)
 		}
@@ -223,5 +230,20 @@ func TestConsoleHostRootRedirectsToThePage(t *testing.T) {
 		if w := serveHost(t, &fakeQueue{}, "", c.domain, c.host, "/"); w.Code != http.StatusNotFound {
 			t.Fatalf("%s /: status = %d, want 404", c.name, w.Code)
 		}
+	}
+}
+
+// A declaration that does not parse leaves no catalog; the queue says so with a
+// 503 rather than an empty page that reads as "nothing open".
+func TestQueueWithoutACatalogIs503(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	Register(r, Live(nil), func() string { return consoleHost })
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/console/queue", nil)
+	req.Host = consoleHost
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503", w.Code)
 	}
 }

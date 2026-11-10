@@ -3,16 +3,17 @@ package api
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/mlorentedev/kubelab/apps/api/internal/console"
+	"github.com/mlorentedev/kubelab/apps/api/internal/forge"
 )
 
 // SetupRoutes configures all API routes
-func SetupRoutes(r *gin.Engine) {
+func SetupRoutes(r *gin.Engine, catalog *forge.Catalog) {
 
 	// Health check routes
 	RegisterHealthCheckRoutes(r)
 
 	// Forge console: served only on its own host, which Authelia guards (CONSOLE-004)
-	console.Register(r, console.Live, console.LiveDomain)
+	console.Register(r, console.Live(catalog), console.LiveDomain)
 
 	// API Group
 	api := r.Group("/api")

@@ -40,3 +40,15 @@ func NewReaders(c Credentials) map[string]Reader {
 	}
 	return readers
 }
+
+// Listers picks the readers that can also list an owner's repositories. They are
+// the same values, so a forge's listing and its reads spend one hourly ceiling.
+func Listers(readers map[string]Reader) map[string]Lister {
+	listers := map[string]Lister{}
+	for name, r := range readers {
+		if l, ok := r.(Lister); ok {
+			listers[name] = l
+		}
+	}
+	return listers
+}
