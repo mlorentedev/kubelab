@@ -16,7 +16,7 @@ KNOWN_FORGES = {"github", "gitea"}
 
 
 def _sources() -> list[str]:
-    declared = yaml.safe_load(COMMON.read_text())["infra"]["forge"]["sources"]
+    declared = yaml.safe_load(COMMON.read_text(encoding="utf-8"))["infra"]["forge"]["sources"]
     return [part.strip() for part in declared.split(",") if part.strip()]
 
 
@@ -41,8 +41,30 @@ def test_the_platform_repository_is_read():
 def test_the_generated_configmap_carries_the_declaration_unchanged():
     # The template folds a long value over several lines (yamllint's limit); a fold
     # at a hyphen would read back with a space in a repository name.
-    declared = yaml.safe_load(COMMON.read_text())["infra"]["forge"]["sources"]
+    declared = yaml.safe_load(COMMON.read_text(encoding="utf-8"))["infra"]["forge"]["sources"]
     for env in ("staging", "prod"):
         path = REPO_ROOT / "infra" / "k8s" / "overlays" / env / "generated" / "configmaps.yaml"
-        api = next(d for d in yaml.safe_load_all(path.read_text()) if d and d["metadata"]["name"] == "api-config")
+        api = next(d for d in yaml.safe_load_all(path.read_text(encoding="utf-8")) if d and d["metadata"]["name"] == "api-config")
         assert api["data"]["INFRA_FORGE_SOURCES"] == declared, env
+
+
+TEMPLATE = REPO_ROOT / "infra" / "k8s" / "templates" / "configmaps.yaml.j2"
+
+
+def _render(value: str) -> str:
+    # The generator's own environment, so the test renders what `config generate` renders.
+    from toolkit.core.templating import TemplateRenderer
+
+    template = TemplateRenderer(TEMPLATE.parent).env.get_template(TEMPLATE.name)
+    rendered = template.render(apps=[{"name": "x", "env_vars": {"K": value}}], namespace="n")
+    return next(d for d in yaml.safe_load_all(rendered) if d)["data"]["K"]
+
+
+def test_the_template_folds_a_long_value_and_reads_it_back_unchanged():
+    long_value = ", ".join(f"github:owner/a-hyphenated-repository-name-{i}" for i in range(12))
+    assert _render(long_value) == long_value
+
+
+def test_the_template_never_folds_a_value_folding_would_change():
+    for value in (" lead" + "x" * 120, "x" * 120 + " ", "a  b " + "x" * 120):
+        assert _render(value) == value, repr(value[:12])
