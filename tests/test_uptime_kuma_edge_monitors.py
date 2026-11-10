@@ -18,9 +18,15 @@ something only Argo CD answers.
 from __future__ import annotations
 
 import json
+import os
 import re
+import shutil
+import subprocess
 from pathlib import Path
 from urllib.parse import urlsplit
+
+import pytest
+import yaml
 
 REPO = Path(__file__).resolve().parent.parent
 SEED = REPO / "infra/config/uptime-kuma/monitors.json"
@@ -100,3 +106,40 @@ def test_the_argo_cd_monitor_names_what_only_argo_cd_answers() -> None:
 def test_no_exemption_is_stale() -> None:
     keys = {m["key"] for m in _edge_monitors()}
     assert set(EXEMPT) <= keys, f"exempt monitors no longer in the seed: {sorted(set(EXEMPT) - keys)}"
+
+
+def _routed_hosts() -> set[str]:
+    """Every literal host an IngressRoute serves in either overlay."""
+    if not shutil.which("kubectl"):
+        if os.environ.get("CI"):
+            pytest.fail("kubectl is required in CI to render the overlays")
+        pytest.skip("kubectl not installed")
+    hosts: set[str] = set()
+    for overlay in ("staging", "prod"):
+        out = subprocess.run(
+            ["kubectl", "kustomize", str(REPO / "infra/k8s/overlays" / overlay)],
+            capture_output=True,
+            check=True,
+            encoding="utf-8",
+        ).stdout
+        for doc in yaml.safe_load_all(out):
+            if doc and doc.get("kind") == "IngressRoute":
+                for route in doc["spec"].get("routes", []):
+                    hosts |= set(re.findall(r"Host\(`([^`]+)`\)", route["match"]))
+    return hosts
+
+
+def test_every_edge_monitor_checks_a_host_a_route_serves() -> None:
+    """A host no route serves lands on the catch-all and is DOWN forever (#3172).
+
+    `pihole.staging.kubelab.live` was retired by OPS-022, and its monitor read the
+    errors 404 for three months. A monitor that is always DOWN teaches everyone to
+    ignore the list.
+    """
+    served = _routed_hosts()
+    unserved = sorted(
+        f"{m['key']} ({urlsplit(m['url']).hostname})"
+        for m in _edge_monitors()
+        if urlsplit(m["url"]).hostname not in served
+    )
+    assert not unserved, f"these monitors check a host no IngressRoute serves: {unserved}"
