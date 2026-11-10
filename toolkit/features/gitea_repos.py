@@ -564,6 +564,83 @@ def collaborator_needs_grant(live: tuple[bool, str] | None) -> bool:
     return not is_collaborator or permission != WRITER_PERMISSION
 
 
+#: Identity keys that may never be exempt from branch protection (AUTH-024): the
+#: protection exists to route a machine writer's changes through a pull request.
+MACHINE_IDENTITIES: frozenset[str] = frozenset({"machine", "reviewer", "agent"})
+
+
+@dataclass(frozen=True)
+class BranchProtection:
+    """The rule the default branch of every repository with `writers:` carries (AUTH-024 AC2).
+
+    Direct push is refused to everybody but `push_whitelist_usernames`; merging is not
+    restricted and no approval is required, by decision (2026-11-09): the pull request
+    is the record of a writer's change, not a gate on it. A site admin does NOT bypass a
+    rule (measured, gitea/gitea:1.27.3), so the operator has to be named here.
+    """
+
+    push_whitelist_usernames: tuple[str, ...]
+
+    def payload(self) -> dict[str, Any]:
+        """The fields declared, under Gitea's own names -- compared and sent as one vocabulary."""
+        return {
+            "enable_push": True,
+            "enable_push_whitelist": True,
+            "push_whitelist_usernames": sorted(self.push_whitelist_usernames),
+            "enable_merge_whitelist": False,
+            "required_approvals": 0,
+        }
+
+
+def branch_protection_drift(
+    live: Mapping[str, Any] | None, declared: BranchProtection
+) -> tuple[tuple[str, Any, Any], ...]:
+    """`(field, live, declared)` for each declared field the live rule does not hold.
+
+    Ranges over the DECLARED fields only, so a field we do not manage (status checks,
+    `block_admin_merge_override`) is never drift. The whitelist is a set: an extra live
+    member is drift and is narrowed. One function serves the plan and the read-back, so
+    what is scheduled and what is verified cannot disagree. An absent rule drifts on all.
+    """
+    drift: list[tuple[str, Any, Any]] = []
+    for key, want in declared.payload().items():
+        have = None if live is None else live.get(key)
+        if key == "push_whitelist_usernames":
+            have = None if live is None else sorted(have or [])
+        if have != want:
+            drift.append((key, have, want))
+    return tuple(drift)
+
+
+@dataclass(frozen=True)
+class BranchProtectionChange:
+    """One repository whose default branch is not protected as declared, and which fields differ.
+
+    `branch` is None for a repository this run is about to create: its default branch
+    is read from the forge once it exists. `absent` marks that case (as `SettingsChange`
+    does); `rule_present` says whether the rule exists, which decides PATCH over POST.
+    """
+
+    org: str
+    name: str
+    branch: str | None
+    rule_present: bool
+    changes: tuple[tuple[str, Any, Any], ...] = ()
+    absent: bool = False
+
+    @property
+    def full_name(self) -> str:
+        return f"{self.org}/{self.name}"
+
+
+def repo_default_branch(full_name: str, body: Mapping[str, Any]) -> str:
+    """The default branch as the forge reports it. Never a literal: a missing one raises."""
+    branch = body.get("default_branch")
+    if not branch:
+        raise ValueError(f"{full_name}: the forge reports no default_branch, so there is no branch to protect.")
+    return str(branch)
+
+
 @dataclass(frozen=True)
 class ReconcilePlan:
     """What reconciliation would do. Creates and reports -- never deletions.
@@ -585,6 +662,8 @@ class ReconcilePlan:
     repos_to_hook: tuple[WebhookChange, ...] = ()
     # Declared writers to make collaborators at `WRITER_PERMISSION` (AUTH-022).
     collaborators_to_grant: tuple[CollaboratorGrant, ...] = ()
+    # Default branches whose protection falls short, for repositories with writers (AUTH-024).
+    branch_protections_to_converge: tuple[BranchProtectionChange, ...] = ()
     undeclared_orgs: tuple[str, ...] = ()
     undeclared_repos: tuple[str, ...] = ()
     visibility_drift: tuple[VisibilityDrift, ...] = ()
@@ -641,6 +720,7 @@ class ReconcilePlan:
             and not self.repos_to_configure
             and not self.repos_to_hook
             and not self.collaborators_to_grant
+            and not self.branch_protections_to_converge
         )
 
 
@@ -652,6 +732,24 @@ def actor_for_org_creation() -> Actor:
 def actor_for_repo_creation() -> Actor:
     """Repositories inside an organization are created by the machine identity."""
     return Actor.MACHINE
+
+
+def _protection_change(
+    org: str,
+    name: str,
+    repo_body: Mapping[str, Any] | None,
+    live_rule: Mapping[str, Any] | None,
+    declared: BranchProtection,
+) -> BranchProtectionChange:
+    """The protection work for one repository: all of it when it is new, else the drift."""
+    if repo_body is None:
+        return BranchProtectionChange(
+            org, name, None, rule_present=False, changes=branch_protection_drift(None, declared), absent=True
+        )
+    branch = repo_default_branch(f"{org}/{name}", repo_body)
+    return BranchProtectionChange(
+        org, name, branch, rule_present=live_rule is not None, changes=branch_protection_drift(live_rule, declared)
+    )
 
 
 def plan_reconcile(
@@ -671,6 +769,8 @@ def plan_reconcile(
     existing_review_teams: Mapping[str, tuple[Mapping[str, Any] | None, Sequence[str]]] | None = None,
     existing_repo_refs: Mapping[str, bool],
     existing_collaborators: Mapping[str, Mapping[str, tuple[bool, str]] | None],
+    declared_protection: BranchProtection | None = None,
+    existing_branch_protections: Mapping[str, Mapping[str, Any] | None] | None = None,
 ) -> ReconcilePlan:
     """Compare the declaration against the forge. Pure -- no network, no side effects.
 
@@ -770,7 +870,21 @@ def plan_reconcile(
     None when the forge does not hold the repository yet (AUTH-022). Required and
     indexed like the reads above. A writer it was never granted is created, never
     removed: an undeclared collaborator is not this reconciler's to delete.
+
+    `declared_protection` and `existing_branch_protections` are optional because
+    nothing needs them until a repository declares writers (AUTH-024), and then both
+    are required: a declaration with writers and no reads raises instead of planning
+    nothing. `existing_branch_protections` maps each such repository to the live rule
+    on its default branch, or None when it has none (or the repository is absent).
+    A rule on a repository WITHOUT writers is neither created nor removed.
     """
+    has_writers = any(spec.writers for specs in declared.values() for spec in specs)
+    if has_writers and (declared_protection is None or existing_branch_protections is None):
+        raise ValueError(
+            "a repository declares writers but declared_protection / existing_branch_protections were "
+            "not given. Planning nothing for it would report a writer free to push to the default branch "
+            "as converged."
+        )
     if reviewer and existing_review_teams is None:
         raise ValueError(
             f"a reviewer ({reviewer!r}) is declared but existing_review_teams was not read. Planning "
@@ -906,6 +1020,25 @@ def plan_reconcile(
         if collaborator_needs_grant(None if live_repo is None else live_repo[login])
     )
 
+    # Over the same repositories as the grants (AUTH-024), the ones this run creates
+    # included: their branch is read once they exist, so `branch` is None here.
+    branch_protections_to_converge = tuple(
+        change
+        for org, specs in sorted(declared.items())
+        for spec in sorted(specs, key=lambda s: s.name)
+        if spec.writers and f"{org}/{spec.name}" not in not_created
+        for change in (
+            _protection_change(
+                org,
+                spec.name,
+                existing_repo_settings[f"{org}/{spec.name}"],
+                existing_branch_protections[f"{org}/{spec.name}"],  # type: ignore[index]
+                declared_protection,  # type: ignore[arg-type]
+            ),
+        )
+        if change.changes
+    )
+
     # Reported, never acted on. The corollary ADR-065 D3 binds the reconciler to:
     # "import by accident must not become policy by inertia."
     undeclared_orgs = tuple(sorted(existing_orgs - declared_orgs))
@@ -985,6 +1118,7 @@ def plan_reconcile(
         repos_to_configure=repos_to_configure,
         repos_to_hook=repos_to_hook,
         collaborators_to_grant=collaborators_to_grant,
+        branch_protections_to_converge=branch_protections_to_converge,
         undeclared_orgs=undeclared_orgs,
         undeclared_repos=undeclared_repos,
         visibility_drift=visibility_drift,
@@ -1080,6 +1214,47 @@ def _resolve_writers(org: str, entry: Mapping[str, Any], identities: Mapping[str
             )
         logins.append(str(login))
     return tuple(logins)
+
+
+def load_branch_protection(common: Mapping[str, Any]) -> BranchProtection:
+    """Resolve `gitea.branch_protection.push_exempt` (identity KEYS) to the push whitelist (AUTH-024).
+
+    Required when any repository declares writers, and never defaulted: an absent or
+    empty list would either leave the operator locked out of the default branch or
+    quietly protect nothing. Keys, never logins, as `writers:`. A machine identity is
+    refused, and so is any account that is also a declared writer: an exempt writer
+    defeats the rule it is supposed to be bound by.
+    """
+    gitea = common.get("apps", {}).get("services", {}).get("core", {}).get("gitea", {})
+    identities = common.get("apps", {}).get("auth", {}).get("identities", {}) or {}
+    keys = (gitea.get("branch_protection") or {}).get("push_exempt")
+    if not isinstance(keys, list) or not keys:
+        raise ValueError(
+            "`apps.services.core.gitea.branch_protection.push_exempt` must be a non-empty list of "
+            f"identity keys, got {keys!r}. It is the push whitelist of every protected default branch: "
+            "empty, the operator could not push either."
+        )
+    writer_keys = {
+        key
+        for org in (gitea.get("organizations") or {}).values()
+        for entry in (org or {}).get("repositories") or []
+        if isinstance(entry, Mapping)
+        for key in entry.get("writers") or []
+    }
+    logins: list[str] = []
+    for key in keys:
+        if key in MACHINE_IDENTITIES:
+            raise ValueError(f"`branch_protection.push_exempt` names {key!r}, a machine identity: it must not bypass.")
+        if key in writer_keys:
+            raise ValueError(f"`branch_protection.push_exempt` names {key!r}, which is also a declared writer.")
+        login = identities.get(key)
+        if not login:
+            raise ValueError(
+                f"`branch_protection.push_exempt` names {key!r}, which is not a key of "
+                f"`apps.auth.identities` ({sorted(identities)})."
+            )
+        logins.append(str(login))
+    return BranchProtection(push_whitelist_usernames=tuple(logins))
 
 
 def load_settings(common: Mapping[str, Any]) -> RepoSettings:
@@ -1399,6 +1574,14 @@ def format_plan(plan: ReconcilePlan) -> str:
         lines.append(
             f"  ~ collaborator {grant.full_name}   {grant.login}: {grant.live or 'none'} -> {WRITER_PERMISSION}"
         )
+    for protection in plan.branch_protections_to_converge:
+        target = f"{protection.full_name}:{protection.branch or 'default branch'}"
+        if not protection.rule_present:
+            fields_set = ", ".join(key for key, _, _ in protection.changes)
+            lines.append(f"  + branch protection {target}   new rule: {fields_set}")
+            continue
+        for key, live_value, declared_value in protection.changes:
+            lines.append(f"  ~ branch protection {target}   {key}: {live_value!r} -> {declared_value!r}")
     # Field by field, because this is the line an operator approves `--apply` on and
     # "settings differ" is not a basis for approving anything. A repository that does
     # not exist yet gets a count instead of nine `None -> x` rows, so the one
@@ -1798,6 +1981,39 @@ def ensure_collaborator(configurator: GiteaBasicAuthClient, grant: CollaboratorG
         )
 
 
+class BranchProtectionError(Exception):
+    """A protection rule Gitea accepted and did not apply (AUTH-024)."""
+
+
+def ensure_branch_protection(
+    configurator: GiteaBasicAuthClient, change: BranchProtectionChange, declared: BranchProtection
+) -> str:
+    """Create or edit the rule, then READ IT BACK and compare, as `ensure_collaborator` does.
+
+    The post-condition is `branch_protection_drift` itself, the plan's own predicate.
+    Gitea keeps a push-whitelist entry only for an account with write on the
+    repository and drops the rest without an error, so the read-back is what catches
+    an exempt account that cannot push. Returns the branch protected.
+    """
+    branch = change.branch
+    if branch is None:
+        body = configurator.get_repo(change.org, change.name)
+        branch = repo_default_branch(change.full_name, body or {})
+    payload = declared.payload()
+    if change.rule_present:
+        configurator.edit_branch_protection(change.org, change.name, branch, payload)
+    else:
+        configurator.create_branch_protection(change.org, change.name, {"rule_name": branch, **payload})
+    drift = branch_protection_drift(configurator.get_branch_protection(change.org, change.name, branch), declared)
+    if drift:
+        raise BranchProtectionError(
+            f"{change.full_name}:{branch} reads back differing on {[(k, live, want) for k, live, want in drift]!r} "
+            "after the write. Gitea accepted the request without applying it. A push-whitelist account "
+            "missing from the read-back is one with no write access to the repository."
+        )
+    return branch
+
+
 class TeamPermissionError(Exception):
     """A team exists but does not grant what it was asked to grant.
 
@@ -1826,6 +2042,8 @@ class ExecutionReport:
     repos_hooked: list[tuple[str, str]] = field(default_factory=list)
     # `(full_name, login)`, each read back at `WRITER_PERMISSION` (AUTH-022).
     collaborators_granted: list[tuple[str, str]] = field(default_factory=list)
+    # `org/name:branch`, each read back as declared (AUTH-024).
+    branch_protections_applied: list[str] = field(default_factory=list)
     failures: list[tuple[str, str]] = field(default_factory=list)
 
     @property
@@ -2086,6 +2304,7 @@ def execute(
     webhook_secrets: Mapping[str, str | None] | None = None,
     migrator: GiteaClient | None = None,
     configurator: GiteaBasicAuthClient | None = None,
+    declared_protection: BranchProtection | None = None,
 ) -> ExecutionReport:
     """Carry out a plan, with each operation performed by the credential that may.
 
@@ -2300,6 +2519,28 @@ def execute(
             report.collaborators_granted.append((grant.full_name, grant.login))
         except Exception as exc:  # noqa: BLE001 - every failure is recorded, whatever its type
             _handle_failure(report, f"collaborator {grant.full_name}", exc)
+
+    # Branch protection (AUTH-024), after the collaborators: the whitelist keeps an
+    # account only if it has write on the repository, so the grants come first.
+    for protection in plan.branch_protections_to_converge:
+        if protection.full_name in failed_repos:
+            continue
+        if configurator is None or declared_protection is None:
+            _handle_failure(
+                report,
+                f"branch protection {protection.full_name}",
+                RuntimeError(
+                    "no configurator client or no declared protection was supplied. The "
+                    "`/branch_protections` endpoints are gated on repo-admin, like repository "
+                    "settings, so the caller must pass a GiteaBasicAuthClient and the declaration."
+                ),
+            )
+            continue
+        try:
+            branch = ensure_branch_protection(configurator, protection, declared_protection)
+            report.branch_protections_applied.append(f"{protection.full_name}:{branch}")
+        except Exception as exc:  # noqa: BLE001 - every failure is recorded, whatever its type
+            _handle_failure(report, f"branch protection {protection.full_name}", exc)
 
     declared_by_url = {hook.spec.url: hook for hook in declared_webhooks}
 

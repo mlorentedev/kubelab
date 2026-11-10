@@ -1516,6 +1516,16 @@ apps:
               failure, but only a review proves delivery. Confirm by consequence:
               push to an open pull request and check for a review comment from the
               reviewer account (`apps.auth.identities.reviewer`).
+        # Who may still push straight to the default branch of a repository that
+        # lists `writers:` (AUTH-024 AC2, #3148). Keys of `apps.auth.identities`; the
+        # reconciler protects that branch with a push whitelist of exactly these.
+        # Gitea keeps a whitelist entry only for an account with write on the
+        # repository (it drops the rest silently, and the reconcile's read-back then
+        # fails), and a site admin does NOT bypass a rule, so the superadmin is named.
+        # A machine identity or a declared writer here is refused by the loader.
+        branch_protection:
+          push_exempt:
+            - superadmin
         organizations:
           teledyne:
             repositories:
