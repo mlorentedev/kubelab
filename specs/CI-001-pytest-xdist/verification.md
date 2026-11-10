@@ -36,15 +36,15 @@ owner: manu
 
 ## Review dispositions
 
-review.md (PASS-WITH-GAPS, `e86ed7fc`), each finding:
+`review-round1.md` (PASS-WITH-GAPS, `e86ed7fc`). One disposition per finding:
 
 1. The first shard's queue is invisible. Applied: a `queue` column (run creation to first shard start), kept outside `wall` because AC2 defines wall from the first shard.
 2. Reruns mix attempts. Applied: runs with `run_attempt > 1` are dropped and never fetched.
-3. Cancelled runs are excluded during saturation. Applied: the docstring states the bias, and the report prints how many runs it dropped.
+3. Cancelled runs are excluded during saturation. Applied: the docstring states the bias. Each window prints the runs dropped between its first and last sample (per pr-agent, so a window's drops are attributed to it rather than lumped).
 4. The CLI is untested, and under-sampling exits 0. Applied: CliRunner tests cover exits 0, 1 and 2. Fewer samples than the window now exits 2.
 5. The exit status gates on a window chosen after the fact. Applied: the command's help states that the exit status reads the last window as a current-health signal and always prints all three windows.
 6. Lesson-728 says 15.2 against 14.2. Applied: the lesson quotes the command's own output (14.1 over 139, re-measured).
-7. The aggregate time is in no column. Applied: an `agg` column.
+7. The aggregate time is in no column. Applied: an `agg` column. pr-agent then found that the columns are not a partition. The module docstring now states the exact identity, wall = shard phase + wait + aggregate. `shard_max` and `skew` are overlapping views of the shard phase, and a test asserts that identity.
 8. #3223 burst hours. Applied: the ticket names the UTC day instead of hours that two measures place differently.
 9. `--since` is unvalidated. Applied: it is normalised to a UTC `Z` instant, and a value without a timezone is refused.
 

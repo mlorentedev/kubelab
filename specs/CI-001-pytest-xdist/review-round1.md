@@ -6,7 +6,9 @@ reviewer: "claude-sonnet-5-5"
 date: "2026-11-09"
 ---
 
-## Adversarial review
+## Adversarial review (round 1, not pooled)
+
+An independent subagent review of `e86ed7fc`, made before the pooled review that `dotf spec review` records in `review.md`. Every finding below is applied in `79702a03` and later. Their dispositions are in `verification.md`, under "Review dispositions".
 
 **Scope**: CI-001-pytest-xdist (mlorentedev/kubelab#3078). The review covers PR #3225 and the two merged PRs it builds on, #3098 and #3124.
 **Sources**: specs/CI-001-pytest-xdist/{proposal,tasks,verification}.md and features.json; the diff of origin/master...e86ed7fc (ci_timing.py, tools.py, test_ci_timing.py, Makefile, lesson-728); .github/workflows/ci.yml; GitHub Actions REST data, read-only.

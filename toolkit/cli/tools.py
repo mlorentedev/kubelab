@@ -886,16 +886,17 @@ def tests_p50(
 
     try:
         got = ci_timing.collect(GhApi(), repo, workflow, since)
-        windows = ci_timing.report(got.samples, window)
+        windows = ci_timing.report(got.samples, window, got.kept)
     except (RuntimeError, ValueError, KeyError) as exc:
         logger.error(f"tests-p50: cannot measure: {exc}")
         raise typer.Exit(2) from exc
 
-    header = f"{'window':<10} {'runs':>4} {'wall':>6} {'shard':>6} {'wait':>6} {'skew':>6} {'agg':>6} {'queue':>6}"
-    logger.info(f"{header}   (p50, minutes; queue is outside wall)")
+    columns = ("wall", "shard", "wait", "skew", "agg", "queue")
+    header = f"{'window':<10} {'runs':>4} " + " ".join(f"{c:>6}" for c in columns) + f" {'drop':>5}"
+    logger.info(f"{header}   (p50 minutes; columns overlap, do not sum; queue is outside wall)")
     for w in windows:
         cells = (w.p50_wall, w.p50_shard_max, w.p50_wait, w.p50_skew, w.p50_aggregate, w.p50_queue)
-        logger.info(f"{w.label:<10} {w.count:>4} " + " ".join(f"{c / 60:>6.1f}" for c in cells))
+        logger.info(f"{w.label:<10} {w.count:>4} " + " ".join(f"{c / 60:>6.1f}" for c in cells) + f" {w.dropped:>5}")
     logger.info(f"{got.dropped} runs dropped: Tests not successful (failed or cancelled) or a rerun")
     if len(got.samples) < window:
         logger.error(f"only {len(got.samples)} samples since {since}; the windows need {window}")

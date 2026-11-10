@@ -170,3 +170,26 @@ def test_the_command_exits_2_when_the_runs_cannot_be_read(monkeypatch: pytest.Mo
     monkeypatch.setattr(ci_timing, "collect", boom)
     result = CliRunner().invoke(app, ["tests-p50", "--since", "2026-11-05T08:13:42Z"])
     assert result.exit_code == 2
+
+
+def test_wall_is_the_shard_phase_plus_wait_plus_aggregate_and_skew_overlaps_it() -> None:
+    s = ci_timing.sample(_run_jobs())
+    assert s is not None
+    shard_phase = 7 * 60  # 10:00:00 -> 10:07:00
+    assert s.wall == shard_phase + s.wait + s.aggregate
+    assert s.shard_max + s.skew + s.wait + s.aggregate != s.wall  # columns are views, not a partition
+
+
+def test_dropped_runs_are_counted_inside_the_window_they_fell_in() -> None:
+    # runs in time order: S D S D D S S D
+    kept = [True, False, True, False, False, True, True, False]
+    assert ci_timing.dropped_within(kept, 0, 1) == 1  # first two samples
+    assert ci_timing.dropped_within(kept, 1, 3) == 2  # between sample 1 and sample 3
+    assert ci_timing.dropped_within(kept, 0, 3) == 3  # the trailing drop is outside every window
+
+
+def test_the_report_carries_each_windows_drops() -> None:
+    samples = [ci_timing.Sample(run_id=i, wall=60, shard_max=60, wait=0, skew=0) for i in range(4)]
+    kept = [True, False, False, True, True, True]
+    first, last, whole = ci_timing.report(samples, window=2, kept=kept)
+    assert (first.dropped, last.dropped, whole.dropped) == (2, 0, 2)

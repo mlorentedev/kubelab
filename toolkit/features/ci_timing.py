@@ -5,10 +5,14 @@ Since #3111, `Tests` is the end of a chain: three `Tests shard N` jobs run the
 suite, then `Tests` combines their coverage. The time a PR waits is therefore
 measured from the first shard's start to the completion of `Tests`.
 
-That number mixes two things that do not have the same owner. The slowest shard's
-own duration is the test suite. The rest is waiting for a hosted runner: the
-shards not starting together (`skew`) and `Tests` not starting when the last shard
-finished (`wait`). On 2026-11-06, with five unattended runs open at once, the
+That number mixes two things that do not have the same owner: the test suite, and
+waiting for a hosted runner. The columns are views of it, not a partition, and
+must not be summed. Exactly, `wall` = (last shard end - first shard start) + `wait`
++ `aggregate`. The first term is the shard phase, and two columns look into it:
+`shard_max`, the slowest shard's own duration (the suite), and `skew`, how far
+apart the shards started (runner wait inside that phase). They overlap. `wait` is
+`Tests` not starting when the last shard finished, and `aggregate` is `Tests`'
+own run time. On 2026-11-06, with five unattended runs open at once, the
 shards still ran in about 7 min while the wall time tripled. So every sample keeps
 the parts apart, and the report shows the first, last and whole windows, because
 a single window chosen after the fact is a number that can be shopped for.
@@ -28,7 +32,7 @@ run's creation to that start, is reported beside it and is not part of it.
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Any
 
@@ -53,6 +57,10 @@ class Sample:
 class Collected:
     samples: list[Sample]
     dropped: int
+    # One entry per run in chronological order: True when it became a sample.
+    # It places every dropped run between two samples, so a window can count
+    # the drops that fell inside it.
+    kept: tuple[bool, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -65,6 +73,7 @@ class Window:
     p50_skew: float
     p50_queue: float
     p50_aggregate: float
+    dropped: int = 0
 
 
 def _ts(value: str) -> float:
@@ -126,14 +135,29 @@ def collect(api: Api, repo: str, workflow: str, since: str) -> Collected:
         runs.extend(batch)
         page += 1
     samples = []
+    kept = []
     for run in reversed(runs):
-        if run.get("run_attempt", 1) > 1:
-            continue
-        jobs = api.json(f"repos/{repo}/actions/runs/{run['id']}/jobs?per_page=100")["jobs"]
-        got = sample(jobs, run_id=run["id"], created_at=run.get("created_at"))
+        got = None
+        if run.get("run_attempt", 1) == 1:
+            jobs = api.json(f"repos/{repo}/actions/runs/{run['id']}/jobs?per_page=100")["jobs"]
+            got = sample(jobs, run_id=run["id"], created_at=run.get("created_at"))
+        kept.append(got is not None)
         if got is not None:
             samples.append(got)
-    return Collected(samples=samples, dropped=len(runs) - len(samples))
+    return Collected(samples=samples, dropped=len(runs) - len(samples), kept=tuple(kept))
+
+
+def dropped_within(kept: Sequence[bool], first: int, last: int) -> int:
+    """Runs dropped between sample `first` and sample `last` (0-based, inclusive)."""
+    seen, inside = -1, 0
+    for k in kept:
+        if k:
+            seen += 1
+            if seen > last:
+                break
+        elif first <= seen < last:
+            inside += 1
+    return inside
 
 
 def _window(label: str, samples: Sequence[Sample]) -> Window:
@@ -149,12 +173,15 @@ def _window(label: str, samples: Sequence[Sample]) -> Window:
     )
 
 
-def report(samples: Sequence[Sample], window: int = 20) -> list[Window]:
-    """The first `window`, the last `window` and all samples, each with its medians."""
+def report(samples: Sequence[Sample], window: int = 20, kept: Sequence[bool] = ()) -> list[Window]:
+    """The first `window`, the last `window` and all samples, each with its medians
+    and the runs dropped between its first and last sample."""
     if not samples:
         raise ValueError("no samples to report")
-    return [
-        _window(f"first {window}", samples[:window]),
-        _window(f"last {window}", samples[-window:]),
-        _window("all", samples),
+    n = len(samples)
+    spans = [
+        (f"first {window}", 0, min(window, n) - 1),
+        (f"last {window}", max(n - window, 0), n - 1),
+        ("all", 0, n - 1),
     ]
+    return [replace(_window(label, samples[a : b + 1]), dropped=dropped_within(kept, a, b)) for label, a, b in spans]
