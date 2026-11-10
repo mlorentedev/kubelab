@@ -851,6 +851,9 @@ edge:
         - route: n8n
           match: /webhook/
           reason: "Webhook receivers called by machines (NOTIFY-001); n8n answers its own JSON"
+        - route: n8n
+          match: /healthz
+          reason: "Health probe read by Uptime Kuma, not people; n8n answers its own JSON (#3167)"
         - route: open-webui
           match: /api/v1/auths/signin
           reason: "Denied path (deny-all); the edge answers 403, which this middleware never touches"
