@@ -28,6 +28,7 @@ from tests.test_gitea_repo_reconcile import (
 from toolkit.features.gitea_client import GiteaClient, GiteaError
 from toolkit.features.gitea_repos import (
     WRITER_PERMISSION,
+    BranchProtection,
     CollaboratorError,
     CollaboratorGrant,
     RepoSpec,
@@ -253,6 +254,15 @@ def test_the_loader_resolves_keys_to_logins() -> None:
 WRITTEN = {"personal": [RepoSpec("tool", native=True, writers=(AGENT,))]}
 
 
+PROTECTED = {
+    "enable_push": True,
+    "enable_push_whitelist": True,
+    "push_whitelist_usernames": ["manu"],
+    "enable_merge_whitelist": False,
+    "required_approvals": 0,
+}
+
+
 def _plan(collaborators: dict[str, Any], *, repos: dict[str, bool] | None = None) -> Any:
     existing_repos = {"personal/tool": False} if repos is None else repos
     settings = {k: v for k, v in settings_for(WRITTEN).items()} if existing_repos else {"personal/tool": None}
@@ -267,6 +277,9 @@ def _plan(collaborators: dict[str, Any], *, repos: dict[str, bool] | None = None
         N8N_HOOK_ONLY,
         existing_repo_refs=ALL_REFS_PRESENT,
         existing_collaborators=collaborators,
+        declared_protection=BranchProtection(push_whitelist_usernames=("manu",)),
+        # Converged, so these tests stay about the collaborator grant (AC2 has its own file).
+        existing_branch_protections={"personal/tool": PROTECTED if existing_repos else None},
     )
 
 

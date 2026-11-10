@@ -28,6 +28,7 @@ this very spec's baseline. `_paginate` walks until a short page arrives, so
 from __future__ import annotations
 
 from typing import Any, Iterator, Mapping
+from urllib.parse import quote
 
 import requests
 
@@ -103,6 +104,9 @@ SCOPE_BY_METHOD: dict[str, frozenset[str]] = {
     # `read:repository`. The write is basic auth (`add_collaborator`).
     "is_collaborator": frozenset({"read:repository"}),
     "get_collaborator_permission": frozenset({"read:repository"}),
+    # The reconcile's branch-protection read (AUTH-024): a rule is repository
+    # metadata. The writes are basic auth (`create_branch_protection`).
+    "get_branch_protection": frozenset({"read:repository"}),
     # Writes.
     "create_org": frozenset({"write:organization"}),
     "create_repo": frozenset({"write:organization"}),
@@ -152,6 +156,8 @@ ADMIN_METHODS: tuple[str, ...] = (
     # And each declared writer's collaborator row and access mode (AUTH-022).
     "is_collaborator",
     "get_collaborator_permission",
+    # And each protected repository's default-branch rule (AUTH-024).
+    "get_branch_protection",
 )
 
 
@@ -664,6 +670,22 @@ class GiteaClient:
             raise
         return str(body.get("permission") or "none")
 
+    def get_branch_protection(self, owner: str, name: str, branch: str) -> dict[str, Any] | None:
+        """The protection rule named `branch`, or None when the repository has none (AUTH-024).
+
+        Every field the reconcile declares reads back from here (measured on
+        gitea/gitea:1.27.3), so convergence is a comparison and not a marker. A 404
+        is the absent rule; anything else raises, because "could not look" is not
+        "unprotected". The branch is one path segment, so a `/` in it is encoded.
+        """
+        try:
+            body = self._request("GET", f"/repos/{owner}/{name}/branch_protections/{quote(branch, safe='')}")
+        except GiteaError as exc:
+            if exc.status_code == 404:
+                return None
+            raise
+        return dict(body)
+
 
 class GiteaBasicAuthClient(GiteaClient):
     """The subset of the API that REFUSES tokens and requires a password.
@@ -844,6 +866,18 @@ class GiteaBasicAuthClient(GiteaClient):
         a repository the bot did not create.
         """
         self._request("PUT", f"/repos/{owner}/{name}/collaborators/{username}", json={"permission": permission})
+
+    def create_branch_protection(self, owner: str, name: str, payload: Mapping[str, Any]) -> None:
+        """Create a protection rule; `payload["rule_name"]` is the branch (AUTH-024).
+
+        ON THIS CLASS for the same reason as `add_collaborator`: the whole
+        `/branch_protections` group is gated on repo-ADMIN.
+        """
+        self._request("POST", f"/repos/{owner}/{name}/branch_protections", json=dict(payload))
+
+    def edit_branch_protection(self, owner: str, name: str, branch: str, payload: Mapping[str, Any]) -> None:
+        """Edit the rule named `branch` in place. Fields not in `payload` are left as they are."""
+        self._request("PATCH", f"/repos/{owner}/{name}/branch_protections/{quote(branch, safe='')}", json=dict(payload))
 
     def revoke_token(self, username: str, token_name: str) -> bool:
         """Delete a named token. True if it was there, False if it already was not.
