@@ -17,8 +17,8 @@ from pathlib import Path
 
 import yaml
 from jinja2 import StrictUndefined
-from tests.ansible_jinja import ansible_env
 
+from tests.ansible_jinja import ansible_env
 from toolkit.features.gitea_repos import load_declaration
 
 REPO = Path(__file__).resolve().parent.parent
