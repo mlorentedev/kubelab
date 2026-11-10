@@ -73,7 +73,13 @@ func (rc *Receiver) declares(forgeName string, payload []byte) bool {
 		if s.Forge != forgeName || !strings.EqualFold(s.Owner, r.Owner.Login) {
 			continue
 		}
-		if s.Wildcard() && r.Name != "" && !r.Fork && !r.Archived || strings.EqualFold(s.Repo, r.Name) {
+		if s.Wildcard() {
+			if r.Name != "" && !r.Fork && !r.Archived {
+				return true
+			}
+			continue
+		}
+		if strings.EqualFold(s.Repo, r.Name) {
 			return true
 		}
 	}
