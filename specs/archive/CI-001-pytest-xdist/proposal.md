@@ -1,7 +1,7 @@
 ---
 id: "CI-001-pytest-xdist"
 type: spec
-status: implementing # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-11-04"
 issue: "mlorentedev/kubelab#3078"   # phase 2: #3111 — repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal]
