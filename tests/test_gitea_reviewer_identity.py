@@ -156,6 +156,7 @@ esac
             "GITEA_OIDC_CLIENT_SECRET": "s",
             "GITEA_OIDC_DISCOVERY_URL": "https://idp.example.test/.well-known/x",
             "GITEA_BOOTSTRAP_STATE": str(marker),
+            "GITEA_CREATION_LIMIT_STATE_DIR": str(tmp_path),
             **extra,
         }
         return subprocess.run(["sh", str(SCRIPT)], env=env, capture_output=True, text=True, timeout=60)
