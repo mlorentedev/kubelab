@@ -173,3 +173,16 @@ func TestGitHubListingFailsWhole(t *testing.T) {
 		t.Fatalf("got %v and no error", names(got))
 	}
 }
+
+// Forges compare names without case, so a named source and a listed repository
+// that differ only in case are one source, read once.
+func TestCatalogReadsACaseVariantOnce(t *testing.T) {
+	l := &fakeLister{repos: map[string][]string{"o": {"kubelab", "b"}}}
+	c := newCatalog(t, "github:o/*,github:O/Kubelab", l)
+	if err := c.Resolve(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if got := c.Current(); len(got) != 2 {
+		t.Fatalf("got %v, want kubelab once and b", names(got))
+	}
+}
