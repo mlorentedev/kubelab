@@ -178,7 +178,7 @@ esac
 echo "curl: $*" >> {calls}
 case "$*" in
   *PATCH*) exit 0 ;;
-  *) printf '{{"login":"{BOT}","prohibit_login":{str(prohibited).lower()}}}' ;;
+  *) printf '{{"id":2,"login":"{BOT}","prohibit_login":{str(prohibited).lower()}}}' ;;
 esac
 """,
             encoding="utf-8",
@@ -199,6 +199,7 @@ esac
             "GITEA_OIDC_CLIENT_SECRET": "s",
             "GITEA_OIDC_DISCOVERY_URL": "https://idp.example.test/.well-known/x",
             "GITEA_BOOTSTRAP_STATE": str(marker),
+            "GITEA_CREATION_LIMIT_STATE_DIR": str(tmp_path),
             "GITEA_BOT_USER": BOT,
             "GITEA_BOT_EMAIL": f"{BOT}@example.test",
         }
@@ -254,12 +255,16 @@ def test_an_account_already_in_the_right_state_is_not_patched_again(bot_harness)
     finished removing it.
     """
     bot_harness.build(bot_exists=True, prohibited=False)
+    # The creation limit (AUTH-024) converges by its own marker; seed it so
+    # this test isolates the login state, which converges by read-back.
+    (bot_harness.calls.parent / f".kubelab-creation-limit-{BOT}-2").write_text("", encoding="utf-8")
     result = bot_harness.run()
     assert "already correct" in result.stdout
     assert "Updated machine account" not in result.stdout, (
         "the script announced a change over an account already in the right state; "
         "`changed_when` matches on 'Updated', so this restarts Gitea every provision"
     )
+    assert "Updated repository creation limit" not in result.stdout, "the seeded marker was not the one the script read"
     assert "PATCH" not in bot_harness.calls.read_text(encoding="utf-8")
 
 
@@ -279,6 +284,7 @@ def test_the_bot_section_is_skipped_when_no_machine_identity_is_declared(bot_har
             "GITEA_OIDC_CLIENT_SECRET": "s",
             "GITEA_OIDC_DISCOVERY_URL": "https://idp.example.test/.well-known/x",
             "GITEA_BOOTSTRAP_STATE": str(bot_harness.calls.parent / "state"),
+            "GITEA_CREATION_LIMIT_STATE_DIR": str(bot_harness.calls.parent),
         },
         capture_output=True,
         text=True,
