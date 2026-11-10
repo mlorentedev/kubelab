@@ -58,9 +58,11 @@ created: "2026-10-21"
 - [x] ✓ 2026-11-02 [AC4] Periodic reconcile per source every 10 minutes under the hourly call ceiling, with a guard test that counts calls. The ceiling is per forge since 2026-11-09, when the Gitea reader was wired (see the sources task below)
 - [ ] [AC1] Queue endpoint with the inbox reason (author, requested reviewer, failing CI, waiting on me). `GET /console/queue` serves the open items without reasons since 2026-11-04; the reasons need the operator's login per forge and check-run reads
   - [x] ✓ 2026-11-04 The queue lists declared sources only, so a repository removed from `infra.forge.sources` leaves the view, and an item deleted upstream goes on the next full rebuild (PR-Agent finding on #3001)
-- [ ] [AC1] The sources cover every repository the board aggregates (ADR-066 A4 parity), declared explicitly: the list is the receiver's gate, so it is never derived from the App's installation
+- [ ] [AC1] The sources cover every repository of the operator's forges (Gitea and the personal GitHub account; no organisation), and a repository created later appears with no new declaration. The declaration stays the receiver's gate: an owner's wildcard (`github:mlorentedev/*`) is bound to that owner, so an App installation widened to another owner still stores nothing
   - [x] ✓ 2026-11-09 GitHub: the 24 repositories that carry `add-to-project.yml`, held sorted and well-formed by `tests/test_forge_sources.py`
   - [x] ✓ 2026-11-09 Gitea: the reconcile wires a Gitea reader, behind its own call ceiling, when `infra.forge.gitea_url` is set (prod: the in-cluster `gitea` Service; staging: none). The sources name every repository under `apps.services.core.gitea.organizations` and only those, held equal by `tests/test_forge_sources.py`
+  - [x] ✓ 2026-11-09 Discovery in the `forge` package: `forge:owner/*` parses; `Catalog` lists each wildcard through the App installation (`GET /installation/repositories`, no forks, no archived), keeps the last good listing when one fails, and only a successful listing retires a repository; the receiver admits an owner's wildcard on the same terms
+  - [ ] Wire the `Catalog` into the reconcile and the console queue, and declare `github:mlorentedev/*` in place of the named GitHub list (`ci-workflows` and every later repository then appear)
 
 ### 2. Access and UI
 
