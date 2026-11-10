@@ -55,7 +55,7 @@ created: "2026-10-21"
     - [x] ✓ 2026-11-05 GitHub: the App's own hook, `make forge-github-hook` (plan; `APPLY=1` writes, `SECRET=1` resends after a rotation). The events and the Active toggle are the operator's settings step, which the command checks (lesson-714)
     - [ ] Gitea: the sources now name each declared Gitea repository, so `repository_settings.webhooks` (one hook per declared repository) matches them; what remains is declaring the hook to the API there
 - [x] ✓ 2026-11-02 [AC4] Test: the same delivery twice projects once (`TestSameDeliveryProjectsOnce`, against Postgres)
-- [x] ✓ 2026-11-02 [AC4] Periodic reconcile per source every 10 minutes under the hourly call ceiling, with a guard test that counts calls. `infra.forge.sources` declares GitHub only: which Gitea repository to read is the operator's call, and the Gitea reader is wired with it
+- [x] ✓ 2026-11-02 [AC4] Periodic reconcile per source every 10 minutes under the hourly call ceiling, with a guard test that counts calls. The ceiling is per forge since 2026-11-09, when the Gitea reader was wired (see the sources task below)
 - [ ] [AC1] Queue endpoint with the inbox reason (author, requested reviewer, failing CI, waiting on me). `GET /console/queue` serves the open items without reasons since 2026-11-04; the reasons need the operator's login per forge and check-run reads
   - [x] ✓ 2026-11-04 The queue lists declared sources only, so a repository removed from `infra.forge.sources` leaves the view, and an item deleted upstream goes on the next full rebuild (PR-Agent finding on #3001)
 - [ ] [AC1] The sources cover every repository the board aggregates (ADR-066 A4 parity), declared explicitly: the list is the receiver's gate, so it is never derived from the App's installation

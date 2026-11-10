@@ -90,8 +90,17 @@ def test_gitea_sources_are_exactly_the_declared_repositories():
     assert {s for s in _sources() if s.startswith("gitea:")} == declared
 
 
-def test_only_prod_wires_the_gitea_reader():
-    # Staging has no `gitea` Service and no token; prod reads it in-cluster.
-    for env, expected in (("staging", ""), ("prod", "http://gitea:3000")):
-        api = _api_config(env)
-        assert api["data"]["INFRA_FORGE_GITEA_URL"] == expected, env
+def test_each_overlay_carries_its_declared_gitea_address():
+    # Staging has no `gitea` Service and no token, so it declares none; prod reads the
+    # in-cluster Service. Compared against the values files, not a copy of them.
+    def declared(name: str) -> str | None:
+        values = yaml.safe_load((COMMON.parent / name).read_text(encoding="utf-8"))
+        return ((values.get("infra") or {}).get("forge") or {}).get("gitea_url")
+
+    common = declared("common.yaml")
+    for env in ("staging", "prod"):
+        expected = declared(f"{env}.yaml")
+        expected = common if expected is None else expected
+        assert _api_config(env)["data"]["INFRA_FORGE_GITEA_URL"] == expected, env
+    assert common == "", "staging must not wire a Gitea reader"
+    assert declared("prod.yaml"), "prod must wire the Gitea reader"

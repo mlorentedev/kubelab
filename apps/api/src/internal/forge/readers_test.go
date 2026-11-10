@@ -1,6 +1,9 @@
 package forge_test
 
 import (
+	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/mlorentedev/kubelab/apps/api/internal/forge"
@@ -31,11 +34,29 @@ func TestNoGiteaReaderWithoutAnAddress(t *testing.T) {
 	}
 }
 
-// The ceiling is per forge (AC4): GitHub's calls must not spend Gitea's hour.
+// The ceiling is per forge (AC4): spending Gitea's whole hour leaves GitHub's untouched.
 func TestEachForgeHasItsOwnCeiling(t *testing.T) {
-	readers := forge.NewReaders(forge.Credentials{GiteaURL: "http://gitea:3000"})
-	gh, gt := readers["github"].(*forge.GitHub), readers["gitea"].(*forge.Gitea)
-	if gh.HTTP == nil || gt.HTTP == nil || gh.HTTP.Transport == gt.HTTP.Transport {
-		t.Error("the two forges share one call ceiling")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
+	defer srv.Close()
+	readers := forge.NewReaders(forge.Credentials{GiteaURL: srv.URL})
+	call := func(c *http.Client) error {
+		req, _ := http.NewRequest(http.MethodGet, srv.URL, nil)
+		resp, err := c.Transport.RoundTrip(req)
+		if err == nil {
+			resp.Body.Close()
+		}
+		return err
+	}
+	gitea, github := readers["gitea"].(*forge.Gitea).HTTP, readers["github"].(*forge.GitHub).HTTP
+	for i := 0; i < forge.HourlyCallCeiling; i++ {
+		if err := call(gitea); err != nil {
+			t.Fatalf("gitea call %d: %v", i, err)
+		}
+	}
+	if err := call(gitea); !errors.Is(err, forge.ErrCeiling) {
+		t.Fatalf("gitea past its ceiling: got %v, want ErrCeiling", err)
+	}
+	if err := call(github); err != nil {
+		t.Errorf("github refused after gitea spent its hour: %v", err)
 	}
 }
