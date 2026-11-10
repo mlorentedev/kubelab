@@ -161,8 +161,9 @@ def _run_script(tmp_path: pathlib.Path, answer: str) -> tuple[int, str, str]:
 
 
 class TestProbeScript:
-    def test_api_answer_passes(self, tmp_path: pathlib.Path) -> None:
-        code, out, _ = _run_script(tmp_path, "400 text/plain; charset=utf-8")
+    @pytest.mark.parametrize("answer", ["400 text/plain; charset=utf-8", "400 text/plain;charset=utf-8", "400 text/plain"])
+    def test_api_answer_passes(self, tmp_path: pathlib.Path, answer: str) -> None:
+        code, out, _ = _run_script(tmp_path, answer)
 
         assert code == 0, out
 
@@ -174,6 +175,8 @@ class TestProbeScript:
             "400 text/html",  # right code, wrong server
             "502 text/html",  # Traefik's error page: api is down
             "000 ",  # nothing answered
+            "400 text/plainX",  # a longer media type that shares the prefix (#2942)
+            "400 text/plain-x; charset=utf-8",
         ],
     )
     def test_any_other_answer_fails_and_names_it(self, tmp_path: pathlib.Path, answer: str) -> None:

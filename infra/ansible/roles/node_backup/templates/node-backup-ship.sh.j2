@@ -151,7 +151,7 @@ case "$SNAPSHOTS_RC" in
             echo "node-backup-ship: restic was still retrying $DESTINATION after {{ node_backup_probe_timeout }}s, last error: $PROBE_REFUSAL" >&2
             case "$PROBE_REFUSAL" in
                 *Unauthorized*|*AccessDenied*|*InvalidAccessKeyId*|*SignatureDoesNotMatch*|*"Credential access key"*)
-                    echo "  That is R2 rejecting this node's credential (backup.r2.access_key_id / secret_access_key)." >&2
+                    echo "  That is R2 rejecting this node's credential (backup.r2.nodes.<node>.access_key_id / secret_access_key)." >&2
                     echo "  restic retries it for 15 minutes rather than failing, hence this bound (#1939)." >&2 ;;
             esac
         else

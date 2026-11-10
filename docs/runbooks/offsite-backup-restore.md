@@ -152,7 +152,7 @@ toolkit obs logs --env prod -q '{namespace="kubelab"} |= "r2_backup_"' --since 2
 | `reason` | Meaning | First move |
 |---|---|---|
 | `unreadable: ... AccessDenied` / `403` | The read-only token was revoked or expired | Rotate it (below) |
-| `unreadable: ... wrong password` | `backup.restic_password` in the cluster Secret differs from the repository's | `make apply-secrets ENV=<env>`; if it persists, see [Rotation](#rotation--the-ordering-matters) |
+| `unreadable: ... wrong password` | The node's `RESTIC_PASSWORD_<NODE>` in the cluster Secret differs from the repository's | `make apply-secrets ENV=<env>`; if it persists, see [Rotation](#rotation--the-ordering-matters) |
 | `unreadable: ... does not exist` | The node's repository is missing | [Repository missing or replaced](#repository-missing-or-replaced) |
 | `no snapshots` | The repository exists and is empty | The node has never shipped: `make backup-node NODE=<node> ENV=prod` |
 | `missing sources` (`missing:[...]`) | The newest snapshot lacks a declared service | The capture on that node skipped it; read `node-backup-capture.service` there |
@@ -183,7 +183,7 @@ log included, before you read it.
 ### Rotating the watcher's token
 
 The watcher reads R2 with `backup.r2.watcher.*` (BACKUP-057): Object Read on every
-`kubelab-backup-<node>` bucket and on `kubelab-backups`, nothing else. It is
+`kubelab-backup-<node>` bucket, nothing else. It is
 separate from the nodes' write tokens on purpose, so a leak from the cluster
 cannot delete or rewrite a backup. It is minted, not created by hand:
 
@@ -222,6 +222,28 @@ command unsets nothing. That happens when the token was already revoked, or
 when it is a user token the minter cannot see. Confirm in the dashboard that it
 is gone, then rerun with `FORGET=1`. Commit the changed `*.enc.yaml` in the
 same PR. Retired so far: `backup.r2.readonly_*` (2026-11-04).
+
+### Retiring a bucket nothing reads
+
+R2 refuses to delete a bucket that holds an object, and emptying one is an S3
+operation, so a bucket is retired with the pair that can delete in it, and
+**before** that pair is revoked:
+
+```bash
+make backup-retire-bucket BUCKET=<name> PAIR=<prefix>            # report only: objects and bytes
+make backup-retire-bucket BUCKET=<name> PAIR=<prefix> APPLY=1    # empty, delete, read the 404 back
+make backup-revoke-r2-pair PAIR=<prefix> APPLY=1                 # then the pair
+```
+
+The command refuses a `backup.sources` node's bucket and any bucket the merged
+config still names, so the config change that stops reading it lands first. It
+re-lists after emptying and keeps the bucket if any object is left, and it reports
+success only when the bucket answers 404. The empty bucket is deleted with the R2
+admin token (`cloudflare.r2_admin_token`), which never reaches a node.
+
+`kubelab-backups`, the shared bucket every node used before BACKUP-057, is retired
+this way, with the pair `backup.r2` and the password `backup.restic_password` after it
+(#1920), once the weekly check had passed on all five node buckets.
 
 ## On-demand backup stale
 
@@ -336,9 +358,9 @@ a new history is a reviewed change, not a side effect of a ship.
 
 BACKUP-057: a node in `backup.sources` ships to `kubelab-backup-<node>` with its own
 token and restic password, and there is no other place for it to ship. Nothing is
-moved: the node is born there, as ace2 was. The five nodes that moved out of
-`kubelab-backups` on 2026-10-08 did so with a one-off command that was removed once
-the last of them had moved.
+moved: the node is born there, as ace2 was. The five nodes that moved out of the
+shared bucket on 2026-10-08 did so with a one-off command that was removed once
+the last of them had moved; the shared bucket itself was then retired (#1920).
 
 1. Declare the node in `backup.sources` and run `make sync-r2-watcher-targets`.
 2. `make tf-r2-apply` creates its bucket and the lock.

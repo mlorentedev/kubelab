@@ -206,8 +206,8 @@ def _backup_node_specs(node: str) -> list[SecretSpec]:
             length=48,
             format_hint="URL-safe random token",
             rotate_note=(
-                "Never regenerate it: `restic key add` on the repository first, as for "
-                "backup.restic_password. Escrow it in Bitwarden in the same pass."
+                "Never regenerate it: `restic key add` on the repository first, then set "
+                "the new value. Escrow it in Bitwarden in the same pass."
             ),
             services=("backup", "r2-backup-watcher"),
             envs=("staging", "prod"),
@@ -1591,82 +1591,20 @@ SECRET_CATALOG: list[SecretSpec] = [
             "it in common, revoke the old one. Nothing deployed reads it."
         ),
     ),
-    # Offsite backup destination (BACKUP-044 / #1056, ADR-049 D3). Stored in
-    # common.enc.yaml because the pipeline spans prod (VPS) and homelab nodes, but
-    # registered under `envs=("prod",)` — `envs` is the AUDIT dimension, not the
-    # storage location, and there is no `common` pseudo-env: a tuple matching no
-    # real env makes the secret vanish from every audit silently (ANSIBLE-033).
-    # Prod is the right audit target because the critical subset exists to protect
-    # prod-serving state: Headscale, Authelia, Postgres, and the Uptime Kuma
-    # instance that is the monitoring of record for prod. Same pattern as the
-    # Argo CD hub keys.
+    # Offsite backup destination (BACKUP-044 / #1056, ADR-049 D3). The shared pair
+    # `backup.r2.{access_key_id,secret_access_key}` and the shared
+    # `backup.restic_password` were retired with the `kubelab-backups` bucket they
+    # opened (BACKUP-057 close-out, #1920): every node has its own pair and
+    # password below, and the watcher has its own read pair.
     #
-    # A backup credential missing from the audit is the worst thing to have
-    # silently absent — the failure is invisible until a restore is attempted.
-    SecretSpec(
-        key_path="backup.r2.access_key_id",
-        expiry=Expiry.NEVER,
-        description="Cloudflare R2 S3 access key id — offsite restic destination",
-        kind=SecretKind.EXTERNAL,
-        services=("backup",),
-        format_hint="R2 API token id (not the token value)",
-        rotate_note=(
-            "Create a new R2 API token scoped to the kubelab-backups bucket, set both "
-            "halves, then re-provision the four backup nodes. The old token must stay "
-            "valid until every node has the new one, or a node silently stops backing up."
-        ),
-        envs=("prod",),
-    ),
-    SecretSpec(
-        key_path="backup.r2.secret_access_key",
-        expiry=Expiry.NEVER,
-        description="Cloudflare R2 S3 secret access key — offsite restic destination",
-        kind=SecretKind.EXTERNAL,
-        services=("backup",),
-        format_hint="SHA-256 of the R2 API token value; shown once, not recoverable",
-        rotate_note="Rotated together with backup.r2.access_key_id — they are one credential.",
-        envs=("prod",),
-    ),
-    # The restic repository password. restic encrypts client-side, so R2 never
-    # holds plaintext and Cloudflare cannot help recover anything — this value is
-    # the only key that exists. Losing it makes every backup permanently
-    # unreadable while looking perfectly healthy in the bucket.
-    #
-    # It therefore has a SECOND home outside this repo, in a Bitwarden item, and
-    # that is deliberate rather than sloppy: SOPS is decrypted by an age key that
-    # a disaster destroys, so a password stored only here is unreachable in
-    # exactly the scenario the backups exist for (BACKUP-044 R1, #479).
-    #
-    # Rotation is unusually cheap for a repository password: restic derives the
-    # key that unlocks an internal master key, so `restic key add` introduces a
-    # second password without re-encrypting any data.
-    SecretSpec(
-        key_path="backup.restic_password",
-        description="restic repository password — the only key to every offsite backup",
-        kind=SecretKind.RANDOM_TOKEN,
-        length=48,
-        format_hint="URL-safe random token",
-        rotate_note=(
-            "Use `restic key add` on every repository BEFORE changing this value — a "
-            "rotation that replaces it first locks you out of existing snapshots. Update "
-            "the Bitwarden escrow copy in the same pass, or recovery silently regresses."
-        ),
-        # Read by no node and no cluster workload since BACKUP-057: each node has
-        # its own password (`backup.nodes.<node>.restic_password`). It is the
-        # only key to the history still in `kubelab-backups`, so the escrow check
-        # (`backup_escrow.py`) still reads it, and it stays until that bucket is
-        # deleted (#1920).
-        services=("backup",),
-        envs=("staging", "prod"),
-    ),
-    # BACKUP-057: the watcher's read pair, on every node bucket and the shared
-    # one. Deliberately not a node's read-write pair: the cluster must never hold
+    # BACKUP-057: the watcher's read pair, on every node bucket. Deliberately not
+    # a node's read-write pair: the cluster must never hold
     # anything that can `forget --prune` (tests/test_k8s_secrets_r2_watcher.py).
     # Throwaway by nature, so it has no escrow copy.
     SecretSpec(
         key_path=WATCHER_ACCESS_KEY_PATH,
         expiry=Expiry.NEVER,
-        description="R2 access key id, Object Read on every kubelab-backup-<node> bucket and kubelab-backups only",
+        description="R2 access key id, Object Read on every kubelab-backup-<node> bucket only",
         kind=SecretKind.EXTERNAL,
         services=("r2-backup-watcher",),
         format_hint="R2 API token id (not the token value)",
@@ -1679,7 +1617,7 @@ SECRET_CATALOG: list[SecretSpec] = [
     SecretSpec(
         key_path=WATCHER_SECRET_KEY_PATH,
         expiry=Expiry.NEVER,
-        description="R2 secret access key, Object Read on every kubelab-backup-<node> bucket and kubelab-backups only",
+        description="R2 secret access key, Object Read on every kubelab-backup-<node> bucket only",
         kind=SecretKind.EXTERNAL,
         services=("r2-backup-watcher",),
         format_hint="SHA-256 of the R2 API token value; shown once, not recoverable",
