@@ -238,7 +238,7 @@ func TestConsoleHostRootRedirectsToThePage(t *testing.T) {
 func TestQueueWithoutACatalogIs503(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	Register(r, Live(nil), func() string { return consoleHost })
+	Register(r, Live(&fakeQueue{}, nil), func() string { return consoleHost })
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/console/queue", nil)
 	req.Host = consoleHost

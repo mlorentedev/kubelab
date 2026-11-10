@@ -17,7 +17,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/mlorentedev/kubelab/apps/api/internal/forge"
-	"github.com/mlorentedev/kubelab/apps/api/internal/store"
 	"github.com/mlorentedev/kubelab/apps/api/pkg/config"
 )
 
@@ -108,20 +107,16 @@ type itemView struct {
 // Deps returns the read model and the sources to show; a seam for tests.
 type Deps func() (QueueReader, []forge.Source, error)
 
-// Live reads the running configuration and the catalog the reconcile reads from,
-// so the console shows exactly the sources being read, wildcards resolved. With
-// no catalog (the declaration did not parse) the queue answers 503, never an
-// empty page that reads as "nothing open".
-func Live(catalog *forge.Catalog) Deps {
+// Live serves the read model and the catalog the reconcile reads from, so the
+// console shows exactly the sources being read, wildcards resolved. With no
+// catalog (the declaration did not parse) the queue answers 503, never an empty
+// page that reads as "nothing open".
+func Live(model QueueReader, catalog *forge.Catalog) Deps {
 	return func() (QueueReader, []forge.Source, error) {
 		if catalog == nil {
 			return nil, nil, errors.New("no catalog: the forge sources did not parse")
 		}
-		conf, err := config.GetConfig()
-		if err != nil {
-			return nil, nil, err
-		}
-		return store.ForgeModel{Conf: conf.Postgres}, catalog.Current(), nil
+		return model, catalog.Current(), nil
 	}
 }
 

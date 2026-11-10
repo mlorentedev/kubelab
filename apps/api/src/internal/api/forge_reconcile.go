@@ -16,6 +16,7 @@ import (
 type ForgeView struct {
 	Readers map[string]forge.Reader
 	Catalog *forge.Catalog
+	Model   store.ForgeModel
 }
 
 // seedTimeout bounds the start-up read of the sources already stored.
@@ -32,7 +33,7 @@ func NewForgeView(ctx context.Context, conf *config.Config) *ForgeView {
 		GiteaURL:             conf.Forge.GiteaURL,
 		GiteaToken:           conf.Forge.GiteaToken,
 	})
-	view := &ForgeView{Readers: readers}
+	view := &ForgeView{Readers: readers, Model: store.ForgeModel{Conf: conf.Postgres}}
 	declared, err := forge.ParseSources(conf.Forge.Sources)
 	if err != nil {
 		log.Printf("forge view: sources: %v", err)
@@ -42,7 +43,7 @@ func NewForgeView(ctx context.Context, conf *config.Config) *ForgeView {
 	if conf.Postgres.Configured() {
 		seedCtx, cancel := context.WithTimeout(ctx, seedTimeout)
 		defer cancel()
-		known, err := store.ForgeModel{Conf: conf.Postgres}.Sources(seedCtx)
+		known, err := view.Model.Sources(seedCtx)
 		if err != nil {
 			log.Printf("forge view: seed from the store: %v", err)
 		}
@@ -57,8 +58,8 @@ func StartForgeReconcile(ctx context.Context, conf *config.Config, view *ForgeVi
 	if view.Catalog == nil || len(view.Catalog.Declared) == 0 || !conf.Postgres.Configured() {
 		return
 	}
-	r := &forge.Reconciler{Readers: view.Readers, Catalog: view.Catalog, Model: store.ForgeModel{Conf: conf.Postgres}}
+	r := &forge.Reconciler{Readers: view.Readers, Catalog: view.Catalog, Model: view.Model}
 	go r.Run(ctx, forge.ReconcilePeriod, forge.RetryPeriod)
-	projector := &forge.Projector{Log: store.ForgeModel{Conf: conf.Postgres}}
+	projector := &forge.Projector{Log: view.Model}
 	go projector.Run(ctx, forge.ProjectPeriod)
 }

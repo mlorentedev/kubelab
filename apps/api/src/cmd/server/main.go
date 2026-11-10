@@ -34,7 +34,7 @@ func main() {
 	defer stop()
 	forgeView := api.NewForgeView(ctx, conf)
 
-	api.SetupRoutes(r, forgeView.Catalog)
+	api.SetupRoutes(r, forgeView)
 
 	api.StartForgeReconcile(ctx, conf, forgeView)
 
