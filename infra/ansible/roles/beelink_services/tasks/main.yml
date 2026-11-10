@@ -186,8 +186,9 @@
 # The global config only. Its repository list is rendered from
 # `renovate_gitea_organizations`, which the playbook sets to the forge's own
 # declaration and which has no role default on purpose: a play that forgot it
-# would render an empty list and Renovate would cover nothing, silently. Nothing
-# runs Renovate yet; the timer that reads this file is AC2.
+# fails this task on an undefined variable. Do not add `| default({})`: that
+# turns the loud failure into an empty list, and Renovate would cover nothing,
+# silently. Nothing runs Renovate yet; the timer that reads this file is AC2.
 - name: Create the Renovate config directory
   file:
     path: "{{ beelink_deploy_dir }}/renovate"

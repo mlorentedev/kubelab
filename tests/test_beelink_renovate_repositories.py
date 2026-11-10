@@ -47,7 +47,11 @@ def _declared(common: dict) -> set[str]:
 
 
 def test_rendered_repositories_equal_the_declaration() -> None:
-    assert set(_repositories(ORGANIZATIONS)) == _declared(COMMON)
+    # Non-empty first: with nothing declared, both sides are the empty set and the
+    # equality holds in exactly the state this test exists to catch.
+    declared = _declared(COMMON)
+    assert declared, "apps.services.core.gitea.organizations declares no repositories"
+    assert set(_repositories(ORGANIZATIONS)) == declared
 
 
 def test_no_repository_is_listed_twice() -> None:
