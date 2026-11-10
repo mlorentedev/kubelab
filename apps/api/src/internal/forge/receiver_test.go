@@ -48,6 +48,10 @@ func TestReceiver(t *testing.T) {
 	}
 	elsewhere := `{"action":"opened","repository":{"name":"fae-brain","owner":{"login":"teledyne"}}}`
 	ping := `{"zen":"Keep it logically awesome.","hook_id":1}`
+	// The listing leaves forks and archived repositories out of a wildcard; the gate agrees with it.
+	fork := `{"action":"opened","repository":{"name":"kubelab","fork":true,"owner":{"login":"mlorentedev"}}}`
+	archived := `{"action":"opened","repository":{"name":"kubelab","archived":true,"owner":{"login":"mlorentedev"}}}`
+	everyRepo := []forge.Source{{Forge: "github", Owner: "mlorentedev", Repo: forge.EveryRepo}}
 	github := func(s string) http.Header {
 		return header("X-Hub-Signature-256", s, "X-GitHub-Delivery", "d1", "X-GitHub-Event", "issues")
 	}
@@ -83,6 +87,16 @@ func TestReceiver(t *testing.T) {
 			body: ping, want: 204},
 		{name: "owner compared without case", forge: "github", header: github("sha256=" + sig), body: body,
 			want: 202, stored: 1, sources: []forge.Source{{Forge: "github", Owner: "MLorentedev", Repo: "kubelab"}}},
+		{name: "an owner's wildcard admits its repositories", forge: "github", header: github("sha256=" + sig),
+			body: body, want: 202, stored: 1, sources: everyRepo},
+		{name: "an owner's wildcard admits no other owner", forge: "github", header: signed("github", elsewhere),
+			body: elsewhere, want: 204, sources: everyRepo},
+		{name: "a fork under a wildcard stores nothing", forge: "github", header: signed("github", fork),
+			body: fork, want: 204, sources: everyRepo},
+		{name: "an archived repository under a wildcard stores nothing", forge: "github",
+			header: signed("github", archived), body: archived, want: 204, sources: everyRepo},
+		{name: "a fork declared by name is stored", forge: "github", header: signed("github", fork),
+			body: fork, want: 202, stored: 1, sources: declared},
 		{name: "store down asks for redelivery", forge: "gitea", header: gitea, body: body, want: 503,
 			err: errors.New("down")},
 	}

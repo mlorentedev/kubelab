@@ -26,6 +26,13 @@ type Source struct {
 
 func (s Source) String() string { return fmt.Sprintf("%s:%s/%s", s.Forge, s.Owner, s.Repo) }
 
+// EveryRepo as a source's Repo stands for every repository the owner has on that
+// forge, so a repository created later is read without a new declaration.
+const EveryRepo = "*"
+
+// Wildcard reports whether the source stands for an owner's every repository.
+func (s Source) Wildcard() bool { return s.Repo == EveryRepo }
+
 // Item is the forge-neutral shape of an issue or a pull request.
 type Item struct {
 	Source    Source

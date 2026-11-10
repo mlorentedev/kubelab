@@ -98,7 +98,12 @@ func TestParseSources(t *testing.T) {
 	if err != nil || len(got) != 2 || got[1] != (forge.Source{Forge: "gitea", Owner: "a", Repo: "b"}) {
 		t.Fatalf("got %v, %v", got, err)
 	}
-	for _, bad := range []string{"github", "github:o", ":o/r", "github:/r"} {
+	// An owner's every repository is `forge:owner/*`; the owner itself is never a wildcard.
+	all, err := forge.ParseSources("github:o/*")
+	if err != nil || len(all) != 1 || !all[0].Wildcard() {
+		t.Fatalf("github:o/*: got %v, %v", all, err)
+	}
+	for _, bad := range []string{"github", "github:o", ":o/r", "github:/r", "github:*/r", "github:*/*", "github:o/r*"} {
 		if _, err := forge.ParseSources(bad); err == nil {
 			t.Errorf("%q: want an error", bad)
 		}

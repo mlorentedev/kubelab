@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"strings"
 	"time"
 )
 
@@ -47,22 +48,16 @@ type restItem struct {
 
 var nextLink = regexp.MustCompile(`<([^>]+)>;\s*rel="next"`)
 
-// ListItems pages through every item changed since the given time.
-func (g *GitHub) ListItems(ctx context.Context, src Source, since time.Time) ([]Item, error) {
-	token := g.Token
+// token is the credential for one read: a fresh App token when Tokens is set.
+func (g *GitHub) token(ctx context.Context) (string, error) {
 	if g.Tokens != nil {
-		fresh, err := g.Tokens(ctx)
-		if err != nil {
-			return nil, &SourceError{Source: src, Err: err}
-		}
-		token = fresh
+		return g.Tokens(ctx)
 	}
-	q := url.Values{"state": {"all"}, "per_page": {fmt.Sprint(githubPerPage)}}
-	if !since.IsZero() {
-		q.Set("since", since.UTC().Format(time.RFC3339))
-	}
-	first := fmt.Sprintf("%s/repos/%s/%s/issues?%s", g.BaseURL, src.Owner, src.Repo, q.Encode())
-	return readPages(ctx, src, pagedRead{
+	return g.Token, nil
+}
+
+func (g *GitHub) read(token, first string) pagedRead {
+	return pagedRead{
 		BaseURL:  g.BaseURL,
 		First:    first,
 		MaxPages: githubMaxPages,
@@ -73,7 +68,67 @@ func (g *GitHub) ListItems(ctx context.Context, src Source, since time.Time) ([]
 				req.Header.Set("Authorization", "Bearer "+token)
 			}
 		},
-	})
+	}
+}
+
+// ListItems pages through every item changed since the given time.
+func (g *GitHub) ListItems(ctx context.Context, src Source, since time.Time) ([]Item, error) {
+	token, err := g.token(ctx)
+	if err != nil {
+		return nil, &SourceError{Source: src, Err: err}
+	}
+	q := url.Values{"state": {"all"}, "per_page": {fmt.Sprint(githubPerPage)}}
+	if !since.IsZero() {
+		q.Set("since", since.UTC().Format(time.RFC3339))
+	}
+	first := fmt.Sprintf("%s/repos/%s/%s/issues?%s", g.BaseURL, src.Owner, src.Repo, q.Encode())
+	return readPages(ctx, src, g.read(token, first))
+}
+
+// ListRepos lists the owner's repositories the App installation can read, without
+// forks or archived ones. The installation spans every owner it was granted, so the
+// owner is filtered here. A page that fails fails the listing.
+func (g *GitHub) ListRepos(ctx context.Context, owner string) ([]Source, error) {
+	token, err := g.token(ctx)
+	if err != nil {
+		return nil, err
+	}
+	p := g.read(token, fmt.Sprintf("%s/installation/repositories?per_page=%d", g.BaseURL, githubPerPage))
+	base, err := url.Parse(g.BaseURL)
+	if err != nil {
+		return nil, fmt.Errorf("parse base url: %w", err)
+	}
+	var repos []Source
+	next := p.First
+	for pages := 0; next != ""; pages++ {
+		if pages == p.MaxPages {
+			return nil, fmt.Errorf("more than %d pages", p.MaxPages)
+		}
+		var page struct {
+			Repositories []struct {
+				Name     string `json:"name"`
+				Fork     bool   `json:"fork"`
+				Archived bool   `json:"archived"`
+				Owner    struct {
+					Login string `json:"login"`
+				} `json:"owner"`
+			} `json:"repositories"`
+		}
+		link, err := getPage(ctx, p, next, &page)
+		if err != nil {
+			return nil, err
+		}
+		if link != "" && !sameOrigin(base, link) {
+			return nil, fmt.Errorf("next page points off %s", base.Host)
+		}
+		for _, r := range page.Repositories {
+			if strings.EqualFold(r.Owner.Login, owner) && !r.Fork && !r.Archived {
+				repos = append(repos, Source{Forge: "github", Owner: r.Owner.Login, Repo: r.Name})
+			}
+		}
+		next = link
+	}
+	return repos, nil
 }
 
 func (r restItem) neutral(src Source) Item {

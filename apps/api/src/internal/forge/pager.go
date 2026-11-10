@@ -47,9 +47,16 @@ func readPages(ctx context.Context, src Source, p pagedRead) ([]Item, error) {
 }
 
 func fetchPage(ctx context.Context, p pagedRead, pageURL string) ([]restItem, string, error) {
+	var page []restItem
+	link, err := getPage(ctx, p, pageURL, &page)
+	return page, link, err
+}
+
+// getPage fetches one page into out and returns the next page's URL, if any.
+func getPage(ctx context.Context, p pagedRead, pageURL string, out any) (string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pageURL, nil)
 	if err != nil {
-		return nil, "", err
+		return "", err
 	}
 	p.Auth(req)
 	client := p.HTTP
@@ -58,19 +65,18 @@ func fetchPage(ctx context.Context, p pagedRead, pageURL string) ([]restItem, st
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, "", err
+		return "", err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode/100 != 2 {
-		return nil, "", fmt.Errorf("forge answered %s", resp.Status)
+		return "", fmt.Errorf("forge answered %s", resp.Status)
 	}
-	var page []restItem
-	if err := json.NewDecoder(resp.Body).Decode(&page); err != nil {
-		return nil, "", fmt.Errorf("decode page: %w", err)
+	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+		return "", fmt.Errorf("decode page: %w", err)
 	}
 	link := ""
 	if m := nextLink.FindStringSubmatch(resp.Header.Get("Link")); m != nil {
 		link = m[1]
 	}
-	return page, link, nil
+	return link, nil
 }

@@ -39,7 +39,9 @@ var webhookHeaders = map[string]struct{ Signature, Delivery, Event string }{
 // Sources is what the reconcile reads. A delivery about any other repository is
 // answered 204 and never written: the hook's scope lives on the forge, and a
 // widened App installation or a mistyped scope must not reach the console's
-// database (ADR-066 A2). No sources means nothing is stored.
+// database (ADR-066 A2). A wildcard (`forge:owner/*`) is bound to its owner, so
+// an installation widened to another owner still stores nothing. No sources
+// means nothing is stored.
 type Receiver struct {
 	Secrets map[string]string
 	Sources []Source
@@ -59,14 +61,19 @@ func NewReceiver(declaration string, secrets map[string]string, store EventStore
 
 // declares reports whether the delivery's repository is one the reconcile reads.
 // Forges treat owner and repository names without case, so the match does too.
+// An owner's wildcard admits what its listing admits (Catalog): no fork and no
+// archived repository, which a repository named on its own may still be.
 func (rc *Receiver) declares(forgeName string, payload []byte) bool {
 	var body webhookBody
 	if json.Unmarshal(payload, &body) != nil {
 		return false
 	}
-	owner, repo := body.Repository.Owner.Login, body.Repository.Name
+	r := body.Repository
 	for _, s := range rc.Sources {
-		if s.Forge == forgeName && strings.EqualFold(s.Owner, owner) && strings.EqualFold(s.Repo, repo) {
+		if s.Forge != forgeName || !strings.EqualFold(s.Owner, r.Owner.Login) {
+			continue
+		}
+		if s.Wildcard() && r.Name != "" && !r.Fork && !r.Archived || strings.EqualFold(s.Repo, r.Name) {
 			return true
 		}
 	}
