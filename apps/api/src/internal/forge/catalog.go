@@ -80,13 +80,9 @@ func (c *Catalog) list(ctx context.Context, pattern Source) ([]Source, error) {
 func (c *Catalog) Current() []Source {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
+	// Keyed without case, as the forges compare names.
 	seen := map[string]Source{}
-	add := func(s Source) {
-		key := strings.ToLower(s.String())
-		if _, dup := seen[key]; !dup {
-			seen[key] = s
-		}
-	}
+	add := func(s Source) { seen[strings.ToLower(s.String())] = s }
 	for _, s := range c.Declared {
 		if s.Wildcard() {
 			for _, r := range c.listed[s] {

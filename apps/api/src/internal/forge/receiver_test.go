@@ -51,6 +51,7 @@ func TestReceiver(t *testing.T) {
 	// The listing leaves forks and archived repositories out of a wildcard; the gate agrees with it.
 	fork := `{"action":"opened","repository":{"name":"kubelab","fork":true,"owner":{"login":"mlorentedev"}}}`
 	archived := `{"action":"opened","repository":{"name":"kubelab","archived":true,"owner":{"login":"mlorentedev"}}}`
+	sibling := `{"action":"opened","repository":{"name":"other","owner":{"login":"mlorentedev"}}}`
 	everyRepo := []forge.Source{{Forge: "github", Owner: "mlorentedev", Repo: forge.EveryRepo}}
 	github := func(s string) http.Header {
 		return header("X-Hub-Signature-256", s, "X-GitHub-Delivery", "d1", "X-GitHub-Event", "issues")
@@ -95,6 +96,8 @@ func TestReceiver(t *testing.T) {
 			body: fork, want: 204, sources: everyRepo},
 		{name: "an archived repository under a wildcard stores nothing", forge: "github",
 			header: signed("github", archived), body: archived, want: 204, sources: everyRepo},
+		{name: "a named source admits no sibling repository", forge: "github", header: signed("github", sibling),
+			body: sibling, want: 204},
 		{name: "a fork declared by name is stored", forge: "github", header: signed("github", fork),
 			body: fork, want: 202, stored: 1, sources: declared},
 		{name: "store down asks for redelivery", forge: "gitea", header: gitea, body: body, want: 503,
