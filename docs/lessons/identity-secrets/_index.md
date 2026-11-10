@@ -4,6 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 728 | [Gitea's repository creation limit is write-only and is checked on the owner](lesson-728-gitea-repository-creation-limit-is-write-only-and-checked-on-the-owner.md) | 2026-11-09 |
 | 716 | [A network-scoped access rule behind a masquerading load balancer matches every client](lesson-716-a-network-scoped-access-rule-behind-a-masquerading-load-balancer-matches-every-client.md) | 2026-11-05 |
 | 707 | [Gitea's collaborator permission endpoint answers `read` for an account a team grants write to](lesson-707-gitea-permission-endpoint-misses-team-units.md) | 2026-11-03 |
 | 684 | [A credential minted in one system and recorded in another needs a way back from the gap between them](lesson-684-a-credential-minted-in-one-system-and-recorded-in-another-needs-a-way-back-from-the-gap.md) | 2026-11-01 |
