@@ -15,7 +15,7 @@ from toolkit.features import r2_documents_token as rdt
 from toolkit.features.secrets_manager import SECRET_CATALOG
 
 ACCOUNT = "acct"
-REFUSED = "kubelab-backups"
+REFUSED = "kubelab-backup-beelink"
 
 
 class FakeApi:

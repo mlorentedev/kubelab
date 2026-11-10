@@ -64,42 +64,21 @@ def revoke_r2_pair_cmd(
         raise typer.Exit(code=1)
 
 
-@app.command("generate-password")
-def generate_password_cmd(
-    env: Annotated[str, typer.Option("--env", "-e", help="SOPS file to write to")] = "common",
-    force: Annotated[bool, typer.Option("--force", help="Overwrite an existing password")] = False,
+@app.command("retire-bucket")
+def retire_bucket_cmd(
+    bucket: Annotated[str, typer.Option("--bucket", help="The R2 bucket to empty and delete")],
+    pair: Annotated[str, typer.Option("--pair", help="Key prefix of an S3 pair that can delete in it, e.g. backup.r2")],
+    apply: Annotated[bool, typer.Option("--apply", help="Empty and delete; without it, only report")] = False,
 ) -> None:
-    """Generate the restic repository password and store it in SOPS.
+    """Retire an R2 bucket nothing reads: empty it, delete it, prove it gone (BACKUP-057).
 
-    The value is never printed. Read it once with
-    `make secrets-show KEY=backup.restic_password SECRETS_ENV=common` to place a
-    copy in the offsite escrow — without that second copy the password is
-    reachable only through an age key that a disaster destroys, which is the one
-    scenario the backups exist for.
-
-    Refuses to overwrite silently: replacing this value without running
-    `restic key add` first locks you out of every existing snapshot.
+    Refused for a backup node's bucket and for any bucket the config still names.
+    Run it before revoking the pair it uses: emptying needs that pair.
     """
-    import secrets as _secrets
+    from toolkit.features.backup_bucket_retire import retire_bucket_cmd as run
 
-    from toolkit.features.secrets_manager import SecretsManager
-
-    key = "backup.restic_password"
-    manager = SecretsManager()
-
-    if manager.show_secret(env, key) and not force:
-        logger.error(
-            f"'{key}' already exists in {env}. Overwriting it locks you out of every existing "
-            "snapshot unless `restic key add` ran first. Pass --force only if you mean it."
-        )
+    if not run(bucket, pair_prefix=pair, apply=apply):
         raise typer.Exit(code=1)
-
-    if not manager.set_secret(env, key, _secrets.token_urlsafe(48)):
-        logger.error(f"Failed to write '{key}' to {env}")
-        raise typer.Exit(code=1)
-
-    logger.success(f"Generated '{key}' in {env} (value not printed)")
-    logger.warning("Copy it to the offsite escrow now: make secrets-show KEY=backup.restic_password SECRETS_ENV=common")
 
 
 @app.command("coverage")

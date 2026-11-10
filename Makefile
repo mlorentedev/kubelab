@@ -1846,6 +1846,15 @@ backup-revoke-r2-pair:
 	@test -n "$(PAIR)" || (echo "Usage: make backup-revoke-r2-pair PAIR=<prefix> (backup.r2.readonly_ or backup.r2) [APPLY=1] [FORGET=1]" && exit 1)
 	@$(TOOLKIT) backup revoke-r2-pair --pair $(PAIR) $(if $(filter 1,$(APPLY)),--apply) $(if $(filter 1,$(FORGET)),--forget)
 
+# Retires an R2 bucket nothing reads (BACKUP-057 close-out): empties it with
+# PAIR's S3 pair, deletes it with the R2 admin token, then proves a 404.
+# Refused for a node's bucket and for a bucket the config still names. Run it
+# BEFORE backup-revoke-r2-pair on the same PAIR. Reports only, unless APPLY=1.
+.PHONY: backup-retire-bucket
+backup-retire-bucket:
+	@test -n "$(BUCKET)" -a -n "$(PAIR)" || (echo "Usage: make backup-retire-bucket BUCKET=<name> PAIR=<prefix> [APPLY=1]" && exit 1)
+	@$(TOOLKIT) backup retire-bucket --bucket $(BUCKET) --pair $(PAIR) $(if $(filter 1,$(APPLY)),--apply)
+
 .PHONY: sync-terraform-backend
 sync-terraform-backend: ## Render infra/terraform/backend.s3.tfbackend from terraform.state (TF-007)
 	@$(TOOLKIT) sync terraform-backend
@@ -1942,15 +1951,6 @@ backup-drill-node:
 restore-window:
 	@test -n "$(APP)" || (echo "Usage: make restore-window APP=<deployment> ENV=staging|prod [END=1]" && exit 1)
 	@$(TOOLKIT) backup restore-window --app $(APP) --env $(or $(filter staging prod,$(ENV)),prod) $(if $(filter 1,$(END)),--end,)
-
-# Generate the restic repository password into SOPS. The value is never printed;
-# read it once with `make secrets-show KEY=backup.restic_password
-# SECRETS_ENV=common` to place the offsite escrow copy. Refuses to overwrite an
-# existing password: replacing it without `restic key add` first locks you out of
-# every existing snapshot.
-.PHONY: backup-generate-password
-backup-generate-password:
-	@$(TOOLKIT) backup generate-password --env $(or $(SECRETS_ENV),common)
 
 # End-to-end smoke of the certificate ALERTING path (OBS-007), one layer above
 # notify-smoke: that one proves the fabric can deliver, this one proves the alert

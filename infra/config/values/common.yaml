@@ -2699,17 +2699,19 @@ backup:
     # `infra.*`: that namespace is emitted as INFRA_* into EVERY component's
     # ConfigMap (ADR-036), and no K8s component consumes R2 config — its
     # consumers are the Ansible backup role on four nodes and the restore
-    # runbook. Sitting here also matches the SOPS paths (`backup.r2.*`,
-    # `backup.restic_password`) and the allow-list under `backup.sources`.
+    # runbook. Sitting here also matches the SOPS paths (`backup.r2.nodes.*`,
+    # `backup.nodes.*`) and the allow-list under `backup.sources`.
     #
     # Nothing in the cluster is a destination: this pipeline writes off-site only
     # (BACKUP-044 AC8, ADR-061 D4), which is what let OPS-023 retire the
     # in-cluster object store without touching it.
     #
-    # These are NOT secrets — the account id appears in every R2 URL and the
-    # bucket name is not a credential. The S3 credentials live in SOPS at
-    # `backup.r2.access_key_id` / `backup.r2.secret_access_key`, and the restic
-    # repository password at `backup.restic_password`.
+    # These are NOT secrets — the account id appears in every R2 URL. Each node
+    # writes `kubelab-backup-<node>` (derived, `r2_tfvars.node_bucket`) with its
+    # own S3 pair at `backup.r2.nodes.<node>.*` and its own restic password at
+    # `backup.nodes.<node>.restic_password`, all in SOPS. The shared bucket
+    # `kubelab-backups`, its pair and its password were retired by BACKUP-057's
+    # close-out (#1920).
     #
     # Storage class must stay Standard: R2's free tier (10 GB-month, 1M Class A,
     # 10M Class B) does not apply to Infrequent Access, so the cheaper-looking
@@ -2731,15 +2733,7 @@ backup:
     # (--max-repack-size 0), or prune deletes a pack younger than R and the lock
     # refuses it; tests/test_r2_terraform.py enforces both.
     lock_retention_days: 30
-    bucket: kubelab-backups
     endpoint: "https://76967f5ede1ce50efce34d90b7e94958.r2.cloudflarestorage.com"
-    # restic addresses R2 through its S3 backend; this is the repository prefix of
-    # the old shared bucket, with the per-node repository name appended. No node
-    # ships there any more: every node in `backup.sources` has a bucket of its own,
-    # `kubelab-backup-<node>`, written with its own pair and restic password.
-    # Nothing reads it through restic; it stays, checked against the derived
-    # URL by tests/test_backup_destination.py, until that bucket is deleted (#1920).
-    repo_prefix: "s3:https://76967f5ede1ce50efce34d90b7e94958.r2.cloudflarestorage.com/kubelab-backups"
     # Pinned static binary (BACKUP-044 Part 2), same idiom as k3s_version:
     # get_url + a checksum verified against upstream's own SHA256SUMS, not a
     # floating "latest" download. Arch is resolved per node at Ansible run

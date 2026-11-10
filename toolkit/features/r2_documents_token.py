@@ -8,7 +8,7 @@ machinery (`backup_node_credentials._mint_token`):
 - Object Read & Write on `kubelab-product-documents` alone, so it can neither
   administer the bucket nor change its lock;
 - verified by consequence before it is stored: it must list the documents
-  bucket and get AccessDenied on the backups' shared bucket, or it is revoked;
+  bucket and get AccessDenied on a node's backup bucket, or it is revoked;
 - its S3 pair goes straight into `prod.enc.yaml` and is never printed. It
   reaches the product's operator through SOPS, never through a product's CI.
 
@@ -82,11 +82,16 @@ def mint_documents_token(rotate: bool = False, store: Optional[bnc.Store] = None
 
     sops = ProdStore()
     store = store or sops
-    r2 = sops._cm.get_merged_config().get("backup", {}).get("r2", {})
+    config = sops._cm.get_merged_config()
+    r2 = config.get("backup", {}).get("r2", {})
     try:
-        account_id, endpoint, refused = str(r2["account_id"]), str(r2["endpoint"]), str(r2["bucket"])
+        account_id, endpoint = str(r2["account_id"]), str(r2["endpoint"])
     except KeyError as exc:
         logger.error(f"backup.r2.{exc.args[0]} is missing from the config SSOT")
+        return False
+    refused = bnc.backup_bucket_to_refuse(config)
+    if not refused:
+        logger.error("backup.sources names no node, so no backup bucket can prove the token's scope")
         return False
 
     minter = store.show(bnc.MINTER_KEY)

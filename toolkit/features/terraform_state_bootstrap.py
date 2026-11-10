@@ -11,7 +11,7 @@ Cloudflare API:
    nor deleted in that time (R2 has no object versioning);
 3. a token with Object Read & Write on that bucket alone, minted by BACKUP-057's
    machinery and verified by consequence: it must list the state bucket and be
-   refused on the backups' bucket. Its S3 pair goes to `common.enc.yaml`, the
+   refused on a node's backup bucket. Its S3 pair goes to `common.enc.yaml`, the
    file the runner's `common` config merges.
 
 Each step reads first and writes only what differs, so a second run changes
@@ -128,10 +128,14 @@ def bootstrap(rotate: bool = False, store: Optional[bnc.Store] = None) -> bool:
     try:
         r2 = config["backup"]["r2"]
         state = config["terraform"]["state"]
-        account_id, endpoint, refused = str(r2["account_id"]), str(r2["endpoint"]), str(r2["bucket"])
+        account_id, endpoint = str(r2["account_id"]), str(r2["endpoint"])
         bucket, prefix, days = str(state["bucket"]), str(state["history_prefix"]), int(state["history_retention_days"])
     except KeyError as exc:
         logger.error(f"{exc.args[0]} is missing from the config SSOT (backup.r2, terraform.state)")
+        return False
+    refused = bnc.backup_bucket_to_refuse(config)
+    if not refused:
+        logger.error("backup.sources names no node, so no backup bucket can prove the token's scope")
         return False
 
     tokens = {path: store.show(path) for path in (ADMIN_KEY, bnc.MINTER_KEY)}

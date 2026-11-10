@@ -1,7 +1,4 @@
-"""BACKUP-044 — the offsite destination's config.
-
-SSOT resolution, and the guard that the repository address is written once.
-"""
+"""BACKUP-044 — the offsite destination's config and credentials."""
 
 from __future__ import annotations
 
@@ -10,102 +7,44 @@ from pathlib import Path
 import pytest
 import yaml
 
-from toolkit.features.backup_destination import (
-    DestinationError,
-    load_credentials,
-    load_destination,
-)
+from toolkit.features.backup_destination import DestinationError, load_credentials
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-_DEST = {
-    "account_id": "abc123",
-    "bucket": "kubelab-backups",
-    "endpoint": "https://abc123.r2.cloudflarestorage.com",
-}
+ACCESS, SECRET = "backup.r2.nodes.rpi3.access_key_id", "backup.r2.nodes.rpi3.secret_access_key"
 
 
 class FakeConfig:
     """Minimal ConfigurationManager stand-in."""
 
-    def __init__(self, dest=_DEST, secrets=None):
-        self._dest = dest
-        self._secrets = (
-            secrets if secrets is not None else {"backup.r2.access_key_id": "AKI", "backup.r2.secret_access_key": "SEC"}
-        )
-
-    def get_merged_config(self):
-        return {"backup": {"r2": self._dest}} if self._dest is not None else {"backup": {}}
+    def __init__(self, secrets=None):
+        self._secrets = secrets if secrets is not None else {ACCESS: "AKI", SECRET: "SEC"}
 
     def get_secret_by_path(self, path):
         return self._secrets.get(path)
 
 
-# --------------------------------------------------------------------------
-# SSOT resolution
-# --------------------------------------------------------------------------
-
-
-def test_destination_resolves_from_the_config_ssot():
-    dest = load_destination(FakeConfig())
-    assert dest.bucket == "kubelab-backups"
-    assert dest.endpoint.endswith(".r2.cloudflarestorage.com")
-
-
-def test_missing_config_section_explains_itself():
-    with pytest.raises(DestinationError, match="backup.r2"):
-        load_destination(FakeConfig(dest=None))
-
-
-def test_partial_config_names_the_missing_fields():
-    with pytest.raises(DestinationError, match="endpoint"):
-        load_destination(FakeConfig(dest={"account_id": "a", "bucket": "b"}))
-
-
 def test_missing_credentials_point_at_the_command_that_sets_them():
     with pytest.raises(DestinationError, match="toolkit secrets set"):
-        load_credentials(FakeConfig(secrets={}))
+        load_credentials(FakeConfig(secrets={}), ACCESS, SECRET)
 
 
 def test_credentials_carry_the_r2_compatibility_env():
     """R2 needs a region placeholder and relaxed checksum behaviour."""
-    creds = load_credentials(FakeConfig())
+    creds = load_credentials(FakeConfig(), ACCESS, SECRET)
     assert creds["AWS_DEFAULT_REGION"] == "auto"
     assert creds["AWS_REQUEST_CHECKSUM_CALCULATION"] == "when_required"
 
 
 def test_real_common_yaml_declares_the_destination():
-    """The committed SSOT must actually carry backup.r2 — guards a rename."""
-    import yaml
-
+    """The committed SSOT must carry the account and endpoint every node's repository is built on."""
     cfg = yaml.safe_load((REPO_ROOT / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
     node = cfg["backup"]["r2"]
-    for field in ("account_id", "bucket", "endpoint", "repo_prefix"):
+    for field in ("account_id", "endpoint"):
         assert node.get(field), f"backup.r2.{field} must be set in common.yaml"
-    assert node["repo_prefix"].startswith("s3:"), "restic addresses R2 through its S3 backend"
 
 
-def test_repo_prefix_agrees_with_the_derived_repository_url():
-    """The repository URL is expressed twice in the SSOT, and nothing pinned them equal.
-
-    The Ansible role writes `backup.r2.repo_prefix/<inventory_hostname>`
-    (`roles/node_backup/defaults/main.yml`); the shared bucket's readers
-    derive `s3:{endpoint}/{bucket}/<node>`. Two expressions of one address, edited independently: a
-    bucket or endpoint change that misses `repo_prefix` makes the writer and
-    the reader disagree about where the backups are.
-
-    Both failure directions are loud — coverage reports UNCOVERED rather than
-    reporting success against an empty repository — which is why this was a
-    Minor finding in the BACKUP-044 adversarial review and not a Blocker. Loud
-    is not the same as guarded, though, and the guard is one assertion.
-    """
-    common = yaml.safe_load((REPO_ROOT / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
-    r2 = common["backup"]["r2"]
-
-    derived = f"s3:{r2['endpoint']}/{r2['bucket']}"
-
-    assert r2["repo_prefix"] == derived, (
-        f"backup.r2.repo_prefix is {r2['repo_prefix']!r} but the readers derive {derived!r}. "
-        "The role writes backups to the first and every check looks in the second, so they "
-        "must be equal. Fix the SSOT — do not relax this assertion."
-    )
+def test_the_shared_bucket_is_gone_from_the_ssot():
+    """`kubelab-backups` was retired (#1920): its bucket and prefix keys must not come back."""
+    cfg = yaml.safe_load((REPO_ROOT / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
+    assert not {"bucket", "repo_prefix"} & set(cfg["backup"]["r2"])
