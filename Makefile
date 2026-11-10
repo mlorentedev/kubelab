@@ -2179,6 +2179,13 @@ test-durations:
 	@gh run download $(RUN) --repo mlorentedev/kubelab --name shard-durations --dir .shard-durations
 	@mv .shard-durations/shard-durations.json tests/shard_durations.json && rmdir .shard-durations
 
+# Median time `Tests` keeps a PR waiting since SINCE, split into suite, runner
+# wait and shard skew, for the first and last 20 runs and all of them (#3078 AC2).
+.PHONY: tests-p50
+tests-p50:
+	@test -n "$(SINCE)" || { echo "usage: make tests-p50 SINCE=<ISO-8601 instant>"; exit 1; }
+	@$(POETRY) run toolkit tools tests-p50 --since $(SINCE)
+
 # Prove a guard goes red against one mutation (#2104), instead of the hand-written
 # commit/mutate/checkout line that lost work when a hook refused the commit
 # (lesson-480). Refuses a dirty tree; restores the file from its own bytes.

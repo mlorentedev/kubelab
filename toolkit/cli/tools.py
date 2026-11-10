@@ -853,3 +853,49 @@ def branch_protection(
     if not apply and pending_total:
         logger.error(f"{pending_total} protection setting(s) disagree with the declaration — run with --apply")
         raise typer.Exit(1)
+
+
+# =============================================================================
+# TESTS CRITICAL PATH (#3078 AC2)
+# =============================================================================
+
+
+@app.command("tests-p50")
+def tests_p50(
+    since: Annotated[str, typer.Option("--since", help="ISO-8601 instant; runs created at or after it are sampled")],
+    repo: Annotated[str, typer.Option("--repo", help="owner/name of the repository")] = "mlorentedev/kubelab",
+    workflow: Annotated[str, typer.Option("--workflow", help="Workflow file holding the sharded Tests job")] = "ci.yml",
+    window: Annotated[int, typer.Option("--window", min=1, help="Runs in the first and last windows")] = 20,
+    max_minutes: Annotated[
+        float, typer.Option("--max-minutes", help="Exit 1 when the last window's p50 wall time exceeds this")
+    ] = 10.0,
+) -> None:
+    """Median time `Tests` keeps a pull request waiting, split into suite and runner wait.
+
+    Wall time runs from the first `Tests shard` start to `Tests` completion, over
+    pull request runs whose `Tests` succeeded. Exits 0 when the last window's p50
+    is within --max-minutes, 1 when it is not, 2 when it cannot be measured.
+    """
+    from toolkit.features import ci_timing
+    from toolkit.features.deploy_shape import GhApi
+
+    try:
+        samples = ci_timing.collect(GhApi(), repo, workflow, since)
+        windows = ci_timing.report(samples, window)
+    except (RuntimeError, ValueError, KeyError) as exc:
+        logger.error(f"tests-p50: cannot measure: {exc}")
+        raise typer.Exit(2) from exc
+
+    if len(samples) < window:
+        logger.warning(f"only {len(samples)} samples since {since}; fewer than the {window} the windows assume")
+    logger.info(f"{'window':<10} {'runs':>4} {'wall':>7} {'shard':>7} {'wait':>7} {'skew':>7}   (p50, minutes)")
+    for w in windows:
+        logger.info(
+            f"{w.label:<10} {w.count:>4} {w.p50_wall / 60:>7.1f} {w.p50_shard_max / 60:>7.1f} "
+            f"{w.p50_wait / 60:>7.1f} {w.p50_skew / 60:>7.1f}"
+        )
+    last = windows[1].p50_wall / 60
+    if last > max_minutes:
+        logger.error(f"last {window} p50 is {last:.1f} min, over {max_minutes} min")
+        raise typer.Exit(1)
+    logger.success(f"last {window} p50 is {last:.1f} min, within {max_minutes} min")
