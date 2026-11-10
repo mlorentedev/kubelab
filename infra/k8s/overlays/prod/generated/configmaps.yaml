@@ -17,17 +17,7 @@ data:
   INFRA_FORGE_GITHUB_INSTALLATION_ID: "177667607"
   INFRA_FORGE_SOURCES: >-
     gitea:personal/imagesensortool, gitea:personal/resume, gitea:teledyne/fae-brain,
-    gitea:teledyne/openkm-brain, gitea:teledyne/projects-toolkit, github:mlorentedev/boilerplates,
-    github:mlorentedev/cloud-architecture-coursework, github:mlorentedev/dotfiles,
-    github:mlorentedev/embedded-systems-coursework, github:mlorentedev/emva1288-sensor-characterization,
-    github:mlorentedev/garsync, github:mlorentedev/hive, github:mlorentedev/iris,
-    github:mlorentedev/kasa-provisioner, github:mlorentedev/knowledge, github:mlorentedev/kubelab,
-    github:mlorentedev/kubelab-devnode-fixture, github:mlorentedev/leaving-denver,
-    github:mlorentedev/mail2markdown, github:mlorentedev/mlorentedev,
-    github:mlorentedev/nan-video-pipeline, github:mlorentedev/pdf-modifier, github:mlorentedev/pollex,
-    github:mlorentedev/svqtriana.github.io, github:mlorentedev/telecom-engineering,
-    github:mlorentedev/ts-bridge, github:mlorentedev/vicon-fpga-face-detection, github:mlorentedev/web,
-    github:mlorentedev/yt-metrics-cli
+    gitea:teledyne/openkm-brain, gitea:teledyne/projects-toolkit, github:mlorentedev/*
   INFRA_POSTGRES_DATABASE: "kubelab"
   INFRA_POSTGRES_HOST: "postgres"
   INFRA_POSTGRES_PORT: "5432"
@@ -69,17 +59,7 @@ data:
   INFRA_FORGE_GITHUB_INSTALLATION_ID: "177667607"
   INFRA_FORGE_SOURCES: >-
     gitea:personal/imagesensortool, gitea:personal/resume, gitea:teledyne/fae-brain,
-    gitea:teledyne/openkm-brain, gitea:teledyne/projects-toolkit, github:mlorentedev/boilerplates,
-    github:mlorentedev/cloud-architecture-coursework, github:mlorentedev/dotfiles,
-    github:mlorentedev/embedded-systems-coursework, github:mlorentedev/emva1288-sensor-characterization,
-    github:mlorentedev/garsync, github:mlorentedev/hive, github:mlorentedev/iris,
-    github:mlorentedev/kasa-provisioner, github:mlorentedev/knowledge, github:mlorentedev/kubelab,
-    github:mlorentedev/kubelab-devnode-fixture, github:mlorentedev/leaving-denver,
-    github:mlorentedev/mail2markdown, github:mlorentedev/mlorentedev,
-    github:mlorentedev/nan-video-pipeline, github:mlorentedev/pdf-modifier, github:mlorentedev/pollex,
-    github:mlorentedev/svqtriana.github.io, github:mlorentedev/telecom-engineering,
-    github:mlorentedev/ts-bridge, github:mlorentedev/vicon-fpga-face-detection, github:mlorentedev/web,
-    github:mlorentedev/yt-metrics-cli
+    gitea:teledyne/openkm-brain, gitea:teledyne/projects-toolkit, github:mlorentedev/*
   INFRA_POSTGRES_DATABASE: "kubelab"
   INFRA_POSTGRES_HOST: "postgres"
   INFRA_POSTGRES_PORT: "5432"

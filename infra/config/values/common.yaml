@@ -562,12 +562,13 @@ infra:
     gitea_url: ""
     # What the view reads, as `forge:owner/repo` separated by commas. Read by the API as
     # INFRA_FORGE_SOURCES; a source with no credential is reported unreachable, never empty.
-    # This list is also the gate: a webhook about any other repository is dropped, so
-    # widening the App's installation adds nothing to the view without a change here.
-    # GitHub: every repository that feeds the board (it carries `add-to-project.yml`),
-    # which is the parity ADR-066 A4 sets. The App must be installed on each one, or
-    # that source reads as unreachable. Gitea: every repository declared under
-    # `apps.services.core.gitea.organizations`, and only those (the test holds the
+    # `forge:owner/*` is every repository the owner has there, listed each reconcile cycle
+    # through the App installation (no forks, no archived), so a new repository appears
+    # with no change here. The installation must be "All repositories" for that to hold.
+    # This list is also the gate: a webhook about any other repository is dropped, and a
+    # wildcard is bound to its owner, so widening the App to another owner adds nothing.
+    # GitHub: the personal account only, no organisation. Gitea: every repository declared
+    # under `apps.services.core.gitea.organizations`, and only those (the test holds the
     # two equal). Sorted; `tests/test_forge_sources.py`.
     sources: >-
       gitea:personal/imagesensortool,
@@ -575,30 +576,7 @@ infra:
       gitea:teledyne/fae-brain,
       gitea:teledyne/openkm-brain,
       gitea:teledyne/projects-toolkit,
-      github:mlorentedev/boilerplates,
-      github:mlorentedev/cloud-architecture-coursework,
-      github:mlorentedev/dotfiles,
-      github:mlorentedev/embedded-systems-coursework,
-      github:mlorentedev/emva1288-sensor-characterization,
-      github:mlorentedev/garsync,
-      github:mlorentedev/hive,
-      github:mlorentedev/iris,
-      github:mlorentedev/kasa-provisioner,
-      github:mlorentedev/knowledge,
-      github:mlorentedev/kubelab,
-      github:mlorentedev/kubelab-devnode-fixture,
-      github:mlorentedev/leaving-denver,
-      github:mlorentedev/mail2markdown,
-      github:mlorentedev/mlorentedev,
-      github:mlorentedev/nan-video-pipeline,
-      github:mlorentedev/pdf-modifier,
-      github:mlorentedev/pollex,
-      github:mlorentedev/svqtriana.github.io,
-      github:mlorentedev/telecom-engineering,
-      github:mlorentedev/ts-bridge,
-      github:mlorentedev/vicon-fpga-face-detection,
-      github:mlorentedev/web,
-      github:mlorentedev/yt-metrics-cli
+      github:mlorentedev/*
     # The console's own host (CONSOLE-004), guarded whole by Authelia. The API binary
     # serves /console only to a request for this host, and to none when it is empty,
     # because it also answers the public api host. Read as INFRA_FORGE_CONSOLE_DOMAIN.

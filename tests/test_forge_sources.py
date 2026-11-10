@@ -1,8 +1,8 @@
 """The forge task view's sources (CONSOLE-004): the declaration the API parses.
 
 `infra.forge.sources` is read by the API's `forge.ParseSources` as
-`forge:owner/repo` separated by commas, and it is also the webhook receiver's
-gate. A malformed entry stops the reconcile and makes every delivery answer 503,
+`forge:owner/repo` separated by commas, where `forge:owner/*` is every repository
+the owner has on that forge, and it is also the webhook receiver's gate. A malformed entry stops the reconcile and makes every delivery answer 503,
 so the shape is held here, before it reaches a cluster.
 """
 
@@ -32,6 +32,9 @@ def test_every_source_is_forge_owner_repo():
         owner, _, repo = path.partition("/")
         assert forge in KNOWN_FORGES, f"{source}: unknown forge"
         assert owner and repo and "/" not in repo, f"{source}: not forge:owner/repo"
+        # The API's rule: the owner is never a wildcard, and `*` is a whole repository name or absent.
+        assert "*" not in owner, f"{source}: the owner is never a wildcard"
+        assert repo == "*" or "*" not in repo, f"{source}: `*` stands alone"
 
 
 def test_sources_are_sorted_and_unique():
@@ -41,7 +44,14 @@ def test_sources_are_sorted_and_unique():
 
 
 def test_the_platform_repository_is_read():
-    assert "github:mlorentedev/kubelab" in _sources()
+    sources = _sources()
+    assert "github:mlorentedev/kubelab" in sources or "github:mlorentedev/*" in sources
+
+
+def test_github_is_the_personal_account_only():
+    # The view covers Gitea and the personal account; no organisation reaches it.
+    owners = {s.partition(":")[2].partition("/")[0] for s in _sources() if s.startswith("github:")}
+    assert owners == {"mlorentedev"}
 
 
 def test_the_generated_configmap_carries_the_declaration_unchanged():

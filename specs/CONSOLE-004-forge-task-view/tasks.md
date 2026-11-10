@@ -62,7 +62,7 @@ created: "2026-10-21"
   - [x] ✓ 2026-11-09 GitHub: the 24 repositories that carry `add-to-project.yml`, held sorted and well-formed by `tests/test_forge_sources.py`
   - [x] ✓ 2026-11-09 Gitea: the reconcile wires a Gitea reader, behind its own call ceiling, when `infra.forge.gitea_url` is set (prod: the in-cluster `gitea` Service; staging: none). The sources name every repository under `apps.services.core.gitea.organizations` and only those, held equal by `tests/test_forge_sources.py`
   - [x] ✓ 2026-11-09 Discovery in the `forge` package: `forge:owner/*` parses; `Catalog` lists each wildcard through the App installation (`GET /installation/repositories`, no forks, no archived), keeps the last good listing when one fails, and only a successful listing retires a repository; the receiver admits an owner's wildcard on the same terms
-  - [ ] Wire the `Catalog` into the reconcile and the console queue, and declare `github:mlorentedev/*` in place of the named GitHub list (`ci-workflows` and every later repository then appear)
+  - [x] ✓ 2026-11-09 The reconcile and the console queue read one `Catalog`, seeded from `forge_source` at start, over readers built once (a forge's listing and reads share its ceiling); `infra.forge.sources` declares `github:mlorentedev/*` in place of the named list, and `tests/test_forge_sources.py` holds GitHub to the personal account. Operating notes: `docs/runbooks/forge-console-operations.md`
 
 ### 2. Access and UI
 

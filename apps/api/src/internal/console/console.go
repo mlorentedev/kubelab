@@ -17,7 +17,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/mlorentedev/kubelab/apps/api/internal/forge"
-	"github.com/mlorentedev/kubelab/apps/api/internal/store"
 	"github.com/mlorentedev/kubelab/apps/api/pkg/config"
 )
 
@@ -60,7 +59,7 @@ func decodeCursor(s string) (*forge.QueueKey, error) {
 		return nil, err
 	}
 	src, err := forge.ParseSources(c.Source)
-	if err != nil || len(src) != 1 || c.Number <= 0 {
+	if err != nil || len(src) != 1 || src[0].Wildcard() || c.Number <= 0 {
 		return nil, errors.New("not a queue cursor")
 	}
 	return &forge.QueueKey{UpdatedAt: c.UpdatedAt, Source: src[0], Number: c.Number}, nil
@@ -105,16 +104,22 @@ type itemView struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-// Deps returns the read model and the declared sources; a seam for tests.
-type Deps func() (QueueReader, string, error)
+// Deps returns the read model and the sources to show; a seam for tests.
+type Deps func() (QueueReader, []forge.Source, error)
 
-// Live reads the running configuration.
-func Live() (QueueReader, string, error) {
-	conf, err := config.GetConfig()
-	if err != nil {
-		return nil, "", err
+// Live serves the read model and the catalog the reconcile reads from, so the
+// console shows exactly the sources being read, wildcards resolved. With no
+// catalog (the declaration did not parse) the queue answers 503, never an empty
+// page that reads as "nothing open".
+func Live(model QueueReader, catalog *forge.Catalog) Deps {
+	return func() (QueueReader, []forge.Source, error) {
+		if catalog == nil {
+			return nil, nil, errors.New("no catalog: the forge sources did not parse")
+		}
+		// A wildcard not listed yet is shown too: the store has no row for it, so it
+		// reads unreachable and never read, rather than a forge silently missing.
+		return model, append(catalog.Current(), catalog.Unresolved()...), nil
 	}
-	return store.ForgeModel{Conf: conf.Postgres}, conf.Forge.Sources, nil
 }
 
 // LiveDomain is the console's declared host, empty when none is.
@@ -155,15 +160,9 @@ func onlyHost(domain func() string) gin.HandlerFunc {
 }
 
 func queueHandler(c *gin.Context, deps Deps) {
-	reader, spec, err := deps()
+	reader, sources, err := deps()
 	if err != nil {
 		log.Printf("console queue: configuration unavailable")
-		c.Status(http.StatusServiceUnavailable)
-		return
-	}
-	sources, err := forge.ParseSources(spec)
-	if err != nil {
-		log.Printf("console queue: sources: %v", err)
 		c.Status(http.StatusServiceUnavailable)
 		return
 	}

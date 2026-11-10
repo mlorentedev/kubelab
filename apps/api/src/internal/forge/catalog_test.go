@@ -174,6 +174,27 @@ func TestGitHubListingFailsWhole(t *testing.T) {
 	}
 }
 
+// A pod that starts while the forge cannot be listed still reads, and shows, the
+// repositories the store already knows (AC1); a listing replaces the seed.
+func TestCatalogSeedServesUntilTheFirstListing(t *testing.T) {
+	l := &fakeLister{err: errors.New("down")}
+	c := newCatalog(t, "github:o/*", l)
+	c.Seed([]forge.Source{{Forge: "github", Owner: "o", Repo: "a"}, {Forge: "github", Owner: "org", Repo: "x"},
+		{Forge: "gitea", Owner: "o", Repo: "y"}})
+	_ = c.Resolve(context.Background())
+	if got := names(c.Current()); !reflect.DeepEqual(got, []string{"github:o/a"}) {
+		t.Fatalf("seeded: %v", got)
+	}
+	l.err, l.repos = nil, map[string][]string{"o": {"b"}}
+	if err := c.Resolve(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	c.Seed([]forge.Source{{Forge: "github", Owner: "o", Repo: "a"}})
+	if got := names(c.Current()); !reflect.DeepEqual(got, []string{"github:o/b"}) {
+		t.Fatalf("a seed overrode a listing: %v", got)
+	}
+}
+
 // Forges compare names without case, so a named source and a listed repository
 // that differ only in case are one source, read once.
 func TestCatalogReadsACaseVariantOnce(t *testing.T) {
@@ -184,5 +205,24 @@ func TestCatalogReadsACaseVariantOnce(t *testing.T) {
 	}
 	if got := c.Current(); len(got) != 2 {
 		t.Fatalf("got %v, want kubelab once and b", names(got))
+	}
+}
+
+// A wildcard never listed, with nothing in the store to seed it, is reported as
+// such: the console shows it unreachable instead of showing no GitHub at all.
+func TestCatalogReportsAWildcardNotYetListed(t *testing.T) {
+	l := &fakeLister{err: errors.New("down")}
+	c := newCatalog(t, "github:o/*,github:p/q", l)
+	c.Seed(nil)
+	_ = c.Resolve(context.Background())
+	if got := names(c.Unresolved()); !reflect.DeepEqual(got, []string{"github:o/*"}) {
+		t.Fatalf("unresolved = %v", got)
+	}
+	l.err, l.repos = nil, map[string][]string{}
+	if err := c.Resolve(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if got := c.Unresolved(); len(got) != 0 {
+		t.Fatalf("an owner with no repositories still reads as unlisted: %v", names(got))
 	}
 }

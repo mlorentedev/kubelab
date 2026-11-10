@@ -56,6 +56,40 @@ func (c *Catalog) Resolve(ctx context.Context) error {
 	return errors.Join(errs...)
 }
 
+// Seed gives each wildcard not yet listed the sources the store already reads,
+// so a pod that starts while its forge cannot be listed still serves them. A
+// listing, once there is one, wins: Seed never replaces it.
+func (c *Catalog) Seed(known []Source) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.listed == nil {
+		c.listed = map[Source][]Source{}
+	}
+	for _, pattern := range c.Declared {
+		if _, done := c.listed[pattern]; done || !pattern.Wildcard() {
+			continue
+		}
+		// An empty seed is no listing: the wildcard stays unresolved until one succeeds.
+		if own := owned(pattern, known); len(own) > 0 {
+			c.listed[pattern] = own
+		}
+	}
+}
+
+// Unresolved returns the wildcards with neither a listing nor a seed: nothing is
+// known about them yet, and the console shows them unreachable, never as nothing.
+func (c *Catalog) Unresolved() []Source {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	var out []Source
+	for _, pattern := range c.Declared {
+		if _, ok := c.listed[pattern]; pattern.Wildcard() && !ok {
+			out = append(out, pattern)
+		}
+	}
+	return out
+}
+
 func (c *Catalog) list(ctx context.Context, pattern Source) ([]Source, error) {
 	lister, ok := c.Listers[pattern.Forge]
 	if !ok {
@@ -65,14 +99,19 @@ func (c *Catalog) list(ctx context.Context, pattern Source) ([]Source, error) {
 	if err != nil {
 		return nil, err
 	}
-	// The wildcard names its owner and forge; a lister answering beyond them widens nothing.
-	var own []Source
-	for _, r := range repos {
+	return owned(pattern, repos), nil
+}
+
+// owned keeps the sources a wildcard names: its forge and its owner. A lister or
+// a store answering beyond them widens nothing.
+func owned(pattern Source, sources []Source) []Source {
+	own := []Source{}
+	for _, r := range sources {
 		if r.Forge == pattern.Forge && strings.EqualFold(r.Owner, pattern.Owner) && r.Repo != "" && !r.Wildcard() {
 			own = append(own, r)
 		}
 	}
-	return own, nil
+	return own
 }
 
 // Current is the set to read now: the named sources and every wildcard's last

@@ -32,16 +32,20 @@ type ReadModel interface {
 // delay and not a lost item.
 type Reconciler struct {
 	Readers map[string]Reader
-	Sources []Source
+	Catalog *Catalog // what to read; each cycle lists its wildcards first
 	Model   ReadModel
 	Now     func() time.Time // nil means time.Now
 }
 
-// Once reads every source. One failing source neither stops the others nor
-// fails the cycle: the failure is recorded on that source. It returns the
-// sources it could not read.
+// Once lists the catalog's wildcards and reads every source. Neither a failed
+// listing nor a failing source stops the cycle: the listing keeps its last set
+// and the failure is recorded on that source. It returns the sources it could
+// not read.
 func (r *Reconciler) Once(ctx context.Context) []Source {
-	return r.read(ctx, r.Sources)
+	if err := r.Catalog.Resolve(ctx); err != nil {
+		log.Printf("forge reconcile: listing: %v", err)
+	}
+	return r.read(ctx, r.Catalog.Current())
 }
 
 func (r *Reconciler) read(ctx context.Context, sources []Source) []Source {

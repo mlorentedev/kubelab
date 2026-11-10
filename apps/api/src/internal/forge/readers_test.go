@@ -60,3 +60,15 @@ func TestEachForgeHasItsOwnCeiling(t *testing.T) {
 		t.Errorf("github refused after gitea spent its hour: %v", err)
 	}
 }
+
+// Listing and reading share one GitHub client, so they spend one hourly ceiling (AC4).
+func TestTheGitHubListerIsTheGitHubReader(t *testing.T) {
+	readers := forge.NewReaders(forge.Credentials{GiteaURL: "http://gitea:3000"})
+	listers := forge.Listers(readers)
+	if readers["github"] == nil || any(listers["github"]) != any(readers["github"]) {
+		t.Fatalf("github lister %v is not the reader %v", listers["github"], readers["github"])
+	}
+	if _, ok := listers["gitea"]; ok {
+		t.Error("gitea lists nothing yet; a lister there would answer for repositories it cannot list")
+	}
+}

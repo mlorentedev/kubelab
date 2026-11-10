@@ -62,7 +62,7 @@ func TestReconcileOneDownSourceLeavesTheOtherRead(t *testing.T) {
 
 	r := forge.Reconciler{
 		Readers: map[string]forge.Reader{"github": reader, "gitea": &fakeReader{err: errors.New("down")}},
-		Sources: []forge.Source{down, up},
+		Catalog: &forge.Catalog{Declared: []forge.Source{down, up}},
 		Model:   model,
 		Now:     func() time.Time { return now },
 	}
@@ -86,7 +86,7 @@ func TestReconcileOneDownSourceLeavesTheOtherRead(t *testing.T) {
 func TestReconcileNoReaderIsUnreachable(t *testing.T) {
 	src := forge.Source{Forge: "gitlab", Owner: "o", Repo: "r"}
 	model := newModel()
-	r := forge.Reconciler{Sources: []forge.Source{src}, Model: model}
+	r := forge.Reconciler{Catalog: &forge.Catalog{Declared: []forge.Source{src}}, Model: model}
 	r.Once(context.Background())
 	if len(model.unreachable) != 1 {
 		t.Fatalf("unreachable = %v", model.unreachable)
@@ -126,7 +126,7 @@ func TestReconcileStaysUnderTheHourlyCeiling(t *testing.T) {
 	ceiling := &forge.Ceiling{Limit: forge.HourlyCallCeiling, Now: func() time.Time { return now }}
 	r := forge.Reconciler{
 		Readers: map[string]forge.Reader{"github": &forge.GitHub{BaseURL: srv.URL, HTTP: &http.Client{Transport: ceiling}}},
-		Sources: []forge.Source{src},
+		Catalog: &forge.Catalog{Declared: []forge.Source{src}},
 		Model:   model,
 		Now:     func() time.Time { return now },
 	}
@@ -197,7 +197,7 @@ func TestADownSourceIsRetriedAloneUntilTheNextCycle(t *testing.T) {
 	broken := &countingReader{err: errors.New("down")}
 	r := forge.Reconciler{
 		Readers: map[string]forge.Reader{"github": healthy, "gitea": broken},
-		Sources: []forge.Source{up, down},
+		Catalog: &forge.Catalog{Declared: []forge.Source{up, down}},
 		Model:   newModel(),
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
@@ -215,7 +215,7 @@ func TestADownSourceIsRetriedAloneUntilTheNextCycle(t *testing.T) {
 func TestFailedCycleRetriesBeforeThePeriod(t *testing.T) {
 	src := forge.Source{Forge: "github", Owner: "o", Repo: "r"}
 	reader := &flakyReader{read: make(chan struct{})}
-	r := forge.Reconciler{Readers: map[string]forge.Reader{"github": reader}, Sources: []forge.Source{src}, Model: newModel()}
+	r := forge.Reconciler{Readers: map[string]forge.Reader{"github": reader}, Catalog: &forge.Catalog{Declared: []forge.Source{src}}, Model: newModel()}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go r.Run(ctx, time.Hour, 10*time.Millisecond)
@@ -223,5 +223,30 @@ func TestFailedCycleRetriesBeforeThePeriod(t *testing.T) {
 	case <-reader.read:
 	case <-time.After(2 * time.Second):
 		t.Fatal("a failed first read waited for the full period")
+	}
+}
+
+// A repository created on the forge is read from the next cycle with no new
+// declaration, and a listing that fails leaves the last set read (AC1).
+func TestReconcileReadsAnOwnersListedRepositories(t *testing.T) {
+	lister := &fakeLister{repos: map[string][]string{"o": {"a"}}}
+	model := newModel()
+	r := forge.Reconciler{
+		Readers: map[string]forge.Reader{"github": &fakeReader{}},
+		Catalog: &forge.Catalog{Declared: []forge.Source{{Forge: "github", Owner: "o", Repo: forge.EveryRepo}},
+			Listers: map[string]forge.Lister{"github": lister}},
+		Model: model,
+	}
+	r.Once(context.Background())
+	lister.repos["o"] = []string{"a", "new"}
+	r.Once(context.Background())
+	if _, ok := model.saved["github:o/new"]; !ok {
+		t.Fatalf("a new repository was not read: %v", model.saved)
+	}
+	lister.err = errors.New("down")
+	delete(model.saved, "github:o/new")
+	r.Once(context.Background())
+	if _, ok := model.saved["github:o/new"]; !ok {
+		t.Fatalf("a failed listing stopped the reads: %v", model.saved)
 	}
 }

@@ -64,7 +64,7 @@ func TestReadModelRebuildsFromTheForgesAlone(t *testing.T) {
 	hub, tea := all(item(1, "open"), item(2, "open"), item(3, "closed")), all(item(4, "open"))
 	model := store.ForgeModel{Conf: conf}
 	r := forge.Reconciler{Readers: map[string]forge.Reader{"github": hub, "gitea": tea},
-		Sources: []forge.Source{gh, gt}, Model: model, Now: func() time.Time { return t0.Add(time.Hour) }}
+		Catalog: &forge.Catalog{Declared: []forge.Source{gh, gt}}, Model: model, Now: func() time.Time { return t0.Add(time.Hour) }}
 	queue := func() forge.QueuePage {
 		t.Helper()
 		page, err := model.Queue(ctx, []forge.Source{gh, gt}, nil, 500)
