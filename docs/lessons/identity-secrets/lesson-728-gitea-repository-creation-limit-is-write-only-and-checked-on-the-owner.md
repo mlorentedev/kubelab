@@ -23,9 +23,11 @@ converge by comparison as it does for `prohibit_login`. The PATCH also requires
 `login_name` and `source_id`, or Gitea refuses it.
 
 **Solution**: `gitea-bootstrap.sh` writes `max_repo_creation: 0` once per
-machine account and records it in `/data/gitea/.kubelab-creation-limit-<login>`
+machine account and records it in `/data/gitea/.kubelab-creation-limit-<login>-<id>`
 only after the PATCH returned 0 (`set -eu` exits before the marker on a
-failure). A recorded account logs neither "Created" nor "Updated", so the
+failure). The id is in the name because an account deleted and created again
+under the same login starts unlimited, and a login-only marker would report it
+converged; with no id read, the limit is written and nothing is recorded. A recorded account logs neither "Created" nor "Updated", so the
 role's `changed_when` stays quiet. `tests/test_gitea_machine_creation_limit.py`
 covers first write, converged run and failed write; a mutation of the value to
 -1 turns it red.

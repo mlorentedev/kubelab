@@ -264,6 +264,7 @@ def test_an_account_already_in_the_right_state_is_not_patched_again(bot_harness)
         "the script announced a change over an account already in the right state; "
         "`changed_when` matches on 'Updated', so this restarts Gitea every provision"
     )
+    assert "Updated repository creation limit" not in result.stdout, "the seeded marker was not the one the script read"
     assert "PATCH" not in bot_harness.calls.read_text(encoding="utf-8")
 
 
