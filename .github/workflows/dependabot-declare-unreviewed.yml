@@ -123,7 +123,7 @@ jobs:
           # lives — which is exactly the state CI-GATE-016 sat in for a week. Read
           # the consequence back, with the same idiom the section check above uses.
           have=$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/labels" --jq '.[].name')
-          if printf '%s\n' "$have" | grep -qxF "$LABEL"; then
+          if printf '%s\n' "$have" | grep -xF "$LABEL" >/dev/null; then
             echo "declared: '$LABEL' is on PR #${PR_NUMBER}"
           else
             echo "labels on the PR after the write: $(printf '%s' "$have" | tr '\n' ' ')"

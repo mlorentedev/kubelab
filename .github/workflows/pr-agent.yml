@@ -395,7 +395,7 @@ jobs:
           label=$(gh api "repos/${GITHUB_REPOSITORY}/contents/harness/review-attestation.json?ref=${BASE_REF}" \
             --jq '.content' | base64 -d | jq -r '.escape.label')
           have=$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/labels" --jq '.[].name')
-          if printf '%s\n' "$have" | grep -qxF "$label"; then
+          if printf '%s\n' "$have" | grep -xF "$label" >/dev/null; then
             echo "::warning::removing stale '${label}' label -- this PR is reviewable now."
             echo "::warning::the rationale section in the PR body is left for a human to clean up."
             gh api -X DELETE "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/labels/${label}" --silent
@@ -874,7 +874,7 @@ jobs:
           # this job green, the gate red, and the PR reading "not reviewed,
           # and not declared as such" for as long as it lives.
           have=$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/labels" --jq '.[].name')
-          if printf '%s\n' "$have" | grep -qxF "$label"; then
+          if printf '%s\n' "$have" | grep -xF "$label" >/dev/null; then
             echo "declared: '$label' is on PR #${PR_NUMBER}"
           else
             echo "labels on the PR after the write: $(printf '%s' "$have" | tr '\n' ' ')"
