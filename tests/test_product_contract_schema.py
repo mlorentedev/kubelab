@@ -36,3 +36,12 @@ def test_schema_is_closed_at_every_level() -> None:
 
     assert schema["additionalProperties"] is False
     assert all(d["additionalProperties"] is False for d in schema["$defs"].values())
+
+
+def test_the_schema_requires_staging_and_leaves_prod_optional() -> None:
+    """What a product author's own validator reads: a staging-only contract passes it (IDP-053 AC5)."""
+    hostnames = json.loads(SCHEMA.read_text(encoding="utf-8"))["$defs"]["Hostnames"]
+
+    assert hostnames["required"] == ["staging"]
+    assert set(hostnames["properties"]) == {"staging", "prod"}
+    assert "default" in hostnames["properties"]["prod"]
