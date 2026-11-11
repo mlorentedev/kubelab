@@ -87,6 +87,7 @@ def test_a_third_zone_yields_a_third_forward_block() -> None:
         "staging.example.test.",
         "staging.exa mple.test",
         "-a.example.test",
+        "staging-.example.test",
         "",
     ],
 )
