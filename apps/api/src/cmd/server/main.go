@@ -30,11 +30,13 @@ func main() {
 
 	r.Use(api.CorsMiddleware())
 
-	api.SetupRoutes(r)
-
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	api.StartForgeReconcile(ctx, conf)
+	forgeView := api.NewForgeView(ctx, conf)
+
+	api.SetupRoutes(r, forgeView)
+
+	api.StartForgeReconcile(ctx, conf, forgeView)
 
 	port := os.Getenv("PORT")
 	if port == "" {

@@ -556,9 +556,27 @@ infra:
     github:
       app_id: 5573076
       installation_id: 177667607
+    # The Gitea root the API reads, as INFRA_FORGE_GITEA_URL. Empty wires no Gitea
+    # reader, so a gitea: source reads as unreachable: staging has no Gitea Service and
+    # no token. Prod sets it to the in-cluster `gitea` Service (overlays/prod/gitea.yaml).
+    gitea_url: ""
     # What the view reads, as `forge:owner/repo` separated by commas. Read by the API as
     # INFRA_FORGE_SOURCES; a source with no credential is reported unreachable, never empty.
-    sources: "github:mlorentedev/kubelab"
+    # `forge:owner/*` is every repository the owner has there, listed each reconcile cycle
+    # through the App installation (no forks, no archived), so a new repository appears
+    # with no change here. The installation must be "All repositories" for that to hold.
+    # This list is also the gate: a webhook about any other repository is dropped, and a
+    # wildcard is bound to its owner, so widening the App to another owner adds nothing.
+    # GitHub: the personal account only, no organisation. Gitea: every repository declared
+    # under `apps.services.core.gitea.organizations`, and only those (the test holds the
+    # two equal). Sorted; `tests/test_forge_sources.py`.
+    sources: >-
+      gitea:personal/imagesensortool,
+      gitea:personal/resume,
+      gitea:teledyne/fae-brain,
+      gitea:teledyne/openkm-brain,
+      gitea:teledyne/projects-toolkit,
+      github:mlorentedev/*
     # The console's own host (CONSOLE-004), guarded whole by Authelia. The API binary
     # serves /console only to a request for this host, and to none when it is empty,
     # because it also answers the public api host. Read as INFRA_FORGE_CONSOLE_DOMAIN.

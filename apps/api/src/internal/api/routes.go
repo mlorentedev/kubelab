@@ -6,13 +6,13 @@ import (
 )
 
 // SetupRoutes configures all API routes
-func SetupRoutes(r *gin.Engine) {
+func SetupRoutes(r *gin.Engine, view *ForgeView) {
 
 	// Health check routes
 	RegisterHealthCheckRoutes(r)
 
 	// Forge console: served only on its own host, which Authelia guards (CONSOLE-004)
-	console.Register(r, console.Live, console.LiveDomain)
+	console.Register(r, console.Live(view.Model, view.Catalog), console.LiveDomain)
 
 	// API Group
 	api := r.Group("/api")

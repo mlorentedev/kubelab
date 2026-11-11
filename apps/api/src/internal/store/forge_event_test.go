@@ -60,6 +60,15 @@ func TestReadModelRoundTrip(t *testing.T) {
 	ctx := context.Background()
 	model := store.ForgeModel{Conf: conf}
 	src := forge.Source{Forge: "github", Owner: "o", Repo: "r"}
+	// Another test reads the same source; without this the test passes only on a new database.
+	conn, err := pgx.Connect(ctx, conf.DSN())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close(ctx)
+	if _, err := conn.Exec(ctx, `TRUNCATE forge_event, forge_item, forge_source`); err != nil {
+		t.Fatal(err)
+	}
 
 	if got, err := model.LastRead(ctx, src); err != nil || !got.IsZero() {
 		t.Fatalf("unread source: %v, %v", got, err)
@@ -261,7 +270,7 @@ func TestADownSourceShowsItsLastReadNeverEmpty(t *testing.T) {
 	now := read
 	reader := &flakyReader{items: []forge.Item{{Number: 7, Kind: forge.KindIssue, Title: "t", State: "open",
 		Author: "a", URL: "u", UpdatedAt: read}}}
-	r := forge.Reconciler{Readers: map[string]forge.Reader{"gitea": reader}, Sources: []forge.Source{src},
+	r := forge.Reconciler{Readers: map[string]forge.Reader{"gitea": reader}, Catalog: &forge.Catalog{Declared: []forge.Source{src}},
 		Model: store.ForgeModel{Conf: conf}, Now: func() time.Time { return now }}
 
 	if failed := r.Once(ctx); len(failed) != 0 {
@@ -282,5 +291,36 @@ func TestADownSourceShowsItsLastReadNeverEmpty(t *testing.T) {
 	}
 	if len(page.Items) != 1 || page.Items[0].Number != 7 || page.Total != 1 {
 		t.Fatalf("page = %+v, want the last read's item", page)
+	}
+}
+
+// The sources the store has read seed the catalog at start (AC1): a pod that cannot
+// list its forge still serves every repository it read before.
+func TestForgeModelListsTheSourcesItHasRead(t *testing.T) {
+	conf := testPostgres(t)
+	ctx := context.Background()
+	conn, err := pgx.Connect(ctx, conf.DSN())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close(ctx)
+	if _, err := conn.Exec(ctx, `TRUNCATE forge_event, forge_item, forge_source`); err != nil {
+		t.Fatal(err)
+	}
+	m := store.ForgeModel{Conf: conf}
+	read := forge.Source{Forge: "github", Owner: "o", Repo: "read"}
+	down := forge.Source{Forge: "gitea", Owner: "t", Repo: "down"}
+	if err := m.SaveRead(ctx, read, nil, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.MarkUnreachable(ctx, down, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	got, err := m.Sources(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0] != down || got[1] != read {
+		t.Fatalf("got %v, want [%v %v]", got, down, read)
 	}
 }

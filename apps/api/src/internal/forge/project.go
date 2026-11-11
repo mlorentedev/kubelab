@@ -23,8 +23,10 @@ type EventLog interface {
 type webhookBody struct {
 	Action     string `json:"action"`
 	Repository struct {
-		Name  string `json:"name"`
-		Owner struct {
+		Name     string `json:"name"`
+		Fork     bool   `json:"fork"`
+		Archived bool   `json:"archived"`
+		Owner    struct {
 			Login string `json:"login"`
 		} `json:"owner"`
 	} `json:"repository"`

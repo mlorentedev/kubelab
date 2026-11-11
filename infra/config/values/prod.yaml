@@ -132,6 +132,12 @@ apps:
       # very surface #1389 and #675 argue should stay unexposed.
       # Guarded by tests/test_declared_domains_are_served.py.
 
+infra:
+  forge:
+    # The `gitea` Service of overlays/prod/gitea.yaml: an EndpointSlice to the Beelink
+    # over the tailnet, so the token never crosses the public router.
+    gitea_url: http://gitea:3000
+
 secret_expiry:
   declared:
     # Approximate: Vikunja shows no expiry date, so these are the earliest plausible

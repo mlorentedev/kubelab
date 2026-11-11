@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.7.0](https://github.com/mlorentedev/kubelab/compare/api-v1.6.0...api-v1.7.0) (2026-11-10)
+
+
+### Features
+
+* **api:** read an owner's every repository from a forge:owner/* source ([#3238](https://github.com/mlorentedev/kubelab/issues/3238)) ([1064c8b](https://github.com/mlorentedev/kubelab/commit/1064c8b961e35fa384b2a4503b5cbe5f2622c8a8))
+* **api:** read every repository of the personal GitHub account in the forge view ([#3239](https://github.com/mlorentedev/kubelab/issues/3239)) ([c2eb6da](https://github.com/mlorentedev/kubelab/commit/c2eb6da12c34487e0fced2b81fbdb1c36afc24f8))
+* **api:** read the declared Gitea repositories in the forge view ([#3233](https://github.com/mlorentedev/kubelab/issues/3233)) ([54f1253](https://github.com/mlorentedev/kubelab/commit/54f125396bf3b03bdf84aa0c0132e1b6e1505227))
+
 ## [1.6.0](https://github.com/mlorentedev/kubelab/compare/api-v1.5.0...api-v1.6.0) (2026-11-06)
 
 

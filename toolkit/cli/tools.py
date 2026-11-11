@@ -853,3 +853,61 @@ def branch_protection(
     if not apply and pending_total:
         logger.error(f"{pending_total} protection setting(s) disagree with the declaration — run with --apply")
         raise typer.Exit(1)
+
+
+# =============================================================================
+# TESTS CRITICAL PATH (#3078 AC2)
+# =============================================================================
+
+
+def _print_tests_p50(windows: list[Any], dropped: int) -> None:
+    """The tests-p50 table: one row per window, p50 minutes, overlapping views."""
+    columns = ("wall", "shard", "wait", "skew", "agg", "queue")
+    header = f"{'window':<10} {'runs':>4} " + " ".join(f"{c:>6}" for c in columns) + f" {'drop':>5}"
+    logger.info(f"{header}   (p50 minutes; columns overlap, do not sum; queue is outside wall)")
+    for w in windows:
+        cells = (w.p50_wall, w.p50_shard_max, w.p50_wait, w.p50_skew, w.p50_aggregate, w.p50_queue)
+        logger.info(f"{w.label:<10} {w.count:>4} " + " ".join(f"{c / 60:>6.1f}" for c in cells) + f" {w.dropped:>5}")
+    logger.info(f"{dropped} runs dropped: Tests not successful (failed or cancelled) or a rerun")
+
+
+@app.command("tests-p50")
+def tests_p50(
+    since: Annotated[
+        str, typer.Option("--since", help="UTC instant (ISO-8601); runs created at or after it are sampled")
+    ],
+    repo: Annotated[str, typer.Option("--repo", help="owner/name of the repository")] = "mlorentedev/kubelab",
+    workflow: Annotated[str, typer.Option("--workflow", help="Workflow file holding the sharded Tests job")] = "ci.yml",
+    window: Annotated[int, typer.Option("--window", min=1, help="Runs in the first and last windows")] = 20,
+    max_minutes: Annotated[
+        float, typer.Option("--max-minutes", help="Exit 1 when the last window's p50 wall time exceeds this")
+    ] = 10.0,
+) -> None:
+    """Median time `Tests` keeps a pull request waiting, split into suite and runner wait.
+
+    Wall time runs from the first `Tests shard` start to `Tests` completion, over
+    first-attempt pull request runs whose `Tests` succeeded. The first, last and
+    whole windows are always printed. The exit status reads the last window
+    only, as a current-health signal, not a verdict on the others: 0 within
+    --max-minutes, 1 over it, 2 when fewer than --window samples exist or the
+    runs cannot be read.
+    """
+    from toolkit.features import ci_timing
+    from toolkit.features.deploy_shape import GhApi
+
+    try:
+        got = ci_timing.collect(GhApi(), repo, workflow, since)
+        windows = ci_timing.report(got.samples, window, got.kept)
+    except (RuntimeError, ValueError, KeyError, OSError, subprocess.TimeoutExpired) as exc:
+        logger.error(f"tests-p50: cannot measure: {exc}")
+        raise typer.Exit(2) from exc
+
+    _print_tests_p50(windows, got.dropped)
+    if len(got.samples) < window:
+        logger.error(f"only {len(got.samples)} samples since {since}; the windows need {window}")
+        raise typer.Exit(2)
+    last = windows[1].p50_wall / 60
+    if last > max_minutes:
+        logger.error(f"last {window} p50 is {last:.1f} min, over {max_minutes} min")
+        raise typer.Exit(1)
+    logger.success(f"last {window} p50 is {last:.1f} min, within {max_minutes} min")

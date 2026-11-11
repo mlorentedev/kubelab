@@ -12,9 +12,12 @@ data:
   BEEHIIV_PUB_ID: "pub_bf6a0b8d-074a-45e5-a2c2-34ed87fb4b5f"
   ENVIRONMENT: "staging"
   INFRA_FORGE_CONSOLE_DOMAIN: "console.staging.kubelab.live"
+  INFRA_FORGE_GITEA_URL: ""
   INFRA_FORGE_GITHUB_APP_ID: "5573076"
   INFRA_FORGE_GITHUB_INSTALLATION_ID: "177667607"
-  INFRA_FORGE_SOURCES: "github:mlorentedev/kubelab"
+  INFRA_FORGE_SOURCES: >-
+    gitea:personal/imagesensortool, gitea:personal/resume, gitea:teledyne/fae-brain,
+    gitea:teledyne/openkm-brain, gitea:teledyne/projects-toolkit, github:mlorentedev/*
   INFRA_POSTGRES_DATABASE: "kubelab"
   INFRA_POSTGRES_HOST: "postgres"
   INFRA_POSTGRES_PORT: "5432"
@@ -51,9 +54,12 @@ data:
   GOOGLE_ANALYTICS_ID: "G-PLL8SP2YFC"
   GOOGLE_TAG_MANAGER_ID: "GTM-XXXXXX"
   INFRA_FORGE_CONSOLE_DOMAIN: "console.staging.kubelab.live"
+  INFRA_FORGE_GITEA_URL: ""
   INFRA_FORGE_GITHUB_APP_ID: "5573076"
   INFRA_FORGE_GITHUB_INSTALLATION_ID: "177667607"
-  INFRA_FORGE_SOURCES: "github:mlorentedev/kubelab"
+  INFRA_FORGE_SOURCES: >-
+    gitea:personal/imagesensortool, gitea:personal/resume, gitea:teledyne/fae-brain,
+    gitea:teledyne/openkm-brain, gitea:teledyne/projects-toolkit, github:mlorentedev/*
   INFRA_POSTGRES_DATABASE: "kubelab"
   INFRA_POSTGRES_HOST: "postgres"
   INFRA_POSTGRES_PORT: "5432"
