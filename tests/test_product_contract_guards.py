@@ -143,7 +143,9 @@ def test_a_staging_only_product_declares_only_the_staging_lane() -> None:
 
 def test_a_remote_product_with_no_event_declares_no_lane(tmp_path: Path) -> None:
     registry = tmp_path / "products.yaml"
-    registry.write_text("products:\n  idle:\n    forge: github\n    repository: o/idle\n    receiver: generic\n")
+    registry.write_text(
+        "products:\n  idle:\n    forge: github\n    repository: o/idle\n    receiver: generic\n", encoding="utf-8"
+    )
 
     assert declared_envs(load_registry(registry).products["idle"]) == ()
 
