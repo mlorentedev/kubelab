@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.2](https://github.com/mlorentedev/kubelab/compare/api-v1.7.1...api-v1.7.2) (2026-11-11)
+
+
+### Bug Fixes
+
+* **api:** retry the forge catalog seed on each reconcile cycle ([#3265](https://github.com/mlorentedev/kubelab/issues/3265)) ([59f1c41](https://github.com/mlorentedev/kubelab/commit/59f1c41f29a771a69ed876a82c31c73dbed64462))
+
 ## [1.7.1](https://github.com/mlorentedev/kubelab/compare/api-v1.7.0...api-v1.7.1) (2026-11-11)
 
 
