@@ -148,8 +148,10 @@ def test_every_edge_monitor_checks_a_host_a_route_serves() -> None:
 def test_the_n8n_health_path_is_answered_by_n8n_not_authelia(overlay: str) -> None:
     """Behind the ForwardAuth, `/healthz` is a 302 to the portal and the monitor reads Authelia (#3167).
 
-    The rule that serves the n8n monitor's path must carry no `authelia` middleware,
-    so the monitor goes DOWN when n8n does, and stays UP when only Authelia is down.
+    The rule that serves the n8n monitor's path must carry no `authelia` middleware
+    and proxy to n8n, so the monitor goes DOWN when n8n does, and stays UP when only
+    Authelia is down. Staging never had the ForwardAuth there; its case guards
+    against one being added.
     """
     monitor = next(m for m in _seed() if "n8n" in m["key"] and overlay in m["key"])
     url = urlsplit(monitor["url"])
@@ -163,3 +165,4 @@ def test_the_n8n_health_path_is_answered_by_n8n_not_authelia(overlay: str) -> No
     chosen = max(serving, key=lambda r: (r.get("priority", 0), len(r["match"])))
     names = [m["name"] for m in chosen.get("middlewares", [])]
     assert "authelia" not in names, f"{overlay}: {chosen['match']} sends {url.path} through Authelia"
+    assert [svc["name"] for svc in chosen["services"]] == ["n8n"], f"{overlay}: {chosen['match']} does not proxy to n8n"
