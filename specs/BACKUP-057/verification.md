@@ -41,6 +41,8 @@ The same apply with it returned rc 0: `cloudflare_r2_bucket.scratch` and `cloudf
 
 The admin token sits in a file every SOPS recipient decrypts, so #1852 (SEC-022) gates this spec's archive (proposal item 1).
 
+Resolved 2026-11-03: #1852 is closed. `.sops.yaml` names only the human recipient (#2935), and the `SOPS_AGE_KEY` Actions secret is deleted.
+
 ## Scratch steps 2, 2b and 3
 
 2026-10-02, against `kubelab-backup-scratch` with the repository at the bucket root, so `data/`, `snapshots/`, `keys/` and `config` sit under the lock rules. A first `init` under a `measure/` prefix put the repository outside every rule; it was deleted and re-initialised at the root before any step was recorded. Credentials were a scratch Object Read & Write token, read from SOPS into the child process only.
