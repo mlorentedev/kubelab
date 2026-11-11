@@ -61,6 +61,10 @@ class ForgeAdapter(Protocol):
         """Whether the default branch has ``sha`` (it is the head, or has moved past it)."""
         ...
 
+    def is_ahead_of(self, base: str, sha: str) -> bool:
+        """Whether ``sha`` descends from ``base`` and has commits ``base`` lacks (not equal, behind or diverged)."""
+        ...
+
     def read_file(self, path: str, ref: str) -> str:
         """The bytes of ``path`` at the commit ``ref``."""
         ...
@@ -121,6 +125,9 @@ class GitHubForge:
         # ahead or diverged: a commit the product never merged, or a fork's.
         return status in ("identical", "behind")
 
+    def is_ahead_of(self, base: str, sha: str) -> bool:
+        return self._api(f"repos/{self.repository}/compare/{base}...{sha}", "--jq", ".status") == "ahead"
+
     def read_file(self, path: str, ref: str) -> str:
         return self._call(
             "-H", "Accept: application/vnd.github.raw", f"repos/{self.repository}/contents/{path}?ref={ref}"
@@ -178,6 +185,14 @@ class GiteaForge:
         if not branch:
             raise ForgeError(f"{self.repository} reported no default branch")
         return self._read(self._client.compare_ahead, str(branch), sha) == 0
+
+    def is_ahead_of(self, base: str, sha: str) -> bool:
+        # Gitea's compare counts commits and names no status: `sha` is a descendant when it
+        # has commits `base` lacks and `base` has none `sha` lacks (diverged fails the second).
+        return (
+            self._read(self._client.compare_ahead, base, sha) != 0
+            and self._read(self._client.compare_ahead, sha, base) == 0
+        )
 
     def read_file(self, path: str, ref: str) -> str:
         return str(self._read(self._client.get_raw_file, path, ref))

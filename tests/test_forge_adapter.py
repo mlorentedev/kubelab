@@ -124,6 +124,20 @@ def test_a_commit_is_on_the_default_branch_when_the_branch_has_it_or_has_moved_p
     ]
 
 
+OLDER = "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678"
+
+
+@pytest.mark.parametrize(
+    ("status", "forward"), [("ahead", True), ("identical", False), ("behind", False), ("diverged", False)]
+)
+def test_a_commit_moves_another_forward_only_when_the_comparison_says_ahead(status: str, forward: bool) -> None:
+    """Only `ahead` is a descendant: `diverged` shares no history that makes it a successor (#796)."""
+    forge, runner = _forge({f"repos/{REPO}/compare/": (0, status, "")})
+
+    assert forge.is_ahead_of(OLDER, FULL) is forward
+    assert runner.calls == [("api", f"repos/{REPO}/compare/{OLDER}...{FULL}", "--jq", ".status")]
+
+
 def test_an_unreadable_default_branch_is_an_error_not_a_verdict() -> None:
     forge, runner = _forge({f"repos/{REPO}": (1, "", "gh: Bad gateway (HTTP 502)")})
 
@@ -375,6 +389,31 @@ def test_gitea_a_failed_comparison_is_an_error_not_a_verdict(answer: tuple[int, 
         forge.is_on_default_branch(FULL)
 
 
+@pytest.mark.parametrize(
+    ("gained", "lost", "forward"),
+    [(3, 0, True), (0, 0, False), (0, 3, False), (2, 2, False)],
+    ids=["ahead", "identical", "behind", "diverged"],
+)
+def test_gitea_a_commit_moves_another_forward_only_when_it_adds_commits_and_loses_none(
+    gained: int, lost: int, forward: bool
+) -> None:
+    """Gitea's compare counts commits and names no status, so both directions are asked."""
+    answers = {
+        f"/repos/{REPO}/compare/{OLDER}...{FULL}": (200, json.dumps({"total_commits": gained})),
+        f"/repos/{REPO}/compare/{FULL}...{OLDER}": (200, json.dumps({"total_commits": lost})),
+    }
+    forge, _ = _gitea(answers)
+
+    assert forge.is_ahead_of(OLDER, FULL) is forward
+
+
+def test_gitea_a_failed_order_comparison_is_an_error_not_a_verdict() -> None:
+    forge, _ = _gitea({f"/repos/{REPO}/compare/{OLDER}...{FULL}": (502, "bad gateway")})
+
+    with pytest.raises(ForgeError, match="502"):
+        forge.is_ahead_of(OLDER, FULL)
+
+
 def test_the_gitea_implementation_reads_with_read_repository_and_nothing_else() -> None:
     """The reads `GiteaForge` makes, observed on a spy client, are exactly the ones it declares."""
     used: set[str] = set()
@@ -390,6 +429,8 @@ def test_the_gitea_implementation_reads_with_read_repository_and_nothing_else() 
             f"{GIT}/{SHORT}": _commit_body(FULL),
             f"/repos/{REPO}": _repo_body(),
             f"/repos/{REPO}/compare/trunk...{FULL}": (200, '{"total_commits": 0}'),
+            f"/repos/{REPO}/compare/{OLDER}...{FULL}": (200, '{"total_commits": 1}'),
+            f"/repos/{REPO}/compare/{FULL}...{OLDER}": (200, '{"total_commits": 0}'),
             f"/repos/{REPO}/raw/kubelab.yaml?ref={FULL}": (200, "x"),
             f"/repos/{REPO}/tags/v1": _tag_body("v1", FULL, FULL),
         },
@@ -397,6 +438,7 @@ def test_the_gitea_implementation_reads_with_read_repository_and_nothing_else() 
     )
     forge.resolve_commit(SHORT)
     forge.is_on_default_branch(FULL)
+    forge.is_ahead_of(OLDER, FULL)
     forge.read_file("kubelab.yaml", FULL)
     forge.resolve_tag("v1")
 
