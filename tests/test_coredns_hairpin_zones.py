@@ -55,11 +55,19 @@ def _committed() -> str:
     return MANIFEST.read_text(encoding="utf-8")
 
 
-def test_the_committed_zones_render_todays_two_blocks_byte_for_byte() -> None:
+def test_todays_two_zones_render_todays_two_blocks_byte_for_byte() -> None:
+    assert _server(render_staging_zones(_committed(), ZONES)) == TODAYS_SERVER
+
+
+def test_the_committed_zone_list_renders_a_forward_block_per_zone() -> None:
+    """Follows `common.yaml` as zones are added: it names no zone of its own."""
     zones = yaml.safe_load(COMMON.read_text(encoding="utf-8"))["networking"]["staging_zones"]
 
-    assert zones == ZONES, "the byte-identity claim is about today's two zones"
-    assert _server(render_staging_zones(_committed(), zones)) == TODAYS_SERVER
+    assert set(ZONES) <= set(zones)
+    server = _server(render_staging_zones(_committed(), zones))
+    assert [line for line in server.splitlines() if line.endswith(":53 {")][: len(zones)] == [
+        f"{zone}:53 {{" for zone in zones
+    ]
 
 
 def test_a_third_zone_yields_a_third_forward_block() -> None:
@@ -70,7 +78,17 @@ def test_a_third_zone_yields_a_third_forward_block() -> None:
 
 @pytest.mark.parametrize(
     "zone",
-    ["Staging.Example.test", "staging", "staging.example.test.", "staging.exa mple.test", "-a.example.test", ""],
+    [
+        "Staging.example.test",
+        "staging.Example.test",
+        "staging.example.Test",
+        "staging.examplE.test",
+        "staging",
+        "staging.example.test.",
+        "staging.exa mple.test",
+        "-a.example.test",
+        "",
+    ],
 )
 def test_a_zone_that_is_not_a_lowercase_fqdn_is_refused(zone: str) -> None:
     with pytest.raises(RenderError, match="lowercase FQDN"):

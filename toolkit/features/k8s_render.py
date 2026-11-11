@@ -149,7 +149,6 @@ def render_staging_zones(text: str, zones: Sequence[str]) -> str:
             f"{m[1]}{zone}:53 {{\n{m[1]}  forward . RESOLVE_RPI4_TAILSCALE_IP\n{m[1]}}}\n" for zone in zones
         ),
         text,
-        count=1,
     )
 
 
