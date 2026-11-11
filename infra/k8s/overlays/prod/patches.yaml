@@ -208,6 +208,23 @@ spec:
       services:
         - name: n8n
           port: 5678
+    # Health probe bypasses Authelia (#3167): behind the ForwardAuth, `/healthz`
+    # is a 302 to the portal and the Uptime Kuma monitor reads Authelia's 200, so
+    # it stays green with n8n gone. `{"status":"ok"}` discloses nothing. Exact
+    # path only, high priority so it wins over the UI route below.
+    - match: Host(`n8n.kubelab.live`) && Path(`/healthz`)
+      kind: Rule
+      priority: 100
+      middlewares:
+        - name: secure-headers
+          namespace: kubelab
+        - name: rate-limit
+          namespace: kubelab
+        - name: crowdsec-bouncer
+          namespace: kubelab
+      services:
+        - name: n8n
+          port: 5678
     - match: Host(`n8n.kubelab.live`)
       kind: Rule
       middlewares:
