@@ -173,19 +173,24 @@ the only authority — `make check-ansible`, which reads the venv's
 dry run. When it cannot be asked (`make` unusable, or no venv yet) the line says
 `ansible-core is unverified` instead of assuming either way.
 
-**Verified in WSL 2026-11-09** — `--check` on a host that has none of it. It
-reports, installs nothing, and exits 1:
+**Verified in WSL 2026-11-09** — `--check` with a `PATH` that holds only
+`python3`, a `sudo` that answers `-n`, and the coreutils the script shells out
+to. It reports, installs nothing, and exits 1. (`$STUB` is the stub directory;
+the bare `3.12.3` is the stub's own stdout, the version gate prints nothing.)
 
 ```
 python3 (>= 3.12, per pyproject.toml)
-  [ok]   python3 3.12.3 (/usr/bin/python3)
+3.12.3
+  [ok]   python3 3.12.3 ($STUB/python3)
 
 GNU make
-  [FAIL] make is not installed
+         make is not installed
+  [FAIL] GNU make is missing
          would install: make
 
 Poetry 2.5.1
-  [FAIL] poetry is not installed
+         poetry is not installed
+  [FAIL] Poetry 2.5.1 is missing
          would install: poetry 2.5.1
 
 ansible-core and the collections
@@ -195,10 +200,34 @@ ansible-core and the collections
 [ERROR] 2 check(s) failed
 ```
 
+The absence appears twice on purpose, and the split is the design: the indented
+line with no tag is the **diagnosis** (what the machine looks like), the
+`[FAIL]` line is the **verdict** (what it costs you). Only the verdict counts.
+Counting the diagnosis is what made this script exit 1 on the one machine it
+exists for, having just installed the tools it was looking for (#3234).
+
+If root is not already available, `would install` is withheld and the two lines
+that replace it are **notes, not verdicts** — the script asks `sudo -n`, so a
+passworded sudo is a refusal instead of a hang, and `--check` installs nothing
+for root to gate. Same host, `make` removed from `PATH` and `sudo -n true`
+failing:
+
+```
+GNU make
+         make is not installed
+  [FAIL] GNU make is missing
+         root is not available without a password
+         run 'sudo -v' first, then re-run this script
+```
+
+`[ERROR] 1 check(s) failed`, not 2. Root is what the install would need, not a
+second thing wrong with the machine, and the count is what the operator
+triages against — reporting two problems for one sends them looking for the
+other. Only the installation path makes root a verdict, and there it is
+(`require_root` in the make block and the Poetry block).
+
 And on the host that is the reason for the doctor call — every prerequisite
-present, `ansible-core` missing. Driven in WSL with stub `python3`/`make`/
-`poetry` on `PATH` (`$STUB` is the stub directory; the bare `3.12.3` is the
-stub's own stdout, the version gate prints nothing), the doctor's refusal
+present, `ansible-core` missing. Same stub treatment, the doctor's refusal
 reaches the exit status and the verdict is withheld:
 
 ```
@@ -226,9 +255,15 @@ The same stubs with `make check-ansible` exiting 0 give `[ok] the doctor
 passed: ansible-core, ansible.cfg and the collection pins agree` and exit 0 —
 so the mode is a real gate in both directions, not a step that always reports.
 
-**Not yet measured**: the install path itself (`apt-get`, the Poetry installer,
-then `make setup-ansible`), because it writes to the host and that window has
-not been opened. `--check` is the half that can be measured without one.
+**Measured on the seat's WSL, 2026-11-08** — both installers, driven by this
+script: `apt-get` put GNU Make 4.3 on the host, and the official installer put
+Poetry 2.5.1 in `~/.local/bin`. **Still not measured end to end**: the hand-off
+to `make setup-ansible` on a real host. That first run was the defect the
+verdict rule exists to fix — both installs succeeded and the script exited 1
+without handing off (#3234) — so the hand-off is exercised by
+`tests/test_bootstrap_controller_script.py` with stub `apt-get`/`curl`/`make`,
+not by one real invocation. The window for that is a machine that still needs
+the bootstrap.
 
 Two caveats about the venv, both measured on the seat's Windows side and likely
 to repeat:
@@ -290,7 +325,7 @@ It does **not** guarantee that on every host:
 | `ansible.cfg: … is not in effect (Ansible reads nothing)` | wrong cwd, or no config found | run from the repo; the message names the file it found |
 | `static inventory: … declares no host` | inventory regenerated for an env with no hosts | check `infra/ansible/inventories/homelab.yml` |
 | `make: (makefile:<line>): expected separator` | BusyBox make | install GNU make |
-| `bootstrap-controller.sh: refusing to run under …` | Git Bash / MSYS shell on Windows | run it from WSL or a Linux host |
+| `[ERROR] this is a Windows shell; ansible-core has no Windows controller` | Git Bash / MSYS shell on Windows | run it from WSL or a Linux host |
 | `set: pipefail: invalid option` or `$'\r': command not found` | CRLF working-tree copy of a `.sh` | re-checkout the file; `.gitattributes` normalises on commit, not on disk |
 
 ## Related

@@ -124,6 +124,13 @@ KNOWN_STALE: dict[tuple[str, str], str] = {
         "docs/runbooks/ansible-controller.md",
         "is",
     ): "`[FAIL] make is not installed` is the doctor's output, quoted verbatim",
+    (
+        "docs/runbooks/ansible-controller.md",
+        "make",
+    ): (
+        "`GNU make` heads the section and the next line quotes the doctor's "
+        "`make is not installed`; the extractor reads `make` across the newline"
+    ),
     ("docs/runbooks/deployment.md", "deploy-prod"): "appears only in the note explaining it was retired",
     ("CLAUDE.md", "backup-pvc"): "appears only in the note recording its removal (OPS-023)",
     #
