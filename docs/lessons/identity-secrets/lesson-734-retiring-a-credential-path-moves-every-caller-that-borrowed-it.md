@@ -1,5 +1,5 @@
 ---
-id: lesson-733-retiring-a-credential-path-moves-every-caller-that-borrowed-it
+id: lesson-734-retiring-a-credential-path-moves-every-caller-that-borrowed-it
 type: lesson
 status: active
 created: "2026-11-10"
