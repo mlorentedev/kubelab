@@ -190,7 +190,9 @@ def image_repositories(
     The same sources the generators read: ``derived_image`` for a contract-managed
     product, ``apps.platform.<app>.image_name`` for an in-tree one, and
     ``edge.errors.image_name`` for errors. A repository is a name under the hub
-    namespace, so only the last segment of an image is kept.
+    namespace, so only the last segment of an image is kept. A product whose image
+    lives in another registry (its entry's ``image_registry``) is not the hub client's
+    to list or delete from, so it is left out of the result.
     """
     if common is None:
         common = (
@@ -203,7 +205,11 @@ def image_repositories(
             key = "edge.errors.image_name"
         elif product_registry.product(app, registry).contract_managed:
             image = product_registry.derived_image(app, registry)
-            name = image.removeprefix(f"{product_registry.platform_registry()}/")
+            prefix = f"{product_registry.platform_registry()}/"
+            if not image.startswith(prefix):
+                logger.info(f"{app}: image {image} is not in {prefix.rstrip('/')}; not pruned here")
+                continue
+            name = image.removeprefix(prefix)
             key = "the product registry"
         else:
             name = (((common.get("apps") or {}).get("platform") or {}).get(app) or {}).get("image_name")
