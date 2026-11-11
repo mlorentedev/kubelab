@@ -40,6 +40,7 @@ PREFIX = f"s3:https://{HOST}/kubelab-backups"
 #   <path>.fail    exit 1 with that file's text on stderr (AccessDenied, no bucket)
 #   <path>.hang    sleep far past any timeout
 #   <path>.nobytes exit 0 with JSON that has no `bytes`
+#   <path>.count   the `count` the listing reports (12 when absent)
 # Every call is logged as `size <path> <arguments>`, so a test can read both
 # what was listed and how.
 FAKE_RCLONE = r"""#!/bin/sh
@@ -52,11 +53,14 @@ echo "size $path $args" >> "$FAKE_DIR/calls"
 [ -f "$FAKE_DIR/$key.fail" ] && { cat "$FAKE_DIR/$key.fail" >&2; exit 1; }
 [ -f "$FAKE_DIR/$key.hang" ] && exec sleep 30
 [ -f "$FAKE_DIR/$key.nobytes" ] && { echo '{"count":3,"sizeless":0}'; exit 0; }
-printf '{"count":12,"bytes":%s,"sizeless":0}\n' "$(cat "$FAKE_DIR/$key.bytes")"
+count=12; [ -f "$FAKE_DIR/$key.count" ] && count="$(cat "$FAKE_DIR/$key.count")"
+bytes=0; [ -f "$FAKE_DIR/$key.bytes" ] && bytes="$(cat "$FAKE_DIR/$key.bytes")"
+printf '{"count":%s,"bytes":%s,"sizeless":0}\n' "$count" "$bytes"
 """
 
 BUCKET_BYTES = 600_000_000
 NODE_BYTES = {"rpi3": 151_630_989, "kubelab-vps": 77_948_912}
+NODE_PACKS = {"rpi3": 364, "kubelab-vps": 120}
 
 SHELLS = [["sh"]] + ([["busybox", "sh"]] if shutil.which("busybox") else [])
 
@@ -81,6 +85,8 @@ def fleet(tmp_path: pathlib.Path, request):
     (fake / "kubelab-backups.bytes").write_text(f"{BUCKET_BYTES}\n", encoding="utf-8")
     for prefix, size in NODE_BYTES.items():
         (fake / f"kubelab-backups_{prefix}.bytes").write_text(f"{size}\n", encoding="utf-8")
+    for prefix, packs in NODE_PACKS.items():
+        (fake / f"kubelab-backups_{prefix}_data.count").write_text(f"{packs}\n", encoding="utf-8")
     out = tmp_path / "sizes" / "sizes.txt"
     out.parent.mkdir()
     env = {
@@ -111,6 +117,11 @@ def _calls(fake: pathlib.Path) -> list[str]:
     return (fake / "calls").read_text(encoding="utf-8").splitlines() if (fake / "calls").exists() else []
 
 
+def _sized(fake: pathlib.Path) -> list[str]:
+    """The paths listed for their bytes; every `<repository>/data` listing counts packs instead."""
+    return [c.split()[1] for c in _calls(fake) if not c.split()[1].endswith("/data")]
+
+
 def test_it_sizes_each_bucket_once_and_each_node_prefix(fleet) -> None:
     fake = fleet[0]
     proc, entries = _run(fleet)
@@ -118,7 +129,7 @@ def test_it_sizes_each_bucket_once_and_each_node_prefix(fleet) -> None:
     assert entries[("bucket", "kubelab-backups")][0] == str(BUCKET_BYTES)
     assert entries[("node", "rpi3")][0] == str(NODE_BYTES["rpi3"])
     assert entries[("node", "vps")][0] == str(NODE_BYTES["kubelab-vps"])
-    listed = [c.split()[1] for c in _calls(fake)]
+    listed = _sized(fake)
     assert sorted(listed) == sorted(["kubelab-backups", "kubelab-backups/rpi3", "kubelab-backups/kubelab-vps"])
 
 
@@ -138,7 +149,7 @@ def test_two_buckets_are_each_listed_once_at_their_root(fleet) -> None:
     assert entries[("bucket", "kubelab-backups")][0] == str(BUCKET_BYTES)
     assert entries[("bucket", "kubelab-backup-rpi4")][0] == "5000"
     assert entries[("node", "rpi4")][0] == "4000"
-    listed = [c.split()[1] for c in _calls(fake)]
+    listed = _sized(fake)
     assert sorted(listed) == sorted(
         [
             "kubelab-backups",
@@ -170,7 +181,7 @@ def test_a_repository_at_its_bucket_root_is_listed_once(fleet) -> None:
     assert proc.returncode == 0, proc.stderr
     assert entries[("bucket", "kubelab-backup-ace2")][0] == "7000"
     assert entries[("node", "ace2")] == entries[("bucket", "kubelab-backup-ace2")]
-    listed = [c.split()[1] for c in _calls(fake)]
+    listed = _sized(fake)
     assert listed.count("kubelab-backup-ace2") == 1, listed
 
 
@@ -180,13 +191,13 @@ def test_a_failed_root_listing_is_null_for_the_node_too(fleet) -> None:
     assert proc.returncode == 0
     assert entries[("bucket", "kubelab-backup-ace2")][0] == "null"
     assert entries[("node", "ace2")][0] == "null"
-    assert [c.split()[1] for c in _calls(fake)].count("kubelab-backup-ace2") == 1
+    assert _sized(fake).count("kubelab-backup-ace2") == 1
 
 
 def test_every_entry_records_how_long_its_listing_took(fleet) -> None:
     """The duration is AC3's evidence that the cost no longer follows the snapshot count."""
     _, entries = _run(fleet)
-    assert len(entries) == 3, entries
+    assert len(entries) == 5, entries
     for rest in entries.values():
         assert len(rest) == 2 and rest[1].isdigit(), rest
 
@@ -198,7 +209,7 @@ def test_it_reaches_r2_by_the_targets_endpoint_with_no_config_file(fleet) -> Non
     """
     fake = fleet[0]
     _run(fleet)
-    assert len(_calls(fake)) == 3, "no call, no option checked"
+    assert len(_calls(fake)) == 5, "no call, no option checked"
     for call in _calls(fake):
         assert "--json" in call and "--fast-list" in call, call
         remote = next(a for a in call.split() if a.startswith(":s3"))
@@ -255,3 +266,40 @@ def test_an_unreadable_targets_file_still_exits_zero(fleet) -> None:
     proc, _ = _run(fleet)
     assert proc.returncode == 0
     assert "targets file" in proc.stderr
+
+
+def test_each_node_reports_the_packs_its_check_has_to_read(fleet) -> None:
+    """BACKUP-081 (#3084): the weekly check reads 1/t of the packs, at a measured rate.
+
+    The packs are the objects under the repository's `data/`, so the count is a
+    listing like the size, not a restic call, and nothing else under the prefix
+    (index, snapshots) inflates it.
+    """
+    fake = fleet[0]
+    proc, entries = _run(fleet)
+    assert proc.returncode == 0, proc.stderr
+    assert entries[("packs", "rpi3")][0] == str(NODE_PACKS["rpi3"])
+    assert entries[("packs", "vps")][0] == str(NODE_PACKS["kubelab-vps"])
+    counted = sorted(c.split()[1] for c in _calls(fake) if c.split()[1].endswith("/data"))
+    assert counted == ["kubelab-backups/kubelab-vps/data", "kubelab-backups/rpi3/data"]
+
+
+def test_a_repository_at_its_bucket_root_counts_the_packs_under_its_data(fleet) -> None:
+    fake = _add_root_node(fleet)
+    (fake / "kubelab-backup-ace2_data.count").write_text("961\n", encoding="utf-8")
+    proc, entries = _run(fleet)
+    assert proc.returncode == 0, proc.stderr
+    assert entries[("packs", "ace2")][0] == "961"
+
+
+@pytest.mark.parametrize("marker", ["fail", "hang"])
+def test_a_failed_pack_count_is_null_and_leaves_the_size_alone(fleet, marker) -> None:
+    """Null, never 0: a zero would read as "fits the budget"."""
+    fake = fleet[0]
+    (fake / f"kubelab-backups_rpi3_data.{marker}").write_text("AccessDenied: Access Denied\n", encoding="utf-8")
+    proc, entries = _run(fleet)
+    assert proc.returncode == 0
+    assert entries[("packs", "rpi3")][0] == "null"
+    assert entries[("node", "rpi3")][0] == str(NODE_BYTES["rpi3"])
+    assert entries[("packs", "vps")][0] == str(NODE_PACKS["kubelab-vps"])
+    assert "r2-backup-watcher: rpi3: pack count unknown:" in proc.stderr
