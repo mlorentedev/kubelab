@@ -60,3 +60,13 @@ All four are triaged, with a `## Review triage` comment each. Only pr-agent revi
 ## Noted, not ticketed
 
 - The S8 builder saw two tests fail once under heavy load, and both pass alone: `test_edge_shape_check::test_the_probe_writes_one_line_per_connect` and `test_r2_backup_freshness_rule::test_the_harness_reads_the_existing_health_rule_both_ways`. They were not reproduced, so they need watching rather than a ticket.
+
+## Continuation (17:00Z, after the usage reset)
+
+- The owner merged #3278, #3283, #3285 and #3296.
+- Landed #3305 (`db6672c3`) under the grant. `pull_secret_mappings` now refuses an uncatalogued pull secret before any `kubectl` call. Closes #3297.
+- Still blocked:
+  - #3272 and #3287 wait on #3281, whose GitGuardian check is still red.
+  - #3288's recommended option (A) changes `deploy_shape.py`, which this envelope freezes. Option B fits in the adapter alone, but goes against the ticket's recommendation, so it is the owner's call.
+  - #3289 is `.github/**` (owner).
+- Queue empty again.
