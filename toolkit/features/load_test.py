@@ -192,6 +192,36 @@ def k6_command(image: str, env: dict[str, str]) -> str:
     return f"docker run --rm -i --network host {flags} {shlex.quote(image)} run --quiet --no-usage-report -"
 
 
+_ROW = re.compile(r'"\\u0000(\d+)\\u0000"')
+
+
+def dumps_result(result: dict[str, Any]) -> str:
+    """The run as JSON, one line per timeline row.
+
+    A sampled run holds about 50 rows a step. Written one value per line,
+    a 30-step run passed the repository's 1 MB file limit; a row per line
+    keeps it under that and still diffs row by row.
+    """
+    rows: list[str] = []
+
+    def mark(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {
+                k: [park(r) for r in v] if k == "timeline" and isinstance(v, list) else mark(v)
+                for k, v in value.items()
+            }
+        if isinstance(value, list):
+            return [mark(v) for v in value]
+        return value
+
+    def park(row: Any) -> str:
+        rows.append(json.dumps(row))
+        return f"\x00{len(rows) - 1}\x00"
+
+    text = json.dumps(mark(result), indent=1)
+    return _ROW.sub(lambda m: rows[int(m.group(1))], text) + "\n"
+
+
 def parse_summary(stdout: str, warmup: int = 0, seconds: int = 0) -> dict[str, Any]:
     """The figures of one step, from the metrics k6 printed. Latencies in ms.
 

@@ -376,11 +376,10 @@ def load_test_run(
     Takes no URL. Writes <date>-<commit>[-N].json and .md, and always removes the route
     it applies. Exits 0 with results, 1 when refused or when a step could not run.
     """
-    import json
     import subprocess
     from datetime import datetime, timezone
 
-    from toolkit.features.load_test import LoadTestRefused, build_targets, render, resolve_nodes, run
+    from toolkit.features.load_test import LoadTestRefused, build_targets, dumps_result, render, resolve_nodes, run
 
     try:
         lab, staging, prod = _load_test_lab(env)
@@ -399,7 +398,7 @@ def load_test_run(
 
         def save(result: dict[str, Any]) -> None:
             result = {**result, "date": now.strftime("%Y-%m-%dT%H:%MZ"), "commit": commit}
-            base.with_suffix(".json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+            base.with_suffix(".json").write_text(dumps_result(result), encoding="utf-8")
             base.with_suffix(".md").write_text(render(result), encoding="utf-8")
 
         image = staging["load_test"]["image"]

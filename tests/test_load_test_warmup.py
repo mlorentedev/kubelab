@@ -264,3 +264,24 @@ def test_the_command_defaults_to_the_declared_warm_up() -> None:
 def test_make_passes_the_warm_up() -> None:
     target = (REPO / "Makefile").read_text(encoding="utf-8").split("\nload-test:")[1].split("\n\n")[0]
     assert "$(if $(WARMUP_SECONDS),--warmup-seconds $(WARMUP_SECONDS))" in target
+
+
+class TestTheRawFileStaysReadable:
+    """A sampled run is 50 rows a step; written one value per line it passed the repo's 1 MB limit."""
+
+    def _result(self) -> dict:
+        rows = [{"t": 2.0 * i, "node_cores": 1.5, "edge_rps": 1000.0} for i in range(1, 4)]
+        return {"facts": {"a": 1}, "ramps": [{"steps": [{"rate": 100, "timeline": rows, "reasons": []}]}]}
+
+    def test_it_parses_back_to_the_same_result(self) -> None:
+        result = self._result()
+        assert json.loads(lt.dumps_result(result)) == result
+
+    def test_each_timeline_row_is_one_line(self) -> None:
+        text = lt.dumps_result(self._result())
+        assert '      {"t": 4.0, "node_cores": 1.5, "edge_rps": 1000.0},\n' in text
+        assert '"facts": {\n' in text  # the rest stays indented
+
+    def test_the_command_writes_it(self) -> None:
+        source = (REPO / "toolkit/cli/infra.py").read_text(encoding="utf-8")
+        assert "dumps_result(result)" in source
