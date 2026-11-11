@@ -84,6 +84,17 @@ The contract carries only what the product owns:
 
 kubelab publishes the contract's JSON Schema. A **registry** of admitted products maps each app to its repository, forge and event types, and a product absent from it is refused. kubelab's registry lists only the products that may be named in public. A private product's entry lives in its tenant repository (D4). `PLATFORM_APPS` is derived from the registry (#1815).
 
+#### Amendment to D2: one hostname convention (decided by the owner, 2026-11-05)
+
+"Hostname per environment" is not a free choice. A hosted product's hostnames follow one rule, enforced when `toolkit product render` runs rather than remembered:
+
+- **Staging:** `staging.<product domain>`, reachable on the VPN only (Headscale split DNS). The zone is one line in `networking.staging_zones` (`infra/config/values/common.yaml`); the RPi4 resolver, Pi-hole and the pod-side CoreDNS forward block (`coredns-custom.yaml`) all follow from that list.
+- **Prod:** `<product domain>`, public, its zone in `infra/terraform/dns/zones.json`. A product that declares prod must name `staging.` plus that hostname as its staging one.
+- **Exception, a product with no domain yet:** one label under the platform wildcard, `<product>.staging.kubelab.live`, which needs no zone line.
+- `web` already conforms (`staging.mlorente.dev`, `mlorente.dev`); nothing migrates.
+
+The check refuses a staging hostname that is neither a listed zone nor one label under the wildcard, with an ERROR / WHY / FIX that names the line to add when the zone is the only thing missing. The contract model cannot read `common.yaml`, so the contract schema does not change: the check sits in the render step, where the values directory is known. Certificates for a zone the ACME token (`kubelab-acme-dns`) does not yet cover need it widened to that zone in Cloudflare; deriving the token's zones from `zones.json` is tracked separately. Issuing a certificate for `staging.<domain>` writes that name to the public Certificate Transparency logs before launch, which the owner accepted. ADR-073 D8 (proposed) replaces this convention with the domain registry on acceptance.
+
 ### D3. One generic receiver
 
 One workflow replaces the per-product receivers. It maps the event type to an app through the registry (C3), rejects any dispatched tag that is not an immutable `sha-*` tag (the guard `web-image-receiver.yml` already applies), fetches that product's contract at the dispatched tag, validates it against the schema, renders the derived configuration, and opens the promotion PR. The payload carries only the tag. A contract change and an image change take the same path.

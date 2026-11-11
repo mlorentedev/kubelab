@@ -32,7 +32,7 @@ from ruamel.yaml import YAML
 from toolkit.config.settings import PROJECT_ROOT
 from toolkit.features.declared_domains import VALUES_DIR
 from toolkit.features.product_contract import Contract, ContractError
-from toolkit.features.product_guards import refuse_oidc_at_render
+from toolkit.features.product_guards import check_staging_hostname, refuse_oidc_at_render, staging_zones
 from toolkit.features.product_registry import load_registry
 
 SNAPSHOT_DIR = PROJECT_ROOT / "infra" / "config" / "products" / "contracts"
@@ -83,10 +83,17 @@ __all__ = [
 
 
 def rendered(
-    contract: Contract, app: str, env: str, mapping: Mapping[str, Callable[[Contract, str], Any]] = CONTRACT_KEYS
+    contract: Contract,
+    app: str,
+    env: str,
+    mapping: Mapping[str, Callable[[Contract, str], Any]] = CONTRACT_KEYS,
+    *,
+    values_dir: Path = VALUES_DIR,
 ) -> dict[str, Any]:
     """The contract-owned keys of ``apps.platform.<app>`` for ``env``."""
     refuse_oidc_at_render(contract, app)
+    # One contract, one convention: refused for either env, against the zones ``values_dir`` lists (D8).
+    check_staging_hostname(contract, staging_zones(values_dir))
     # Before any key is derived: a product with no hostname for ``env`` renders nothing for it.
     _hostname(contract, env)
     return {key: derive(contract, env) for key, derive in mapping.items()}
@@ -111,7 +118,7 @@ def drift(
     """Return ``({key: (rendered, in values)}, keys compared)``; refuse to compare nothing."""
     if not mapping:
         raise ValueError("no contract-owned keys to compare: an empty mapping would report every tree clean")
-    want = rendered(contract, app, env, mapping)
+    want = rendered(contract, app, env, mapping, values_dir=values_dir)
     have = _merged_app(app, env, values_dir)
     differences = {key: (value, have.get(key)) for key, value in want.items() if have.get(key) != value}
     return differences, len(want)

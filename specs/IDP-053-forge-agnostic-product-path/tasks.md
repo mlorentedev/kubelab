@@ -135,12 +135,12 @@ Depends on S3a (both touch `product_render.py`'s hostname checks). Implements D8
 prod rewrite blocks stay hand-written until a product declares prod),
 `docs/adr/adr-067-product-contract-and-agent-access.md` (amendment), tests.
 
-- [ ] [P] [AC13] Failing tests in `tests/test_product_staging_hostname.py` (new): `web` passes; staging-only `staging.imagesensortool.com` passes with its zone in `networking.staging_zones`; the same name with the zone missing is refused, naming the line to add; `beta.imagesensortool.com` is refused; `<label>.staging.kubelab.live` passes; a product declaring `hostnames.prod: x.dev` with `hostnames.staging: staging.y.dev` is refused even when both zones are listed
-- [ ] [AC13] Implement the check at render time (the contract model cannot read `common.yaml`, so the contract schema does not change)
-- [ ] [P] [AC13] Failing tests in `tests/test_coredns_hairpin_zones.py` (new): the rendered staging blocks equal today's two blocks byte for byte; a third zone in a fixture `staging_zones` yields a third `forward` block; a zone that is not a lowercase FQDN is refused
-- [ ] [AC13] Implement the templated block; `tests/test_coredns_hairpin_answer.py` stays green
-- [ ] [AC13] ADR-067 amendment: the D8 convention, the wildcard exception, `web` already conforming, and the note that ADR-073 D8 replaces it with the domain registry on acceptance
-- [ ] Ticket, not code: derive the ACME token's zones (`kubelab-acme-dns`, #2459) from `zones.json` in Terraform, so a new domain needs no Cloudflare UI step (proposal risk 7)
+- [x] [P] [AC13] Failing tests in `tests/test_product_staging_hostname.py` (new): `web` passes; staging-only `staging.imagesensortool.com` passes with its zone in `networking.staging_zones`; the same name with the zone missing is refused, naming the line to add; `beta.imagesensortool.com` is refused; `<label>.staging.kubelab.live` passes; a product declaring `hostnames.prod: x.dev` with `hostnames.staging: staging.y.dev` is refused even when both zones are listed
+- [x] [AC13] Implement the check at render time (the contract model cannot read `common.yaml`, so the contract schema does not change)
+- [x] [P] [AC13] Failing tests in `tests/test_coredns_hairpin_zones.py` (new): the rendered staging blocks equal today's two blocks byte for byte; a third zone in a fixture `staging_zones` yields a third `forward` block; a zone that is not a lowercase FQDN is refused
+- [x] [AC13] Implement the templated block; `tests/test_coredns_hairpin_answer.py` stays green
+- [x] [AC13] ADR-067 amendment: the D8 convention, the wildcard exception, `web` already conforming, and the note that ADR-073 D8 replaces it with the domain registry on acceptance
+- [x] Ticket, not code: derive the ACME token's zones (`kubelab-acme-dns`, #2459) from `zones.json` in Terraform, so a new domain needs no Cloudflare UI step (proposal risk 7): filed as #3276
 
 Acceptance: `.venv/bin/python -m pytest -q tests/test_product_staging_hostname.py tests/test_coredns_hairpin_zones.py tests/test_coredns_hairpin_answer.py`, each new boundary test mutation-checked.
 

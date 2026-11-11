@@ -25,6 +25,7 @@ from toolkit.features.argo_manager import (
 )
 from toolkit.features.k8s_kubeconfig import output_path
 from toolkit.features.k8s_render import BootstrapEntry, render_and_apply
+from toolkit.features.product_guards import staging_zones
 from toolkit.features.validation import (
     confirm_dangerous_operation,
     validate_environment_config,
@@ -1479,6 +1480,11 @@ def _load_cluster_bootstrap() -> list[BootstrapEntry]:
     return [BootstrapEntry.from_dict(entry) for entry in config.get("cluster_bootstrap", [])]
 
 
+def _staging_zones() -> list[str]:
+    """``networking.staging_zones`` (common.yaml): the list the hairpin's staging blocks render from."""
+    return staging_zones(settings.project_root / "infra" / "config" / "values")
+
+
 def _apply_cluster_bootstrap(kubeconfig: str, *, dry_run: bool) -> bool:
     """Render + (validate or apply) every cluster_bootstrap entry, in declared order.
 
@@ -1486,10 +1492,13 @@ def _apply_cluster_bootstrap(kubeconfig: str, *, dry_run: bool) -> bool:
     the first hard failure (an `optional` entry whose render target is unreachable is a
     logged skip, not a failure — see render_and_apply).
     """
+    zones = _staging_zones()
     for entry in _load_cluster_bootstrap():
         verb = "Validating" if dry_run else "Applying"
         logger.info(f"{verb} cluster_bootstrap '{entry.name}' (ns: {entry.namespace})...")
-        if not render_and_apply(entry, kubeconfig=kubeconfig, project_root=settings.project_root, dry_run=dry_run):
+        if not render_and_apply(
+            entry, kubeconfig=kubeconfig, project_root=settings.project_root, dry_run=dry_run, staging_zones=zones
+        ):
             logger.error(f"cluster_bootstrap {'dry-run' if dry_run else 'apply'} failed: {entry.name}")
             return False
     return True

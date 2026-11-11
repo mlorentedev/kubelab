@@ -73,6 +73,15 @@ def values_copy(tmp_path: Path) -> Path:
     return tmp_path / "values"
 
 
+def _list_zone(values_dir: Path, zone: str) -> None:
+    """Add ``zone`` to ``networking.staging_zones``: D8 lets a staging hostname name only a listed zone."""
+    path = values_dir / "common.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace("  staging_zones:\n", f'  staging_zones:\n  - "{zone}"\n'),
+        encoding="utf-8",
+    )
+
+
 def _edit_web(values_dir: Path, env: str, key: str, value: object) -> None:
     path = values_dir / f"{env}.yaml"
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -118,21 +127,21 @@ def test_a_hostname_change_moves_the_site_keys_with_the_domain(env: str, values_
     Detecting the mismatch instead would turn the force-pushed staging deploy PR
     red with nothing to correct it.
     """
-    old = getattr(validate_contract(WEB).hostnames, env)
     moved = tmp_path / "web.yaml"
     moved.write_text(
-        WEB.read_text(encoding="utf-8").replace(f"{env}: {old}\n", f"{env}: new.{old}\n"), encoding="utf-8"
+        WEB.read_text(encoding="utf-8")
+        .replace("staging: staging.mlorente.dev\n", "staging: staging.new.mlorente.dev\n")
+        .replace("prod: mlorente.dev\n", "prod: new.mlorente.dev\n"),
+        encoding="utf-8",
     )
+    _list_zone(values_copy, "staging.new.mlorente.dev")
+    host = getattr(validate_contract(moved).hostnames, env)
 
     changed = write(validate_contract(moved), "web", env, values_dir=values_copy)
 
     assert sorted(changed) == ["domain", "site_domain", "site_url"]
     after = yaml.safe_load((values_copy / f"{env}.yaml").read_text(encoding="utf-8"))["apps"]["platform"]["web"]
-    assert (after["domain"], after["site_domain"], after["site_url"]) == (
-        f"new.{old}",
-        f"new.{old}",
-        f"https://new.{old}",
-    )
+    assert (after["domain"], after["site_domain"], after["site_url"]) == (host, host, f"https://{host}")
 
 
 def test_write_on_a_clean_tree_changes_nothing(values_copy: Path) -> None:
@@ -337,12 +346,19 @@ def test_a_contract_change_to_a_prod_owned_key_leaves_the_tree_green(values_copy
     edited = (
         staging.read_text(encoding="utf-8")
         .replace("port: 8080", "port: 9090")
+        .replace("staging: staging.mlorente.dev", "staging: staging.new.dev")
         .replace("prod: mlorente.dev", "prod: new.dev")
     )
     assert edited != staging.read_text(encoding="utf-8")
     staging.write_text(edited, encoding="utf-8")
+    _list_zone(values_copy, "staging.new.dev")
 
-    assert write(validate_contract(staging), "web", "staging", values_dir=values_copy) == ["default_port"]
+    assert sorted(write(validate_contract(staging), "web", "staging", values_dir=values_copy)) == [
+        "default_port",
+        "domain",
+        "site_domain",
+        "site_url",
+    ]
     assert _drift_per_env(snapshots_copy, values_copy) == {"staging": {}, "prod": {}}
 
     shutil.copy(staging, snapshot_path("web", "prod", snapshots_copy))
