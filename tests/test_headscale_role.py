@@ -374,3 +374,22 @@ class TestAutoRevert:
         block_yaml = yaml.safe_dump(blocks[0]["block"])
         assert "toolkit infra headscale probe" in block_yaml, "probe must run via the toolkit CLI"
         assert "toolkit/scripts/" not in block_yaml, "must not invoke the script file directly"
+
+
+class TestHealthcheckAsksTheServer:
+    """The container healthcheck must ask the running server, not print the binary's version (#3164).
+
+    `headscale version` exits 0 with the server down, so the container read `healthy`
+    whatever Headscale was doing. `headscale health` queries the server over its socket.
+    """
+
+    SOURCES = (
+        REPO / "infra/ansible/roles/headscale/templates/docker-compose.yml.j2",
+        REPO / "infra/stacks/services/core/headscale/compose.base.yml",
+    )
+
+    def test_every_compose_source_runs_headscale_health(self) -> None:
+        for source in self.SOURCES:
+            text = source.read_text(encoding="utf-8")
+            assert 'test: ["CMD", "headscale", "health"]' in text, source
+            assert '"headscale", "version"' not in text, source

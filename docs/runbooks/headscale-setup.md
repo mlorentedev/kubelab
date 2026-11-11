@@ -66,7 +66,7 @@ services:
     networks:
       - kubelab
     healthcheck:
-      test: ["CMD", "headscale", "version"]
+      test: ["CMD", "headscale", "health"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -148,7 +148,7 @@ curl -s -w ' %{content_type}\n' https://vpn.kubelab.live/health
 # → {"status":"pass"} application/health+json; charset=utf-8
 ```
 
-`make test-e2e ENV=prod` asserts the `status` key on every run. The container's health state is a weaker check: its healthcheck runs `headscale version` (1.2), which passes without a running server (#3164 moves it to `headscale health`):
+`make test-e2e ENV=prod` asserts the `status` key on every run. The container's health state asks the same server: its healthcheck runs `headscale health` (1.2), which fails when the server does not answer (#3164; it ran `headscale version` until then, which passed with the server down):
 
 ```bash
 # On VPS (ssh vps-pub)
