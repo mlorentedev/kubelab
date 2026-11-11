@@ -28,6 +28,7 @@ from toolkit.core.logging import logger
 from toolkit.features import product_registry
 from toolkit.features.configuration import ConfigurationManager
 from toolkit.features.generator_k8s import K8sGenerator
+from toolkit.features.product_guards import declared_envs
 from toolkit.features.registry import tag_exists
 from toolkit.scripts import sync_k8s_images
 
@@ -69,13 +70,8 @@ def _require_platform_app(app: str, reason: str) -> None:
 
 
 def has_prod_lane(app: str, path: Path | None = None) -> bool:
-    """Whether ``app`` may run in prod (IDP-053 D5): a contract-managed product declares it with ``events.prod``.
-
-    An in-tree product has no events by construction (it is released, not dispatched),
-    so it is not judged by them.
-    """
-    entry = product_registry.product(app, path)
-    return not entry.contract_managed or entry.events.prod is not None
+    """Whether ``app`` may run in prod (IDP-053 D5): the registry's lanes, as ``declared_envs`` reads them."""
+    return "prod" in declared_envs(product_registry.product(app, path))
 
 
 def _require_prod_lane(env: str, app: str) -> None:
