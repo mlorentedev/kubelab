@@ -437,7 +437,7 @@ class TestTheWatcherToken:
         assert store.writes == [] and http.deletes() == ["tok-1"]
 
     def test_a_missing_refusal_bucket_is_not_a_refusal(self) -> None:
-        # #3217: a bucket that is gone answers NoSuchBucket, which proves nothing about scope.
+        # #3217: a NoSuchBucket answer is not a refusal, so it proves nothing about scope.
         store, http = FakeStore(), FakeHttp()
         with pytest.raises(bnc.MintError, match="unproven"):
             _mint_watcher(store, http, _watcher_runner(outside_error="NoSuchBucket"))
@@ -500,7 +500,10 @@ class TestTheRefusalBucket:
 
     def test_it_resolves_in_the_shared_config(self) -> None:
         common_yaml = pathlib.Path(__file__).resolve().parents[1] / "infra/config/values/common.yaml"
-        common = yaml.safe_load(common_yaml.read_text())
+        common = yaml.safe_load(common_yaml.read_text(encoding="utf-8"))
         bucket = bnc._bucket_outside_backups(common)
         assert bucket, f"{bnc.OUTSIDE_BUCKET_KEY} resolves to nothing in common.yaml"
-        assert not bucket.startswith("kubelab-backup-"), "the refusal bucket must hold no backup"
+        assert bnc.OUTSIDE_BUCKET_KEY.endswith(".bucket"), "the key must name a bucket, not another scalar"
+        assert bucket not in bnc.watcher_buckets(sorted(common["backup"]["sources"])), (
+            "the refusal bucket must be one the watcher does not read"
+        )
