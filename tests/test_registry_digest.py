@@ -185,9 +185,11 @@ class TestTheCredentialGoesOnlyWhereTheRegistryItselfAsks:
             "http://ghcr.io/token",
             "https://ghcr.io:8443/token",
             "https://user:pass@ghcr.io/token",
+            "https://user@ghcr.io/token",
+            "https://:pass@ghcr.io/token",
             "https://ghcr.io.elsewhere.example/token",
         ],
-        ids=["plain http", "another port", "userinfo", "lookalike host"],
+        ids=["plain http", "another port", "userinfo", "username only", "password only", "lookalike host"],
     )
     def test_a_realm_that_is_not_the_registrys_own_https_endpoint_gets_no_request(self, realm: str) -> None:
         seen: list[str] = []
