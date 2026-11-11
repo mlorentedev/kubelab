@@ -238,8 +238,7 @@ def _is_own_endpoint(realm: SplitResult, own: SplitResult) -> bool:
         realm.scheme == "https"
         and realm.hostname == own.hostname
         and ports[0] == ports[1]
-        and realm.username is None
-        and realm.password is None
+        and "@" not in realm.netloc  # no userinfo: it would name another host to a lenient client
     )
 
 
