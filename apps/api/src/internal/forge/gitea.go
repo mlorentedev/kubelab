@@ -38,6 +38,7 @@ func (g *Gitea) ListItems(ctx context.Context, src Source, since time.Time) ([]I
 			First:    first,
 			MaxPages: giteaMaxPages,
 			HTTP:     g.HTTP,
+			Rehost:   true,
 			Auth: func(req *http.Request) {
 				if g.Token != "" {
 					req.Header.Set("Authorization", "token "+g.Token)

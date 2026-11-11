@@ -16,6 +16,9 @@ type pagedRead struct {
 	MaxPages int
 	HTTP     *http.Client
 	Auth     func(*http.Request)
+	// Rehost follows a next link on any host by reading its path and query at
+	// BaseURL. Gitea needs it: its links name ROOT_URL, not the address read.
+	Rehost bool
 }
 
 // readPages follows the Link rel="next" header until the listing ends. Every
@@ -35,8 +38,8 @@ func readPages(ctx context.Context, src Source, p pagedRead) ([]Item, error) {
 		if err != nil {
 			return nil, &SourceError{Source: src, Err: err}
 		}
-		if link != "" && !sameOrigin(base, link) {
-			return nil, &SourceError{Source: src, Err: fmt.Errorf("next page points off %s", base.Host)}
+		if link, err = nextOnBase(base, link, p.Rehost); err != nil {
+			return nil, &SourceError{Source: src, Err: err}
 		}
 		for _, raw := range page {
 			items = append(items, raw.neutral(src))
@@ -79,4 +82,24 @@ func getPage(ctx context.Context, p pagedRead, pageURL string, out any) (string,
 		link = m[1]
 	}
 	return link, nil
+}
+
+// nextOnBase returns the next page's URL on base. With rehost, the link's path
+// and query are read at base, so the token only ever reaches the configured
+// host; without it, a link naming another host is refused.
+func nextOnBase(base *url.URL, link string, rehost bool) (string, error) {
+	if link == "" {
+		return "", nil
+	}
+	if !rehost {
+		if !sameOrigin(base, link) {
+			return "", fmt.Errorf("next page points off %s", base.Host)
+		}
+		return link, nil
+	}
+	u, err := url.Parse(link)
+	if err != nil {
+		return "", fmt.Errorf("parse next link: %w", err)
+	}
+	return (&url.URL{Scheme: base.Scheme, Host: base.Host, Path: u.Path, RawQuery: u.RawQuery}).String(), nil
 }

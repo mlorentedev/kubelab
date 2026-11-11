@@ -297,3 +297,32 @@ func TestGitHubReaderStopsAtThePageCap(t *testing.T) {
 		t.Fatalf("an endless listing must end in a SourceError, got %v", err)
 	}
 }
+
+// Gitea writes its next links from ROOT_URL, its public address, while the
+// API reads it at the in-cluster one. The reader keeps the configured host
+// and takes only the path and query from the link, so the token never leaves it.
+func TestGiteaReaderFollowsANextLinkWrittenForItsPublicAddress(t *testing.T) {
+	issues := fixture(t, "gitea_issues.json")
+	var second int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("page") == "2" {
+			second++
+			_, _ = w.Write(issues)
+			return
+		}
+		q := r.URL.Query()
+		q.Set("page", "2")
+		w.Header().Set("Link", `<https://git.public.invalid`+r.URL.Path+`?`+q.Encode()+`>; rel="next"`)
+		_, _ = w.Write([]byte("[]"))
+	}))
+	defer srv.Close()
+
+	items, err := (&forge.Gitea{BaseURL: srv.URL}).ListItems(context.Background(),
+		forge.Source{Forge: "gitea", Owner: "o", Repo: "r"}, time.Time{})
+	if err != nil {
+		t.Fatalf("a next link on the public address must be read here: %v", err)
+	}
+	if second != 2 || len(items) == 0 {
+		t.Fatalf("want page 2 of both listings read from the configured host, got %d reads and %d items", second, len(items))
+	}
+}
