@@ -34,6 +34,11 @@ _APP_NAME = r"^[a-z][a-z0-9]{0,39}$"
 _REPOSITORY = r"^[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}$"
 _EVENT = r"^[a-z0-9]+(-[a-z0-9]+)*$"
 _IMAGE_NAME = r"^[a-z0-9]+([._-][a-z0-9]+)*$"
+# A registry host (optionally with a port) and an owner path, no scheme and no
+# trailing slash: ``derived_image`` appends ``/<name>`` to it verbatim.
+_IMAGE_REGISTRY = r"^[a-z0-9]([a-z0-9.-]*[a-z0-9])?(:[0-9]{1,5})?(/[a-z0-9]+([._-][a-z0-9]+)*)*$"
+# The catalog key of a secret, as ``secrets_manager`` names it (``ghcr.pull_token``).
+_SECRET_KEY = r"^[a-z0-9_]+(\.[a-z0-9_]+)+$"
 
 EventType = Annotated[str, StringConstraints(max_length=100, pattern=_EVENT)]
 
@@ -59,6 +64,23 @@ class Events(BaseModel):
     prod: EventType | None = None
 
 
+class PullCredential(BaseModel):
+    """What pulls a private image: the registry login and the catalog key of its token.
+
+    The token is never written here: ``secret`` names the entry in the secrets
+    catalog, and the pull Secret is rendered from it at apply time (D6).
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    username: Annotated[str, StringConstraints(min_length=1, max_length=128, pattern=r"^\S+$")]
+    secret: Annotated[str, StringConstraints(pattern=_SECRET_KEY)]
+
+
+def _refusal(error: str, why: str, fix: str) -> str:
+    return f"ERROR: {error}\nWHY: {why}\nFIX: {fix}"
+
+
 class Product(BaseModel):
     """One admitted product."""
 
@@ -71,11 +93,21 @@ class Product(BaseModel):
     # Only where the derived image name is wrong (Q7). It lives here, not in the
     # contract, so a product cannot grant itself another image.
     image_name: Annotated[str, StringConstraints(max_length=128, pattern=_IMAGE_NAME)] | None = None
+    # Where CI pushed the image (the *source* registry, with its owner path). Absent,
+    # the platform registry applies. It lives here, not in the contract or the values,
+    # so a product cannot point itself at another registry (IDP-053 D4).
+    image_registry: Annotated[str, StringConstraints(max_length=200, pattern=_IMAGE_REGISTRY)] | None = None
+    private: bool = False
+    pull_credential: PullCredential | None = None
 
     @model_validator(mode="after")
     def _forge_decides_the_shape(self) -> Product:
         if self.forge == "in-tree":
-            named = [field for field in ("repository", "receiver", "events") if field in self.model_fields_set]
+            named = [
+                field
+                for field in ("repository", "receiver", "events", "image_registry", "private", "pull_credential")
+                if field in self.model_fields_set
+            ]
             if named:
                 raise ValueError(
                     f"an in-tree product has no remote repository and receives no dispatch; remove {', '.join(named)}"
@@ -86,9 +118,37 @@ class Product(BaseModel):
                 raise ValueError(f"a {self.forge} product needs {', '.join(missing)}")
         return self
 
+    @model_validator(mode="after")
+    def _private_needs_a_registry_and_a_credential(self) -> Product:
+        if self.private:
+            missing = [f for f in ("image_registry", "pull_credential") if getattr(self, f) is None]
+            if missing:
+                raise ValueError(
+                    _refusal(
+                        f"a private product needs {' and '.join(missing)}",
+                        "a private image is unpullable without the registry it lives in and the credential that "
+                        "reads it; Docker Hub private images are not supported",
+                        f"add {', '.join(missing)} to the entry, or set private: false",
+                    )
+                )
+        elif self.pull_credential is not None:
+            raise ValueError(
+                _refusal(
+                    "pull_credential on a product that is not private",
+                    "nothing pulls with it, so it would sit in the registry unread",
+                    "set private: true, or remove pull_credential",
+                )
+            )
+        return self
+
     @property
     def contract_managed(self) -> bool:
         return self.forge != "in-tree"
+
+    @property
+    def image_host(self) -> str | None:
+        """The registry host (no owner path) the image is pulled from, when the entry names one."""
+        return self.image_registry.split("/", 1)[0] if self.image_registry else None
 
 
 class Registry(BaseModel):
@@ -112,7 +172,31 @@ class Registry(BaseModel):
                 if event in claimed:
                     raise ValueError(f"event type '{event}' is claimed by both {claimed[event]} and {name}")
                 claimed[event] = name
+        _one_credential_per_host(products)
         return products
+
+
+def _one_credential_per_host(products: dict[str, Product]) -> None:
+    """Refuse two private entries that name different credentials for one registry host (D6).
+
+    Everything shares one namespace, so the pull Secret is named from the host: two
+    credentials for one host would be two Secrets with one name.
+    """
+    seen: dict[str, tuple[str, PullCredential]] = {}
+    for name, entry in products.items():
+        if not entry.private or entry.pull_credential is None or entry.image_host is None:
+            continue
+        host, credential = entry.image_host, entry.pull_credential
+        if host in seen and seen[host][1] != credential:
+            first = seen[host][0]
+            raise ValueError(
+                _refusal(
+                    f"{first} and {name} name different pull credentials for {host}",
+                    "the pull Secret is one per registry host (pull-<host-slug>) in a shared namespace",
+                    f"give {first} and {name} the same pull_credential, or move one to another registry host",
+                )
+            )
+        seen.setdefault(host, (name, credential))
 
 
 class _UniqueKeyLoader(yaml.SafeLoader):
@@ -208,8 +292,9 @@ def platform_registry() -> str:
 def derived_image(app: str, path: Path | None = None) -> str:
     """The image repository the platform derives for a product (Q7): ``<registry>/<image_name or app>``.
 
-    The platform registry already ends in the owner (``docker.io/mlorentedev``), so
-    the rule ``<registry>/<owner>/<product>`` reads ``<registry>/<product>``. A
+    The registry is the entry's ``image_registry`` when it names one, else the
+    platform registry. Either already ends in the owner (``docker.io/mlorentedev``),
+    so the rule ``<registry>/<owner>/<product>`` reads ``<registry>/<product>``. A
     contract's ``image`` must equal this; an in-tree product has no contract, and its
     hand-authored image (``kubelab-api``) is not what the rule yields, so it refuses.
     """
@@ -220,4 +305,4 @@ def derived_image(app: str, path: Path | None = None) -> str:
             f"'{app}' is in-tree in {resolved}: its image is hand-authored in apps.platform.{app}.image_name, "
             "not derived from a contract"
         )
-    return f"{platform_registry()}/{entry.image_name or app}"
+    return f"{entry.image_registry or platform_registry()}/{entry.image_name or app}"
