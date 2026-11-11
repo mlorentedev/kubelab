@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from toolkit.features import product_registry
-from toolkit.features.forge_adapter import ForgeAdapter, ForgeError, adapter_for
+from toolkit.features.forge_adapter import ForgeAdapter, ForgeError, adapter_for, runs_on
 from toolkit.features.product_contract import ContractError
 from toolkit.features.product_ready import CONTRACT_PATH, commit_of, entry_for, forge_for
 
@@ -27,7 +27,6 @@ _SHA_TAG = re.compile(r"sha-([0-9a-f]{7,})")
 _FULL_SHA = re.compile(r"[0-9a-f]{40}")
 
 #: Where a forge's reads run when it is not on a hosted runner: a runner on the homelab, which reaches it.
-_SELF_HOSTED = {"gitea": ["self-hosted", "linux", "docker"]}
 HOSTED = ["ubuntu-latest"]
 
 
@@ -209,4 +208,4 @@ def route(app: str, hosted_runner: str = "", registry: Path | None = None) -> di
             "an in-tree product has no repository to read, so there is no runner to choose (ADR-048).",
             f"promote it with toolkit deployment promote --env staging --app {app}",
         )
-    return {"forge": entry.forge, "runs_on": _SELF_HOSTED.get(entry.forge) or _hosted(hosted_runner)}
+    return {"forge": entry.forge, "runs_on": runs_on(entry.forge) or _hosted(hosted_runner)}

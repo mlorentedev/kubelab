@@ -56,6 +56,26 @@ def forge_compares(source: str) -> list[int]:
     return lines
 
 
+def forge_lookups(source: str) -> list[int]:
+    """Line numbers of every lookup keyed by a `forge` value: `table[entry.forge]`, `table.get(entry.forge)`.
+
+    A table keyed by forge names is a compare by another name: a new forge means editing it.
+    """
+    lines = []
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Subscript) and _is_forge_operand(node.slice):
+            lines.append(node.lineno)
+        elif (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "get"
+            and node.args
+            and _is_forge_operand(node.args[0])
+        ):
+            lines.append(node.lineno)
+    return lines
+
+
 def _modules() -> list[pathlib.Path]:
     return sorted(p for p in TOOLKIT.rglob("*.py") if p != ADAPTER)
 
@@ -89,16 +109,30 @@ def test_the_scan_leaves_alone_what_is_not_a_forge_name_compare(source: str) -> 
     assert forge_compares(source) == []
 
 
+@pytest.mark.parametrize(
+    ("source", "found"),
+    [
+        ("RUNNERS.get(entry.forge)", [1]),
+        ("RUNNERS[entry.forge]", [1]),
+        ("table.get(self.source_forge, [])", [1]),
+        ('services.get("github")', []),
+        ("table[entry.app]", []),
+    ],
+)
+def test_the_scan_sees_a_lookup_keyed_by_a_forge(source: str, found: list[int]) -> None:
+    assert forge_lookups(source) == found
+
+
 def test_no_module_outside_the_adapter_compares_a_forge_with_a_forge_name() -> None:
     offenders = {
         f"{path.relative_to(REPO_ROOT)}:{line}"
         for path in _modules()
         if path not in ALLOWED
-        for line in forge_compares(path.read_text(encoding="utf-8"))
+        for line in forge_compares(path.read_text(encoding="utf-8")) + forge_lookups(path.read_text(encoding="utf-8"))
     }
 
     assert not offenders, (
-        f"{sorted(offenders)} compare a forge with a name. Ask `adapter_for(app, entry)` in "
+        f"{sorted(offenders)} compare a forge with a name, or look one up in a table keyed by it. Ask `adapter_for(app, entry)` in "
         "toolkit/features/forge_adapter.py instead: it refuses a forge with no implementation."
     )
 

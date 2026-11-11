@@ -195,10 +195,17 @@ def test_an_unexpected_trigger_is_refused(gh: FakeRunner) -> None:
     assert gh.calls == []
 
 
-@pytest.mark.parametrize("name", ["api", "ghost", "gadget"], ids=["in-tree", "unregistered", "no-adapter-yet"])
+@pytest.mark.parametrize("name", ["api", "ghost", "gadget"], ids=["in-tree", "unregistered", "gitea-unconfigured"])
 def test_a_product_with_no_repository_the_toolkit_can_read_is_refused_before_the_forge_is_asked(
-    gh: FakeRunner, name: str
+    gh: FakeRunner, name: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """`gadget` is on Gitea: with no forge URL and no reader token it is refused before any client exists.
+
+    The settings are cleared here, not assumed absent: on a runner that sets them the case would
+    otherwise reach a live forge, which `gh.calls` cannot see.
+    """
+    monkeypatch.delenv(forge_adapter.GITEA_URL_ENV, raising=False)
+    monkeypatch.delenv(forge_adapter.GITEA_TOKEN_ENV, raising=False)
     code, answer = _receive("--event", "workflow_dispatch", "--app", name, "--tag", TAG)
 
     assert code == 1 and answer["ok"] is False and answer["why"] and answer["fix"]
