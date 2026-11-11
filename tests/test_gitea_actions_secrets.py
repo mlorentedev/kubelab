@@ -599,11 +599,13 @@ def test_the_delivery_client_is_the_superadmin_and_not_the_agent() -> None:
     assert (client.username, client._password) == ("manu", "pw")
 
 
-def test_no_admin_password_is_a_clean_exit_naming_the_key() -> None:
+def test_no_admin_password_is_a_clean_exit_naming_the_key(monkeypatch: pytest.MonkeyPatch) -> None:
     import typer
 
     import toolkit.cli.services as cli
 
+    errors: list[str] = []
+    monkeypatch.setattr(cli.logger, "error", lambda message, *a, **k: errors.append(str(message)))
     config = _merged()
     del config["apps"]["services"]["core"]["gitea"]["admin_password"]
 
@@ -611,3 +613,4 @@ def test_no_admin_password_is_a_clean_exit_naming_the_key() -> None:
         cli._actions_secrets_client(config)
 
     assert exc.value.exit_code == 1
+    assert len(errors) == 1 and "apps.services.core.gitea.admin_password" in errors[0]
