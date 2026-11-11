@@ -176,6 +176,7 @@
     # Resolved at provision, on the controller: a version reaches the node only
     # through a provisioned PR, never at run time. `always` because the role
     # reads it under any of its tags; raw.githubusercontent needs no token.
+    # It serves text/plain, so `uri` never fills `.json`: parse `content` (#3261).
     - name: Fetch the Renovate engine pin from ci-workflows
       ansible.builtin.uri:
         url: "https://raw.githubusercontent.com/mlorentedev/ci-workflows/{{ gitea_config.ci.renovate.preset_tag }}/renovate/engine.json"
@@ -191,13 +192,13 @@
     - name: Refuse an engine pin that is not an image and a version
       ansible.builtin.assert:
         that:
-          - _renovate_engine.json.image is string
-          - _renovate_engine.json.image is regex('^[a-z0-9./_-]+$')
-          - _renovate_engine.json.version is string
-          - _renovate_engine.json.version is regex('^\d+\.\d+\.\d+$')
+          - (_renovate_engine.content | from_json).image is string
+          - (_renovate_engine.content | from_json).image is regex('^[a-z0-9./_-]+$')
+          - (_renovate_engine.content | from_json).version is string
+          - (_renovate_engine.content | from_json).version is regex('^\d+\.\d+\.\d+$')
         fail_msg: >-
           ci-workflows renovate/engine.json at {{ gitea_config.ci.renovate.preset_tag }}
-          is not {"image": <repository>, "version": <x.y.z>}: {{ _renovate_engine.json }}
+          is not {"image": <repository>, "version": <x.y.z>}: {{ _renovate_engine.content }}
         quiet: true
       tags: [always]
 
@@ -278,7 +279,7 @@
         # IDP-036 AC3: the one pinned ci-workflows tag the preset and engine are read at.
         renovate_preset_tag: "{{ gitea_config.ci.renovate.preset_tag }}"
         # IDP-036 AC4: {image, version} from engine.json at that same tag (pre_tasks).
-        renovate_engine: "{{ _renovate_engine.json }}"
+        renovate_engine: "{{ _renovate_engine.content | from_json }}"
         # SEC-GITEA-001 (#1389). `health_path` has been declared in common.yaml
         # since the move and was read by NOTHING: the compose healthcheck
         # hardcoded /api/v1/version instead. That divergence was invisible while

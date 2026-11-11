@@ -87,7 +87,16 @@ def test_the_engine_shape_is_asserted_before_anything_reads_it() -> None:
 
 
 def test_the_role_receives_the_fetched_engine_not_a_value() -> None:
-    assert _role_vars()["renovate_engine"] == "{{ _renovate_engine.json }}"
+    assert _role_vars()["renovate_engine"] == "{{ _renovate_engine.content | from_json }}"
+
+
+def test_the_fetched_body_is_parsed_not_read_as_json() -> None:
+    """raw.githubusercontent serves `text/plain`, so `uri` never fills `.json`.
+
+    Read through `.json`, the pin is undefined on every provision (measured
+    against the live endpoint in #3261), and no static check would notice.
+    """
+    assert "_renovate_engine.json" not in PLAYBOOK.read_text(encoding="utf-8")
 
 
 def test_the_env_file_carries_the_fetched_image() -> None:
