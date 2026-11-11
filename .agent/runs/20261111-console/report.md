@@ -1,6 +1,6 @@
 # Run report: forge console line (2026-11-11)
 
-**Verdict:** queue-empty. Two PRs landed and one is landing; every remaining
+**Verdict:** queue-empty. Three PRs landed; every remaining
 item needs the owner (a release, a prod promotion, a `.github/` change, or a
 decision).
 
@@ -33,7 +33,7 @@ None.
 - #3265: reconciler retries the wildcard seed from the store (closes #3247).
 - #3269: lesson-735, a release re-tags whatever staging pins.
 - #3282: lesson-735 guard corrected from an ancestor check to source equality
-  (landing at report time).
+  (merged at `a77c5a9`).
 
 ## Evidence index
 
