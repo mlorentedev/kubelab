@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import re
 import subprocess
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -30,6 +30,10 @@ FIELD_MANAGER = "kubelab-toolkit"
 
 # Deploy-time placeholders carry this prefix (e.g. RESOLVE_RPI4_TAILSCALE_IP).
 _PLACEHOLDER_RE = re.compile(r"RESOLVE_[A-Z0-9_]+")
+
+# One line of a manifest, standing for the staging forward blocks (IDP-053 D8).
+STAGING_ZONES_MARKER = "STAGING_ZONE_BLOCKS"
+_ZONE_RE = re.compile(r"^(?=.{1,253}$)[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$")
 
 Resolver = Callable[[str], "str | None"]
 Runner = Callable[..., "subprocess.CompletedProcess[str]"]
@@ -122,6 +126,33 @@ def render_text(
     return text
 
 
+def render_staging_zones(text: str, zones: Sequence[str]) -> str:
+    """Replace the ``STAGING_ZONE_BLOCKS`` line of ``text`` with one forward block per zone.
+
+    The zones are ``networking.staging_zones``: a product's staging zone is one line there, and
+    the pod-side forward to the RPi4 resolver follows from it. Each block keeps the marker's
+    indentation and the ``RESOLVE_RPI4_TAILSCALE_IP`` placeholder for ``render_text``. Fail-closed:
+    no zones, a zone that is not a lowercase FQDN, or a manifest without the marker raises
+    :class:`RenderError`, so a block never lands half-rendered or not at all.
+    """
+    bad = [zone for zone in zones if not _ZONE_RE.match(zone)]
+    if not zones or bad:
+        raise RenderError(
+            f"networking.staging_zones must list at least one lowercase FQDN; got {bad or 'no zones'} "
+            "(fix the list in infra/config/values/common.yaml)"
+        )
+    marker = re.compile(rf"^([ \t]*){STAGING_ZONES_MARKER}\n", re.MULTILINE)
+    if not marker.search(text):
+        raise RenderError(f"manifest has no {STAGING_ZONES_MARKER} line to render the staging zones into")
+    return marker.sub(
+        lambda m: "".join(
+            f"{m[1]}{zone}:53 {{\n{m[1]}  forward . RESOLVE_RPI4_TAILSCALE_IP\n{m[1]}}}\n" for zone in zones
+        ),
+        text,
+        count=1,
+    )
+
+
 def render_and_apply(
     entry: BootstrapEntry,
     *,
@@ -130,11 +161,14 @@ def render_and_apply(
     dry_run: bool = False,
     resolver: Resolver = resolve_magicdns,
     runner: Runner = subprocess.run,
+    staging_zones: Sequence[str] | None = None,
 ) -> bool:
-    """Render an entry's ``RESOLVE_*`` placeholders, then server-side apply it.
+    """Render an entry's staging zones and ``RESOLVE_*`` placeholders, then server-side apply it.
 
-    Steps: read the vendored manifest at ``project_root / entry.manifest`` → resolve
+    Steps: read the vendored manifest at ``project_root / entry.manifest`` → render the
+    ``STAGING_ZONE_BLOCKS`` line from ``staging_zones`` (when the manifest has one) → resolve
     placeholders via MagicDNS → client-side validate → server-side apply (unless ``dry_run``).
+    A zone-list error is a config error, never an ``optional`` skip: the entry is a hard failure.
 
     For an ``optional`` entry a render/resolve failure is a logged SKIP returning
     ``True`` (mirrors the on-demand-node semantics the Makefile had for coredns/RPi4);
@@ -150,8 +184,15 @@ def render_and_apply(
     # Rendered even with no `render:` map: an empty map makes any placeholder left
     # in the manifest an unmapped one, so a forgotten map fails closed instead of
     # handing kubectl the literal `RESOLVE_*` string.
+    text = manifest_path.read_text(encoding="utf-8")
+    if STAGING_ZONES_MARKER in text:
+        try:
+            text = render_staging_zones(text, staging_zones or [])
+        except RenderError as exc:
+            logger.error(f"[{entry.name}] render failed: {exc}")
+            return False
     try:
-        text = render_text(manifest_path.read_text(encoding="utf-8"), entry.render, resolver=resolver)
+        text = render_text(text, entry.render, resolver=resolver)
     except RenderError as exc:
         if entry.optional:
             logger.warning(f"[{entry.name}] skipped (optional): {exc}")

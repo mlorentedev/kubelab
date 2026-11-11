@@ -32,12 +32,17 @@ import re
 from collections.abc import Callable, Iterable
 from pathlib import Path
 
+import yaml
+
 from toolkit.config.settings import PROJECT_ROOT
 from toolkit.features.declared_domains import VALUES_DIR, declared_domains
 from toolkit.features.product_contract import Contract, ContractError, validate_contract
 from toolkit.features.product_registry import Product, RegistryError, derived_image, load_registry
 
 ENVIRONMENTS = ("staging", "prod")
+
+#: The platform's wildcard staging zone: a product with no domain of its own takes one label under it.
+WILDCARD_ZONE = "staging.kubelab.live"
 
 #: Values subtree a product owns; declarations under it are the product's own.
 OWN_SUBTREE = "apps.platform.{app}."
@@ -61,6 +66,50 @@ def declared_envs(product: Product) -> tuple[str, ...]:
 def apps_declaring(env: str, registry: Path | None = None) -> tuple[str, ...]:
     """The registered products that run in ``env``, in registry order."""
     return tuple(name for name, product in load_registry(registry).products.items() if env in declared_envs(product))
+
+
+def staging_zones(values_dir: Path = VALUES_DIR) -> list[str]:
+    """``networking.staging_zones`` from ``common.yaml``: the zones the platform resolves on the VPN."""
+    data = yaml.safe_load((values_dir / "common.yaml").read_text(encoding="utf-8")) or {}
+    return [str(zone) for zone in (data.get("networking") or {}).get("staging_zones") or []]
+
+
+def check_staging_hostname(contract: Contract, zones: Iterable[str]) -> None:
+    """Refuse a ``hostnames.staging`` that breaks the hostname convention (IDP-053 D8).
+
+    Accepted: exactly a zone in ``zones`` (``networking.staging_zones``) other than the wildcard
+    zone, or one label under the wildcard zone. A contract that also declares prod must name
+    ``staging.`` + its prod hostname. The contract model cannot read ``common.yaml``, so this runs
+    at render time.
+    """
+    host = contract.hostnames.staging
+    listed = set(zones) - {WILDCARD_ZONE}
+    label, _, parent = host.partition(".")
+    if host not in listed and not (parent == WILDCARD_ZONE and label):
+        domain = host.removeprefix("staging.")
+        fix = (
+            f'add "{host}" to networking.staging_zones in infra/config/values/common.yaml'
+            if host.startswith("staging.") and "." in domain and host not in set(zones)
+            else f"name it staging.<product domain> (with that zone listed in networking.staging_zones), "
+            f"or <label>.{WILDCARD_ZONE}"
+        )
+        raise _staging_refusal(
+            host, f"is not a zone in networking.staging_zones or one label under {WILDCARD_ZONE}", fix
+        )
+    prod = contract.hostnames.prod
+    if prod is not None and host != f"staging.{prod}":
+        raise _staging_refusal(
+            host, f"is not 'staging.' + the declared prod hostname '{prod}'", f"set hostnames.staging: staging.{prod}"
+        )
+
+
+def _staging_refusal(host: str, reason: str, fix: str) -> ContractError:
+    return ContractError(
+        f"field 'hostnames.staging': '{host}' {reason}",
+        "D8 (IDP-053): a hosted product's staging hostname is staging.<its domain>, listed as a zone so split DNS "
+        "and the pod-side hairpin resolve it; with no domain yet it takes one label under the wildcard zone.",
+        fix,
+    )
 
 
 def _catalog_keys() -> frozenset[str]:
