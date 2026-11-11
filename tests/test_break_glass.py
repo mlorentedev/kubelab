@@ -125,6 +125,27 @@ def test_the_committed_declaration_is_valid(env: str) -> None:
     assert not bg.unreachable_backends(bg.dependents(env, _render(env), values), bg.declarations(values))
 
 
+def test_no_declaration_outlives_its_service() -> None:
+    """The reverse of the coverage check: a declaration no env derives is stale (#3179).
+
+    `dev-node` kept its entry after #3135 removed its route, and `make break-glass`
+    still offered it. Declarations are shared across envs, so a service counts if
+    any env derives it.
+    """
+    derived: set[str] = set()
+    declared: set[str] = set()
+    for env in ("staging", "prod"):
+        values = oidc_clients.load_values(env)
+        derived |= set(bg.dependents(env, _render(env), values))
+        declared |= set(bg.declarations(values))
+    stale = bg.stale_declarations(derived, declared)
+    assert not stale, f"declared in {bg.DECLARATION_PATH} but no env routes them through Authelia: {stale}"
+
+
+def test_stale_declarations_are_those_no_env_derives() -> None:
+    assert bg.stale_declarations({"grafana", "loki"}, {"grafana", "dev-node"}) == ["dev-node"]
+
+
 # --------------------------------------------------------------------------- derivation
 
 

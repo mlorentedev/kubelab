@@ -46,6 +46,8 @@ A persistent (on-demand) tmux workspace host where the toolchain, repos, and age
 
 A first-class DX capability rides on the existing stack: **port-to-subdomain with OIDC** — Traefik + Authelia ForwardAuth + a `*.dev.kubelab.live` wildcard route any local port on ace2 (`<port>.dev.kubelab.live`) behind Authelia. (The common "nginx + Google OAuth" recipe, implemented natively.)
 
+> **Amendment 2026-11-09 — the route is gone.** Only a single `dev.kubelab.live` route was ever built, never the wildcard, and that name never resolved. ADR-068 had already kept ace2's surfaces off it. The route was removed by [#3135](https://github.com/mlorentedev/kubelab/issues/3135), and its break-glass entry by [#3179](https://github.com/mlorentedev/kubelab/issues/3179). ace2 is reached over SSH and directly on the tailnet. Port-to-subdomain is not built. Reopen it as its own decision if it is wanted.
+
 ### D2 — Dev-flow model: three loops, fit-for-purpose (not a ladder)
 
 ace2 is **not** a K8s cluster; ace1 is the K3s staging node. "Developing on ace2" relocates the inner loop there — it does not replace the cluster.

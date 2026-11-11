@@ -39,16 +39,16 @@ owner: manu
 Files: `toolkit/features/product_registry.py`, `toolkit/features/registry.py`,
 `infra/config/products.yaml` (schema comment only, no new entry), tests below.
 
-- [ ] [P] [AC1] Failing tests in `tests/test_product_registry.py`: `image_registry` and `private`
+- [x] [P] [AC1] Failing tests in `tests/test_product_registry.py`: `image_registry` and `private`
   parse; `derived_image` returns `<image_registry>/<image_name or app>`; `private` without
   `image_registry` or `pull_credential` is refused with ERROR / WHY / FIX; two private entries on
   one host naming different credentials are refused (D6)
-- [ ] [AC1] Add `image_registry`, `private`, `pull_credential` (username + catalog key) to `Product`; `derived_image` honours `image_registry`
-- [ ] [AC1] Failing test in `tests/test_registry_prune.py`: a product whose registry is not
+- [x] [AC1] Add `image_registry`, `private`, `pull_credential` (username + catalog key) to `Product`; `derived_image` honours `image_registry`
+- [x] [AC1] Failing test in `tests/test_registry_prune.py`: a product whose registry is not
   `platform_registry()` is skipped by `image_repositories`, and
   `test_the_committed_set_is_the_three_kubelab_repositories` still passes
-- [ ] [AC1] `image_repositories` skips non-default-registry products instead of raising on `/`
-- [ ] Mutation check on both new guards: `make mutate FILE=toolkit/features/product_registry.py TEST=tests/test_product_registry.py`
+- [x] [AC1] `image_repositories` skips non-default-registry products instead of raising on `/`
+- [x] Mutation check on both new guards: `make mutate FILE=toolkit/features/product_registry.py TEST=tests/test_product_registry.py`
 
 Acceptance: `.venv/bin/python -m pytest -q tests/test_product_registry.py tests/test_registry_prune.py`
 
@@ -175,11 +175,11 @@ Files: new `toolkit/features/forge_adapter.py`, `toolkit/features/product_ready.
 `toolkit/features/product_release.py`, `toolkit/cli/product.py` (new `product resolve`),
 tests.
 
-- [ ] [P] [AC8] Failing tests in `tests/test_forge_adapter.py`: a `ForgeAdapter` protocol with `resolve_commit(short)`, `is_on_default_branch(sha)`, `read_file(path, ref)`, `resolve_tag(tag)`; the GitHub implementation maps each to the `gh api` call the receiver and `product_release` make today (injectable runner, no network)
-- [ ] [AC8] Implement `forge_adapter.py` with the GitHub implementation and a factory keyed on the registry entry's `forge`
-- [ ] [AC8] Move the `forge != github` refusals in `product_ready.py:58` and `product_release.py:52` behind the factory (an unsupported forge is refused by the factory, not by string compare)
-- [ ] [AC8] `toolkit product resolve --app --tag` prints the resolved commit and on-default-branch verdict
-- [ ] [AC8] New `tests/test_no_forge_names_outside_adapter.py`: no module outside `forge_adapter.py` compares `forge` to a forge name; `deploy_shape.py` is allow-listed with a comment pointing at S9
+- [x] [P] [AC8] Failing tests in `tests/test_forge_adapter.py`: a `ForgeAdapter` protocol with `resolve_commit(short)`, `is_on_default_branch(sha)`, `read_file(path, ref)`, `resolve_tag(tag)`; the GitHub implementation maps each to the `gh api` call the receiver and `product_release` make today (injectable runner, no network)
+- [x] [AC8] Implement `forge_adapter.py` with the GitHub implementation and a factory keyed on the registry entry's `forge`
+- [x] [AC8] Move the `forge != github` refusals in `product_ready.py:58` and `product_release.py:52` behind the factory (an unsupported forge is refused by the factory, not by string compare)
+- [x] [AC8] `toolkit product resolve --app --tag` prints the resolved commit and on-default-branch verdict
+- [x] [AC8] New `tests/test_no_forge_names_outside_adapter.py`: no module outside `forge_adapter.py` compares `forge` to a forge name; `deploy_shape.py` is allow-listed with a comment pointing at S9
 
 Acceptance: `.venv/bin/python -m pytest -q tests/test_forge_adapter.py tests/test_no_forge_names_outside_adapter.py tests/test_product_release.py tests/test_product_ready.py`
 

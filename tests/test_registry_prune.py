@@ -13,6 +13,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from toolkit.features import registry
+from toolkit.features.product_registry import platform_registry
 from toolkit.features.registry import DockerHubClient, TagInfo, image_repositories, prune, select_stale_tags
 
 
@@ -190,6 +191,28 @@ class TestImageRepositories:
             "web": "kubelab-web",
             "errors": "kubelab-errors",
         }
+
+    def test_a_product_in_another_registry_is_skipped_not_refused(self, tmp_path: Path) -> None:
+        """The hub client lists and deletes under its own namespace; a forge image is not its to prune."""
+        path = tmp_path / "products.yaml"
+        path.write_text(
+            "products:\n"
+            "  web:\n    repository: mlorentedev/web\n    forge: github\n    receiver: generic\n"
+            "    image_name: kubelab-web\n"
+            "  beta:\n    repository: personal/beta\n    forge: gitea\n    receiver: generic\n"
+            "    image_registry: gitea.kubelab.live/personal\n",
+            encoding="utf-8",
+        )
+        assert image_repositories(["web", "beta"], registry=path) == {"web": "kubelab-web"}
+
+    def test_a_product_naming_the_platform_registry_itself_is_still_pruned(self, tmp_path: Path) -> None:
+        path = tmp_path / "products.yaml"
+        path.write_text(
+            "products:\n  web:\n    repository: mlorentedev/web\n    forge: github\n    receiver: generic\n"
+            f"    image_registry: {platform_registry()}\n    image_name: kubelab-web\n",
+            encoding="utf-8",
+        )
+        assert image_repositories(["web"], registry=path) == {"web": "kubelab-web"}
 
     def test_a_product_with_no_image_name_override_is_pruned_in_its_derived_repository(self) -> None:
         assert image_repositories(["third"], registry=FIXTURE_REGISTRY) == {"third": "third"}

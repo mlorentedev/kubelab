@@ -223,6 +223,118 @@ products:
             product_registry.load_registry(_write(tmp_path, body))
 
 
+_ENTRY = """\
+  {name}:
+    repository: personal/{name}
+    forge: gitea
+    receiver: generic
+    image_registry: {registry}
+    private: true
+    pull_credential: {{username: {username}, secret: {secret}}}
+"""
+
+
+def _entry(
+    name: str = "beta",
+    registry: str = "gitea.kubelab.live/personal",
+    username: str = "reviewer",
+    secret: str = "gitea.registry_pull",
+) -> str:
+    return _ENTRY.format(name=name, registry=registry, username=username, secret=secret)
+
+
+def _private(**fields: str) -> str:
+    return "products:\n" + _entry(**fields)
+
+
+class TestRegistryFields:
+    """IDP-053 D4/D6: the entry, not the values, names the registry a product's image lives in."""
+
+    def test_image_registry_private_and_the_credential_parse(self, tmp_path: Path) -> None:
+        entry = product_registry.load_registry(_write(tmp_path, _private())).products["beta"]
+        assert entry.image_registry == "gitea.kubelab.live/personal"
+        assert entry.private is True
+        assert entry.pull_credential is not None
+        assert (entry.pull_credential.username, entry.pull_credential.secret) == ("reviewer", "gitea.registry_pull")
+
+    def test_the_new_fields_default_to_the_platform_registry_and_public(self) -> None:
+        entry = product_registry.load_registry().products["web"]
+        assert (entry.image_registry, entry.private, entry.pull_credential) == (None, False, None)
+
+    def test_the_committed_registry_is_unchanged_by_the_new_fields(self) -> None:
+        """No committed entry names a registry yet; a new entry is a separate slice."""
+        assert [n for n, p in product_registry.load_registry().products.items() if p.image_registry] == []
+
+    @pytest.mark.parametrize(
+        "image_registry",
+        ["https://gitea.kubelab.live/personal", "gitea.kubelab.live/personal/", "Gitea.Kubelab.Live", "/personal", ""],
+    )
+    def test_an_image_registry_that_is_not_a_host_with_an_owner_path_is_refused(
+        self, tmp_path: Path, image_registry: str
+    ) -> None:
+        body = _private().replace("gitea.kubelab.live/personal", f"'{image_registry}'")
+        with pytest.raises(RegistryError, match="image_registry"):
+            product_registry.load_registry(_write(tmp_path, body))
+
+    def test_an_unknown_credential_field_is_refused(self, tmp_path: Path) -> None:
+        body = _private().replace("secret:", "password: hunter2, secret:")
+        with pytest.raises(RegistryError, match="password"):
+            product_registry.load_registry(_write(tmp_path, body))
+
+    @pytest.mark.parametrize(
+        "line",
+        ["image_registry: gitea.kubelab.live/personal", "private: true", "pull_credential: {username: u, secret: k.s}"],
+    )
+    def test_an_in_tree_entry_names_none_of_the_image_source_fields(self, tmp_path: Path, line: str) -> None:
+        path = _write(tmp_path, f"products:\n  api:\n    forge: in-tree\n    {line}\n")
+        with pytest.raises(RegistryError, match="in-tree"):
+            product_registry.load_registry(path)
+
+
+class TestPrivateEntryRefusals:
+    """A private image is unpullable without a registry to pull from and a credential to pull with (D6)."""
+
+    @pytest.mark.parametrize("missing", ["image_registry", "pull_credential"])
+    def test_a_private_entry_without_its_registry_or_credential_is_refused(self, tmp_path: Path, missing: str) -> None:
+        body = "".join(line for line in _private().splitlines(keepends=True) if not line.strip().startswith(missing))
+        with pytest.raises(RegistryError) as refused:
+            product_registry.load_registry(_write(tmp_path, body))
+        message = str(refused.value)
+        assert missing in message
+        assert all(part in message for part in ("ERROR:", "WHY:", "FIX:"))
+
+    def test_a_credential_on_a_public_entry_is_refused(self, tmp_path: Path) -> None:
+        body = _private().replace("private: true", "private: false")
+        with pytest.raises(RegistryError, match="pull_credential.*private"):
+            product_registry.load_registry(_write(tmp_path, body))
+
+    def test_two_private_entries_on_one_host_naming_different_credentials_are_refused(self, tmp_path: Path) -> None:
+        body = _private() + _entry("gamma", registry="gitea.kubelab.live/me", secret="gitea.other_pull")
+        with pytest.raises(RegistryError) as refused:
+            product_registry.load_registry(_write(tmp_path, body))
+        message = str(refused.value)
+        assert all(part in message for part in ("gitea.kubelab.live", "beta", "gamma", "ERROR:", "WHY:", "FIX:"))
+
+    def test_the_credential_is_compared_by_username_and_secret_not_the_secret_alone(self, tmp_path: Path) -> None:
+        body = _private() + _entry("gamma", username="other")
+        with pytest.raises(RegistryError, match="gitea.kubelab.live"):
+            product_registry.load_registry(_write(tmp_path, body))
+
+    def test_two_private_entries_on_one_host_naming_one_credential_are_admitted(self, tmp_path: Path) -> None:
+        body = _private() + _entry("gamma", registry="gitea.kubelab.live/me")
+        assert set(product_registry.load_registry(_write(tmp_path, body)).products) == {"beta", "gamma"}
+
+    def test_private_entries_on_different_hosts_may_name_different_credentials(self, tmp_path: Path) -> None:
+        body = _private() + _entry("gamma", registry="ghcr.io/mlorentedev", secret="ghcr.pull_token")
+        assert set(product_registry.load_registry(_write(tmp_path, body)).products) == {"beta", "gamma"}
+
+    def test_a_public_entry_on_a_private_host_does_not_count_as_a_second_credential(self, tmp_path: Path) -> None:
+        public = _entry("open", secret="gitea.other_pull").replace("private: true", "private: false")
+        public = public.replace("    pull_credential: {username: reviewer, secret: gitea.other_pull}\n", "")
+        registry = product_registry.load_registry(_write(tmp_path, _private() + public))
+        assert set(registry.products) == {"beta", "open"}
+
+
 class TestDerivedImage:
     """Q7: the registry has no ``image`` field; the image is derived, with an override."""
 
@@ -245,6 +357,23 @@ class TestDerivedImage:
     def test_an_unregistered_product_is_refused_naming_the_registry(self, fixture_registry: Path) -> None:
         with pytest.raises(RegistryError, match=r"ghost.*registry\.yaml"):
             product_registry.derived_image("ghost")
+
+    def test_an_image_registry_replaces_the_platform_registry(self, tmp_path: Path) -> None:
+        path = _write(tmp_path, _private())
+        assert product_registry.derived_image("beta", path) == "gitea.kubelab.live/personal/beta"
+
+    def test_the_image_name_override_applies_under_the_entry_registry(self, tmp_path: Path) -> None:
+        path = _write(tmp_path, _private() + "    image_name: beta-app\n")
+        assert product_registry.derived_image("beta", path) == "gitea.kubelab.live/personal/beta-app"
+
+    def test_a_product_without_image_registry_keeps_the_platform_default(self, fixture_registry: Path) -> None:
+        assert product_registry.derived_image("web") == f"{product_registry.platform_registry()}/kubelab-web"
+
+    def test_image_registry_is_not_a_contract_key(self) -> None:
+        """D4: the registry entry owns the host; a values key would be a second copy of the fact."""
+        from toolkit.features.product_render import CONTRACT_KEYS
+
+        assert "image_registry" not in CONTRACT_KEYS
 
     def test_each_real_product_derives_the_image_its_values_deploy(self) -> None:
         """The override and ``apps.platform.<app>.image_name`` must name one image."""

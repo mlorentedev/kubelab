@@ -12,7 +12,7 @@ services:
     networks:
       - default
     healthcheck:
-      test: ["CMD", "headscale", "version"]
+      test: ["CMD", "headscale", "health"]
       interval: ${HEALTHCHECK_INTERVAL}
       timeout: ${HEALTHCHECK_TIMEOUT}
       retries: ${HEALTHCHECK_RETRIES}

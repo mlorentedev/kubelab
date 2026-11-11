@@ -16,7 +16,7 @@ tags: [kubelab, networking-dns]
 
 **Problem (original, wrong):** Ansible uri module checking http://127.0.0.1:8080/health returned 404. The Headscale container's own Docker healthcheck uses `headscale version` (CLI), not HTTP. There is no HTTP health endpoint in Headscale v0.28.
 
-**Solution (original, superseded):** Use `docker inspect --format '{{.State.Health.Status}}' headscale` to check container health status instead of HTTP endpoint. That check is weak: `headscale version` exits 0 with the server down (#3164).
+**Solution (original, superseded):** Use `docker inspect --format '{{.State.Health.Status}}' headscale` to check container health status instead of HTTP endpoint. That check was weak: `headscale version` exits 0 with the server down. Since #3164 the healthcheck runs `headscale health`, which asks the running server.
 
 **Rule:** Probe Headscale's health at `/health` and check the media type, since the errors service also answers `/health`, in plain text.
 
