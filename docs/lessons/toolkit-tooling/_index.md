@@ -4,6 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 733 | [Gitea answers an ambiguous short sha with the same 404 as an unknown one](lesson-733-gitea-answers-an-ambiguous-short-sha-with-the-same-404-as-an-unknown-one.md) | 2026-11-10 |
 | 727 | [A fork per file is invisible on Linux and a hung commit on Windows](lesson-727-a-fork-per-file-is-invisible-on-linux-and-a-hung-commit-on-windows.md) | 2026-11-09 |
 | 725 | [A secret written before its permissions land is a secret on disk, and a failed hardening leaves it there](lesson-725-a-secret-written-before-its-permissions-land-is-a-secret-on-disk.md) | 2026-11-07 |
 | 724 | [A fail-closed parse after a successful mutation reports the opposite of what happened](lesson-724-a-fail-closed-parse-after-a-successful-mutation-reports-the-opposite.md) | 2026-11-07 |
