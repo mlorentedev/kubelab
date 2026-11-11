@@ -212,9 +212,9 @@ Depends on S5a. Moves the workflow's inline `gh api` shell into testable command
 changing the workflow's behaviour (the workflow edit itself is S6b). Files:
 `toolkit/cli/product.py`, `toolkit/features/product_receiver.py` (new), tests.
 
-- [ ] [AC9] Failing tests: `product resolve` returns the same JSON the workflow's resolve step builds today for a GitHub fixture
-- [ ] [AC9] `toolkit product fetch-contract --app --sha` reads `kubelab.yaml` at the commit through the adapter and writes it
-- [ ] [AC9] Failing test then implement `toolkit product route --app` printing `{forge, runs_on}` from `products.yaml` only (GitHub keeps `vars.RUNNER_DOCKER`'s ubuntu default, Gitea selects the self-hosted label)
+- [x] [AC9] Failing tests: `product resolve` returns the same JSON the workflow's resolve step builds today for a GitHub fixture
+- [x] [AC9] `toolkit product fetch-contract --app --sha` reads `kubelab.yaml` at the commit through the adapter and writes it
+- [x] [AC9] Failing test then implement `toolkit product route --app` printing `{forge, runs_on}` from `products.yaml` only (GitHub keeps `vars.RUNNER_DOCKER`'s ubuntu default, Gitea selects the self-hosted label)
 
 Acceptance: `.venv/bin/python -m pytest -q tests/test_product_receiver.py tests/test_forge_adapter.py`
 
