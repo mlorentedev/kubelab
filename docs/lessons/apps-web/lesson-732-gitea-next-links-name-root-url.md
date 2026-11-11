@@ -23,13 +23,14 @@ while single-page repositories read normally, so the console showed only part
 of the forge as reachable. The fixture-based tests could not catch it: their
 fake server wrote links on its own host.
 
-**Solution**: Gitea's paged read sets `Rehost`. The reader takes only the
-path and query from the next link and reads them at the configured base URL,
-so the token still only reaches the configured host. GitHub keeps the strict
-guard, since its links always name the API host it was read at.
+**Solution**: Gitea's paged read sets `APIRoot` (`/api/v1/`). The reader
+takes the next link's path from `/api/v1/` on, puts it under the configured
+base URL's own path, and keeps the link's query, so the token only reaches the
+configured host and a path prefix on either side is handled. GitHub keeps the
+strict guard, since its links always name the API host it was read at.
 `TestGiteaReaderFollowsANextLinkWrittenForItsPublicAddress` serves a link on
-another host and fails with the old guard and with a rehost that keeps the
-link's host.
+another host and prefix; it fails with the old guard, and under mutations that
+keep the link's host, drop the base prefix or drop the path.
 
 **Rule**: A forge behind a proxy or read at an internal address builds its
 links from its configured public URL. Follow a server-built link by its path
