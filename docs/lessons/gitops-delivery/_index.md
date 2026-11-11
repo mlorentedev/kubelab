@@ -4,6 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 735 | [An api release re-tags whatever staging pins, so a release merged before its staging deploy ships the previous build](lesson-735-a-release-retags-whatever-staging-pins.md) | 2026-11-11 |
 | 721 | [Deploy branches that rewrite the same files merge in either order, because each app's writes stay inside its own block](lesson-721-deploy-branches-sharing-a-file-merge-because-each-app-owns-a-block.md) | 2026-11-06 |
 | 683 | [A commit that changes only an Argo CD hook starts no sync, so the hook never runs](lesson-683-a-commit-that-changes-only-a-hook-starts-no-sync-so-the-hook-never-runs.md) | 2026-11-01 |
 | 616 | [One snapshot for two environments that advance separately makes the slower one drift](lesson-616-one-snapshot-for-two-envs-that-advance-separately-makes-the-slower-one-drift.md) | 2026-10-21 |
