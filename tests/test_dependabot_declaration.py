@@ -130,7 +130,7 @@ def test_the_declaration_verifies_the_label_actually_landed() -> None:
     )
     # Keyed to the label it just added, read from the registry, not to a name
     # copied into this file — and non-zero when it is absent.
-    assert re.search(r"grep -qxF \"\$LABEL\"", script), "the read-back must test for the registry's own escape label"
+    assert re.search(r"grep -xF \"\$LABEL\" >/dev/null", script), "the read-back must test for the registry's own escape label"
     assert "::error" in script and re.search(r"\bexit 1\b", script), (
         "a label that did not land must fail the job with a message, not print and pass"
     )
