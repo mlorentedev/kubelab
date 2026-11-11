@@ -242,9 +242,9 @@ Acceptance: `.venv/bin/python -m pytest -q tests/test_product_image_receiver_wor
 Depends on S5b and S1b. Closes #2627 AC1 and AC2. Files: `toolkit/features/product_release.py`,
 `toolkit/features/registry.py`, tests.
 
-- [ ] [AC11] Failing tests in `tests/test_registry_digest.py` (new): authenticated manifest digest read for GHCR and for the Gitea registry; unsupported or private registry without a credential is refused with ERROR / WHY / FIX naming the registry
-- [ ] [AC11] Implement `tag_digest` for non-`docker.io` hosts using the catalogued pull credential (D3's authenticated half)
-- [ ] [AC11] Failing test then implement: `release-contract` reads the contract through the adapter for any forge; a 7-hex and a 10-hex `sha-` tag are both proven, so a check fixed at 7 fails (#2627 AC1)
+- [x] [AC11] Failing tests in `tests/test_registry_digest.py` (new): authenticated manifest digest read for GHCR and for the Gitea registry; unsupported or private registry without a credential is refused with ERROR / WHY / FIX naming the registry
+- [x] [AC11] Implement `tag_digest` for non-`docker.io` hosts using the catalogued pull credential (D3's authenticated half)
+- [x] [AC11] Failing test then implement: `release-contract` reads the contract through the adapter for any forge; a 7-hex and a 10-hex `sha-` tag are both proven, so a check fixed at 7 fails (#2627 AC1)
 
 Acceptance: `.venv/bin/python -m pytest -q tests/test_product_release.py tests/test_registry_digest.py`
 

@@ -17,10 +17,12 @@ else is I/O. That split keeps the policy unit-testable without a network.
 from __future__ import annotations
 
 import os
+import re
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 import yaml
@@ -30,16 +32,35 @@ from toolkit.core.logging import logger
 from toolkit.features import product_registry
 
 _HUB = "https://hub.docker.com/v2"
-_ANONYMOUS_HOST = "docker.io/"  # the one registry whose tags are read here, anonymously
+_ANONYMOUS_HOST = "docker.io/"  # Docker Hub: read through its own API, anonymously
 SHA_TAG_PREFIX = "sha-"  # immutable per-commit staging tag scheme (ADR-046)
 #: The hex lengths a ``sha-`` tag may carry: what the product image receiver admits (``sha-[0-9a-f]{7,}``).
 SHA_TAG_HEX_LENGTHS = range(7, 41)
 _RC_MARKER = "-rc."  # dropped scheme; any remaining are dead
 
 
-def reads_digests(registry: str) -> bool:
-    """Whether ``tag_digest`` can read this registry at all (only Docker Hub, anonymously)."""
+def is_docker_hub(registry: str) -> bool:
+    """Whether ``registry`` is Docker Hub, the one registry read through its own API rather than OCI."""
     return registry.startswith(_ANONYMOUS_HOST)
+
+
+@dataclass(frozen=True)
+class RegistryCredential:
+    """A registry login for an authenticated read; the token never appears in a repr or a message."""
+
+    username: str
+    token: str = field(repr=False)
+
+
+def catalog_secret(key: str) -> str | None:
+    """The value the secrets catalog holds at ``key`` (a product's ``pull_credential.secret``), or ``None``.
+
+    The catalog is SOPS, so this resolves only where the age key is: a runner without it
+    gets ``None`` and the caller refuses by name. Tests inject a lookup instead.
+    """
+    from toolkit.features.configuration import ConfigurationManager
+
+    return ConfigurationManager("prod").get_secret_by_path(key)
 
 
 @dataclass(frozen=True)
@@ -129,14 +150,23 @@ def _oci_tag_exists(registry: str, image_name: str, tag: str, http: Callable[...
     return None
 
 
-def tag_digest(registry: str, image_name: str, tag: str) -> str | None:
-    """The manifest digest a tag names, or ``None`` when it cannot be read (absent tag, no registry, not Docker Hub).
+def tag_digest(
+    registry: str,
+    image_name: str,
+    tag: str,
+    credential: RegistryCredential | None = None,
+    http: Callable[..., httpx.Response] | None = None,
+) -> str | None:
+    """The manifest digest a tag names, or ``None`` when it cannot be read (absent tag, refused login, no digest).
 
     Unlike ``tag_exists`` this never answers "skip": a caller proving two tags are
-    one image treats ``None`` as no proof.
+    one image treats ``None`` as no proof. Docker Hub is read anonymously through its
+    API; any other registry through an OCI manifest ``HEAD``, trading ``credential``
+    (or nothing, for a public package) for a bearer token when the registry asks
+    (IDP-053 D3, the authenticated half). ``http`` replaces ``httpx.request`` for tests.
     """
-    if not reads_digests(registry):
-        return None
+    if not is_docker_hub(registry):
+        return _oci_tag_digest(registry, image_name, tag, credential, http or httpx.request)
     namespace = registry.split("/", 1)[1]
     try:
         resp = httpx.get(f"{_HUB}/repositories/{namespace}/{image_name}/tags/{tag}", timeout=15.0)
@@ -147,6 +177,77 @@ def tag_digest(registry: str, image_name: str, tag: str) -> str | None:
         return None
     digest = resp.json().get("digest")
     return digest if isinstance(digest, str) and digest.startswith("sha256:") else None
+
+
+_CHALLENGE_PARAM = re.compile(r'(\w+)="([^"]*)"')
+
+
+def _oci_tag_digest(
+    registry: str,
+    image_name: str,
+    tag: str,
+    credential: RegistryCredential | None,
+    http: Callable[..., httpx.Response],
+) -> str | None:
+    host, _, owner = registry.partition("/")
+    repository = "/".join(part for part in (owner, image_name) if part)
+    subject = f"{host}: the digest of {image_name}:{tag}"
+    url = f"https://{host}/v2/{repository}/manifests/{tag}"
+    headers = {"Accept": _MANIFEST_TYPES}
+    try:
+        resp = http("HEAD", url, headers=headers, timeout=15.0)
+        if resp.status_code == 401:
+            token = _bearer_token(host, repository, resp.headers.get("www-authenticate", ""), credential, http)
+            if token is None:
+                return None
+            resp = http("HEAD", url, headers={**headers, "Authorization": f"Bearer {token}"}, timeout=15.0)
+    except httpx.HTTPError as exc:
+        logger.warning(f"{subject} is unread, the registry is unreachable ({exc})")
+        return None
+    digest = resp.headers.get("docker-content-digest", "")
+    if resp.status_code != 200 or not digest.startswith("sha256:"):
+        logger.warning(f"{subject} is unread, the registry answered HTTP {resp.status_code} with no sha256 digest")
+        return None
+    return digest
+
+
+def _token_of(resp: httpx.Response) -> str | None:
+    if resp.status_code != 200:
+        return None
+    try:
+        body = resp.json()
+    except ValueError:
+        return None
+    token = body.get("token") or body.get("access_token") if isinstance(body, dict) else None
+    return token if isinstance(token, str) and token else None
+
+
+def _bearer_token(
+    host: str,
+    repository: str,
+    challenge: str,
+    credential: RegistryCredential | None,
+    http: Callable[..., httpx.Response],
+) -> str | None:
+    """Trade ``credential`` for a pull token at the realm the registry names, or ``None`` with a warning.
+
+    The credential goes only to a realm on the registry's own host over https: the realm
+    comes from the registry's answer, so an unchecked one would send the long-lived token wherever it points.
+    """
+    params = dict(_CHALLENGE_PARAM.findall(challenge))
+    realm = urlsplit(params.get("realm", ""))
+    if not challenge.lower().startswith("bearer ") or realm.scheme != "https" or realm.hostname != host:
+        logger.warning(f"{host}: unread, it asked for a login this client does not speak or at a host not its own")
+        return None
+    query = {"service": params.get("service", host), "scope": params.get("scope", f"repository:{repository}:pull")}
+    auth = (credential.username, credential.token) if credential else None
+    resp = http("GET", realm.geturl(), params=query, auth=auth, timeout=15.0)
+    token = _token_of(resp)
+    if token is None:
+        who = f"the login of {credential.username}" if credential else "an anonymous read"
+        logger.warning(f"{host}: unread, its token endpoint refused {who} (HTTP {resp.status_code})")
+        return None
+    return token
 
 
 class DockerHubClient:
