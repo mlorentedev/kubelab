@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 )
 
 // pagedRead describes one paged listing: where it starts, how the request is
@@ -16,6 +17,10 @@ type pagedRead struct {
 	MaxPages int
 	HTTP     *http.Client
 	Auth     func(*http.Request)
+	// APIRoot, when set, follows a next link on any host: the link's path from
+	// APIRoot on, and its query, are read at BaseURL. Gitea needs it: its links
+	// name ROOT_URL, which may differ from BaseURL in host and in path prefix.
+	APIRoot string
 }
 
 // readPages follows the Link rel="next" header until the listing ends. Every
@@ -35,8 +40,8 @@ func readPages(ctx context.Context, src Source, p pagedRead) ([]Item, error) {
 		if err != nil {
 			return nil, &SourceError{Source: src, Err: err}
 		}
-		if link != "" && !sameOrigin(base, link) {
-			return nil, &SourceError{Source: src, Err: fmt.Errorf("next page points off %s", base.Host)}
+		if link, err = nextOnBase(base, link, p.APIRoot); err != nil {
+			return nil, &SourceError{Source: src, Err: err}
 		}
 		for _, raw := range page {
 			items = append(items, raw.neutral(src))
@@ -79,4 +84,29 @@ func getPage(ctx context.Context, p pagedRead, pageURL string, out any) (string,
 		link = m[1]
 	}
 	return link, nil
+}
+
+// nextOnBase returns the next page's URL on base. With an apiRoot, the link's
+// path from apiRoot on is read under base's own path, so the token only ever
+// reaches the configured host; without one, a link naming another host is refused.
+func nextOnBase(base *url.URL, link, apiRoot string) (string, error) {
+	if link == "" {
+		return "", nil
+	}
+	if apiRoot == "" {
+		if !sameOrigin(base, link) {
+			return "", fmt.Errorf("next page points off %s", base.Host)
+		}
+		return link, nil
+	}
+	u, err := url.Parse(link)
+	if err != nil {
+		return "", fmt.Errorf("parse next link: %w", err)
+	}
+	i := strings.Index(u.Path, apiRoot)
+	if i < 0 {
+		return "", fmt.Errorf("next link %s is outside %s", u.Path, apiRoot)
+	}
+	path := strings.TrimSuffix(base.Path, "/") + u.Path[i:]
+	return (&url.URL{Scheme: base.Scheme, Host: base.Host, Path: path, RawQuery: u.RawQuery}).String(), nil
 }
