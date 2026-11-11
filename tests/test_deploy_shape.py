@@ -24,8 +24,11 @@ from toolkit.features.deploy_shape import (
     DeclarationError,
     classify_diff,
     evaluate,
+    gh_over,
     load_declaration,
 )
+from toolkit.features.forge_adapter import GiteaForge
+from toolkit.features.gitea_client import GiteaError
 from toolkit.features.product_registry import load_registry as load_products
 from toolkit.features.review_attestation import DEFAULT_REGISTRY
 
@@ -411,16 +414,29 @@ class TestEvaluate:
         routes[f"repos/mlorentedev/web/commits/{SHORT}"] = {"sha": "f" * 40}
         assert evaluate(7, REPO, FakeApi(routes), decl, products).verdict == "not-mechanical"
 
-    @pytest.mark.parametrize("suffix", ["0", "\n"])
-    def test_a_resolved_sha_longer_than_a_commit_is_refused(self, decl, products, suffix: str) -> None:
-        """#3062 F5: pins `fullmatch` on the resolved sha. The sha still starts with the
-        tag's short sha and is on the branch, so only the pattern refuses it, and the
-        newline case is refused only by `fullmatch`, however the pattern is anchored."""
+    def test_a_resolved_sha_longer_than_a_commit_is_refused(self, decl, products) -> None:
+        """#3062 F5: pins the length of the resolved sha. It still starts with the tag's short
+        sha and is on the branch, so only the full-sha check refuses it."""
         routes = routes_for("web", "mlorentedev/web")
-        routes[f"repos/mlorentedev/web/commits/{SHORT}"] = {"sha": FULL + suffix}
-        routes[f"repos/mlorentedev/web/compare/master...{FULL + suffix}"] = {"status": "behind"}
+        routes[f"repos/mlorentedev/web/commits/{SHORT}"] = {"sha": FULL + "0"}
+        routes[f"repos/mlorentedev/web/compare/master...{FULL}0"] = {"status": "behind"}
         shape = evaluate(7, REPO, FakeApi(routes), decl, products)
         assert shape.verdict == "not-mechanical" and "resolved to" in shape.reason, shape.reason
+
+    def test_a_trailing_newline_is_stripped_by_the_adapter_and_the_clean_sha_is_what_is_compared(
+        self, decl, products
+    ) -> None:
+        """`gh_over` returns the JSON value as is, so no transport newline exists here: the newline
+        goes because `GitHubForge._api` strips every value it reads. GitHub's JSON never carries
+        whitespace in a sha, so nothing real is lost, and the sha asked about is the clean
+        40-hex one. The unstripped form is made unmerged here, so a compare against it would
+        refuse. (The same strip makes a `status` with whitespace around `ahead` read as
+        `ahead`; that cannot be pinned without changing `_api`.)"""
+        routes = routes_for("web", "mlorentedev/web")
+        routes[f"repos/mlorentedev/web/commits/{SHORT}"] = {"sha": FULL + "\n"}
+        routes[f"repos/mlorentedev/web/compare/master...{FULL}\n"] = {"status": "ahead"}
+        shape = evaluate(7, REPO, FakeApi(routes), decl, products)
+        assert shape.verdict == "mechanical", shape.reason
 
     @pytest.mark.parametrize("app,repo", [("web", "mlorentedev/web"), ("api", REPO)])
     @pytest.mark.parametrize("order", ["behind", "diverged", "identical"])
@@ -470,6 +486,115 @@ class TestEvaluate:
         """Human PRs are the common case: they cost one API call, not six."""
         routes = {f"repos/{REPO}/pulls/7/files?per_page=100": changes("README.md")}
         assert evaluate(7, REPO, FakeApi(routes), decl, products).verdict == "not-mechanical"
+
+
+GITEA_REPO = "personal/web"
+
+
+class FakeGitea:
+    """The `GiteaClient` reads `GiteaForge` makes, answered from tables: no network.
+
+    `ahead[(base, head)]` is how many commits `head` has that `base` lacks.
+    """
+
+    def __init__(self, ahead: dict[tuple[str, str], int], commits: dict[str, str] | None = None) -> None:
+        self.ahead = ahead
+        old_short = current_version("web").split("-", 1)[1]
+        self.commits = commits if commits is not None else {SHORT: FULL, old_short: old_full("web")}
+        self.fail: GiteaError | None = None
+
+    def get_repo(self, owner: str, name: str) -> dict[str, str]:
+        if self.fail:
+            raise self.fail
+        return {"default_branch": "main"}
+
+    def get_commit(self, owner: str, name: str, ref: str) -> str | None:
+        return self.commits.get(ref)
+
+    def compare_ahead(self, owner: str, name: str, base: str, head: str) -> int:
+        return self.ahead[(base, head)]
+
+
+def merged_and_forward() -> dict[tuple[str, str], int]:
+    """New is on `main` and descends from the pin: the one table in which Gitea proves the move."""
+    return {("main", FULL): 0, (old_full("web"), FULL): 3, (FULL, old_full("web")): 0}
+
+
+class TestEvaluateGitea:
+    """AC12: a Gitea product's deploy PR is judged through the adapter, never `gh api` on its repository."""
+
+    @pytest.fixture
+    def gitea_products(self, products):
+        web = products["web"].model_copy(update={"forge": "gitea", "repository": GITEA_REPO})
+        return {**products, "web": web}
+
+    def judge(self, decl, gitea_products, gitea: FakeGitea):
+        # The PR is on GitHub; the FakeApi has no route for the product's repository, so any
+        # `gh api` read of it would be `unknown`, not the verdict asserted below.
+        api = FakeApi(routes_for("web", "mlorentedev/web"))
+        return evaluate(7, REPO, api, decl, gitea_products, forge_for=lambda app, p: GiteaForge(p.repository, gitea))
+
+    def test_a_deploy_proven_against_gitea_is_mechanical(self, decl, gitea_products) -> None:
+        shape = self.judge(decl, gitea_products, FakeGitea(merged_and_forward()))
+        assert shape.verdict == "mechanical", shape.reason
+        assert shape.head_sha == HEAD
+
+    def test_a_commit_gitea_does_not_have_on_its_default_branch_is_refused(self, decl, gitea_products) -> None:
+        shape = self.judge(decl, gitea_products, FakeGitea({**merged_and_forward(), ("main", FULL): 1}))
+        assert shape.verdict == "not-mechanical" and "not on" in shape.reason, shape.reason
+
+    @pytest.mark.parametrize("forward", [(0, 0), (0, 3), (2, 2)], ids=["identical", "rollback", "diverged"])
+    def test_a_pin_that_does_not_move_forward_on_gitea_is_refused(self, decl, gitea_products, forward) -> None:
+        ahead = {**merged_and_forward(), (old_full("web"), FULL): forward[0], (FULL, old_full("web")): forward[1]}
+        shape = self.judge(decl, gitea_products, FakeGitea(ahead))
+        assert shape.verdict == "not-mechanical" and "forward" in shape.reason, shape.reason
+
+    def test_a_commit_gitea_cannot_place_is_refused_with_error_why_and_fix(self, decl, gitea_products) -> None:
+        shape = self.judge(decl, gitea_products, FakeGitea(merged_and_forward(), commits={}))
+        assert shape.verdict == "not-mechanical"
+        assert all(part in shape.reason for part in ("ERROR:", "WHY:", "FIX:")), shape.reason
+        assert GITEA_REPO in shape.reason
+
+    def test_a_sha_gitea_returns_with_a_trailing_newline_is_refused(self, decl, gitea_products) -> None:
+        """The judge used `fullmatch` on the resolved sha; the adapter must refuse `<40hex>\\n` as it did."""
+        gitea = FakeGitea(
+            merged_and_forward(), commits={SHORT: FULL + "\n", current_version("web").split("-", 1)[1]: old_full("web")}
+        )
+        shape = self.judge(decl, gitea_products, gitea)
+        assert shape.verdict == "not-mechanical" and "resolved to" in shape.reason, shape.reason
+
+    def test_a_gitea_that_cannot_answer_is_refused_with_error_why_and_fix(self, decl, gitea_products) -> None:
+        gitea = FakeGitea(merged_and_forward())
+        gitea.fail = GiteaError("Gitea API GET /repos/personal/web answered 502")
+        shape = self.judge(decl, gitea_products, gitea)
+        assert shape.verdict == "not-mechanical"
+        assert all(part in shape.reason for part in ("ERROR:", "WHY:", "FIX:")), shape.reason
+        assert "502" in shape.reason
+
+    def test_a_gitea_the_judge_cannot_reach_is_refused_with_error_why_and_fix(
+        self, decl, gitea_products, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The default factory reads GITEA_URL and the repo_reader token: unset, the product is not proven."""
+        monkeypatch.delenv("GITEA_URL", raising=False)
+        monkeypatch.delenv("GITEA_REPO_READER_TOKEN", raising=False)
+        shape = evaluate(7, REPO, FakeApi(routes_for("web", "mlorentedev/web")), decl, gitea_products)
+        assert shape.verdict == "not-mechanical"
+        assert all(part in shape.reason for part in ("ERROR:", "WHY:", "FIX:")), shape.reason
+        assert "GITEA_URL" in shape.reason
+
+
+class TestGhOverApi:
+    """The GitHub adapter's reads go through the judge's own `api`: one transport, one failure mode."""
+
+    def test_a_call_the_judge_does_not_make_is_refused_rather_than_guessed(self) -> None:
+        runner = gh_over(FakeApi({}))
+        with pytest.raises(ValueError, match="unsupported"):
+            runner("api", "repos/x/y", "--paginate")
+
+    def test_a_failed_read_is_an_exception_so_the_verdict_is_unknown(self) -> None:
+        runner = gh_over(FakeApi({"repos/x/y": RuntimeError("HTTP 502")}))
+        with pytest.raises(RuntimeError, match="502"):
+            runner("api", "repos/x/y", "--jq", ".sha")
 
 
 class TestRequiredContext:

@@ -13,6 +13,10 @@ Three verdicts, never two:
     not-mechanical  evaluated, and some condition does not hold: the PR takes
                     the normal review path
     unknown         something could not be read or parsed: fails closed
+                    (two exceptions on a product's Gitea: it answers with an HTTP
+                    error, and the commit it could not place is not proven, so
+                    not-mechanical; it cannot be reached at all, a connection error
+                    or timeout, which is not a ForgeError, so unknown)
 
 The class itself (env, files, version path, tag pattern) is declared in the
 reviewer registry, `mechanical`, and read from there; this module names none of
@@ -25,13 +29,15 @@ from __future__ import annotations
 import json
 import re
 import subprocess
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
 import yaml
 
+from toolkit.features.forge_adapter import ForgeAdapter, ForgeError, GitHubForge, Runner, adapter_for
+from toolkit.features.product_contract import ContractError
 from toolkit.features.product_registry import Product
 
 MECHANICAL = "mechanical"
@@ -269,18 +275,34 @@ def _head(api: Api, repo: str, number: int) -> tuple[str, str, str]:
     return pr["head"]["sha"], pr["base"]["ref"], pr["base"]["repo"]["default_branch"]
 
 
-def _commit(api: Api, repository: str, tag: str) -> tuple[str, str | None]:
-    """The full commit sha a `sha-<short>` tag names in `repository`, or why it names none."""
+def gh_over(api: Api) -> Runner:
+    """The GitHub adapter's `gh` runner, answering through `api`.
+
+    The judge reads the PR and the product through one transport, so a read that fails is
+    the same exception either way: `unknown`, never a verdict. `GitHubForge` makes two kinds
+    of call (`--jq .field` and a raw `-H` fetch); anything else is refused, not guessed at.
+    """
+
+    def run(*args: str) -> subprocess.CompletedProcess[str]:
+        if len(args) == 4 and args[0] == "api" and args[2] == "--jq" and re.fullmatch(r"\.\w+", args[3]):
+            out = str(api.json(args[1])[args[3][1:]])
+        elif len(args) == 4 and args[:2] == ("api", "-H"):
+            out = api.raw(args[3])
+        else:
+            raise ValueError(f"unsupported gh call: {args}")
+        return subprocess.CompletedProcess(list(args), 0, stdout=out, stderr="")
+
+    return run
+
+
+def _commit(forge: ForgeAdapter, tag: str) -> str:
+    """The full commit sha a `sha-<short>` tag names in the product's repository."""
     if not re.fullmatch(r"sha-[0-9a-f]{7,40}", tag):
-        return "", f"{tag!r} is not a sha-<short> tag"
-    short = tag.split("-", 1)[1]
-    sha = api.json(f"repos/{repository}/commits/{short}")["sha"]
-    if not re.fullmatch(r"[0-9a-f]{40}", sha or "") or not sha.startswith(short):
-        return "", f"{tag} resolved to {sha!r} in {repository}, not a commit starting with {short}"
-    return sha, None
+        raise ForgeError(f"{tag!r} is not a sha-<short> tag")
+    return forge.resolve_commit(tag.split("-", 1)[1])
 
 
-def _provenance(api: Api, repository: str, old: str, new: str) -> str | None:
+def _provenance(forge: ForgeAdapter, old: str, new: str) -> str | None:
     """None when `new` is on the default branch and moves `old` forward, else why not.
 
     The first half is the receiver's own check on its input (product-image-receiver.yml),
@@ -289,29 +311,75 @@ def _provenance(api: Api, repository: str, old: str, new: str) -> str | None:
     commit is a clean version move too, and it comes from a stale or out-of-order PR,
     never from a generator. A revert rolls back by building a newer commit, which
     passes; going back to an older image is a merge a human makes.
+
+    A `ForgeError` means the forge could not place a commit or answer: `evaluate` words it.
     """
-    sha, why = _commit(api, repository, new)
-    if why:
-        return why
-    branch = api.json(f"repos/{repository}")["default_branch"]
-    status = api.json(f"repos/{repository}/compare/{branch}...{sha}")["status"]
-    if status not in ("identical", "behind"):
-        return f"{sha} is not on {repository}'s {branch} (compare: {status})"
-    previous, why = _commit(api, repository, old)
-    if why:
-        return f"the current pin cannot be placed: {why}"
-    order = api.json(f"repos/{repository}/compare/{previous}...{sha}")["status"]
-    if order != "ahead":
-        return f"{new} does not move {old} forward in {repository} (compare: {order}); a rollback is merged by hand"
+    sha = _commit(forge, new)
+    if not forge.is_on_default_branch(sha):
+        return f"{sha} is not on {forge.repository}'s default branch"
+    try:
+        previous = _commit(forge, old)
+    except ForgeError as exc:
+        raise ForgeError(f"the current pin cannot be placed: {exc}") from None
+    if not forge.is_ahead_of(previous, sha):
+        return f"{new} does not move {old} forward in {forge.repository}; a rollback is merged by hand"
     return None
 
 
-def evaluate(number: int, repo: str, api: Api, decl: Declaration, products: Mapping[str, Product]) -> Shape:
+def _unproven(forge: ForgeAdapter, new: str, exc: ForgeError) -> str:
+    return str(
+        ContractError(
+            f"{new} cannot be proven against {forge.repository} on {forge.name}: {exc}",
+            "a deploy skips review only when its image tag is a commit the product merged and the pin moved forward, "
+            "and the forge could not say.",
+            "the PR takes the normal review path; once the forge answers, push again or re-run this check.",
+        )
+    )
+
+
+ForgeFor = Callable[[str, Product], ForgeAdapter]
+
+
+def _default_forge(repo: str, api: Api) -> ForgeFor:
+    """An in-tree product is proven against `repo` (GitHub, read through `api`), any other through its adapter."""
+    runner = gh_over(api)
+
+    def build(app: str, product: Product) -> ForgeAdapter:
+        return GitHubForge(repo, runner) if product.forge == "in-tree" else adapter_for(app, product, runner)
+
+    return build
+
+
+def _proven(shape: Shape, forge_for: ForgeFor, products: Mapping[str, Product]) -> Shape:
+    """`shape` when its tag is proven against the product's repository, else the refusal."""
+    app = shape.app or ""
+    try:
+        forge = forge_for(app, products[app])
+    except ContractError as exc:  # a forge with no adapter, or one whose settings are missing
+        return Shape(NOT_MECHANICAL, str(exc), app=shape.app, old=shape.old, new=shape.new)
+    try:
+        why = _provenance(forge, shape.old or "", shape.new or "")
+    except ForgeError as exc:
+        why = _unproven(forge, shape.new or "", exc)
+    return Shape(NOT_MECHANICAL, why, app=shape.app, old=shape.old, new=shape.new) if why else shape
+
+
+def evaluate(
+    number: int,
+    repo: str,
+    api: Api,
+    decl: Declaration,
+    products: Mapping[str, Product],
+    forge_for: ForgeFor | None = None,
+) -> Shape:
     """Read PR `number` of `repo` through `api` and judge it at one head sha.
 
     Any API or parse failure is `unknown`. The head is read before and after, and a
     push in between is `unknown` too: the verdict must name the sha it judged.
+    `forge_for` builds the adapter that proves a product's tag against its repository
+    (`_default_forge` when absent).
     """
+    forge_for = forge_for or _default_forge(repo, api)
     try:
         head, base_ref, default_branch = _head(api, repo, number)
         if base_ref != default_branch:
@@ -325,16 +393,7 @@ def evaluate(number: int, repo: str, api: Api, decl: Declaration, products: Mapp
             after = {p: api.raw(f"repos/{repo}/contents/{p}?ref={head}") for p in decl.files}
             shape = classify_diff(changes, before, after, products, decl)
             if shape.verdict == MECHANICAL:
-                product = products[shape.app or ""]
-                if product.forge == "in-tree":
-                    repository = repo
-                elif product.forge == "github" and product.repository:
-                    repository = product.repository
-                else:
-                    return Shape(NOT_MECHANICAL, f"{shape.app}'s forge ({product.forge}) cannot be proven here")
-                why = _provenance(api, repository, shape.old or "", shape.new or "")
-                if why:
-                    shape = Shape(NOT_MECHANICAL, why, app=shape.app, old=shape.old, new=shape.new)
+                shape = _proven(shape, forge_for, products)
         if _head(api, repo, number)[0] != head:
             return Shape(UNKNOWN, "the PR's head moved while it was being judged")
     except Exception as exc:  # noqa: BLE001 — any failure to read is a verdict of `unknown`

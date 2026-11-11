@@ -23,12 +23,9 @@ ADAPTER = TOOLKIT / "features" / "forge_adapter.py"
 #: What a forge is called in `products.yaml`. `in-tree` is the absence of a forge, not one.
 FORGE_NAMES = frozenset({"github", "gitea"})
 
-#: Modules allowed to name a forge, each with the slice that removes it.
-ALLOWED = {
-    # IDP-053 S9 moves `_provenance` behind the adapter and deletes this entry. Until then the
-    # judge keeps its own `forge == "github"` branch: no earlier slice touches deploy_shape.py.
-    TOOLKIT / "features" / "deploy_shape.py",
-}
+#: Modules allowed to name a forge, each with the slice that removes it. Empty: `deploy_shape.py`,
+#: the last one, asks the adapter now. An entry is a hole, so it needs a reason and a way out.
+ALLOWED: set[pathlib.Path] = set()
 
 
 def _is_forge_operand(node: ast.expr) -> bool:
@@ -137,7 +134,14 @@ def test_no_module_outside_the_adapter_compares_a_forge_with_a_forge_name() -> N
     )
 
 
-@pytest.mark.parametrize("path", sorted(ALLOWED, key=str), ids=lambda p: p.name)
-def test_an_allow_listed_module_still_needs_its_entry(path: pathlib.Path) -> None:
+def test_an_allow_listed_module_still_needs_its_entry() -> None:
     """An entry that matches nothing is a hole left open for the next module that is named there."""
-    assert forge_compares(path.read_text(encoding="utf-8")), f"{path.name} no longer names a forge: drop its entry"
+    stale = [p.name for p in ALLOWED if not forge_compares(p.read_text(encoding="utf-8"))]
+    assert not stale, f"{stale} no longer name a forge: drop their entries"
+
+
+def test_the_merge_judge_asks_the_adapter_and_is_not_allow_listed() -> None:
+    """The judge is the last module that named a forge (it kept `forge == "github"` for its own `_provenance`)."""
+    judge = TOOLKIT / "features" / "deploy_shape.py"
+    assert judge not in ALLOWED
+    assert judge in _modules(), "the scan no longer reaches the merge judge"

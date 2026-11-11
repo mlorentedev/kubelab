@@ -250,8 +250,8 @@ Acceptance: `.venv/bin/python -m pytest -q tests/test_product_release.py tests/t
 
 ### S9. `deploy_shape` provenance through the adapter (owner merges, after #3063, ~80 LOC)
 
-- [ ] [AC12] Failing test: a Gitea product's deploy PR is `mechanical` when provenance proves against Gitea, and `not-mechanical` with an ERROR / WHY / FIX when it does not
-- [ ] [AC12] Replace `_provenance`'s `gh api` calls and the `forge == "github"` branch with the adapter; remove the allow-list entry in `test_no_forge_names_outside_adapter.py`
+- [x] [AC12] Failing test: a Gitea product's deploy PR is `mechanical` when provenance proves against Gitea, and `not-mechanical` with an ERROR / WHY / FIX when it does not
+- [x] [AC12] Replace `_provenance`'s `gh api` calls and the `forge == "github"` branch with the adapter; remove the allow-list entry in `test_no_forge_names_outside_adapter.py`
 
 Acceptance: `.venv/bin/python -m pytest -q tests/test_deploy_shape.py tests/test_deploy_shape_widening.py tests/test_no_forge_names_outside_adapter.py`
 
