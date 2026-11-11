@@ -34,12 +34,7 @@ ERRORS_NGINX = REPO / "edge/errors/nginx.conf"
 CATCH_ALL_HOST = re.compile(r".+\.kubelab\.live")
 
 #: Monitors known to measure something other than their service, each with its ticket.
-#: n8n's `/healthz` sits behind the Authelia ForwardAuth, so the monitor follows a 302
-#: to the portal and reads Authelia's 200 (#3167).
-EXEMPT = {
-    "services-data-n8n-prod": "#3167",
-    "staging-web-n8n-staging": "#3167",
-}
+EXEMPT: dict[str, str] = {}
 
 
 def _seed() -> list[dict]:
@@ -108,24 +103,28 @@ def test_no_exemption_is_stale() -> None:
     assert set(EXEMPT) <= keys, f"exempt monitors no longer in the seed: {sorted(set(EXEMPT) - keys)}"
 
 
-def _routed_hosts() -> set[str]:
-    """Every literal host an IngressRoute serves in either overlay."""
+def _ingress_routes(overlay: str) -> list[dict]:
+    """Every IngressRoute the overlay renders."""
     if not shutil.which("kubectl"):
         if os.environ.get("CI"):
             pytest.fail("kubectl is required in CI to render the overlays")
         pytest.skip("kubectl not installed")
+    out = subprocess.run(
+        ["kubectl", "kustomize", str(REPO / "infra/k8s/overlays" / overlay)],
+        capture_output=True,
+        check=True,
+        encoding="utf-8",
+    ).stdout
+    return [doc for doc in yaml.safe_load_all(out) if doc and doc.get("kind") == "IngressRoute"]
+
+
+def _routed_hosts() -> set[str]:
+    """Every literal host an IngressRoute serves in either overlay."""
     hosts: set[str] = set()
     for overlay in ("staging", "prod"):
-        out = subprocess.run(
-            ["kubectl", "kustomize", str(REPO / "infra/k8s/overlays" / overlay)],
-            capture_output=True,
-            check=True,
-            encoding="utf-8",
-        ).stdout
-        for doc in yaml.safe_load_all(out):
-            if doc and doc.get("kind") == "IngressRoute":
-                for route in doc["spec"].get("routes", []):
-                    hosts |= set(re.findall(r"Host\(`([^`]+)`\)", route["match"]))
+        for doc in _ingress_routes(overlay):
+            for route in doc["spec"].get("routes", []):
+                hosts |= set(re.findall(r"Host\(`([^`]+)`\)", route["match"]))
     return hosts
 
 
@@ -143,3 +142,27 @@ def test_every_edge_monitor_checks_a_host_a_route_serves() -> None:
         if urlsplit(m["url"]).hostname not in served
     )
     assert not unserved, f"these monitors check a host no IngressRoute serves: {unserved}"
+
+
+@pytest.mark.parametrize("overlay", ["staging", "prod"])
+def test_the_n8n_health_path_is_answered_by_n8n_not_authelia(overlay: str) -> None:
+    """Behind the ForwardAuth, `/healthz` is a 302 to the portal and the monitor reads Authelia (#3167).
+
+    The rule that serves the n8n monitor's path must carry no `authelia` middleware
+    and proxy to n8n, so the monitor goes DOWN when n8n does, and stays UP when only
+    Authelia is down. Staging never had the ForwardAuth there; its case guards
+    against one being added.
+    """
+    monitor = next(m for m in _seed() if "n8n" in m["key"] and overlay in m["key"])
+    url = urlsplit(monitor["url"])
+    n8n = next(d for d in _ingress_routes(overlay) if d["metadata"]["name"] == "n8n")
+    serving = [
+        r
+        for r in n8n["spec"]["routes"]
+        if f"Host(`{url.hostname}`)" in r["match"] and ("Path" not in r["match"] or f"Path(`{url.path}`)" in r["match"])
+    ]
+    # Traefik picks the highest priority, then the longest rule, so take the rule it would pick.
+    chosen = max(serving, key=lambda r: (r.get("priority", 0), len(r["match"])))
+    names = [m["name"] for m in chosen.get("middlewares", [])]
+    assert "authelia" not in names, f"{overlay}: {chosen['match']} sends {url.path} through Authelia"
+    assert [svc["name"] for svc in chosen["services"]] == ["n8n"], f"{overlay}: {chosen['match']} does not proxy to n8n"
