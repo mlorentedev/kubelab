@@ -214,12 +214,16 @@ def test_any_other_failure_reading_the_permission_raises(status_code: int) -> No
 # --------------------------------------------------------------------------- the declaration
 
 
-def test_imagesensortool_declares_the_agent_as_its_writer() -> None:
+def test_the_agent_is_a_writer_on_exactly_the_declared_repositories() -> None:
+    """Written as a literal set, so widening the agent's write is a visible edit here too.
+
+    `resume` joined on 2026-11-10 (#2578): its agents push through `make gitea-git`,
+    which runs as this account since that change.
+    """
     declared = load_declaration(_common())
-    spec = next(s for s in declared["personal"] if s.name == "imagesensortool")
-    assert spec.writers == (_common()["apps"]["auth"]["identities"]["agent"],)
-    others = [s for org, specs in declared.items() for s in specs if s.name != "imagesensortool"]
-    assert all(not s.writers for s in others), "the agent's write is declared on imagesensortool only"
+    agent = _common()["apps"]["auth"]["identities"]["agent"]
+    with_writers = {f"{org}/{s.name}": s.writers for org, specs in declared.items() for s in specs if s.writers}
+    assert with_writers == {"personal/imagesensortool": (agent,), "personal/resume": (agent,)}
 
 
 def _declaring(writers: list[str]) -> dict[str, Any]:

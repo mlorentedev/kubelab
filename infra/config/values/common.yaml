@@ -1561,6 +1561,10 @@ apps:
             - name: resume
               migrate_from: github:mlorentedev/resume
               private: false
+              # Agents push branches and open PRs here through `make gitea-git`,
+              # which runs as the agent account since #2578.
+              writers:
+                - agent
             - name: imagesensortool
               origin: native
               private: false
