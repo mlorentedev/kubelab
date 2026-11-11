@@ -42,6 +42,8 @@ Declared in `toolkit/features/load_test.py` before the first run:
 | `limiter` | A 429 on the bypass route | Nothing: the route was not in force |
 | `rollout` | The pod changed during the step | Nothing: rerun |
 
+**What the knee measures.** Each step starts k6 fresh, so every connection is new: the first degraded rate is how much connection setup of a cold burst ace1 absorbs (most likely TLS handshakes; not profiled) before k6 starts adding virtual users, not warm request capacity. Read a step's `timeline` before quoting it. A step that fails only in its first 15 to 30 s, and runs at about 1 ms after its connections are open, failed on connection setup (#3102, lesson-736; #3294 reports the two separately).
+
 `lower_bound_only: true` means do not call the figure a limit. `measured: false` means there is no figure at all (a `limiter` or `rollout` stop, or the generator saturating on the first step), and every figure beside it is null. `measured: true` with a null `last_healthy_rps` means the service degraded on the first step: the knee is below `first_degraded_rps`. Runs before #3012 have no `measured` key and read `lower_bound_only: true` in that case too.
 
 Below each ramp, "Where the time went" splits every step by k6's request phases (p95 and p99, in ms). The latency columns above are `http_req_duration`, which leaves out `blocked`: a step whose p99 is low while `blocked` or `connecting` is in seconds waited for connections, not for the backend. A high `waiting` points at Traefik or the backend instead. The phases are in each step's `phases` field in the JSON; runs before #3102 have none.
