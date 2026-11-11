@@ -36,7 +36,7 @@ The components:
    - `CONFIG__GIT_PROVIDER=gitea`
    - `GITEA__URL=https://gitea.kubelab.live`
    - `OPENAI__API_BASE=https://api.nan.builders/v1`
-   - `CONFIG__MODEL=openai/mimo-v2.5`, with `CONFIG__FALLBACK_MODELS=["openai/deepseek-v4-flash"]`
+   - `CONFIG__MODEL=openai/mimo-v2.6-flash`, with `CONFIG__FALLBACK_MODELS=["openai/deepseek-v4-flash"]`
    - `CONFIG__CUSTOM_MODEL_MAX_TOKENS=200000`
    - `CONFIG__PUBLISH_OUTPUT_PROGRESS=false`
 

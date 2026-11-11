@@ -2340,7 +2340,9 @@ apps:
         # models as if they could chat. Open WebUI offers these chat models from
         # NaN and no others; the rest are wired to the feature they serve.
         # Measured 2026-10-11 against NaN: each chat model answers 200;
-        # `minimax-h3` (listed) and `glm5.3` answer 401, outside our tier;
+        # `minimax-h3` (listed) and `glm5.3` answered 401 then. NaN has since
+        # opened every model to every plan (one credit pool, 2026-11); these two
+        # are left out because nothing here is configured for them;
         # `qwen-image-2.1` is a second image model on the same 100-a-month cap.
         models:
           chat:
@@ -2471,7 +2473,8 @@ apps:
           memory_limit: 128m
           cpu_limit: 0.5
         # ADR-068 D7: the key is PR-Agent's, so scheduled and delegated work runs
-        # on an unmetered model; only an interactive turn draws from a quota.
+        # on a model that spends no NaN credits; only an interactive turn draws
+        # from the shared credit pool.
         models:
           default: deepseek-v4-flash
           unmetered: qwen3.6
@@ -2593,7 +2596,7 @@ apps:
         # here and never in the vault zone the agent writes (placement rule). A job
         # is `<name_prefix><key>`; a job without the prefix is not the role's and is
         # never touched. `mode: agent` runs `prompt` as a turn on `cron.model`
-        # (qwen3.6, unmetered); `mode: script` runs a file the role ships under
+        # (qwen3.6, which spends no credits); `mode: script` runs a file the role ships under
         # HERMES_HOME/scripts and delivers its stdout. Delivery is the Slack home
         # channel. Schedules are UTC, five-field cron or `every <n>m|h|d`.
         cron:

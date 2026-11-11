@@ -47,8 +47,8 @@ from another network logs `[UFW BLOCK] ... DPT=8642` in `journalctl -k`
 
 ## Models
 
-- **Primary**: NaN (`models.unmetered` in `common.yaml`), which delegation is
-  pinned to as well.
+- **Primary**: NaN (`models.unmetered` in `common.yaml`, a model that spends no
+  NaN credits; the key keeps its older name), which delegation is pinned to as well.
 - **Fallback**: Anthropic Haiku (`models.fallback` in `common.yaml`), on the key
   of the Console workspace `hermes-kubelab` (non-Default, 20 USD monthly
   limit), in `prod.enc.yaml` as

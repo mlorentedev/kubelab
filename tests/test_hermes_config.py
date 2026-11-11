@@ -124,7 +124,7 @@ def test_no_secret_is_written_into_the_config() -> None:
 
 
 def test_scheduled_and_delegated_work_runs_on_the_unmetered_model() -> None:
-    """ADR-068 D7: the key is PR-Agent's, so only an interactive turn draws a quota."""
+    """ADR-068 D7: the key is PR-Agent's, so only an interactive turn spends credits."""
     config = _config()
     unmetered = yaml.safe_load(COMMON.read_text(encoding="utf-8"))["apps"]["services"]["ai"]["hermes_kubelab"][
         "models"
