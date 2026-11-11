@@ -22,6 +22,7 @@ import re
 import subprocess
 import time
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any
 
@@ -194,13 +195,20 @@ def interval(a: dict[str, Any], b: dict[str, Any], start: float) -> dict[str, An
     return row
 
 
+def _read(reader: Reader) -> Any:
+    try:
+        return reader()
+    except (subprocess.SubprocessError, OSError, ValueError):
+        return None  # one missed read loses two intervals of that source, not the step
+
+
 def _take(readers: Readers, clock: Callable[[], float]) -> dict[str, Any]:
+    """The three sources at once: each ssh read is about a second of handshake, so read in
+    turn they would describe three different seconds."""
     sample: dict[str, Any] = {"t": clock()}
-    for name in ("edge", "node", "generator"):
-        try:
-            sample[name] = getattr(readers, name)()
-        except (subprocess.SubprocessError, OSError, ValueError):
-            sample[name] = None  # one missed read loses two intervals of that source, not the step
+    names = ("edge", "node", "generator")
+    with ThreadPoolExecutor(max_workers=len(names)) as pool:
+        sample |= dict(zip(names, pool.map(lambda n: _read(getattr(readers, n)), names), strict=True))
     return sample
 
 
@@ -216,7 +224,9 @@ def sample_timeline(
         raise ValueError("the timeline needs a positive interval")
     start = clock()
     samples = [_take(readers, clock)]
+    tick = start
     while clock() - start < seconds:
-        sleep(every)
+        tick += every
+        sleep(max(tick - clock(), 0.0))  # the reads' own time comes out of the wait, so rows keep the interval
         samples.append(_take(readers, clock))
     return [interval(a, b, start) for a, b in zip(samples, samples[1:], strict=False)]

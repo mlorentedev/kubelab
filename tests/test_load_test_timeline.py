@@ -297,3 +297,37 @@ def test_the_edge_read_is_bounded_by_the_apiserver_too() -> None:
     lab.timeline_readers("api").edge()
     ((_, args, _),) = calls
     assert f"--request-timeout={lt.TIMELINE_READ_TIMEOUT}s" in args
+
+
+class TestOneInstantPerSample:
+    """Each ssh read costs about a second of handshake; read in turn, the three sources of one
+    row would describe three different seconds, and the rows would drift past the interval."""
+
+    def test_the_three_sources_are_read_at_once(self) -> None:
+        import threading
+
+        meet = threading.Barrier(3, timeout=2)
+
+        def reader() -> dict:
+            try:
+                meet.wait()
+            except threading.BrokenBarrierError as e:
+                raise OSError("read in turn") from e
+            return {}
+
+        sample = tl._take(tl.Readers(reader, reader, reader), lambda: 0.0)
+        assert all(sample[k] is not None for k in ("edge", "node", "generator"))
+
+    def test_the_reads_time_comes_out_of_the_wait(self) -> None:
+        now, slept = [0.0], []
+
+        def slow() -> dict:
+            now[0] += 0.5
+            return {}
+
+        def sleep(s: float) -> None:
+            slept.append(s)
+            now[0] += s
+
+        tl.sample_timeline(tl.Readers(slow, lambda: None, lambda: None), 4, 2, clock=lambda: now[0], sleep=sleep)
+        assert slept == [1.5, 1.5]
