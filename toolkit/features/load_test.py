@@ -30,6 +30,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from toolkit.features import load_test_timeline as tl
+
 # Finer between 800 and 2000: the first run went from healthy at 800 to Traefik
 # OOMKilled at 1600, a cliff too wide to read.
 STEPS = (50, 100, 200, 400, 800, 1000, 1200, 1400, 1600, 2000, 3200, 6400)
@@ -37,6 +39,10 @@ BASELINE_RATE = 25  # below the limiter's 30/s, so it needs no route at all
 STEP_SECONDS = 60
 SETTLE_SECONDS = 15
 TOP_AFTER_SECONDS = 45  # metrics-server averages over about 15 s
+# The sampler outlives the step by this much: k6's container starts a few seconds after
+# the sampler, so the rise and fall of the edge's rate mark where k6 ran (#3102).
+TIMELINE_TAIL_SECONDS = 10
+TIMELINE_READ_TIMEOUT = 8
 
 # Declared before the first run, so the knee cannot be chosen after seeing the data.
 MAX_ERROR_RATE = 0.01
@@ -342,6 +348,24 @@ class Lab:
         out = self.ssh(node, "grep MemAvailable /proc/meminfo")
         return int(out.split()[1]) // 1024
 
+    def timeline_readers(self, workload: str) -> tl.Readers:
+        """Resolve the pods once per step; each sample is then one GET and two ssh reads."""
+        edge = self.pod(EDGE_WORKLOAD, EDGE_NAMESPACE)
+        ports = [p for c in edge["spec"]["containers"] for p in c.get("ports", []) if p.get("name") == "metrics"]
+        if not ports:
+            raise LoadTestRefused(f"{EDGE_WORKLOAD} declares no port named metrics")
+        path = f"/api/v1/namespaces/{EDGE_NAMESPACE}/pods/{edge['metadata']['name']}:{ports[0]['containerPort']}"
+        command = tl.node_command(edge["metadata"]["uid"], self.pod(workload)["metadata"]["uid"])
+        return tl.Readers(
+            edge=lambda: tl.parse_edge(
+                self.kubectl("get", "--raw", f"{path}/proxy/metrics", f"--request-timeout={TIMELINE_READ_TIMEOUT}s")
+            ),
+            node=lambda: tl.parse_node(self.ssh(self.target_node, command, timeout=TIMELINE_READ_TIMEOUT)),
+            generator=lambda: tl.parse_cpu_line(
+                self.ssh(self.generator, "head -1 /proc/stat", timeout=TIMELINE_READ_TIMEOUT)
+            ),
+        )
+
     def top(self, workload: str) -> dict[str, str]:
         out = self.kubectl("top", "pod", "-A", "--no-headers", "-l", f"app.kubernetes.io/name in ({workload},traefik)")
         return {row[1].rsplit("-", 2)[0]: f"{row[2]} {row[3]}" for row in (line.split() for line in out.splitlines())}
@@ -357,22 +381,32 @@ def run_step(
     seconds: int,
     bypass: str | None,
     accept_encoding: str | None = None,
+    sample_seconds: int = 0,
 ) -> dict[str, Any]:
     """One step with the node's figures around it. The generator's CPU decides its validity.
 
     `bypass` is the run's header value, or None for a step under the limiter.
+    `sample_seconds` above zero adds the step's timeline, one row per interval.
     """
     env = k6_env(target, address, rate, seconds, bypass, accept_encoding)
     before = {n: lab.cpu_line(n) for n in (lab.target_node, lab.generator)}
     stat_before = lab.cpu_stat(target.workload)
     pod_before = lab.pod(target.workload)["metadata"]["uid"]
     edge_before = lab.edge_state()
-    with ThreadPoolExecutor(max_workers=2) as pool:
+    readers = lab.timeline_readers(target.workload) if sample_seconds > 0 else None
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        timeline = (
+            pool.submit(tl.sample_timeline, readers, seconds + TIMELINE_TAIL_SECONDS, sample_seconds)
+            if readers is not None
+            else None
+        )
         k6 = pool.submit(lab.ssh, lab.generator, k6_command(image, env), script, seconds + 120)
         mid = pool.submit(_sample_mid_step, lab, target.workload, min(TOP_AFTER_SECONDS, seconds))
         stdout = k6.result()
         top, memory = mid.result()
     step: dict[str, Any] = {"rate": rate, "target": target.name, **parse_summary(stdout)}
+    if timeline is not None:
+        step["timeline"] = timeline.result()
     step["node_cpu"] = cpu_percent(before[lab.target_node], lab.cpu_line(lab.target_node))
     step["generator_cpu"] = cpu_percent(before[lab.generator], lab.cpu_line(lab.generator))
     step["node_mem_available_mb"] = memory
@@ -477,6 +511,7 @@ def run(
     checkpoint: Any = lambda _result: None,
     min_rate: int = 0,
     accept_encoding: str | None = None,
+    sample_seconds: int = 0,
 ) -> dict[str, Any]:
     """Baseline under the limiter, then `repeats` ramps past it. Always removes the route.
 
@@ -490,7 +525,13 @@ def run(
         refuse_unknown_encoding(accept_encoding)
     lab.assert_cluster()
     script = (lab.root / SCRIPT).read_text(encoding="utf-8")
-    facts = {**_runtime_facts(lab, image), "accept_encoding": accept_encoding or "gzip (k6 default)"}
+    if sample_seconds < 0:
+        raise LoadTestRefused("sample seconds must be 0 (off) or positive")
+    facts = {
+        **_runtime_facts(lab, image),
+        "accept_encoding": accept_encoding or "gzip (k6 default)",
+        "sample_seconds": sample_seconds,
+    }
     steps = select_steps(min_rate, max_rate)
     restarts = {t.workload: lab.restarts(t.workload) for t in targets}
     edge_at_start = lab.edge_state()
@@ -506,7 +547,18 @@ def run(
 
     stable_edge()
     baselines = [
-        run_step(lab, image, script, t, address, BASELINE_RATE, seconds, bypass=None, accept_encoding=accept_encoding)
+        run_step(
+            lab,
+            image,
+            script,
+            t,
+            address,
+            BASELINE_RATE,
+            seconds,
+            bypass=None,
+            accept_encoding=accept_encoding,
+            sample_seconds=sample_seconds,
+        )  # fmt: skip
         for t in targets
     ]
     ramps: list[dict[str, Any]] = []
@@ -534,7 +586,7 @@ def run(
                 def one(rate: int, target: Target = target) -> dict[str, Any]:
                     return run_step(
                         lab, image, script, target, address, rate, seconds,
-                        bypass=bypass, accept_encoding=accept_encoding,
+                        bypass=bypass, accept_encoding=accept_encoding, sample_seconds=sample_seconds,
                     )  # fmt: skip
 
                 done = ramp(one, steps, lambda: time.sleep(SETTLE_SECONDS))
