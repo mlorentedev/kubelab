@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.1](https://github.com/mlorentedev/kubelab/compare/api-v1.7.0...api-v1.7.1) (2026-11-11)
+
+
+### Bug Fixes
+
+* **api:** follow Gitea next links written for its public address ([#3246](https://github.com/mlorentedev/kubelab/issues/3246)) ([ac159e0](https://github.com/mlorentedev/kubelab/commit/ac159e080fa4e195cc71c8d6a9e8e6e8cc3f114f))
+
 ## [1.7.0](https://github.com/mlorentedev/kubelab/compare/api-v1.6.0...api-v1.7.0) (2026-11-10)
 
 
