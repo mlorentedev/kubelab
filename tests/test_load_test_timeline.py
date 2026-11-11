@@ -129,6 +129,13 @@ class TestInterval:
             row = tl.interval(a, b, 0.0)
             assert row["edge_cgroup_cores"] + row["workload_cores"] <= row["node_cores"] + 0.01
 
+    def test_a_negative_remainder_is_shown_not_clamped(self) -> None:
+        """/proc/stat and the cgroups are read milliseconds apart; a remainder below zero says so."""
+        n1 = tl.parse_node(_node(1000, 3000, 100, 0, 0))
+        n2 = tl.parse_node(_node(1800, 3200, 100, 4_000_000, 4_500_000))  # 8.5 CPU-seconds in 5 s: 1.7 cores
+        row = tl.interval(self._sample(0.0, None, n1), self._sample(2.0, None, n2), 0.0)
+        assert row["other_cores"] == -0.1
+
     def test_guest_time_is_not_counted_twice_in_the_wall_clock(self) -> None:
         """guest and guest_nice are already inside user and nice, so they are not elapsed time."""
         before = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]

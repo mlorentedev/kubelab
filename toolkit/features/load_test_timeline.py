@@ -187,8 +187,9 @@ def _node_row(a: dict[str, Any], b: dict[str, Any]) -> dict[str, Any]:
             cores[name] = round((b[key] - a[key]) / 1e6 / wall, 2)
     row |= cores
     if len(cores) == 2:
-        # /proc/stat and the cgroups are still read milliseconds apart, so the remainder can dip below zero.
-        row["other_cores"] = round(max(row["node_cores"] - sum(cores.values()), 0.0), 2)
+        # /proc/stat and the cgroups are still read milliseconds apart, so the remainder can dip below
+        # zero. It is not clamped: a negative figure is that skew, and a 0.0 then means zero.
+        row["other_cores"] = round(row["node_cores"] - sum(cores.values()), 2)
     return row
 
 
