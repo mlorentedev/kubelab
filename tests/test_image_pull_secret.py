@@ -47,7 +47,7 @@ def _registry(tmp_path: Path, *entries: str) -> product_registry.Registry:
     return product_registry.load_registry(path)
 
 
-def _entry(name: str = "beta", host: str = HOST, secret: str = "gitea.registry_pull") -> str:
+def _entry(name: str = "beta", host: str = HOST, secret: str = "ghcr.pull_token") -> str:
     return ENTRY.format(name=name, host=host, secret=secret)
 
 
@@ -92,10 +92,16 @@ class TestMappingFromTheRegistry:
 
     def test_two_hosts_that_slug_alike_are_refused(self, tmp_path: Path) -> None:
         registry = _registry(
-            tmp_path, _entry("beta", host="git.example.com"), _entry("gamma", host="git-example.com", secret="x.y")
+            tmp_path, _entry("beta", host="git.example.com"), _entry("gamma", host="git-example.com")
         )
 
         with pytest.raises(ValueError, match="pull-git-example-com"):
+            pull_secret_mappings(registry)
+
+    def test_an_uncatalogued_pull_secret_is_refused_naming_the_product_and_the_key(self, tmp_path: Path) -> None:
+        registry = _registry(tmp_path, _entry("beta", secret="gitea.registry_pull"))
+
+        with pytest.raises(product_registry.RegistryError, match=r"beta names pull_credential\.secret 'gitea\.registry_pull'"):
             pull_secret_mappings(registry)
 
 
@@ -201,3 +207,19 @@ class TestApplySecretsDeliversIt:
         decoded = json.loads(base64.b64decode(doc["data"][".dockerconfigjson"]))
         assert (doc["metadata"]["name"], list(decoded["auths"])) == ("pull-ghcr-io", ["ghcr.io"])
         assert decoded["auths"]["ghcr.io"]["password"] == TOKEN
+
+    def test_an_uncatalogued_pull_secret_is_refused_before_kubectl_runs(
+        self, tmp_path: Path, mocker, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        registry = _registry(tmp_path, _entry(secret="gitea.registry_pull"))
+        monkeypatch.setattr(ks, "load_registry", lambda: registry)
+        cm = mocker.MagicMock()
+        cm.get_env_vars.return_value = {"GITEA_REGISTRY_PULL": TOKEN}
+        cm.get_merged_config.return_value = {}
+        monkeypatch.setattr(ks, "ConfigurationManager", lambda *a, **k: cm)
+        run = mocker.patch.object(ks.subprocess, "run")
+
+        with pytest.raises(product_registry.RegistryError, match="gitea.registry_pull"):
+            ks.apply_secrets("prod", Path("."), dry_run=False)
+
+        run.assert_not_called()
