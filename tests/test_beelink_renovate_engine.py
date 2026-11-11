@@ -66,20 +66,31 @@ def test_the_engine_is_read_at_the_tag_the_config_extends() -> None:
     assert url == ENGINE_URL % _tag_expression()
 
 
-def test_the_fetch_runs_on_the_controller_under_every_tag_and_in_check_mode() -> None:
+def _assert_after(fetch: dict) -> dict:
+    names = [t.get("name") for t in PLAY["pre_tasks"]]
+    return PLAY["pre_tasks"][names.index(fetch["name"]) + 1]
+
+
+def test_the_fetch_runs_on_the_controller_and_in_check_mode() -> None:
+    """Its tags are held complete by `test_pre_task_facts`; `always` is avoided on purpose."""
     (fetch,) = _engine_fetches()
     assert fetch["delegate_to"] == "localhost"
     assert fetch["become"] is False
     assert fetch["check_mode"] is False
     assert fetch["changed_when"] is False
-    assert "always" in fetch["tags"]
+    assert "always" not in fetch["tags"], "an unrelated --tags run would then need GitHub"
+
+
+def test_the_shape_check_runs_whenever_the_fetch_does() -> None:
+    """A tag the fetch has and the assert lacks consumes an unchecked pin."""
+    (fetch,) = _engine_fetches()
+    assert set(fetch["tags"]) <= set(_assert_after(fetch).get("tags") or [])
 
 
 def test_the_engine_shape_is_asserted_before_anything_reads_it() -> None:
     """A changed `engine.json` must fail the play, not render `None:None`."""
-    names = [t.get("name") for t in PLAY["pre_tasks"]]
     (fetch,) = _engine_fetches()
-    following = PLAY["pre_tasks"][names.index(fetch["name"]) + 1]
+    following = _assert_after(fetch)
     body = following.get("ansible.builtin.assert") or following.get("assert")
     assert body, f"the task after the fetch is {following.get('name')!r}, not an assert"
     text = " ".join(body["that"])

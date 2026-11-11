@@ -174,8 +174,10 @@
     # in ci-workflows' renovate/engine.json, read here at the same tag the run's
     # global config extends (renovate_preset_tag below), so one pin moves both.
     # Resolved at provision, on the controller: a version reaches the node only
-    # through a provisioned PR, never at run time. `always` because the role
-    # reads it under any of its tags; raw.githubusercontent needs no token.
+    # through a provisioned PR, never at run time. Tagged with every tag that
+    # selects the beelink_services role (test_pre_task_facts holds the set
+    # complete), not `always`: a run of unrelated tags must not need GitHub.
+    # raw.githubusercontent needs no token.
     # It serves text/plain, so `uri` never fills `.json`: parse `content` (#3261).
     - name: Fetch the Renovate engine pin from ci-workflows
       ansible.builtin.uri:
@@ -187,7 +189,7 @@
       run_once: true
       changed_when: false
       check_mode: false
-      tags: [always]
+      tags: &renovate_engine_tags [boot, cleanup, gitea, renovate, runner, services]
 
     - name: Refuse an engine pin that is not an image and a version
       ansible.builtin.assert:
@@ -200,7 +202,7 @@
           ci-workflows renovate/engine.json at {{ gitea_config.ci.renovate.preset_tag }}
           is not {"image": <repository>, "version": <x.y.z>}: {{ _renovate_engine.content }}
         quiet: true
-      tags: [always]
+      tags: *renovate_engine_tags
 
     - name: Generate Headscale pre-auth key (via VPS)
       command: >
