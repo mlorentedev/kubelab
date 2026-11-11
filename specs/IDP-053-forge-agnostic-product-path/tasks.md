@@ -189,10 +189,10 @@ Depends on S5a and the API note. Files: `toolkit/features/forge_adapter.py`,
 `toolkit/features/gitea_client.py` (new read methods plus their `SCOPE_BY_METHOD` entries),
 `docs/lessons/` or the spec's `verification.md` (the note).
 
-- [ ] [AC8] API note first: run a local Gitea 1.27.3 (as `scope-lab.py` does) and record, for each adapter method, the endpoint, the status codes and the edge cases (unknown vs ambiguous short sha, `compare` direction, raw at a commit, annotated tag). Commit it before code
-- [ ] [AC8] Failing tests with recorded responses: each of the four methods on the Gitea implementation; unknown and ambiguous short sha are told apart; a missing file is an error with ERROR / WHY / FIX
-- [ ] [AC8] Implement on `GiteaClient`; each new method is mapped in `SCOPE_BY_METHOD` and the test that pins the method-to-scope map passes with `read:repository` only
-- [ ] [AC8] The factory selects the Gitea implementation for `forge: gitea`
+- [x] [AC8] API note first: run a local Gitea 1.27.3 (as `scope-lab.py` does) and record, for each adapter method, the endpoint, the status codes and the edge cases (unknown vs ambiguous short sha, `compare` direction, raw at a commit, annotated tag). Commit it before code
+- [x] [AC8] Failing tests with recorded responses: each of the four methods on the Gitea implementation; unknown and ambiguous short sha are told apart; a missing file is an error with ERROR / WHY / FIX
+- [x] [AC8] Implement on `GiteaClient`; each new method is mapped in `SCOPE_BY_METHOD` and the test that pins the method-to-scope map passes with `read:repository` only
+- [x] [AC8] The factory selects the Gitea implementation for `forge: gitea`
 
 Acceptance: `.venv/bin/python -m pytest -q tests/test_forge_adapter.py tests/test_gitea_token_scopes.py tests/test_gitea_token_scope_drift.py`
 
