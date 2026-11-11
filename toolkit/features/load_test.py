@@ -357,7 +357,9 @@ class Lab:
         path = f"/api/v1/namespaces/{EDGE_NAMESPACE}/pods/{edge['metadata']['name']}:{ports[0]['containerPort']}"
         command = tl.node_command(edge["metadata"]["uid"], self.pod(workload)["metadata"]["uid"])
         return tl.Readers(
-            edge=lambda: tl.parse_edge(self.kubectl("get", "--raw", f"{path}/proxy/metrics")),
+            edge=lambda: tl.parse_edge(
+                self.kubectl("get", "--raw", f"{path}/proxy/metrics", f"--request-timeout={TIMELINE_READ_TIMEOUT}s")
+            ),
             node=lambda: tl.parse_node(self.ssh(self.target_node, command, timeout=TIMELINE_READ_TIMEOUT)),
             generator=lambda: tl.parse_cpu_line(
                 self.ssh(self.generator, "head -1 /proc/stat", timeout=TIMELINE_READ_TIMEOUT)

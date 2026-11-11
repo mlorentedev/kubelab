@@ -77,8 +77,20 @@ def _usage_usec(cpu_stat: str) -> int | None:
     return int(found.group(1)) if found else None
 
 
+def _sections(text: str) -> list[str]:
+    """Split on marker LINES: an empty `cat` puts two markers back to back, with no blank line between."""
+    marker = SEPARATOR.strip()
+    parts: list[list[str]] = [[]]
+    for line in text.splitlines():
+        if line == marker:
+            parts.append([])
+        else:
+            parts[-1].append(line)
+    return ["\n".join(part) for part in parts]
+
+
 def parse_node(text: str) -> dict[str, Any]:
-    stat, conntrack, edge, workload = text.split(SEPARATOR)
+    stat, conntrack, edge, workload = _sections(text)
     cpus = {
         fields[0]: [int(x) for x in fields[1:]]
         for fields in (line.split() for line in stat.splitlines())
@@ -106,7 +118,7 @@ def node_command(edge_uid: str, workload_uid: str) -> str:
         paths.append(f"/sys/fs/cgroup/kubepods.slice/kubepods-*/kubepods-*-pod{slug}.slice/cpu.stat")
     sep = SEPARATOR.strip()
     return (
-        f"cat /proc/stat; echo {sep}; cat /proc/sys/net/netfilter/nf_conntrack_count; echo {sep}; "
+        f"cat /proc/stat; echo {sep}; cat /proc/sys/net/netfilter/nf_conntrack_count 2>/dev/null; echo {sep}; "
         f"cat {paths[0]} 2>/dev/null; echo {sep}; cat {paths[1]} 2>/dev/null; true"
     )
 

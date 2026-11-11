@@ -143,7 +143,7 @@ class TestNodeCommand:
     def test_it_reads_both_cgroups_and_tolerates_one_that_is_gone(self) -> None:
         cmd = tl.node_command("0fc274d4-eab5", "1a2b")
         assert "pod0fc274d4_eab5.slice/cpu.stat" in cmd and "pod1a2b.slice/cpu.stat" in cmd
-        assert cmd.count("2>/dev/null") == 2
+        assert cmd.count("2>/dev/null") == 3
 
     @pytest.mark.parametrize("uid", ["a b", "x;rm", "../etc", ""])
     def test_a_uid_that_is_not_a_uid_is_refused(self, uid: str) -> None:
@@ -184,7 +184,7 @@ class TestLabReaders:
         readers = self._lab(calls).timeline_readers("api")
         assert readers.edge()["traefik_open_connections"] == 40
         ((_, args, kwargs),) = calls
-        assert args == ("get", "--raw", "/api/v1/namespaces/kube-system/pods/traefik-abc:9100/proxy/metrics")
+        assert args[:3] == ("get", "--raw", "/api/v1/namespaces/kube-system/pods/traefik-abc:9100/proxy/metrics")
         assert not kwargs.get("impersonate")
 
     def test_node_and_generator_are_one_bounded_ssh_each(self) -> None:
@@ -270,3 +270,30 @@ def test_iowait_is_idle_not_busy() -> None:
     a = {"t": 0.0, "edge": None, "node": None, "generator": [10, 0, 0, 90, 0]}
     b = {"t": 2.0, "edge": None, "node": None, "generator": [30, 0, 0, 150, 20]}
     assert tl.interval(a, b, 0.0)["generator_busy_pct"] == 20.0
+
+
+class TestWhatTheShellReallyWrites:
+    """`echo @@` after an empty `cat` leaves two marker lines back to back, with no blank line
+    between them; the fixture builder above adds one, so these use the literal bytes."""
+
+    STAT = "cpu  1 0 0 9 0 0 0\ncpu0 1 0 0 9 0 0 0\n"
+
+    def test_a_gone_edge_cgroup_loses_only_that_cgroup(self) -> None:
+        node = tl.parse_node(f"{self.STAT}@@\n400\n@@\n@@\nusage_usec 7\nnr_throttled 0\n")
+        assert (node["conntrack"], node["edge_usec"], node["workload_usec"]) == (400, None, 7)
+
+    def test_both_cgroups_and_conntrack_gone_still_reads_the_cpus(self) -> None:
+        node = tl.parse_node(f"{self.STAT}@@\n@@\n@@\n")
+        assert set(node["cpus"]) == {"cpu", "cpu0"}
+        assert (node["conntrack"], node["edge_usec"], node["workload_usec"]) == (None, None, None)
+
+    def test_every_read_but_proc_stat_tolerates_a_missing_file(self) -> None:
+        assert tl.node_command("ab", "cd").count("2>/dev/null") == 3
+
+
+def test_the_edge_read_is_bounded_by_the_apiserver_too() -> None:
+    calls: list = []
+    lab = TestLabReaders()._lab(calls)
+    lab.timeline_readers("api").edge()
+    ((_, args, _),) = calls
+    assert f"--request-timeout={lt.TIMELINE_READ_TIMEOUT}s" in args
