@@ -156,3 +156,24 @@ def test_a_bad_or_missing_zone_list_is_a_hard_failure_even_for_an_optional_entry
         runner=kubectl,
     )
     assert kubectl.manifests == []
+
+
+def test_the_cluster_bootstrap_hands_the_committed_zone_list_to_the_hairpin(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The real boundary: `k8s deploy`'s bootstrap step reads `common.yaml` and the applied hairpin carries it."""
+    from toolkit.cli import infra
+
+    kubectl = _Kubectl()
+    real = infra.render_and_apply
+    monkeypatch.setattr(
+        infra,
+        "render_and_apply",
+        lambda entry, **kw: real(entry, **{**kw, "resolver": lambda host: "100.64.0.10", "runner": kubectl}),
+    )
+
+    assert infra._apply_cluster_bootstrap("kubeconfig", dry_run=True)
+
+    hairpin = next(m for m in kubectl.manifests if "kubelab-hairpin.server" in m)
+    zones = yaml.safe_load(COMMON.read_text(encoding="utf-8"))["networking"]["staging_zones"]
+    assert zones, "no zone listed: nothing was checked"
+    for zone in zones:
+        assert f"{zone}:53 {{\n  forward . 100.64.0.10\n}}\n" in _server(hairpin)
