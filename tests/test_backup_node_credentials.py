@@ -348,6 +348,14 @@ class TestResticPasswords:
         assert bnc.mint_all(node=nodes[0], rotate=True) is True
         assert [body["name"] for body in http.posts()] == [bnc.node_bucket(nodes[0])]
 
+    def test_the_watcher_refuses_to_mint_without_its_refusal_bucket(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """#3217: with the key gone, the watcher's scope cannot be proven, so nothing is minted."""
+        store, http = _held_fleet(monkeypatch, _nodes())
+        del store._cm.get_merged_config.return_value["terraform"]
+
+        assert bnc.mint_all(watcher_only=True, rotate=True) is False
+        assert http.posts() == [] and store.writes == []
+
 
 OUTSIDE = "kubelab-tfstate"
 
@@ -504,6 +512,12 @@ class TestTheRefusalBucket:
         bucket = bnc._bucket_outside_backups(common)
         assert bucket, f"{bnc.OUTSIDE_BUCKET_KEY} resolves to nothing in common.yaml"
         assert bnc.OUTSIDE_BUCKET_KEY.endswith(".bucket"), "the key must name a bucket, not another scalar"
+        # The mint reads prod's merged config: no env file may redirect the bucket.
+        top = bnc.OUTSIDE_BUCKET_KEY.split(".")[0]
+        for env_file in sorted(common_yaml.parent.glob("*.yaml")):
+            if env_file.name != "common.yaml":
+                override = yaml.safe_load(env_file.read_text(encoding="utf-8")) or {}
+                assert top not in override, f"{env_file.name} overrides {top}, which the mint reads"
         assert bucket not in bnc.watcher_buckets(sorted(common["backup"]["sources"])), (
             "the refusal bucket must be one the watcher does not read"
         )
