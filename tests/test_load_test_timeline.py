@@ -263,3 +263,10 @@ class TestRunPassesTheInterval:
     def test_a_negative_interval_is_refused(self, monkeypatch: pytest.MonkeyPatch) -> None:
         with pytest.raises(lt.LoadTestRefused):
             self._run(monkeypatch, -1)
+
+
+def test_iowait_is_idle_not_busy() -> None:
+    """A CPU waiting on disk is free to run Traefik, so it must not read as load."""
+    a = {"t": 0.0, "edge": None, "node": None, "generator": [10, 0, 0, 90, 0]}
+    b = {"t": 2.0, "edge": None, "node": None, "generator": [30, 0, 0, 150, 20]}
+    assert tl.interval(a, b, 0.0)["generator_busy_pct"] == 20.0
