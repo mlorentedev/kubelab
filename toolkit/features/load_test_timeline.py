@@ -97,6 +97,8 @@ def parse_node(text: str) -> dict[str, Any]:
         for fields in (line.split() for line in stat.splitlines())
         if fields and fields[0].startswith("cpu")
     }
+    if "cpu" not in cpus:
+        raise ValueError("no /proc/stat in the node read")  # a failed read, so the sample keeps its other sources
     return {
         "cpus": cpus,
         "conntrack": int(conntrack.strip()) if conntrack.strip() else None,
@@ -106,7 +108,10 @@ def parse_node(text: str) -> dict[str, Any]:
 
 
 def parse_cpu_line(text: str) -> list[int]:
-    return [int(x) for x in text.split()[1:]]
+    fields = text.split()
+    if len(fields) < 5 or fields[0] != "cpu":  # name, then user nice system idle at least
+        raise ValueError(f"not an aggregate /proc/stat line: {text[:40]!r}")
+    return [int(x) for x in fields[1:]]
 
 
 def node_command(edge_uid: str, workload_uid: str) -> str:

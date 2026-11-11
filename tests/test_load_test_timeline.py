@@ -331,3 +331,16 @@ class TestOneInstantPerSample:
 
         tl.sample_timeline(tl.Readers(slow, lambda: None, lambda: None), 4, 2, clock=lambda: now[0], sleep=sleep)
         assert slept == [1.5, 1.5]
+
+
+def test_a_node_read_without_proc_stat_is_a_failed_read_not_a_crash() -> None:
+    """`sh -c` of the real command where /proc is absent prints only the markers. Parsed as a
+    reading, the empty CPU table would raise later in `interval`, outside the guarded read."""
+    with pytest.raises(ValueError):
+        tl.parse_node("@@\n@@\n@@\n")
+
+
+@pytest.mark.parametrize("text", ["", "cpu 1 2 3", "intr 1 2 3 4 5"])
+def test_a_generator_read_that_is_not_a_cpu_line_is_a_failed_read(text: str) -> None:
+    with pytest.raises(ValueError):
+        tl.parse_cpu_line(text)
