@@ -83,7 +83,7 @@ REFUSED = [
     pytest.param(_host("prod", "Mlorente.dev"), "hostnames.prod", id="hostname-uppercase"),
     pytest.param(_host("staging", "localhost"), "hostnames.staging", id="hostname-single-label"),
     pytest.param(_host("dev", "mlorente.test"), "hostnames.dev", id="hostname-unknown-env"),
-    pytest.param(_drop_host("prod"), "hostnames.prod", id="hostname-prod-absent"),
+    pytest.param(_drop_host("staging"), "hostnames.staging", id="hostname-staging-absent"),
     pytest.param(_set("health_path", "healthz"), "health_path", id="health-path-without-slash"),
     pytest.param(_set("auth", "admin"), "auth", id="auth-admin"),
     pytest.param(_drop("schema_version"), "schema_version", id="schema-version-absent"),
@@ -146,6 +146,48 @@ def test_a_duplicate_key_is_refused(tmp_path: Path) -> None:
 
     assert "port" in excinfo.value.error
     assert "duplicate" in excinfo.value.error.lower()
+
+
+def _staging_only() -> dict[str, Any]:
+    data = _web()
+    del data["hostnames"]["prod"]
+    return data
+
+
+def test_a_contract_with_no_prod_hostname_validates(tmp_path: Path) -> None:
+    """IDP-053 AC5: a product with no prod lane yet declares only its staging hostname."""
+    contract = validate_contract(_write(tmp_path, _staging_only()))
+
+    assert contract.hostnames.staging == "staging.mlorente.dev"
+    assert contract.hostnames.prod is None
+
+
+def test_a_null_prod_hostname_means_the_same_as_an_absent_one(tmp_path: Path) -> None:
+    """The model and the published schema agree on null, so a product author's validator and ours do too."""
+    data = _web()
+    data["hostnames"]["prod"] = None
+
+    assert validate_contract(_write(tmp_path, data)).hostnames.prod is None
+
+
+def test_an_empty_hostnames_block_is_still_refused(tmp_path: Path) -> None:
+    """Only prod became optional: a contract with no hostname at all gives the route nothing to serve."""
+    data = _web()
+    data["hostnames"] = {}
+
+    err = _refusal(tmp_path, data)
+
+    assert "hostnames.staging" in err.error
+
+
+def test_the_hostnames_fix_no_longer_demands_both_environments(tmp_path: Path) -> None:
+    """The FIX is what a product author reads; it must not tell a staging-only product to add a prod name."""
+    err = _refusal(tmp_path, _host("staging", "https://staging.mlorente.dev"))
+
+    assert "exactly" not in err.fix
+    assert "hostnames.staging" in err.fix
+    assert "hostnames.prod" in err.fix
+    assert "optional" in err.fix or "when" in err.fix
 
 
 def test_a_refusal_renders_error_why_and_fix(tmp_path: Path) -> None:
