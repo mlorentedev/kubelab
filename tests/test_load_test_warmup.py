@@ -131,6 +131,16 @@ class TestColdVerdict:
         cold = lt.cold_knee(steps)
         assert (cold["last_healthy_rps"], cold["first_degraded_rps"]) == (800, 1000)
 
+    def test_a_cold_burst_that_passes_above_its_first_failure_does_not_move_the_knee(self) -> None:
+        """Run b33d4c96: api's burst failed at 1,400/s and passed at 1,600/s, since the ramp goes on warm."""
+        steps = [
+            {"rate": 1200, "reasons": [], "cold_reasons": [], "vus_peak": 1},
+            {"rate": 1400, "reasons": [], "cold_reasons": ["errors"], "vus_peak": 2},
+            {"rate": 1600, "reasons": [], "cold_reasons": [], "vus_peak": 3},
+        ]
+        cold = lt.cold_knee(steps)
+        assert (cold["last_healthy_rps"], cold["first_degraded_rps"], cold["vus_at_last_healthy"]) == (1200, 1400, 1)
+
     def test_a_step_without_a_warm_up_has_no_cold_knee(self) -> None:
         assert lt.cold_knee([{"rate": 800, "reasons": [], "vus_peak": 1}]) is None
 

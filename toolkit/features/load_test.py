@@ -286,8 +286,10 @@ def knee(steps: list[dict[str, Any]]) -> dict[str, Any]:
     the limiter measured nothing at all, and neither did one a rollout cut short,
     nor one whose generator saturated on the first step, before any healthy step
     gave a figure to bound, nor a ramp with no steps: `measured` is then false and no figure stands beside it."""
-    healthy = [s["rate"] for s in steps if not s["reasons"]]
     bad = next((s for s in steps if s["reasons"]), None)
+    # Only steps below the first failure: a ramp stops there, but the cold burst's steps go on with
+    # the warm verdict, and a burst that passes above its first failure does not move the knee (#3294).
+    healthy = [s["rate"] for s in steps[: steps.index(bad) if bad else len(steps)] if not s["reasons"]]
     reasons = set(bad["reasons"]) if bad else set()
     measured = bool(steps) and not ({"limiter", "rollout"} & reasons or ("generator" in reasons and not healthy))
     last = healthy[-1] if healthy and measured else None
