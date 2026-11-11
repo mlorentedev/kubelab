@@ -112,7 +112,7 @@ class TestBypassRoute:
 
     def test_every_rule_is_scoped_and_keeps_the_real_chain_minus_the_limiter(self) -> None:
         for rule in self._route()["spec"]["routes"]:
-            assert f"Header(`{lt.BYPASS_HEADER}`, `{lt.BYPASS_VALUE}`)" in rule["match"]
+            assert f"Header(`{lt.BYPASS_HEADER}`, `{lt.BYPASS_PLACEHOLDER}`)" in rule["match"]
             assert [m["name"] for m in rule["middlewares"]] == ["secure-headers", "error-pages"]
 
     def test_its_hosts_and_paths_are_the_targets(self) -> None:
@@ -122,8 +122,65 @@ class TestBypassRoute:
 
     def test_only_the_ramp_sends_the_header(self) -> None:
         target = lt.build_targets(STAGING, PROD)[0]
-        assert lt.BYPASS_HEADER not in lt.k6_env(target, "10.0.0.2", 25, 60, bypass=False).values()
-        assert lt.k6_env(target, "10.0.0.2", 100, 60, bypass=True)["LT_BYPASS_HEADER"] == lt.BYPASS_HEADER
+        assert lt.BYPASS_HEADER not in lt.k6_env(target, "10.0.0.2", 25, 60, bypass=None).values()
+        env = lt.k6_env(target, "10.0.0.2", 100, 60, bypass="f" * 32)
+        assert (env["LT_BYPASS_HEADER"], env["LT_BYPASS_VALUE"]) == (lt.BYPASS_HEADER, "f" * 32)
+
+
+class TestBypassValueLivesOneRun:
+    """A route a dead run leaves behind must bypass nothing anyone can use (#3012).
+
+    The header value used to be `ops-054`, in git, so a leftover route let anyone on the
+    VPN past the limiter on two staging hosts until someone ran the infra suite.
+    """
+
+    def test_each_run_draws_a_new_unguessable_value(self) -> None:
+        values = {lt.new_bypass_value() for _ in range(20)}
+        assert len(values) == 20
+        assert all(re.fullmatch(r"[0-9a-f]{32}", v) for v in values)
+
+    def test_the_rendered_route_carries_the_value_in_every_rule(self) -> None:
+        rendered = yaml.safe_load(lt.render_route(ROUTE.read_text(encoding="utf-8"), "a" * 32))
+        for rule in rendered["spec"]["routes"]:
+            assert f"Header(`{lt.BYPASS_HEADER}`, `{'a' * 32}`)" in rule["match"]
+        assert lt.BYPASS_PLACEHOLDER not in json.dumps(rendered)
+
+    @pytest.mark.parametrize("value", ["ops-054", "", "A" * 32, "a" * 31, "a`) || Host(`x"])
+    def test_a_value_that_is_not_a_drawn_one_is_refused(self, value: str) -> None:
+        with pytest.raises(lt.LoadTestRefused):
+            lt.render_route(ROUTE.read_text(encoding="utf-8"), value)
+
+    def test_a_manifest_without_the_placeholder_is_refused(self) -> None:
+        with pytest.raises(lt.LoadTestRefused):
+            lt.render_route("kind: IngressRoute\n", "a" * 32)
+
+    def test_arm_applies_the_rendered_route_not_the_file(self) -> None:
+        lab = lt.Lab(REPO, "kc", "op", "node", "gen")
+        calls: list[tuple] = []
+        lab.kubectl = lambda *a, **k: calls.append((a, k)) or ""  # type: ignore[method-assign]
+        lab.arm("b" * 32)
+        ((args, kwargs),) = calls
+        assert args == ("apply", "-f", "-")
+        assert kwargs["impersonate"] is True
+        assert f"`{'b' * 32}`" in kwargs["stdin"] and lt.BYPASS_PLACEHOLDER not in kwargs["stdin"]
+
+    def test_the_run_sends_what_it_armed_and_records_none_of_it(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        sent: list[str | None] = []
+
+        def step(*_a: object, bypass: str | None, **_k: object) -> dict:
+            sent.append(bypass)
+            return {**_step(), "reasons": ["errors"]}
+
+        monkeypatch.setattr(lt, "run_step", step)
+        monkeypatch.setattr(lt, "_runtime_facts", lambda *_: {})
+        monkeypatch.setattr(lt, "wait_for_stable_edge", lambda *_: None)
+        monkeypatch.setattr("time.sleep", lambda _: None)
+        lab = _DyingLab()
+        target = lt.Target("api", "api.example", "/health", "api")
+        result = lt.run(lab, "img", (target,), "1.2.3.4", 1, 1, 50)
+        assert sent[0] is None  # the baseline runs under the limiter
+        assert set(sent[1:]) == {lab.armed}
+        assert lab.armed not in json.dumps(result)
 
 
 class TestAcceptEncoding:
@@ -132,11 +189,11 @@ class TestAcceptEncoding:
 
     def test_k6s_own_default_sends_nothing_extra(self) -> None:
         target = lt.build_targets(STAGING, PROD)[1]
-        assert "LT_ACCEPT_ENCODING" not in lt.k6_env(target, "10.0.0.2", 800, 60, bypass=True)
+        assert "LT_ACCEPT_ENCODING" not in lt.k6_env(target, "10.0.0.2", 800, 60, bypass="f" * 32)
 
     def test_a_declared_encoding_reaches_k6(self) -> None:
         target = lt.build_targets(STAGING, PROD)[1]
-        env = lt.k6_env(target, "10.0.0.2", 800, 60, bypass=True, accept_encoding="identity")
+        env = lt.k6_env(target, "10.0.0.2", 800, 60, bypass="f" * 32, accept_encoding="identity")
         assert env["LT_ACCEPT_ENCODING"] == "identity"
 
     @pytest.mark.parametrize("value", ["br", "identity;q=1", "gzip identity", "x -e LT_HOST=evil", ""])
@@ -394,9 +451,12 @@ class _DyingLab:
 
     def __init__(self) -> None:
         self.disarmed = False
+        self.armed = ""
 
     def assert_cluster(self) -> None: ...
-    def arm(self) -> None: ...
+
+    def arm(self, value: str) -> None:
+        self.armed = value
 
     def disarm(self) -> None:
         self.disarmed = True

@@ -11,10 +11,12 @@
 # edited: every request without the header below keeps going through the limiter.
 #
 # Same hosts as the real routes, so no new DNS name or certificate. Same chain as
-# the real routes minus `rate-limit`. The header is not a secret: the object lives
-# for one run on a staging edge reachable only from the VPN and the LAN. If a run
-# dies before its cleanup, tests/infra/test_rate_limit.py fails on this route, and
-# `make load-test-clear ENV=staging` removes it.
+# the real routes minus `rate-limit`. The header's value is not a secret, but it is
+# not reusable either (#3012): `arm()` draws a fresh one per run, renders it over the
+# placeholder below and applies the result from stdin, and nothing records it. A
+# route a dead run leaves behind therefore bypasses nothing anyone can send, and the
+# next run's apply replaces it. tests/infra/test_rate_limit.py still fails on a
+# leftover, and `make load-test-clear ENV=staging` removes it.
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
@@ -27,7 +29,7 @@ spec:
   entryPoints:
     - websecure
   routes:
-    - match: Host(`api.staging.kubelab.live`) && Path(`/health`) && Header(`X-Load-Test`, `ops-054`)
+    - match: Host(`api.staging.kubelab.live`) && Path(`/health`) && Header(`X-Load-Test`, `__LOAD_TEST_BYPASS_VALUE__`)
       kind: Rule
       priority: 1000
       services:
@@ -36,7 +38,7 @@ spec:
       middlewares:
         - name: secure-headers
         - name: error-pages
-    - match: Host(`staging.mlorente.dev`) && Path(`/`) && Header(`X-Load-Test`, `ops-054`)
+    - match: Host(`staging.mlorente.dev`) && Path(`/`) && Header(`X-Load-Test`, `__LOAD_TEST_BYPASS_VALUE__`)
       kind: Rule
       priority: 1000
       services:
