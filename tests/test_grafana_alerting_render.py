@@ -121,12 +121,15 @@ def _without_tier(policy: dict) -> dict:
 
     A route that mirrors the root's receiver (TOOL-093: the failure alert must still
     page when a second route is added) carries the tier too, so it varies per
-    environment exactly as the root does and is compared without it.
+    environment exactly as the root does and is compared without it. So does a route
+    pinned to one tier everywhere (BACKUP-081 keeps its alert on the log tier): in
+    staging it reads as the root's own. Where each such alert lands is pinned by its
+    own test (`test_backup_check_budget.py`, `test_forge_review_failed_route.py`).
     """
-    tier = policy["receiver"]
+    tiers = set(EXPECTED_RECEIVER.values())
     out = {k: v for k, v in policy.items() if k not in ("receiver", "routes")}
     out["routes"] = [
-        {k: v for k, v in route.items() if k != "receiver"} if route["receiver"] == tier else route
+        {k: v for k, v in route.items() if k != "receiver"} if route["receiver"] in tiers else route
         for route in policy.get("routes", [])
     ]
     return out
