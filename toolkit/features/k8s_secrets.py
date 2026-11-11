@@ -266,7 +266,8 @@ def pull_secret_mappings(registry: Registry) -> list[SecretMapping]:
     by_host = {
         entry.image_host: entry.pull_credential
         for entry in registry.products.values()
-        if entry.private and entry.pull_credential is not None and entry.image_host is not None
+        # A pull_credential exists only on a private entry: the registry refuses it otherwise.
+        if entry.pull_credential is not None and entry.image_host is not None
     }
     mappings: list[SecretMapping] = []
     hosts: dict[str, str] = {}
