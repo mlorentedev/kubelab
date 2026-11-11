@@ -23,11 +23,10 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 
-# Shipped code only. Workflow steps do run under pipefail (`shell: bash` is
-# `bash -eo pipefail`); they are excluded here only because CI workflows sit
-# outside the merge grant, and their three sites are #3227. specs/ holds
-# one-off probes from closed work.
-ROOTS = ("infra", "toolkit", "edge", "scripts")
+# Shipped code only, CI workflows included: their steps set pipefail
+# themselves (`set -euo pipefail`), and a quiet grep there misread a label it
+# had just written (#3227). specs/ holds one-off probes from closed work.
+ROOTS = ("infra", "toolkit", "edge", "scripts", ".github/workflows")
 QUIET_AFTER_PIPE = re.compile(r"\|\s*grep\s+(?:-[A-Za-z]*q[A-Za-z]*|--quiet|--silent)\b")
 
 
@@ -89,6 +88,17 @@ def test_the_detector_sees_the_files_and_matches_the_known_forms() -> None:
     scanned = {str(p.relative_to(REPO)) for p in _tracked()}
     assert "Makefile" in scanned
     assert "infra/ansible/roles/node_maintenance/templates/kubelab-maintenance.sh.j2" in scanned
+    assert ".github/workflows/pr-agent.yml" in scanned
+    # The scan keys on "pipefail" in the file; both workflows #3227 fixed must pass it.
+    texts = {
+        f: (REPO / f).read_text(encoding="utf-8")
+        for f in (
+            ".github/workflows/pr-agent.yml",
+            ".github/workflows/dependabot-declare-unreviewed.yml",
+        )
+    }
+    for name, text in texts.items():
+        assert name in scanned and "pipefail" in text, name
     for bad in (
         """if ! printf '%s\\n' "$HELD_BEFORE" | grep -qx 'docker-ce'; then""",
         """tail -n 5 "$f" | grep -qxF -- 'done'""",
