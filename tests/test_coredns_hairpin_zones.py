@@ -7,6 +7,7 @@ stay hand-written until a product declares prod.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -23,6 +24,15 @@ ROOT = Path(__file__).resolve().parent.parent
 MANIFEST = ROOT / "infra/k8s/base/edge/coredns-custom.yaml"
 COMMON = ROOT / "infra/config/values/common.yaml"
 ZONES = ["staging.kubelab.live", "staging.mlorente.dev"]
+#: Addresses come from their single source, never a literal (CLAUDE.md: no hardcoded IPs in tests).
+#: The stub resolver answers with rpi4's own address, as the real resolver would.
+RPI4_IP = yaml.safe_load(COMMON.read_text(encoding="utf-8"))["networking"]["nodes"]["rpi4"]["tailscale_ip"]
+#: K3s's cluster DNS has no key in ``common.yaml``; the manifest is its one home, so it is read from
+#: the prod blocks' own ``forward`` line, which these tests assert the staging render leaves alone.
+CLUSTER_DNS = re.search(
+    r"traefik\.kube-system\.svc\.cluster\.local answer auto\n\s+forward \. (\S+)",
+    MANIFEST.read_text(encoding="utf-8"),
+).group(1)  # type: ignore[union-attr]
 
 STAGING_BLOCKS = """\
 staging.kubelab.live:53 {
@@ -35,13 +45,14 @@ staging.mlorente.dev:53 {
 PROD_BLOCKS = """\
 kubelab.live:53 {
   rewrite name regex (.*)\\.kubelab\\.live traefik.kube-system.svc.cluster.local answer auto
-  forward . 10.43.0.10
+  forward . CLUSTER_DNS
 }
 mlorente.dev:53 {
   rewrite name regex (.*)\\.mlorente\\.dev traefik.kube-system.svc.cluster.local answer auto
-  forward . 10.43.0.10
+  forward . CLUSTER_DNS
 }
 """
+PROD_BLOCKS = PROD_BLOCKS.replace("CLUSTER_DNS", CLUSTER_DNS)
 #: The committed hairpin before the staging blocks were templated, byte for byte.
 TODAYS_SERVER = STAGING_BLOCKS + PROD_BLOCKS
 THIRD_BLOCK = "staging.example-product.test:53 {\n  forward . RESOLVE_RPI4_TAILSCALE_IP\n}\n"
@@ -134,11 +145,11 @@ def test_the_applied_manifest_carries_every_zone_and_the_resolved_ip() -> None:
         kubeconfig="k",
         project_root=ROOT,
         staging_zones=[*ZONES, "staging.example-product.test"],
-        resolver=lambda host: "100.64.0.10",
+        resolver=lambda host: RPI4_IP,
         runner=kubectl,
     )
     server = _server(kubectl.manifests[-1])
-    assert "staging.example-product.test:53 {\n  forward . 100.64.0.10\n}\n" in server
+    assert f"staging.example-product.test:53 {{\n  forward . {RPI4_IP}\n}}\n" in server
     assert "RESOLVE_" not in server and "STAGING_ZONE_BLOCKS" not in server
 
 
@@ -152,7 +163,7 @@ def test_a_bad_or_missing_zone_list_is_a_hard_failure_even_for_an_optional_entry
         kubeconfig="k",
         project_root=ROOT,
         staging_zones=zones,
-        resolver=lambda host: "100.64.0.10",
+        resolver=lambda host: RPI4_IP,
         runner=kubectl,
     )
     assert kubectl.manifests == []
@@ -167,7 +178,7 @@ def test_the_cluster_bootstrap_hands_the_committed_zone_list_to_the_hairpin(monk
     monkeypatch.setattr(
         infra,
         "render_and_apply",
-        lambda entry, **kw: real(entry, **{**kw, "resolver": lambda host: "100.64.0.10", "runner": kubectl}),
+        lambda entry, **kw: real(entry, **{**kw, "resolver": lambda host: RPI4_IP, "runner": kubectl}),
     )
 
     assert infra._apply_cluster_bootstrap("kubeconfig", dry_run=True)
@@ -176,4 +187,4 @@ def test_the_cluster_bootstrap_hands_the_committed_zone_list_to_the_hairpin(monk
     zones = yaml.safe_load(COMMON.read_text(encoding="utf-8"))["networking"]["staging_zones"]
     assert zones, "no zone listed: nothing was checked"
     for zone in zones:
-        assert f"{zone}:53 {{\n  forward . 100.64.0.10\n}}\n" in _server(hairpin)
+        assert f"{zone}:53 {{\n  forward . {RPI4_IP}\n}}\n" in _server(hairpin)
