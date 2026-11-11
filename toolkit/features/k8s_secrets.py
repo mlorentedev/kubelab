@@ -18,7 +18,7 @@ from toolkit.config.constants import is_placeholder
 from toolkit.core.logging import logger
 from toolkit.features.configuration import ConfigurationManager, UserPasswordHashMissing, resolve_user_identity
 from toolkit.features.k8s_kubeconfig import output_path
-from toolkit.features.product_registry import Registry, load_registry
+from toolkit.features.product_registry import Registry, check_pull_secrets_catalogued, load_registry
 from toolkit.features.secret_consumers import restart_consumers
 
 
@@ -259,10 +259,14 @@ def pull_secret_mappings(registry: Registry) -> list[SecretMapping]:
 
     Generated, so a new private product adds no entry here. The registry already
     refuses two credentials for one host; two hosts that slug alike would still
-    collide on a name, so those are refused here.
+    collide on a name, so those are refused here. A token that is not a catalog
+    key is refused before anything renders (#3297): its environments come from
+    the catalog entry, and with none it would be looked up in every environment.
     """
     from toolkit.features.secrets_manager import SECRET_CATALOG
 
+    envs_by_key = {spec.key_path: spec.envs for spec in SECRET_CATALOG}
+    check_pull_secrets_catalogued(registry, envs_by_key)
     by_host = {
         entry.image_host: entry.pull_credential
         for entry in registry.products.values()
@@ -276,13 +280,12 @@ def pull_secret_mappings(registry: Registry) -> list[SecretMapping]:
         if name in hosts:
             raise ValueError(f"registry hosts {hosts[name]} and {host} both name the pull Secret {name}")
         hosts[name] = host
-        # Scoped as the token is: a mapping for a key catalogued for one env must not fail the others.
-        envs = next((spec.envs for spec in SECRET_CATALOG if spec.key_path == credential.secret), None)
         mappings.append(
             SecretMapping(
                 name=name,
                 keys={_TOKEN_KEY: credential.secret.upper().replace(".", "_")},
-                envs=envs,
+                # Scoped as the token is: a mapping for a key catalogued for one env must not fail the others.
+                envs=envs_by_key[credential.secret],
                 secret_type=DOCKERCONFIGJSON,
                 registry_login=(host, credential.username),
             )
