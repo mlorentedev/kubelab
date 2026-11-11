@@ -23,6 +23,9 @@ from toolkit.features.product_contract import ContractError
 DIGEST = "sha256:" + "a" * 64
 OTHER = "sha256:" + "b" * 64
 PULL_TOKEN = "ghp_not-a-real-token"  # noqa: S105 - a fixture, not a credential
+BOT = "deploy-bot"
+READER = "registry-reader"
+STALE_TOKEN = "fixture-rotated-away"  # noqa: S105 - a fixture, not a credential
 BEARER = "bearer-issued-by-the-registry"
 SHA = "661a205c0ffee0ddba11ca5cadeba5eba11fade1"
 VERSION = "1.4.0"
@@ -76,23 +79,23 @@ def _oci(kind: str, digests: dict[str, str], login: tuple[str, str] | None = Non
     return path, _Oci(host, realm, digests, login=login)
 
 
-CREDENTIAL = registry.RegistryCredential("deploy-bot", PULL_TOKEN)
+CREDENTIAL = registry.RegistryCredential(BOT, PULL_TOKEN)
 
 
 @pytest.mark.parametrize("kind", ["ghcr", "gitea"])
 class TestAuthenticatedManifestDigest:
     def test_the_digest_is_read_with_the_catalogued_credential(self, kind: str) -> None:
-        path, http = _oci(kind, {VERSION: DIGEST}, login=("deploy-bot", PULL_TOKEN))
+        path, http = _oci(kind, {VERSION: DIGEST}, login=(BOT, PULL_TOKEN))
 
         assert registry.tag_digest(path, "web", VERSION, CREDENTIAL, http=http) == DIGEST
 
     def test_the_credential_goes_to_the_token_endpoint_and_a_bearer_goes_to_the_manifest(self, kind: str) -> None:
-        path, http = _oci(kind, {VERSION: DIGEST}, login=("deploy-bot", PULL_TOKEN))
+        path, http = _oci(kind, {VERSION: DIGEST}, login=(BOT, PULL_TOKEN))
 
         registry.tag_digest(path, "web", VERSION, CREDENTIAL, http=http)
 
         (token_call,) = [c for c in http.calls if c[1].startswith(http.realm)]
-        assert token_call[2]["auth"] == ("deploy-bot", PULL_TOKEN)
+        assert token_call[2]["auth"] == (BOT, PULL_TOKEN)
         owner = path.split("/", 1)[1]
         assert token_call[2]["params"]["scope"] == f"repository:{owner}/web:pull"
         for _, url, kwargs in http.manifest_reads():
@@ -102,7 +105,7 @@ class TestAuthenticatedManifestDigest:
     def test_a_refused_login_is_none_naming_the_registry_and_never_the_token(
         self, kind: str, warnings: MagicMock
     ) -> None:
-        path, http = _oci(kind, {VERSION: DIGEST}, login=("deploy-bot", "something-else"))
+        path, http = _oci(kind, {VERSION: DIGEST}, login=(BOT, STALE_TOKEN))
 
         assert registry.tag_digest(path, "web", VERSION, CREDENTIAL, http=http) is None
 
@@ -163,6 +166,103 @@ class TestARegistryThatCannotBeRead:
         assert "ghcr.io" in warnings.call_args.args[0]
 
 
+def _challenging(challenge: str, seen: list[str], *, token_status: int = 200) -> Any:
+    """A registry that answers every manifest read with ``challenge`` and every GET with a token body."""
+
+    def http(method: str, url: str, **kwargs: Any) -> httpx.Response:
+        seen.append(f"{method} {url}")
+        if method == "GET":
+            return httpx.Response(token_status, json={"token": BEARER})
+        return httpx.Response(401, headers={"www-authenticate": challenge})
+
+    return http
+
+
+class TestTheCredentialGoesOnlyWhereTheRegistryItselfAsks:
+    @pytest.mark.parametrize(
+        "realm",
+        [
+            "http://ghcr.io/token",
+            "https://ghcr.io:8443/token",
+            "https://user:pass@ghcr.io/token",
+            "https://ghcr.io.elsewhere.example/token",
+        ],
+        ids=["plain http", "another port", "userinfo", "lookalike host"],
+    )
+    def test_a_realm_that_is_not_the_registrys_own_https_endpoint_gets_no_request(self, realm: str) -> None:
+        seen: list[str] = []
+        http = _challenging(f'Bearer realm="{realm}",service="ghcr.io"', seen)
+
+        assert registry.tag_digest("ghcr.io/acme", "web", VERSION, CREDENTIAL, http=http) is None
+
+        assert [call.split(" ", 1)[0] for call in seen] == ["HEAD"], "the credential must not leave the registry"
+
+    def test_a_registry_declared_with_a_port_is_matched_with_that_port(self) -> None:
+        seen: list[str] = []
+        http = _challenging('Bearer realm="https://reg.example:5443/token",service="reg.example"', seen)
+
+        registry.tag_digest("reg.example:5443/acme", "web", VERSION, CREDENTIAL, http=http)
+
+        assert seen[1] == "GET https://reg.example:5443/token"
+
+    def test_the_default_port_of_the_realm_matches_a_declared_443(self) -> None:
+        seen: list[str] = []
+        http = _challenging('Bearer realm="https://reg.example/token",service="reg.example"', seen)
+
+        registry.tag_digest("reg.example:443/acme", "web", VERSION, CREDENTIAL, http=http)
+
+        assert seen[1] == "GET https://reg.example/token"
+
+    @pytest.mark.parametrize(
+        "challenge",
+        [
+            'Basic realm="https://ghcr.io/token"',
+            'Basic realm="x", Bearer realm="https://ghcr.io/token",service="ghcr.io"',
+        ],
+        ids=["basic only", "basic listed first"],
+    )
+    def test_a_basic_challenge_is_refused_not_answered(self, challenge: str) -> None:
+        seen: list[str] = []
+
+        assert (
+            registry.tag_digest("ghcr.io/acme", "web", VERSION, CREDENTIAL, http=_challenging(challenge, seen)) is None
+        )
+
+        assert [call.split(" ", 1)[0] for call in seen] == ["HEAD"]
+
+    @pytest.mark.parametrize("status", [401, 403, 500])
+    def test_a_token_endpoint_that_refuses_is_refused_even_with_a_token_in_its_body(self, status: int) -> None:
+        seen: list[str] = []
+        challenge = 'Bearer realm="https://ghcr.io/token",service="ghcr.io"'
+
+        http = _challenging(challenge, seen, token_status=status)
+
+        assert registry.tag_digest("ghcr.io/acme", "web", VERSION, CREDENTIAL, http=http) is None
+        assert [call.split(" ", 1)[0] for call in seen] == ["HEAD", "GET"], "no manifest read may follow a refusal"
+
+    @pytest.mark.parametrize("status", [206, 301, 302, 307])
+    def test_a_manifest_answer_that_is_not_200_is_unread_even_with_a_digest_header(self, status: int) -> None:
+        def http(method: str, url: str, **kwargs: Any) -> httpx.Response:
+            return httpx.Response(status, headers={"docker-content-digest": DIGEST})
+
+        assert registry.tag_digest("ghcr.io/acme", "web", VERSION, http=http) is None
+
+    @pytest.mark.parametrize(
+        "digest", ["sha256:", "sha256:zzz", "sha256:" + "a" * 63, "sha256:" + "A" * 64, DIGEST + "0"]
+    )
+    def test_a_digest_is_sixty_four_lowercase_hex_digits_not_a_prefix(self, digest: str) -> None:
+        def http(method: str, url: str, **kwargs: Any) -> httpx.Response:
+            return httpx.Response(200, headers={"docker-content-digest": digest})
+
+        assert registry.tag_digest("ghcr.io/acme", "web", VERSION, http=http) is None
+
+    def test_the_hub_digest_is_held_to_the_same_shape(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        reply = MagicMock(status_code=200, **{"json.return_value": {"digest": "sha256:zzz"}})
+        monkeypatch.setattr(registry.httpx, "get", MagicMock(return_value=reply))
+
+        assert registry.tag_digest("docker.io/ns", "kubelab-web", VERSION) is None
+
+
 class TestTheCatalogSecret:
     def test_it_reads_the_key_through_the_configuration_manager(self, monkeypatch: pytest.MonkeyPatch) -> None:
         manager = MagicMock()
@@ -215,7 +315,7 @@ class TestTheReleaseProofOnAPrivateRegistry:
             "ghcr.io",
             "https://ghcr.io/token",
             {VERSION: DIGEST, f"sha-{SHA[:7]}": DIGEST},
-            login=("deploy-bot", PULL_TOKEN),
+            login=(BOT, PULL_TOKEN),
         )
         secret = _secret(PULL_TOKEN)
 
@@ -227,7 +327,7 @@ class TestTheReleaseProofOnAPrivateRegistry:
     def test_a_sha_tag_of_either_length_is_proven(self, private_registry: Path, length: int) -> None:
         """#2627 AC1: a check fixed at 7 hex digits fails the 10-digit product."""
         digests = {VERSION: DIGEST, f"sha-{SHA[:length]}": DIGEST}
-        http = _Oci("ghcr.io", "https://ghcr.io/token", digests, login=("deploy-bot", PULL_TOKEN))
+        http = _Oci("ghcr.io", "https://ghcr.io/token", digests, login=(BOT, PULL_TOKEN))
 
         assert _prove(private_registry, http, _secret(PULL_TOKEN)) == DIGEST
 
@@ -235,7 +335,7 @@ class TestTheReleaseProofOnAPrivateRegistry:
 
     def test_a_tag_naming_another_build_is_refused(self, private_registry: Path) -> None:
         digests = {VERSION: DIGEST, f"sha-{SHA[:7]}": OTHER}
-        http = _Oci("ghcr.io", "https://ghcr.io/token", digests, login=("deploy-bot", PULL_TOKEN))
+        http = _Oci("ghcr.io", "https://ghcr.io/token", digests, login=(BOT, PULL_TOKEN))
 
         with pytest.raises(ContractError) as refused:
             _prove(private_registry, http, _secret(PULL_TOKEN))
@@ -259,7 +359,7 @@ class TestTheReleaseProofOnAPrivateRegistry:
         http.assert_not_called()
 
     def test_a_refused_login_names_the_registry_and_the_login_not_a_missing_tag(self, private_registry: Path) -> None:
-        http = _Oci("ghcr.io", "https://ghcr.io/token", {VERSION: DIGEST}, login=("deploy-bot", "rotated-away"))
+        http = _Oci("ghcr.io", "https://ghcr.io/token", {VERSION: DIGEST}, login=(BOT, STALE_TOKEN))
 
         with pytest.raises(ContractError) as refused:
             _prove(private_registry, http, _secret(PULL_TOKEN))
@@ -341,9 +441,7 @@ def test_release_contract_on_a_gitea_product_reads_through_the_adapter_and_the_p
     monkeypatch.setattr("toolkit.features.forge_adapter.GiteaClient", _GiteaReads)
     _GiteaReads.instances.clear()
     realm = "https://gitea.kubelab.live/v2/token"
-    http = _Oci(
-        "gitea.kubelab.live", realm, {VERSION: DIGEST, f"sha-{SHA[:10]}": DIGEST}, login=("registry-reader", PULL_TOKEN)
-    )
+    http = _Oci("gitea.kubelab.live", realm, {VERSION: DIGEST, f"sha-{SHA[:10]}": DIGEST}, login=(READER, PULL_TOKEN))
     secret = _secret(PULL_TOKEN)
     out = tmp_path / "out" / "beta.yaml"
 

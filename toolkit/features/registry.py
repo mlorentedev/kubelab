@@ -22,7 +22,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import SplitResult, urlsplit
 
 import httpx
 import yaml
@@ -175,10 +175,18 @@ def tag_digest(
         return None
     if resp.status_code != 200:
         return None
-    digest = resp.json().get("digest")
-    return digest if isinstance(digest, str) and digest.startswith("sha256:") else None
+    return _digest_or_none(resp.json().get("digest"))
 
 
+_DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
+
+
+def _digest_or_none(value: object) -> str | None:
+    """``value`` when it is a whole ``sha256:<64 lowercase hex>`` digest: a prefix match would let ``sha256:`` pass."""
+    return value if isinstance(value, str) and _DIGEST.fullmatch(value) else None
+
+
+_HTTPS_PORT = 443
 _CHALLENGE_PARAM = re.compile(r'(\w+)="([^"]*)"')
 
 
@@ -204,10 +212,9 @@ def _oci_tag_digest(
     except httpx.HTTPError as exc:
         logger.warning(f"{subject} is unread, the registry is unreachable ({exc})")
         return None
-    digest = resp.headers.get("docker-content-digest", "")
-    if resp.status_code != 200 or not digest.startswith("sha256:"):
+    digest = _digest_or_none(resp.headers.get("docker-content-digest")) if resp.status_code == 200 else None
+    if digest is None:
         logger.warning(f"{subject} is unread, the registry answered HTTP {resp.status_code} with no sha256 digest")
-        return None
     return digest
 
 
@@ -222,6 +229,20 @@ def _token_of(resp: httpx.Response) -> str | None:
     return token if isinstance(token, str) and token else None
 
 
+def _is_own_endpoint(realm: SplitResult, own: SplitResult) -> bool:
+    try:
+        ports = (realm.port or _HTTPS_PORT, own.port or _HTTPS_PORT)
+    except ValueError:  # a port that is not a number
+        return False
+    return (
+        realm.scheme == "https"
+        and realm.hostname == own.hostname
+        and ports[0] == ports[1]
+        and realm.username is None
+        and realm.password is None
+    )
+
+
 def _bearer_token(
     host: str,
     repository: str,
@@ -231,12 +252,14 @@ def _bearer_token(
 ) -> str | None:
     """Trade ``credential`` for a pull token at the realm the registry names, or ``None`` with a warning.
 
-    The credential goes only to a realm on the registry's own host over https: the realm
-    comes from the registry's answer, so an unchecked one would send the long-lived token wherever it points.
+    The credential goes only to an https realm on the registry's own host and port, with no
+    userinfo: the realm comes from the registry's answer, so an unchecked one would send the
+    long-lived token wherever it points. ``host`` may carry a port (``host:5443``).
     """
     params = dict(_CHALLENGE_PARAM.findall(challenge))
     realm = urlsplit(params.get("realm", ""))
-    if not challenge.lower().startswith("bearer ") or realm.scheme != "https" or realm.hostname != host:
+    own = urlsplit(f"https://{host}")
+    if not challenge.lower().startswith("bearer ") or not _is_own_endpoint(realm, own):
         logger.warning(f"{host}: unread, it asked for a login this client does not speak or at a host not its own")
         return None
     query = {"service": params.get("service", host), "scope": params.get("scope", f"repository:{repository}:pull")}
