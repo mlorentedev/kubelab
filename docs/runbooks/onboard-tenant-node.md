@@ -77,7 +77,7 @@ fingerprint came from.
 - [ ] **0.1 Headscale healthy**
   ```bash
   ssh vps-pub "docker inspect --format '{{.State.Health.Status}}' headscale"
-  # → healthy  (v0.28 has no HTTP /health endpoint — do not curl it)
+  # → healthy  (the healthcheck runs `headscale health`; https://vpn.kubelab.live/health answers too)
   ```
 - [ ] **0.2 Segment declared and deployed.** The proof is the deploy that rendered
   it: `make deploy TARGET=vps ENV=prod` completed without the role's segment

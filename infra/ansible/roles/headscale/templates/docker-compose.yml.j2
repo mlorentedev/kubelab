@@ -19,7 +19,7 @@ services:
     networks:
       - {{ docker_network }}
     healthcheck:
-      test: ["CMD", "headscale", "version"]
+      test: ["CMD", "headscale", "health"]
       interval: 10s
       timeout: 5s
       retries: 3
