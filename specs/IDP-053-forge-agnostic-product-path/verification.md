@@ -20,7 +20,7 @@ Spec-only so far: nothing below is proven yet. Each row is filled by the slice t
 - [ ] AC5 (S3a) -> commit `<hash>` / the eight test files named in `tasks.md`
 - [ ] AC6 (S3b) -> commit `<hash>` / `make test` output
 - [ ] AC7 (S4) -> deploy PR `<number>`; `kubectl` and `curl` output
-- [ ] AC8 (S5) -> commit `<hash>` / `tests/test_forge_adapter.py`; S5b API note
+- [ ] AC8 (S5) -> commit `<hash>` / `tests/test_forge_adapter.py`; S5b API note: `docs/lessons/toolkit-tooling/lesson-733-gitea-answers-an-ambiguous-short-sha-with-the-same-404-as-an-unknown-one.md` (S5c's token test still open)
 - [ ] AC9 (S6) -> commit `<hash>` / workflow tests; dry-run run URL
 - [ ] AC10 (S7) -> comment URL on #2612; runbook line
 - [ ] AC11 (S8) -> commit `<hash>` / `tests/test_registry_digest.py`

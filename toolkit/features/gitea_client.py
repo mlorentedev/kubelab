@@ -107,6 +107,13 @@ SCOPE_BY_METHOD: dict[str, frozenset[str]] = {
     # The reconcile's branch-protection read (AUTH-024): a rule is repository
     # metadata. The writes are basic auth (`create_branch_protection`).
     "get_branch_protection": frozenset({"read:repository"}),
+    # The product path's reads of a product's repository (IDP-053, lesson-733): commit,
+    # compare, raw file and tag are repository content. They belong to the receiver's own
+    # `repo_reader` token, so none is in `ADMIN_METHODS`.
+    "get_commit": frozenset({"read:repository"}),
+    "compare_ahead": frozenset({"read:repository"}),
+    "get_raw_file": frozenset({"read:repository"}),
+    "get_tag": frozenset({"read:repository"}),
     # Writes.
     "create_org": frozenset({"write:organization"}),
     "create_repo": frozenset({"write:organization"}),
@@ -265,6 +272,7 @@ class GiteaClient:
         kwargs.setdefault("headers", self._headers())
         kwargs.setdefault("timeout", self.timeout)
 
+        as_text = kwargs.pop("as_text", False)
         resp = self.session.request(method, url, **kwargs)
         if not resp.ok:
             # The body carries Gitea's scope diagnostics verbatim -- the
@@ -272,6 +280,8 @@ class GiteaClient:
             # that told Risk 1 apart from a permission problem. Never swallow it.
             raise GiteaError(f"Gitea API {method} {endpoint} -> {resp.status_code}: {resp.text}", resp.status_code)
 
+        if as_text:
+            return resp.text
         if resp.status_code == 204 or not resp.content:
             return {}
         return resp.json()
@@ -685,6 +695,53 @@ class GiteaClient:
                 return None
             raise
         return dict(body)
+
+    def get_commit(self, owner: str, name: str, ref: str) -> str | None:
+        """The full sha `ref` names, or None when Gitea answers 404 (measured on 1.27.3, lesson-733).
+
+        404 is what an unknown prefix AND an ambiguous one both get, with the same body, and a
+        prefix under 4 digits too, so None does not say which. A ref NAME resolves as well
+        (`main` answers with the branch head): the caller checks the sha starts with what it asked.
+        """
+        try:
+            body = self._request("GET", f"/repos/{owner}/{name}/git/commits/{quote(ref, safe='')}")
+        except GiteaError as exc:
+            if exc.status_code == 404:
+                return None
+            raise
+        return str(body.get("sha") or "")
+
+    def compare_ahead(self, owner: str, name: str, base: str, head: str) -> int:
+        """How many commits `head` has that `base` lacks: 0 when `head` is on `base` or behind it.
+
+        Gitea's compare has no `status`, only `total_commits`, and the direction is the answer:
+        `{older}...main` counts what the older commit lacks. A branch name keeps its `/`.
+        """
+        endpoint = f"/repos/{owner}/{name}/compare/{quote(base, safe='/')}...{quote(head, safe='')}"
+        total = self._request("GET", endpoint).get("total_commits")
+        if not isinstance(total, int):
+            raise GiteaError(f"Gitea API GET {endpoint} answered no total_commits")
+        return total
+
+    def get_raw_file(self, owner: str, name: str, path: str, ref: str) -> str:
+        """The bytes of `path` at `ref`. `ref` is always sent: without it Gitea reads the default branch."""
+        return str(
+            self._request(
+                "GET",
+                f"/repos/{owner}/{name}/raw/{quote(path, safe='/')}?ref={quote(ref, safe='')}",
+                as_text=True,
+            )
+        )
+
+    def get_tag(self, owner: str, name: str, tag: str) -> str | None:
+        """The COMMIT a tag names, or None for 404. Never `id`: for an annotated tag that is the tag object."""
+        try:
+            body = self._request("GET", f"/repos/{owner}/{name}/tags/{quote(tag, safe='')}")
+        except GiteaError as exc:
+            if exc.status_code == 404:
+                return None
+            raise
+        return str(body["commit"]["sha"])
 
 
 class GiteaBasicAuthClient(GiteaClient):
