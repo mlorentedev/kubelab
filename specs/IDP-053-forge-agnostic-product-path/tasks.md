@@ -77,11 +77,11 @@ Acceptance: `make validate-sync ENV=staging && make validate-sync ENV=prod` and
 Depends on S1a. Owner merges because it changes the secret delivery path (D13).
 Files: `toolkit/features/k8s_secrets.py`, tests.
 
-- [ ] [AC3] Failing test: `SecretMapping` accepts a `secret_type`; a private entry yields `pull-<host-slug>` of type `kubernetes.io/dockerconfigjson` whose `.dockerconfigjson` decodes to `{"auths": {"<host>": {"username", "password", "auth"}}}`
-- [ ] [AC3] `_render_secret_manifest` takes the type (default stays `Opaque`); build the dockerconfigjson from the catalogued token, as a rendered literal (D6)
-- [ ] [AC3] Failing test: the token never appears in an argv, a log line or `--dry-run` output (the manifest is redacted the way the existing Secret dry-run is)
-- [ ] [AC3] Failing test: `web`'s rendered secrets are unchanged; a registry with no private entry adds no Secret
-- [ ] [AC3] Generate the mapping from the registry (no hand-written list entry per product)
+- [x] [AC3] Failing test: `SecretMapping` accepts a `secret_type`; a private entry yields `pull-<host-slug>` of type `kubernetes.io/dockerconfigjson` whose `.dockerconfigjson` decodes to `{"auths": {"<host>": {"username", "password", "auth"}}}`
+- [x] [AC3] `_render_secret_manifest` takes the type (default stays `Opaque`); build the dockerconfigjson from the catalogued token, as a rendered literal (D6)
+- [x] [AC3] Failing test: the token never appears in an argv, a log line or `--dry-run` output (the manifest is redacted the way the existing Secret dry-run is)
+- [x] [AC3] Failing test: `web`'s rendered secrets are unchanged; a registry with no private entry adds no Secret
+- [x] [AC3] Generate the mapping from the registry (no hand-written list entry per product)
 
 Acceptance: `.venv/bin/python -m pytest -q tests/test_image_pull_secret.py tests/test_k8s_secrets_apply.py tests/test_k8s_secrets_delivery.py` (the first is new)
 
