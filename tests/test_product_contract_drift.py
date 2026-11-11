@@ -223,6 +223,16 @@ def test_a_staging_only_contract_is_refused_for_prod(
     assert (values_copy / "prod.yaml").read_text(encoding="utf-8") == before
 
 
+def test_the_prod_refusal_does_not_depend_on_which_keys_are_derived(staging_only_contract: Path) -> None:
+    """The refusal is about the env, not about a hostname key: a mapping with none of them is refused too."""
+    only_port = {"default_port": CONTRACT_KEYS["default_port"]}
+
+    with pytest.raises(ContractError) as excinfo:
+        product_render.rendered(validate_contract(staging_only_contract), "web", "prod", only_port)
+
+    _assert_explained(excinfo.value)
+
+
 def test_no_derivation_reads_an_absent_environment(staging_only_contract: Path) -> None:
     """A mapping used directly, past `rendered`, still cannot turn a missing prod hostname into text."""
     contract = validate_contract(staging_only_contract)
