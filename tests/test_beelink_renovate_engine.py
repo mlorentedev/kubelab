@@ -110,16 +110,26 @@ def test_the_fetched_body_is_parsed_not_read_as_json() -> None:
     assert "_renovate_engine.json" not in PLAYBOOK.read_text(encoding="utf-8")
 
 
-def test_the_env_file_carries_the_fetched_image() -> None:
-    assert "RENOVATE_IMAGE=example/renovate:1.2.3" in _render_env({"image": "example/renovate", "version": "1.2.3"})
+def _settings(rendered: str) -> list[str]:
+    return [line for line in rendered.splitlines() if line.strip() and not line.lstrip().startswith("#")]
+
+
+def test_the_env_file_carries_the_fetched_image_and_nothing_else() -> None:
+    """Exactly one line: a second, literal `RENOVATE_IMAGE` would win in systemd."""
+    assert _settings(_render_env({"image": "example/renovate", "version": "1.2.3"})) == [
+        "RENOVATE_IMAGE=example/renovate:1.2.3"
+    ]
 
 
 def test_the_env_file_follows_the_engine_not_a_literal() -> None:
-    assert "RENOVATE_IMAGE=other/renovate:9.9.9" in _render_env({"image": "other/renovate", "version": "9.9.9"})
+    assert _settings(_render_env({"image": "other/renovate", "version": "9.9.9"})) == [
+        "RENOVATE_IMAGE=other/renovate:9.9.9"
+    ]
 
 
 def test_kubelab_carries_no_engine_version_of_its_own() -> None:
-    pattern = re.compile(r"renovatebot/renovate:\d|renovate_version|RENOVATE_VERSION")
+    # ghcr.io and Docker Hub names, by tag or by digest.
+    pattern = re.compile(r"renovate(?:bot)?/renovate[:@]|renovate_version|RENOVATE_VERSION")
     files = [*ROLE.rglob("*"), PLAYBOOK, REPO / "infra/config/values/common.yaml"]
     offenders = [
         str(path.relative_to(REPO))
