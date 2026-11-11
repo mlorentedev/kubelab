@@ -11,8 +11,8 @@ both gated on the SOPS key being empty. Two differences, both on purpose:
   `/user` and the organization's labels and teams, besides writing branches, pull
   requests and the Dependency Dashboard issue.
 
-The run also needs a read-only github.com token to fetch the shared preset and the
-GitHub release notes; it is catalogued here and supplied by hand.
+The run's read-only github.com token is not catalogued here: an expiring token
+needs an expiry checker, which belongs with the run that reads it (AC2).
 """
 
 from __future__ import annotations
@@ -31,7 +31,6 @@ ROLE = REPO / "infra/ansible/roles/beelink_services"
 PLAYBOOK = REPO / "infra/ansible/playbooks/provision-bee.yml"
 
 RENOVATE_TOKEN_KEY = "apps.services.core.gitea.renovate_token"
-GITHUB_COM_TOKEN_KEY = "apps.services.core.gitea.renovate_github_com_token"
 #: Renovate's Gitea platform docs, for Gitea >= 1.20: repo read/write, user read,
 #: issue read/write, organization read ("to read org labels and teams").
 DOCUMENTED_SCOPES = {"write:repository", "read:user", "write:issue", "read:organization"}
@@ -84,7 +83,7 @@ def test_the_token_is_rotatable_under_its_own_name() -> None:
 # --------------------------------------------------------------------------- the catalogue
 
 
-def test_both_tokens_are_catalogued_for_prod() -> None:
+def test_the_token_is_catalogued_for_prod() -> None:
     from toolkit.features.secrets_manager import Expiry, SecretKind
 
     forge = _catalogued(RENOVATE_TOKEN_KEY)
@@ -92,12 +91,6 @@ def test_both_tokens_are_catalogued_for_prod() -> None:
     assert forge.expiry is Expiry.NEVER
     assert forge.envs == ("prod",)
     assert "gitea-rotate-token TOKEN=renovate" in forge.rotate_note
-
-    github = _catalogued(GITHUB_COM_TOKEN_KEY)
-    assert github.kind is SecretKind.EXTERNAL
-    assert github.expiry is Expiry.PROVIDER
-    assert github.envs == ("prod",)
-    assert "github_pat_" in github.format_hint, "a fine-grained token: it reads public repositories only"
 
 
 # --------------------------------------------------------------------------- the role

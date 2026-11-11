@@ -849,28 +849,6 @@ SECRET_CATALOG: list[SecretSpec] = [
         expiry=Expiry.NEVER,
         envs=("prod",),
     ),
-    # The same run reads the shared preset (`github>mlorentedev/ci-workflows`) and
-    # release notes from github.com, whose anonymous API limit one run exhausts.
-    # Public repositories only: it needs no access to any private one.
-    SecretSpec(
-        key_path="apps.services.core.gitea.renovate_github_com_token",
-        expiry=Expiry.PROVIDER,
-        description=(
-            "Fine-grained GitHub PAT, public repositories read-only (GITHUB_COM_TOKEN of the Gitea Renovate run)"
-        ),
-        kind=SecretKind.EXTERNAL,
-        services=("gitea",),
-        format_hint=(
-            "fine-grained PAT (github_pat_…), Repository access: Public repositories (read-only), no permissions"
-        ),
-        rotate_note=(
-            "Mint a new fine-grained token (Settings > Developer settings > Fine-grained tokens), "
-            "Repository access `Public repositories`, no permissions. "
-            "`toolkit secrets set apps.services.core.gitea.renovate_github_com_token --env prod --stdin`, "
-            "then `make provision NODE=bee ENV=prod TAGS=renovate`, then revoke the old one."
-        ),
-        envs=("prod",),
-    ),
     SecretSpec(
         key_path="apps.services.core.github_app.private_key",
         description=(
