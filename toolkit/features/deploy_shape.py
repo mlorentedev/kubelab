@@ -13,8 +13,10 @@ Three verdicts, never two:
     not-mechanical  evaluated, and some condition does not hold: the PR takes
                     the normal review path
     unknown         something could not be read or parsed: fails closed
-                    (a product's forge that does not answer is the exception: the
-                    commit it could not place is not proven, so not-mechanical)
+                    (two exceptions on a product's Gitea: it answers with an HTTP
+                    error, and the commit it could not place is not proven, so
+                    not-mechanical; it cannot be reached at all, a connection error
+                    or timeout, which is not a ForgeError, so unknown)
 
 The class itself (env, files, version path, tag pattern) is declared in the
 reviewer registry, `mechanical`, and read from there; this module names none of

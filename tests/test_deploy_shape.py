@@ -423,11 +423,15 @@ class TestEvaluate:
         shape = evaluate(7, REPO, FakeApi(routes), decl, products)
         assert shape.verdict == "not-mechanical" and "resolved to" in shape.reason, shape.reason
 
-    def test_a_trailing_newline_is_the_transport_and_the_clean_sha_is_what_is_compared(self, decl, products) -> None:
-        """The adapter reads `gh api --jq`, whose output ends in a newline, and strips it (this
-        pinned #3062 F5's newline as a refusal while the judge read the JSON itself). What
-        matters stays true: the sha asked about is the clean 40-hex one. The unstripped form
-        is made unmerged here, so a compare against it would refuse."""
+    def test_a_trailing_newline_is_stripped_by_the_adapter_and_the_clean_sha_is_what_is_compared(
+        self, decl, products
+    ) -> None:
+        """`gh_over` returns the JSON value as is, so no transport newline exists here: the newline
+        goes because `GitHubForge._api` strips every value it reads. GitHub's JSON never carries
+        whitespace in a sha, so nothing real is lost, and the sha asked about is the clean
+        40-hex one. The unstripped form is made unmerged here, so a compare against it would
+        refuse. (The same strip makes a `status` with whitespace around `ahead` read as
+        `ahead`; that cannot be pinned without changing `_api`.)"""
         routes = routes_for("web", "mlorentedev/web")
         routes[f"repos/mlorentedev/web/commits/{SHORT}"] = {"sha": FULL + "\n"}
         routes[f"repos/mlorentedev/web/compare/master...{FULL}\n"] = {"status": "ahead"}
@@ -550,6 +554,14 @@ class TestEvaluateGitea:
         assert shape.verdict == "not-mechanical"
         assert all(part in shape.reason for part in ("ERROR:", "WHY:", "FIX:")), shape.reason
         assert GITEA_REPO in shape.reason
+
+    def test_a_sha_gitea_returns_with_a_trailing_newline_is_refused(self, decl, gitea_products) -> None:
+        """The judge used `fullmatch` on the resolved sha; the adapter must refuse `<40hex>\\n` as it did."""
+        gitea = FakeGitea(
+            merged_and_forward(), commits={SHORT: FULL + "\n", current_version("web").split("-", 1)[1]: old_full("web")}
+        )
+        shape = self.judge(decl, gitea_products, gitea)
+        assert shape.verdict == "not-mechanical" and "resolved to" in shape.reason, shape.reason
 
     def test_a_gitea_that_cannot_answer_is_refused_with_error_why_and_fix(self, decl, gitea_products) -> None:
         gitea = FakeGitea(merged_and_forward())

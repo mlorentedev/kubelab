@@ -26,7 +26,7 @@ from toolkit.features.gitea_client import GiteaClient, GiteaError
 from toolkit.features.product_contract import ContractError
 from toolkit.features.product_registry import Product
 
-_FULL_SHA = re.compile(r"^[0-9a-f]{40}$")
+_FULL_SHA = re.compile(r"[0-9a-f]{40}")
 
 #: Gitea answers 404 for a prefix under 4 hex digits even when it is unique (lesson-733).
 _GITEA_MIN_SHORT = 4
@@ -105,7 +105,7 @@ class GitHubForge:
 
     def _commit(self, ref: str) -> str:
         sha = self._api(f"repos/{self.repository}/commits/{ref}", "--jq", ".sha")
-        if not _FULL_SHA.match(sha):
+        if not _FULL_SHA.fullmatch(sha):
             raise ForgeError(f"{ref} resolved to '{sha}', which is not a full commit sha")
         return sha
 
@@ -167,7 +167,7 @@ class GiteaForge:
             raise ForgeError(
                 f"no commit starts with {short} (or commits sharing it share its next digit too: pass more digits)"
             )
-        if not _FULL_SHA.match(str(sha)) or not str(sha).startswith(short):
+        if not _FULL_SHA.fullmatch(str(sha)) or not str(sha).startswith(short):
             raise ForgeError(f"{short} resolved to '{sha}', which does not start with it")
         return str(sha)
 
@@ -175,7 +175,7 @@ class GiteaForge:
         sha = self._read(self._client.get_tag, tag)
         if sha is None:
             raise ForgeError(f"{tag} names no tag of {self.repository}")
-        if not _FULL_SHA.match(str(sha)):
+        if not _FULL_SHA.fullmatch(str(sha)):
             raise ForgeError(f"{tag} resolved to '{sha}', which is not a full commit sha")
         return str(sha)
 

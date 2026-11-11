@@ -259,6 +259,23 @@ def test_gitea_ambiguity_probe_stops_at_the_first_extension_that_resolves() -> N
     assert session.calls == [f"GET {GIT}/abcd"] + [f"GET {GIT}/abcd{d}" for d in "01"]
 
 
+@pytest.mark.parametrize("suffix", ["\n", " ", "0"])
+def test_gitea_resolve_commit_refuses_a_sha_with_anything_after_the_forty_digits(suffix: str) -> None:
+    """`$` matches before a trailing newline, so `.match` accepted `<40hex>\\n`; the whole value must be a sha (#3062 F5)."""
+    forge, _ = _gitea({f"{GIT}/{SHORT}": _commit_body(FULL + suffix)})
+
+    with pytest.raises(ForgeError, match="resolved to"):
+        forge.resolve_commit(SHORT)
+
+
+@pytest.mark.parametrize("suffix", ["\n", " ", "0"])
+def test_gitea_resolve_tag_refuses_a_sha_with_anything_after_the_forty_digits(suffix: str) -> None:
+    forge, _ = _gitea({f"/repos/{REPO}/tags/v1": _tag_body("v1", FULL + suffix, FULL)})
+
+    with pytest.raises(ForgeError, match="not a full commit sha"):
+        forge.resolve_tag("v1")
+
+
 def test_gitea_resolve_commit_refuses_a_ref_name_that_resolves_to_a_commit() -> None:
     """`/git/commits/main` answers 200 with the branch head, so the sha must start with what was asked."""
     forge, _ = _gitea({f"{GIT}/main": _commit_body(FULL)})
