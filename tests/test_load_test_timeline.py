@@ -8,6 +8,7 @@ The timeline reads what staging already exposes and changes nothing on the clust
 
 from __future__ import annotations
 
+import contextlib
 import pathlib
 import subprocess
 
@@ -205,8 +206,8 @@ class TestLabReaders:
         }
         lab.pod = lambda workload, namespace="kubelab": pods[workload]  # type: ignore[method-assign]
         lab.kubectl = lambda *a, **k: calls.append(("kubectl", a, k)) or EDGE_METRICS  # type: ignore[method-assign]
-        lab.ssh = lambda node, cmd, stdin=None, timeout=60: (
-            calls.append(("ssh", node, cmd, timeout))
+        lab.ssh = lambda node, cmd, stdin=None, timeout=60, options=(): (
+            calls.append(("ssh", node, cmd, timeout, options))
             or (  # type: ignore[method-assign]
                 "cpu 1 0 0 9 0 0 0" if node == "gen" else _node(100, 300, 20, 1, 2)
             )
@@ -226,7 +227,7 @@ class TestLabReaders:
         readers = self._lab(calls).timeline_readers("api")
         assert readers.node()["conntrack"] == 400
         assert readers.generator() == [1, 0, 0, 9, 0, 0, 0]
-        (_, node, cmd, timeout), (_, gen, _, gen_timeout) = calls
+        (_, node, cmd, timeout, _), (_, gen, _, gen_timeout, _) = calls
         assert (node, gen) == ("node", "gen")
         assert "pod0fc2_eab5.slice" in cmd and "pod1a2b.slice" in cmd
         assert max(timeout, gen_timeout) <= tl.SAMPLE_SECONDS * 5  # a hung read must not outlive the step
@@ -246,7 +247,17 @@ class TestStepCarriesItsTimeline:
         monkeypatch.setattr(lab, "pod", lambda *_a, **_k: {"metadata": {"uid": "u"}})
         monkeypatch.setattr(lab, "edge_state", lambda: ("a", 0))
         monkeypatch.setattr(lab, "ssh", lambda *_a, **_k: "")
-        monkeypatch.setattr(lab, "timeline_readers", lambda w: seen.append(("readers", w)) or "readers")
+        monkeypatch.setattr(lab, "timeline_readers", lambda w, o=(): seen.append(("readers", w, o)) or "readers")
+
+        @contextlib.contextmanager
+        def multiplexed(nodes: tuple, seconds: int):  # type: ignore[no-untyped-def]
+            seen.append(("open", nodes, seconds))
+            try:
+                yield ("-o", "ControlPath=x")
+            finally:
+                seen.append(("close", nodes))
+
+        monkeypatch.setattr(lab, "multiplexed", multiplexed)
         monkeypatch.setattr(lt, "_sample_mid_step", lambda *_a: ({}, 0))
         monkeypatch.setattr(lt, "parse_summary", lambda _s: {})
         monkeypatch.setattr(lt, "classify", lambda *_a: [])
@@ -269,6 +280,70 @@ class TestStepCarriesItsTimeline:
         seen: list = []
         step = self._step(self._fake(monkeypatch, seen), 0)
         assert "timeline" not in step and seen == []
+
+    def test_a_sampled_step_reads_over_one_connection_per_node(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A handshake per sample cost ace1 0.1 to 0.2 cores at rest, on the node under test (#3295)."""
+        seen: list = []
+        self._step(self._fake(monkeypatch, seen), 2)
+        opened = next(e for e in seen if e[0] == "open")
+        assert opened[1] == ("node", "gen")
+        assert opened[2] >= 60 + lt.TIMELINE_TAIL_SECONDS  # the connection outlives the sampling
+        assert ("readers", "api", ("-o", "ControlPath=x")) in seen
+        assert seen[-1] == ("close", ("node", "gen"))
+
+    def test_the_connections_close_when_the_step_fails(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        seen: list = []
+        lab = self._fake(monkeypatch, seen)
+
+        def broken(*_a: object, **_k: object) -> str:
+            raise subprocess.CalledProcessError(1, "ssh")
+
+        monkeypatch.setattr(lab, "ssh", broken)
+        with pytest.raises(subprocess.CalledProcessError):
+            self._step(lab, 2)
+        assert ("close", ("node", "gen")) in seen
+
+
+class TestMultiplexed:
+    """The step's ssh master: opened per node, closed per node, and never in the operator's ~/.ssh."""
+
+    def _run(self, monkeypatch: pytest.MonkeyPatch, fail_open: bool = False) -> tuple[list, tuple]:
+        argvs: list = []
+
+        def run(argv: list, **kwargs: object) -> subprocess.CompletedProcess:
+            argvs.append(argv)
+            if fail_open and "-fN" in argv:
+                raise subprocess.TimeoutExpired(argv, 15)
+            return subprocess.CompletedProcess(argv, 0, "", "")
+
+        monkeypatch.setattr(lt.subprocess, "run", run)
+        lab = lt.Lab(REPO, "kc", "op", "node", "gen")
+        with lab.multiplexed(("node", "gen"), 90) as options:
+            control = next(o for o in options if o.startswith("ControlPath="))
+            path = control.split("=", 1)[1]
+            assert len(path.replace("%C", "x" * 40)) < 100  # a unix socket path caps near 104 bytes on macOS
+            assert pathlib.Path(path).parent.is_dir()
+            lab.ssh("node", "true", options=options)
+        assert not pathlib.Path(path).parent.exists()
+        return argvs, options
+
+    def test_one_master_per_node_then_exit_per_node(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        argvs, options = self._run(monkeypatch)
+        masters = [a for a in argvs if "-fN" in a]
+        exits = [a for a in argvs if "-O" in a]
+        assert [a[-1] for a in masters] == ["node", "gen"]
+        assert all("ControlMaster=yes" in a and "ControlPersist=90" in a for a in masters)
+        assert [a[-1] for a in exits] == ["node", "gen"]
+        assert "ControlMaster=no" in options  # a reader never becomes a master that outlives the step
+
+    def test_a_reader_carries_the_options_before_the_host(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        argvs, options = self._run(monkeypatch)
+        (reader,) = [a for a in argvs if a[-1] == "true"]
+        assert reader[reader.index("node") - len(options) : reader.index("node")] == list(options)
+
+    def test_a_master_that_fails_to_open_leaves_direct_connections(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        argvs, _ = self._run(monkeypatch, fail_open=True)
+        assert any(a[-1] == "true" for a in argvs)  # the step still samples, a handshake per read
 
 
 class TestRunPassesTheInterval:

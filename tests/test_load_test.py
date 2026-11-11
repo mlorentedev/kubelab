@@ -376,6 +376,10 @@ class TestParsing:
     def test_cpu_counts_iowait_as_idle(self) -> None:
         assert lt.cpu_percent("cpu 0 0 0 100 0 0 0 0 0 0", "cpu 25 0 0 150 25 0 0 0 0 0") == 25.0
 
+    def test_cpu_does_not_count_guest_time_twice(self) -> None:
+        """guest and guest_nice are already inside user and nice (#3295)."""
+        assert lt.cpu_percent("cpu 0 0 0 0 0 0 0 0 0 0", "cpu 50 0 0 50 0 0 0 0 50 0") == 50.0
+
     def test_throttling_is_a_delta(self) -> None:
         assert lt.throttled_ms("nr_throttled 1\nthrottled_usec 1000", "nr_throttled 2\nthrottled_usec 5000") == 4.0
 
