@@ -13,6 +13,10 @@
 #                                          at its bucket's root reuses that
 #                                          bucket's entry rather than being
 #                                          listed a second time.
+#   packs <node> <count|null> <seconds>    the objects under the repository's
+#                                          `data/`: the packs the weekly check
+#                                          reads 1/t of (BACKUP-081). Always its
+#                                          own listing, whatever the root.
 #
 # Not `restic stats --mode raw-data`, which this replaced: that walks every tree
 # of every snapshot, so its cost follows the snapshot count (the Beelink passed
@@ -42,28 +46,32 @@ for var in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; do
     [ -n "$value" ] || { echo "r2-backup-watcher: missing env $var; every size is null" >&2; credentials=0; }
 done
 
-# `bytes` of `rclone size --json` for one bucket or bucket/prefix, or a failure.
+# One field (`bytes` or `count`) of `rclone size --json` for one bucket or
+# bucket/prefix, or a failure.
 # The remote is an on-the-fly S3 backend: no config file, the token from AWS_*
 # (`env_auth`), the endpoint from the target, and `no_check_bucket` because a
 # read-only token cannot create the bucket rclone would otherwise try to make.
-list_bytes() {
+list_field() {
     [ "$credentials" -eq 1 ] || { echo "no credentials" >"$errfile"; return 1; }
     out="$(timeout "$SIZE_TIMEOUT" rclone size --json --fast-list \
         ":s3,provider=Cloudflare,env_auth=true,no_check_bucket=true,endpoint='https://$1':$2" 2>"$errfile")" || return 1
-    bytes="$(printf '%s\n' "$out" | sed -n 's/^.*"bytes": *\([0-9][0-9]*\).*$/\1/p' | head -n 1)"
-    [ -n "$bytes" ] || { echo "rclone returned no bytes" >"$errfile"; return 1; }
-    printf '%s\n' "$bytes"
+    value="$(printf '%s\n' "$out" | sed -n "s/^.*\"$3\": *\([0-9][0-9]*\).*$/\1/p" | head -n 1)"
+    [ -n "$value" ] || { echo "rclone returned no $3" >"$errfile"; return 1; }
+    printf '%s\n' "$value"
 }
 
-# One entry: `<kind> <name> <bytes|null> <seconds>`, from the arguments only:
+# One entry: `<kind> <name> <value|null> <seconds>`, from the arguments only:
 # POSIX sh has no `local`, so this sets no variable the caller's loop reads.
+# A `packs` entry reads the listing's `count`, every other kind its `bytes`.
 measure() {
     started="$(date +%s)"
-    if bytes="$(list_bytes "$3" "$4")"; then :; else
-        bytes=null
-        echo "r2-backup-watcher: $2: size unknown: $(head -n 1 "$errfile" | cut -c1-160)" >&2
+    field=bytes what=size
+    [ "$1" = packs ] && field=count what="pack count"
+    if value="$(list_field "$3" "$4" "$field")"; then :; else
+        value=null
+        echo "r2-backup-watcher: $2: $what unknown: $(head -n 1 "$errfile" | cut -c1-160)" >&2
     fi
-    echo "$1 $2 $bytes $(($(date +%s) - started))" >>"$tmp"
+    echo "$1 $2 $value $(($(date +%s) - started))" >>"$tmp"
 }
 
 [ -r "$TARGETS" ] || { echo "r2-backup-watcher: targets file $TARGETS unreadable; every size is null" >&2; mv "$tmp" "$OUT"; exit 0; }
@@ -99,6 +107,7 @@ while read -r node repo _ || [ -n "$node" ]; do
     else
         measure node "$node" "$host" "$path" </dev/null
     fi
+    measure packs "$node" "$host" "$path/data" </dev/null
 done <"$TARGETS"
 
 rm -f "$errfile"

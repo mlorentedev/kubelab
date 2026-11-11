@@ -218,6 +218,7 @@ while read -r node repo declared_id address port class services || [ -n "$node" 
     reason=""
     repository_id=""
     size=null
+    packs=null
     newest_snapshot=null
     snapshot_age=null
     reachable=0
@@ -311,6 +312,15 @@ while read -r node repo declared_id address port class services || [ -n "$node" 
         size="$1"
         echo "r2-backup-watcher: $node: size listing took ${2}s" >&2
     fi
+    # The packs the weekly check reads 1/t of (BACKUP-081), for the check budget
+    # rule. Like the size, it never decides health: null when unmeasured.
+    # shellcheck disable=SC2046 # as above
+    set -- $(size_entry packs "$node")
+    if [ $# -eq 2 ] && [ "$1" != null ]; then
+        packs="$1"
+    else
+        echo "r2-backup-watcher: $node: pack count unknown, see the r2-size init container" >&2
+    fi
 
     missing_json=""
     for service in $missing; do
@@ -324,8 +334,8 @@ while read -r node repo declared_id address port class services || [ -n "$node" 
         unhealthy=$((unhealthy + 1))
     fi
 
-    printf '{"metric":"r2_backup_node","namespace":"kubelab","node":"%s","class":"%s","readable":%d,"snapshots":%d,"missing":[%s],"sentinel":%d,"repository_id":"%s","newest_snapshot":%s,"snapshot_age_seconds":%s,"reachable":%d,"stored_bytes":%s,"healthy":%d,"reason":"%s"}\n' \
-        "$node" "$class" "$readable" "$snapshots" "$missing_json" "$sentinel" "$repository_id" "$newest_snapshot" "$snapshot_age" "$reachable" "$size" "$healthy" "$reason"
+    printf '{"metric":"r2_backup_node","namespace":"kubelab","node":"%s","class":"%s","readable":%d,"snapshots":%d,"missing":[%s],"sentinel":%d,"repository_id":"%s","newest_snapshot":%s,"snapshot_age_seconds":%s,"reachable":%d,"stored_bytes":%s,"packs":%s,"healthy":%d,"reason":"%s"}\n' \
+        "$node" "$class" "$readable" "$snapshots" "$missing_json" "$sentinel" "$repository_id" "$newest_snapshot" "$snapshot_age" "$reachable" "$size" "$packs" "$healthy" "$reason"
 done <"$TARGETS"
 
 rm -f "$errfile"

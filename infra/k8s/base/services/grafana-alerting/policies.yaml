@@ -51,3 +51,9 @@ policies:
         object_matchers:
           - ["alertname", "=", "Forge reviewer failed to review a pull request"]
         repeat_interval: 24h
+      # BACKUP-081 (#3084): always the log tier, prod included, where this route is
+      # what keeps it off the page. Here it only mirrors prod, since the policies
+      # may differ in nothing but the tier (tests/test_grafana_alerting_render.py).
+      - receiver: apprise-log
+        object_matchers:
+          - ["alertname", "=", "A node's weekly backup check is outgrowing its time budget"]
