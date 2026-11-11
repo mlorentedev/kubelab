@@ -3,6 +3,15 @@
 # Global config for the Gitea Renovate run (IDP-036). Renovate reads it through
 # RENOVATE_CONFIG_FILE.
 #
+# The fleet defaults come from the shared preset in mlorentedev/ci-workflows, at
+# the tag declared in ci.renovate.preset_tag (AC3); no Gitea repository holds a
+# copy. `onboarding: false` with `requireConfig: optional` processes a repository
+# whether or not it carries a renovate.json, so a new repository needs no commit.
+extends:
+  - "github>mlorentedev/ci-workflows//renovate/default#{{ renovate_preset_tag }}"
+onboarding: false
+requireConfig: optional
+
 # `repositories` is rendered from apps.services.core.gitea.organizations, the same
 # declaration the repository reconciler creates them from, so a repository
 # declared there is covered here without another edit (AC1). Organizations are

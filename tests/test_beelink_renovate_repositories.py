@@ -35,6 +35,7 @@ def _render(organizations: dict) -> str:
     return env.get_template(TEMPLATE).render(
         ansible_managed="Ansible managed",
         renovate_gitea_organizations=organizations,
+        renovate_preset_tag=COMMON["ci"]["renovate"]["preset_tag"],
     )
 
 
