@@ -95,11 +95,45 @@ class TestInterval:
         # 1,000 jiffies elapsed over 2 CPUs: 800 busy -> 1.6 cores, 200 of them softirq -> 0.4 cores.
         assert row["node_cores"] == 1.6
         assert row["softirq_cores"] == 0.4
-        assert row["edge_cgroup_cores"] == 2.5
-        assert row["workload_cores"] == 0.25
-        assert row["other_cores"] == 0.0  # 1.6 - 2.5 - 0.25 clamps: jiffies and cgroups are not read at one instant
+        # The cgroups divide by the kernel's 5 s (1,000 jiffies over 2 CPUs at USER_HZ 100), not the stamps' 2 s.
+        assert row["edge_cgroup_cores"] == 1.0
+        assert row["workload_cores"] == 0.1
+        assert row["other_cores"] == 0.5
         assert row["max_cpu_busy_pct"] == 80.0
         assert row["generator_busy_pct"] == 20.0
+
+    def test_cgroup_cores_use_the_kernels_clock_not_the_sample_stamps(self) -> None:
+        """A saturated node answers late and unevenly (#3295): the stamps say 2 s, the kernel says 5 s.
+
+        Two CPUs at USER_HZ 100 count 200 jiffies a second, so 1,000 jiffies are 5 s of wall time.
+        Over the stamps' 2 s the 5 CPU-seconds of Traefik would read 2.5 cores on a 2-core node.
+        """
+        n1 = tl.parse_node(_node(1000, 3000, 100, 10_000_000, 2_000_000))
+        n2 = tl.parse_node(_node(1800, 3200, 100, 15_000_000, 2_500_000))
+        row = tl.interval(self._sample(10.0, None, n1), self._sample(12.0, None, n2), 10.0)
+        assert row["node_cores"] == 1.6
+        assert row["edge_cgroup_cores"] == 1.0
+        assert row["workload_cores"] == 0.1
+        assert row["edge_cgroup_cores"] + row["workload_cores"] <= row["node_cores"]
+        assert row["other_cores"] == 0.5
+
+    def test_uneven_reads_never_put_more_in_the_cgroups_than_the_node_ran(self) -> None:
+        """Stamps 2.0 s and then 5.5 s apart, while the kernel counted 3 s and 4 s."""
+        usage = [(0, 0), (2_400_000, 900_000), (5_600_000, 2_100_000)]
+        jiffies = [(0, 0), (480, 600), (1120, 1400)]  # (busy, elapsed) over 2 CPUs: 3 s, then 4 s
+        stamps = [0.0, 2.0, 7.5]
+        nodes = [tl.parse_node(_node(b, e - b, 0, u, w)) for (b, e), (u, w) in zip(jiffies, usage, strict=True)]
+        samples = [self._sample(t, None, n) for t, n in zip(stamps, nodes, strict=True)]
+        for a, b in zip(samples, samples[1:], strict=False):
+            row = tl.interval(a, b, 0.0)
+            assert row["edge_cgroup_cores"] + row["workload_cores"] <= row["node_cores"] + 0.01
+
+    def test_guest_time_is_not_counted_twice_in_the_wall_clock(self) -> None:
+        """guest and guest_nice are already inside user and nice, so they are not elapsed time."""
+        before = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        after = [300, 0, 0, 100, 0, 0, 0, 0, 250, 0]
+        elapsed, busy, _ = tl._busy(before, after)
+        assert (elapsed, busy) == (400, 300)
 
     def test_a_restarted_edge_is_marked_not_read_as_negative_rates(self) -> None:
         a = tl.parse_edge(EDGE_METRICS)
