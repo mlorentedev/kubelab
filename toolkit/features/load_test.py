@@ -304,7 +304,8 @@ class Lab:
         A handshake per sample cost ace1 0.1 to 0.2 cores at rest, on the node under test (#3295).
         The masters live in a directory of their own, never the operator's ~/.ssh, and are closed
         when the step ends, failed or not. A master that does not open leaves the readers on direct
-        connections: ssh connects normally when the control socket is missing.
+        connections: with `ControlMaster=no`, ssh connects directly when the socket is missing or stale
+        (checked against ace1, both cases exit 0).
         """
         control = tempfile.mkdtemp(prefix="lt-", dir="/tmp")  # a unix socket path caps near 104 bytes on macOS
         path = ("-o", f"ControlPath={control}/%C")

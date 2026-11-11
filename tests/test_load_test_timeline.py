@@ -341,9 +341,11 @@ class TestMultiplexed:
         (reader,) = [a for a in argvs if a[-1] == "true"]
         assert reader[reader.index("node") - len(options) : reader.index("node")] == list(options)
 
-    def test_a_master_that_fails_to_open_leaves_direct_connections(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_a_master_that_fails_to_open_does_not_fail_the_step(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Only that the failure is swallowed. That ssh then connects directly is ssh's behaviour, not this
+        code's: checked by hand against ace1 on 2026-11-11, with the socket missing and with a stale one."""
         argvs, _ = self._run(monkeypatch, fail_open=True)
-        assert any(a[-1] == "true" for a in argvs)  # the step still samples, a handshake per read
+        assert any(a[-1] == "true" for a in argvs)
 
 
 class TestRunPassesTheInterval:
