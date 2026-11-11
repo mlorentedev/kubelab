@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 )
 
 const (
 	giteaPerPage  = 50
 	giteaMaxPages = 200
+	giteaAPIRoot  = "/api/v1/"
 )
 
 // Gitea reads a repository through the issues endpoint. Unlike GitHub's, it
@@ -32,12 +34,13 @@ func (g *Gitea) ListItems(ctx context.Context, src Source, since time.Time) ([]I
 		if !since.IsZero() {
 			q.Set("since", since.UTC().Format(time.RFC3339))
 		}
-		first := fmt.Sprintf("%s/api/v1/repos/%s/%s/issues?%s", g.BaseURL, src.Owner, src.Repo, q.Encode())
+		first := fmt.Sprintf("%s%srepos/%s/%s/issues?%s", strings.TrimSuffix(g.BaseURL, "/"), giteaAPIRoot, src.Owner, src.Repo, q.Encode())
 		items, err := readPages(ctx, src, pagedRead{
 			BaseURL:  g.BaseURL,
 			First:    first,
 			MaxPages: giteaMaxPages,
 			HTTP:     g.HTTP,
+			APIRoot:  giteaAPIRoot,
 			Auth: func(req *http.Request) {
 				if g.Token != "" {
 					req.Header.Set("Authorization", "token "+g.Token)

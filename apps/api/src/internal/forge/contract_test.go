@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -295,5 +296,43 @@ func TestGitHubReaderStopsAtThePageCap(t *testing.T) {
 	var se *forge.SourceError
 	if !errors.As(err, &se) {
 		t.Fatalf("an endless listing must end in a SourceError, got %v", err)
+	}
+}
+
+// Gitea writes its next links from ROOT_URL, its public address, while the
+// API reads it at the in-cluster one, possibly under another path prefix. The
+// reader keeps the configured host and prefix and takes the API path and query
+// from the link, so the token never leaves the configured host.
+func TestGiteaReaderFollowsANextLinkWrittenForItsPublicAddress(t *testing.T) {
+	issues := fixture(t, "gitea_issues.json")
+	const prefix = "/internal"
+	var second int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		api := strings.TrimPrefix(r.URL.Path, prefix)
+		if api == r.URL.Path {
+			t.Errorf("read %s, outside the configured prefix %s", r.URL.Path, prefix)
+		}
+		if r.URL.Query().Get("page") == "2" {
+			if api != "/api/v1/repos/o/r/issues" {
+				t.Errorf("page 2 read at %s, not the link's API path", r.URL.Path)
+			}
+			second++
+			_, _ = w.Write(issues)
+			return
+		}
+		q := r.URL.Query()
+		q.Set("page", "2")
+		w.Header().Set("Link", `<https://git.public.invalid/gitea`+api+`?`+q.Encode()+`>; rel="next"`)
+		_, _ = w.Write([]byte("[]"))
+	}))
+	defer srv.Close()
+
+	items, err := (&forge.Gitea{BaseURL: srv.URL + prefix}).ListItems(context.Background(),
+		forge.Source{Forge: "gitea", Owner: "o", Repo: "r"}, time.Time{})
+	if err != nil {
+		t.Fatalf("a next link on the public address must be read here: %v", err)
+	}
+	if second != 2 || len(items) == 0 {
+		t.Fatalf("want page 2 of both listings read from the configured host, got %d reads and %d items", second, len(items))
 	}
 }

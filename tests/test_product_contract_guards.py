@@ -17,12 +17,14 @@ import yaml
 
 from toolkit.features.product_contract import _SECRET_NAME, Contract, ContractError
 from toolkit.features.product_guards import (
+    ENVIRONMENTS,
     check_against_platform,
+    declared_envs,
     refuse_oidc_at_render,
     validate_against_platform,
     validate_registered,
 )
-from toolkit.features.product_registry import derived_image
+from toolkit.features.product_registry import derived_image, load_registry
 from toolkit.features.secrets_manager import SECRET_CATALOG
 
 FIXTURE = Path(__file__).parent / "fixtures" / "product" / "web.kubelab.yaml"
@@ -114,6 +116,81 @@ def test_a_hostname_only_a_hand_written_route_serves_is_refused(host: str) -> No
 def test_a_product_may_keep_the_hostnames_it_already_declares() -> None:
     """web's own `apps.platform.web.domain` is not another route."""
     check_against_platform(_contract(), "web", image_for=_web_image)
+
+
+# A product with no prod lane (IDP-053 AC5). The fixture registry's `third` declares
+# only `events.staging`, so it is the registry's own staging-only product.
+FIXTURE_REGISTRY = Path(__file__).parent / "fixtures" / "product" / "registry.yaml"
+
+
+def _staging_only(**changes: Any) -> Contract:
+    fields: dict[str, Any] = {
+        "image": "docker.io/mlorentedev/third",
+        "hostnames": {"staging": "staging.third-app.dev"},
+        **changes,
+    }
+    return _contract(**fields)
+
+
+def test_a_staging_only_product_declares_only_the_staging_lane() -> None:
+    """The registry's `events` is the declaration of a lane; an in-tree product has no events and runs in both."""
+    products = load_registry(FIXTURE_REGISTRY).products
+
+    assert declared_envs(products["web"]) == ("staging", "prod")
+    assert declared_envs(products["third"]) == ("staging",)
+    assert declared_envs(products["api"]) == ENVIRONMENTS
+
+
+def test_a_remote_product_with_no_event_declares_no_lane(tmp_path: Path) -> None:
+    registry = tmp_path / "products.yaml"
+    registry.write_text(
+        "products:\n  idle:\n    forge: github\n    repository: o/idle\n    receiver: generic\n", encoding="utf-8"
+    )
+
+    assert declared_envs(load_registry(registry).products["idle"]) == ()
+
+
+def test_a_contract_with_no_prod_hostname_passes_when_the_product_has_no_prod_lane() -> None:
+    """`_check_hostnames` loops only the envs the entry declares: no `None` is looked up as a host."""
+    check_against_platform(_staging_only(), "third", image_for=_web_image, envs=("staging",))
+
+
+def test_a_contract_with_no_prod_hostname_is_refused_when_the_product_has_a_prod_lane() -> None:
+    """The trap: a staging-only contract under a registry entry that declares `events.prod`."""
+    with pytest.raises(ContractError) as excinfo:
+        check_against_platform(_staging_only(), "third", image_for=_web_image)
+
+    _assert_explained(excinfo.value)
+    assert "hostnames.prod" in excinfo.value.error
+    assert "events.prod" in excinfo.value.why
+    assert "hostnames.prod" in excinfo.value.fix
+
+
+def test_a_prod_hostname_another_route_owns_is_refused_even_without_a_prod_lane() -> None:
+    """A name declared today is claimed whether or not its lane exists yet: it is checked, never skipped."""
+    contract = _staging_only(hostnames={"staging": "staging.third-app.dev", "prod": "grafana.kubelab.live"})
+
+    with pytest.raises(ContractError) as excinfo:
+        check_against_platform(contract, "third", image_for=_web_image, envs=("staging",))
+
+    assert "grafana.kubelab.live" in excinfo.value.error
+
+
+def test_validate_registered_reads_the_lanes_from_the_registry_entry(tmp_path: Path) -> None:
+    """The caller never passes `envs`: the registry entry decides, so a contract cannot widen or narrow it."""
+    path = tmp_path / "kubelab.yaml"
+    contract = yaml.safe_load(FIXTURE.read_text(encoding="utf-8"))
+    contract.update(image="docker.io/mlorentedev/third", hostnames={"staging": "staging.third-app.dev"})
+    path.write_text(yaml.safe_dump(contract), encoding="utf-8")
+
+    assert validate_registered(path, "third", FIXTURE_REGISTRY).hostnames.prod is None
+
+    # web declares events.prod, so the same shape of contract is refused for it.
+    contract.update(image=WEB_IMAGE, hostnames={"staging": "staging.web-app.dev"})
+    path.write_text(yaml.safe_dump(contract), encoding="utf-8")
+    with pytest.raises(ContractError) as excinfo:
+        validate_registered(path, "web", FIXTURE_REGISTRY)
+    assert "hostnames.prod" in excinfo.value.error
 
 
 @pytest.mark.parametrize("key", ["repository", "repo", "source", "remote"])

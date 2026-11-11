@@ -9,6 +9,9 @@ cannot write (proposal design point 2):
   product's image. The deriver is passed in, so the caller decides which
   registry entries are contract-managed; an in-tree product has no contract.
 - every ``secrets`` name must already be in ``SECRET_CATALOG`` (Q6).
+- a hostname is required for each env the registry entry declares a lane for
+  (``events``), and may be absent for one it does not: a product with no
+  ``events.prod`` has no prod lane and need not name a prod hostname (IDP-053 D5).
 - no hostname may belong to another declared route. A hostname is checked
   against the domains declared in BOTH environments, minus the product's own
   ``apps.platform.<app>.`` subtree: a staging host equal to another product's
@@ -32,7 +35,7 @@ from pathlib import Path
 from toolkit.config.settings import PROJECT_ROOT
 from toolkit.features.declared_domains import VALUES_DIR, declared_domains
 from toolkit.features.product_contract import Contract, ContractError, validate_contract
-from toolkit.features.product_registry import RegistryError, derived_image, load_registry
+from toolkit.features.product_registry import Product, RegistryError, derived_image, load_registry
 
 ENVIRONMENTS = ("staging", "prod")
 
@@ -41,6 +44,23 @@ OWN_SUBTREE = "apps.platform.{app}."
 
 K8S_DIR = PROJECT_ROOT / "infra" / "k8s"
 _ROUTE_HOST = re.compile(r"Host(?:SNI)?\(`([^`]+)`\)")
+
+
+def declared_envs(product: Product) -> tuple[str, ...]:
+    """The envs ``product`` runs in: the registry's declaration of its lanes.
+
+    A remote product runs where it has an event (``events.staging``, ``events.prod``);
+    one with none is deployed nowhere. An in-tree product has no events at all and
+    hand-authored values in both envs, so it counts for both.
+    """
+    if not product.contract_managed:
+        return ENVIRONMENTS
+    return tuple(env for env in ENVIRONMENTS if getattr(product.events, env) is not None)
+
+
+def apps_declaring(env: str, registry: Path | None = None) -> tuple[str, ...]:
+    """The registered products that run in ``env``, in registry order."""
+    return tuple(name for name, product in load_registry(registry).products.items() if env in declared_envs(product))
 
 
 def _catalog_keys() -> frozenset[str]:
@@ -82,7 +102,15 @@ def _manifest_hosts(k8s_dir: Path) -> dict[str, str]:
     return hosts
 
 
-def _check_hostnames(contract: Contract, app: str, values_dir: Path, k8s_dir: Path) -> None:
+def _check_hostnames(
+    contract: Contract, app: str, values_dir: Path, k8s_dir: Path, envs: Iterable[str] = ENVIRONMENTS
+) -> None:
+    """Refuse a hostname another route owns, and a lane in ``envs`` with no hostname.
+
+    ``envs`` are the lanes the registry entry declares. Another route's hosts are
+    collected from every env, because a name is taken wherever it is declared; a
+    hostname the contract does declare is checked even for an env outside ``envs``.
+    """
     own = OWN_SUBTREE.format(app=app)
     owners: dict[str, str] = {}
     own_hosts: set[str] = set()
@@ -97,6 +125,16 @@ def _check_hostnames(contract: Contract, app: str, values_dir: Path, k8s_dir: Pa
             owners.setdefault(host, manifest)
     for env in ENVIRONMENTS:
         host = getattr(contract.hostnames, env)
+        if host is None:
+            if env in envs:
+                raise ContractError(
+                    f"field 'hostnames.{env}': the contract declares no {env} hostname",
+                    f"the registry entry declares a {env} lane (events.{env}), and a lane with no hostname "
+                    "would deploy a route that serves nothing.",
+                    f"declare hostnames.{env} in the contract; if the product has no {env} lane yet, ask the "
+                    f"kubelab operator to remove events.{env} from its registry entry.",
+                )
+            continue
         if host in owners:
             raise ContractError(
                 f"field 'hostnames.{env}': '{host}' already belongs to another route",
@@ -113,11 +151,16 @@ def check_against_platform(
     catalog: Iterable[str] | None = None,
     values_dir: Path = VALUES_DIR,
     k8s_dir: Path = K8S_DIR,
+    envs: Iterable[str] = ENVIRONMENTS,
 ) -> None:
-    """Raise ``ContractError`` on the first claim of ``contract`` the platform did not grant ``app``."""
+    """Raise ``ContractError`` on the first claim of ``contract`` the platform did not grant ``app``.
+
+    ``envs`` are the lanes the product's registry entry declares (``declared_envs``);
+    the default, both, is the strict reading for a caller that has no entry to ask.
+    """
     _check_image(contract, app, image_for)
     _check_secrets(contract, _catalog_keys() if catalog is None else frozenset(catalog))
-    _check_hostnames(contract, app, values_dir, k8s_dir)
+    _check_hostnames(contract, app, values_dir, k8s_dir, envs)
 
 
 def validate_against_platform(
@@ -127,11 +170,12 @@ def validate_against_platform(
     image_for: Callable[[str], str],
     catalog: Iterable[str] | None = None,
     values_dir: Path = VALUES_DIR,
+    envs: Iterable[str] = ENVIRONMENTS,
 ) -> Contract:
     """Validate the contract at ``path`` (schema first), then every guard for ``app``."""
     contract = validate_contract(path)
     try:
-        check_against_platform(contract, app, image_for=image_for, catalog=catalog, values_dir=values_dir)
+        check_against_platform(contract, app, image_for=image_for, catalog=catalog, values_dir=values_dir, envs=envs)
     except ContractError as e:
         raise ContractError(f"{path}: {e.error}", e.why, e.fix) from None
     return contract
@@ -173,4 +217,6 @@ def validate_registered(path: Path, app: str, registry: Path | None = None) -> C
             "an in-tree product's configuration is hand-authored in the values files, not rendered.",
             "validate a contract only for a product whose registry entry names a forge repository.",
         )
-    return validate_against_platform(path, app, image_for=lambda name: derived_image(name, registry))
+    return validate_against_platform(
+        path, app, image_for=lambda name: derived_image(name, registry), envs=declared_envs(product)
+    )
