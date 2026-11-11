@@ -39,15 +39,30 @@ SNAPSHOT_DIR = PROJECT_ROOT / "infra" / "config" / "products" / "contracts"
 
 _AUTH_LEVEL = {"public": "bypass", "forwardauth": "one_factor"}
 
+
+def _hostname(contract: Contract, env: str) -> str:
+    """The contract's hostname for ``env``; a contract that declares none cannot render for it."""
+    host = getattr(contract.hostnames, env, None)
+    if host is None:
+        raise ContractError(
+            f"field 'hostnames.{env}': the contract declares no {env} hostname, so it cannot be rendered for {env}",
+            f"a product with no {env} hostname has no {env} lane yet; rendering one would write a domain, "
+            f"site_domain and site_url that name nothing into values/{env}.yaml.",
+            f"render --env staging; to add a {env} lane, declare hostnames.{env} in the contract and "
+            f"events.{env} in the product's registry entry (infra/config/products.yaml).",
+        )
+    return host
+
+
 #: values key -> how the contract derives it for an env.
 CONTRACT_KEYS: dict[str, Callable[[Contract, str], Any]] = {
     "default_port": lambda c, env: c.port,
     "health_path": lambda c, env: c.health_path,
-    "domain": lambda c, env: getattr(c.hostnames, env),
+    "domain": lambda c, env: _hostname(c, env),
     # The same hostname under the names the site reads (#2610). Only staging and
     # prod render, and both serve https.
-    "site_domain": lambda c, env: getattr(c.hostnames, env),
-    "site_url": lambda c, env: f"https://{getattr(c.hostnames, env)}",
+    "site_domain": lambda c, env: _hostname(c, env),
+    "site_url": lambda c, env: f"https://{_hostname(c, env)}",
     "enable_auth": lambda c, env: c.auth != "public",
     "auth_level": lambda c, env: _AUTH_LEVEL[c.auth],
     # The guard has already pinned the repository to <registry>/<image_name>.
@@ -72,6 +87,8 @@ def rendered(
 ) -> dict[str, Any]:
     """The contract-owned keys of ``apps.platform.<app>`` for ``env``."""
     refuse_oidc_at_render(contract, app)
+    # Before any key is derived: a product with no hostname for ``env`` renders nothing for it.
+    _hostname(contract, env)
     return {key: derive(contract, env) for key, derive in mapping.items()}
 
 
