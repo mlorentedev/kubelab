@@ -343,13 +343,13 @@ class TestResticPasswords:
         """Only the watcher's mint proves a refusal, so only it needs the outside bucket."""
         nodes = _nodes()
         store, http = _held_fleet(monkeypatch, nodes)
-        del store._cm.get_merged_config.return_value["apps"]
+        del store._cm.get_merged_config.return_value["terraform"]
 
         assert bnc.mint_all(node=nodes[0], rotate=True) is True
         assert [body["name"] for body in http.posts()] == [bnc.node_bucket(nodes[0])]
 
 
-OUTSIDE = "kubelab-vikunja-staging"
+OUTSIDE = "kubelab-tfstate"
 
 
 def _held_fleet(monkeypatch: pytest.MonkeyPatch, nodes: list[str]) -> tuple[FakeStore, FakeHttp]:
@@ -370,7 +370,7 @@ def _held_fleet(monkeypatch: pytest.MonkeyPatch, nodes: list[str]) -> tuple[Fake
     store._cm = MagicMock()
     store._cm.get_merged_config.return_value = {
         "backup": {"sources": dict.fromkeys(nodes, {}), "r2": r2},
-        "apps": {"services": {"core": {"vikunja": {"storage": {"s3_bucket": OUTSIDE}}}}},
+        "terraform": {"state": {"bucket": OUTSIDE}},
     }
     http = FakeHttp()
 
@@ -387,11 +387,13 @@ def _held_fleet(monkeypatch: pytest.MonkeyPatch, nodes: list[str]) -> tuple[Fake
     return store, http
 
 
-def _watcher_runner(outside: str = OUTSIDE, outside_ok: bool = False, unreadable: str = ""):
+def _watcher_runner(
+    outside: str = OUTSIDE, outside_ok: bool = False, unreadable: str = "", outside_error: str = "AccessDenied"
+):
     def run(argv: list[str], env: dict[str, str]) -> tuple[int, str, str]:
         bucket = argv[argv.index("--bucket") + 1]
         if bucket == outside:
-            return (0, "{}", "") if outside_ok else (254, "", "An error occurred (AccessDenied)")
+            return (0, "{}", "") if outside_ok else (254, "", f"An error occurred ({outside_error})")
         if bucket == unreadable:
             return (254, "", "An error occurred (AccessDenied)")
         return (0, "{}", "")
@@ -432,6 +434,13 @@ class TestTheWatcherToken:
         missing = bnc.node_bucket(_nodes()[-1])
         with pytest.raises(bnc.MintError, match=missing):
             _mint_watcher(store, http, _watcher_runner(unreadable=missing))
+        assert store.writes == [] and http.deletes() == ["tok-1"]
+
+    def test_a_missing_refusal_bucket_is_not_a_refusal(self) -> None:
+        # #3217: a bucket that is gone answers NoSuchBucket, which proves nothing about scope.
+        store, http = FakeStore(), FakeHttp()
+        with pytest.raises(bnc.MintError, match="unproven"):
+            _mint_watcher(store, http, _watcher_runner(outside_error="NoSuchBucket"))
         assert store.writes == [] and http.deletes() == ["tok-1"]
 
     def test_an_existing_pair_is_kept(self) -> None:
@@ -480,3 +489,18 @@ class TestTheSopsStore:
         with pytest.raises(ValueError, match="one SOPS file"):
             store.write({bnc.access_key_path("vps"): "a", bnc.restic_password_path("vps"): "b"})
         store._cm.batch_update_secrets.assert_not_called()
+
+
+class TestTheRefusalBucket:
+    """#3217: the watcher's refusal proof names a bucket whose lifetime is the platform's."""
+
+    def test_it_is_not_an_applications_bucket(self) -> None:
+        # An app's bucket goes when the app does (Vikunja, #2587), and the proof with it.
+        assert not bnc.OUTSIDE_BUCKET_KEY.startswith("apps.services.")
+
+    def test_it_resolves_in_the_shared_config(self) -> None:
+        common_yaml = pathlib.Path(__file__).resolve().parents[1] / "infra/config/values/common.yaml"
+        common = yaml.safe_load(common_yaml.read_text())
+        bucket = bnc._bucket_outside_backups(common)
+        assert bucket, f"{bnc.OUTSIDE_BUCKET_KEY} resolves to nothing in common.yaml"
+        assert not bucket.startswith("kubelab-backup-"), "the refusal bucket must hold no backup"

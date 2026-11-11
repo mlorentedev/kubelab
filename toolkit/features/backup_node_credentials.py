@@ -145,9 +145,13 @@ def watcher_token_request(nodes: list[str], *, account_id: str, read_group_id: s
     return _token_body(WATCHER_TOKEN_NAME, buckets, account_id=account_id, group_id=read_group_id)
 
 
-# A bucket in the backup account that holds no backup: Vikunja's attachments.
-# The watcher reads every backup bucket, so its refusal has to be shown elsewhere.
-OUTSIDE_BUCKET_KEY = "apps.services.core.vikunja.storage.s3_bucket"
+# A bucket in the backup account that holds no backup: the Terraform state bucket
+# (ADR-069). The watcher reads every backup bucket, so its refusal has to be shown
+# elsewhere, on a bucket whose lifetime is the platform's rather than one app's: an
+# app's bucket goes when the app does, and the proof with it (#3217). A bucket that
+# is gone answers NoSuchBucket, not AccessDenied, so it fails the proof rather than
+# passing it vacuously (`_scope_error`).
+OUTSIDE_BUCKET_KEY = "terraform.state.bucket"
 
 
 def backup_bucket_to_refuse(config: dict[str, Any]) -> str:

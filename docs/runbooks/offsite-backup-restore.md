@@ -195,7 +195,7 @@ make watcher-run NAME=r2-backup-watcher ENV=prod
 ```
 
 The mint verifies the new token by consequence before storing it. The token must
-list every backup bucket and be refused on `kubelab-vikunja-staging`. Only then does
+list every backup bucket and be refused on `kubelab-tfstate` (`terraform.state.bucket`). Only then does
 the mint revoke the old token. A `"healthy":1` line per node and a fleet
 `"healthy":1` mean the cluster has it. The token can be re-minted, so it has no
 Bitwarden escrow: losing it loses no data.
