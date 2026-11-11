@@ -16,6 +16,7 @@ stay hand-authored, not a contract-managed product (proposal design point 3).
 from __future__ import annotations
 
 import re
+from collections.abc import Collection
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated, Any, Literal, NamedTuple
@@ -131,6 +132,15 @@ class Product(BaseModel):
                         f"add {', '.join(missing)} to the entry, or set private: false",
                     )
                 )
+            if self.image_host == "docker.io" or (self.image_host or "").endswith(".docker.io"):
+                raise ValueError(
+                    _refusal(
+                        "a private product on Docker Hub",
+                        "the authenticated reader is OCI-only and Docker Hub delegates login to auth.docker.io, "
+                        "so a private Docker Hub read is not supported and the proof can never succeed",
+                        "move the image to GHCR or the forge registry and set image_registry, or set private: false",
+                    )
+                )
         elif self.pull_credential is not None:
             raise ValueError(
                 _refusal(
@@ -197,6 +207,25 @@ def _one_credential_per_host(products: dict[str, Product]) -> None:
                 )
             )
         seen.setdefault(host, (name, credential))
+
+
+def check_pull_secrets_catalogued(registry: Registry, catalogued: Collection[str]) -> None:
+    """Refuse a ``pull_credential.secret`` that is not a key of the secrets catalog (#3284).
+
+    ``catalogued`` is passed in, not read from ``secrets_manager``: reading the registry stays free
+    of the secrets stack, and the registry is validated against fake keys across the suite.
+    """
+    for name, entry in registry.products.items():
+        if entry.pull_credential is not None and entry.pull_credential.secret not in catalogued:
+            key = entry.pull_credential.secret
+            raise RegistryError(
+                _refusal(
+                    f"{name} names pull_credential.secret '{key}', which is not in SECRET_CATALOG",
+                    "the pull Secret's environments are read from the catalog entry; with none, the token is "
+                    "looked up in every environment and apply-secrets fails closed in all of them",
+                    f"use the key_path of a SECRET_CATALOG entry (e.g. ghcr.pull_token) for {name}, or add the entry",
+                )
+            )
 
 
 class _UniqueKeyLoader(yaml.SafeLoader):

@@ -11,6 +11,7 @@ from toolkit.config import settings as settings_module
 from toolkit.features import product_registry
 from toolkit.features.product_guards import apps_declaring
 from toolkit.features.product_registry import RegistryError, UnknownEventError
+from toolkit.features.secrets_manager import SECRET_CATALOG
 
 REPO = Path(__file__).resolve().parents[1]
 FIXTURE = Path(__file__).parent / "fixtures" / "product" / "registry.yaml"
@@ -339,6 +340,52 @@ class TestPrivateEntryRefusals:
         public = public.replace("    pull_credential: {username: reviewer, secret: gitea.other_pull}\n", "")
         registry = product_registry.load_registry(_write(tmp_path, _private() + public))
         assert set(registry.products) == {"beta", "open"}
+
+    @pytest.mark.parametrize("host", ["docker.io", "index.docker.io", "registry-1.docker.io"])
+    def test_a_private_entry_on_docker_hub_is_refused_naming_the_product(self, tmp_path: Path, host: str) -> None:
+        body = _private(registry=f"{host}/acme", secret="ghcr.pull_token")
+        with pytest.raises(RegistryError) as refused:
+            product_registry.load_registry(_write(tmp_path, body))
+        message = str(refused.value)
+        assert all(part in message for part in ("beta", "Docker Hub", "ERROR:", "WHY:", "FIX:", "GHCR"))
+
+    def test_a_public_entry_on_docker_hub_is_admitted(self, tmp_path: Path) -> None:
+        public = _private(registry="docker.io/acme").replace("private: true", "private: false")
+        public = public.replace("    pull_credential: {username: reviewer, secret: gitea.registry_pull}\n", "")
+        assert not product_registry.load_registry(_write(tmp_path, public)).products["beta"].private
+
+    def test_a_host_that_only_ends_in_docker_io_is_not_docker_hub(self, tmp_path: Path) -> None:
+        assert product_registry.load_registry(_write(tmp_path, _private(registry="notdocker.io/acme")))
+
+
+class TestPullSecretsAreCatalogued:
+    """The registry names a token by its catalog key; a key the catalog lacks is a typo (#3284).
+
+    The check cannot sit in ``load_registry``: the suite reads the registry against fake keys, and
+    ``product_verify`` validates old revisions. So the catalog is a parameter, and a test applies it
+    to the committed file.
+    """
+
+    def _registry(self, tmp_path: Path, body: str) -> product_registry.Registry:
+        return product_registry.load_registry(_write(tmp_path, body))
+
+    def test_an_uncatalogued_secret_is_refused_naming_the_product_and_the_key(self, tmp_path: Path) -> None:
+        registry = self._registry(tmp_path, _private(secret="ghcr.pul_token"))
+        with pytest.raises(RegistryError) as refused:
+            product_registry.check_pull_secrets_catalogued(registry, {"ghcr.pull_token"})
+        message = str(refused.value)
+        assert all(part in message for part in ("beta", "ghcr.pul_token", "ERROR:", "WHY:", "FIX:"))
+
+    def test_a_catalogued_secret_is_admitted(self, tmp_path: Path) -> None:
+        registry = self._registry(tmp_path, _private(secret="ghcr.pull_token"))
+        product_registry.check_pull_secrets_catalogued(registry, {"ghcr.pull_token"})
+
+    def test_an_entry_without_a_credential_is_skipped(self) -> None:
+        product_registry.check_pull_secrets_catalogued(product_registry.load_registry(), set())
+
+    def test_every_committed_pull_secret_is_in_the_secrets_catalog(self) -> None:
+        catalogued = {spec.key_path for spec in SECRET_CATALOG}
+        product_registry.check_pull_secrets_catalogued(product_registry.load_registry(), catalogued)
 
 
 class TestDerivedImage:
