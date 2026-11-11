@@ -89,6 +89,16 @@ def test_the_detector_sees_the_files_and_matches_the_known_forms() -> None:
     assert "Makefile" in scanned
     assert "infra/ansible/roles/node_maintenance/templates/kubelab-maintenance.sh.j2" in scanned
     assert ".github/workflows/pr-agent.yml" in scanned
+    # The scan keys on "pipefail" in the file; both workflows #3227 fixed must pass it.
+    texts = {
+        f: (REPO / f).read_text(encoding="utf-8")
+        for f in (
+            ".github/workflows/pr-agent.yml",
+            ".github/workflows/dependabot-declare-unreviewed.yml",
+        )
+    }
+    for name, text in texts.items():
+        assert name in scanned and "pipefail" in text, name
     for bad in (
         """if ! printf '%s\\n' "$HELD_BEFORE" | grep -qx 'docker-ce'; then""",
         """tail -n 5 "$f" | grep -qxF -- 'done'""",
