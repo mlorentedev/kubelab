@@ -52,7 +52,10 @@ a loss.
 ```bash
 S=$(mktemp -d)
 R=<name>; O=<gitea-org>
-make gitea-git ARGS="clone --quiet --mirror https://gitea.kubelab.live/$O/$R.git $S/$R.git"
+# As yourself over SSH (`forge` host, dotfiles#2512; needs the tailnet). Not
+# `make gitea-git`: that runs as the agents' account, which reads only the
+# repositories naming it under `writers:` (#2578).
+git clone --quiet --mirror "forge:$O/$R.git" "$S/$R.git"
 # Read GitHub's refs first and refuse an empty answer: a failed or empty
 # ls-remote leaves the loop below silent, which reads as a pass.
 refs=$(git ls-remote --heads --tags https://github.com/mlorentedev/$R.git) && [ -n "$refs" ] \
@@ -82,7 +85,8 @@ branch that has diverged is a merge decision for the operator, not a step in thi
 
 ```bash
 git clone --quiet --mirror https://github.com/mlorentedev/$R.git "$S/$R-github.git"
-make gitea-git ARGS="-C $S/$R-github.git push https://gitea.kubelab.live/$O/$R.git main"
+# core.hooksPath=/dev/null: a global pre-push hook must not run against a foreign mirror.
+git -c core.hooksPath=/dev/null -C "$S/$R-github.git" push "forge:$O/$R.git" main
 # then re-run Gate 2
 ```
 

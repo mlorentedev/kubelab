@@ -28,6 +28,7 @@ from toolkit.features.gitea_git import (
 )
 
 PASSWORD = "correct-horse-battery-staple"
+AGENT_TOKEN = "cccccccccccccccccccccccccccccccccccccccc"
 ADMIN_TOKEN = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 BOT_TOKEN = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 
@@ -38,12 +39,13 @@ def merged(**overrides: Any) -> dict[str, Any]:
         "admin_token": ADMIN_TOKEN,
         "bot_token": BOT_TOKEN,
         "admin_password": PASSWORD,
+        "agent_token": AGENT_TOKEN,
         **overrides,
     }
     return {
         "apps": {
             "services": {"core": {"gitea": gitea}},
-            "auth": {"identities": {"superadmin": "manu", "machine": "hefesto"}},
+            "auth": {"identities": {"superadmin": "manu", "machine": "hefesto", "agent": "dedalo"}},
         }
     }
 
@@ -75,20 +77,20 @@ def test_the_password_is_never_on_the_command_line() -> None:
 
     assert runner.argv is not None
     flat = " ".join(runner.argv)
-    assert PASSWORD not in flat
+    assert AGENT_TOKEN not in flat and PASSWORD not in flat
     assert ADMIN_TOKEN not in flat and BOT_TOKEN not in flat
     # The floor: without this the assertion above would hold over an empty argv.
     assert runner.argv[0] == "git" and runner.argv[-3:] == ["push", "origin", "HEAD"]
 
 
-def test_the_password_reaches_the_child_environment() -> None:
+def test_the_token_reaches_the_child_environment() -> None:
     """The positive half. Keeping it off the command line is only useful if it arrives."""
     runner = _Capturing()
     run_git(["status"], merged(), runner=runner)
 
     assert runner.env is not None
-    assert runner.env["GITEA_GIT_PASS"] == PASSWORD
-    assert runner.env["GITEA_GIT_USER"] == "manu"
+    assert runner.env["GITEA_GIT_PASS"] == AGENT_TOKEN
+    assert runner.env["GITEA_GIT_USER"] == "dedalo"
 
 
 def test_git_must_fail_rather_than_prompt() -> None:
@@ -105,27 +107,27 @@ def test_git_must_fail_rather_than_prompt() -> None:
     assert runner.env["GIT_ASKPASS"] == "/bin/false"
 
 
-def test_the_credential_is_the_admin_password_and_not_a_token() -> None:
-    """Measured 2026-09-04: neither token may push, and one of them must never be able to.
+def test_the_credential_is_the_agent_account_s_token() -> None:
+    """The push authenticates as the agents' authoring account, never as the forge admin (#2578).
 
-    `admin_token` is refused at Gitea's scope layer because it has no
-    `write:repository` -- a scope this line of work keeps off every token on
-    purpose, since it is a standing DELETE capability. Asserting the identity of the
-    chosen credential here is what stops a later edit from "simplifying" this to the
-    token the rest of the module already holds.
+    Gitea takes an API token as the password of an HTTPS basic-auth login, so the
+    pair is the account's login and its token. Asserting the identity of the chosen
+    credential here is what stops a later edit from putting the break-glass password
+    back on the routine path, which is what this module used to do.
     """
     user, password = resolve_git_credential(merged())
 
-    assert (user, password) == ("manu", PASSWORD)
-    assert password not in (ADMIN_TOKEN, BOT_TOKEN)
+    assert (user, password) == ("dedalo", AGENT_TOKEN)
+    assert password not in (PASSWORD, ADMIN_TOKEN, BOT_TOKEN)
 
 
-def test_an_absent_password_is_refused_with_the_reason() -> None:
-    """And the message says why a token is not a substitute, because that is the next thing tried."""
+def test_an_absent_token_is_refused_and_never_falls_back_to_the_admin_password() -> None:
+    """The admin password is still in the fixture: a fallback would find it, and must not."""
     with pytest.raises(GiteaGitError) as exc:
-        resolve_git_credential(merged(admin_password=None))
+        resolve_git_credential(merged(agent_token=None))
 
-    assert "write:repository" in str(exc.value)
+    assert "apps.services.core.gitea.agent_token" in str(exc.value)
+    assert PASSWORD not in str(exc.value)
 
 
 def test_the_helper_is_marked_as_a_shell_command() -> None:
@@ -137,7 +139,7 @@ def test_the_helper_is_marked_as_a_shell_command() -> None:
     """
     assert CREDENTIAL_HELPER.startswith("!")
     assert "$GITEA_GIT_PASS" in CREDENTIAL_HELPER, "the helper must read the password from the environment"
-    assert PASSWORD not in CREDENTIAL_HELPER
+    assert AGENT_TOKEN not in CREDENTIAL_HELPER
 
 
 def test_the_shared_hooks_path_is_neutralised() -> None:

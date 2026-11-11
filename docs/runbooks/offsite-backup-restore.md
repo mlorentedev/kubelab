@@ -552,8 +552,12 @@ sudo git -C "/tmp/repo-restore/opt/node-backup/staging/gitea/git/repositories/<o
 
 Create the empty repository as the superadmin, in the web UI under `<org>`, with
 the declared visibility. Then copy the restored bare repository to the
-workstation and push every ref from it:
-`make gitea-git ARGS="-C <restored>.git push --mirror https://gitea.kubelab.live/<org>/<name>.git"`.
+workstation and push every ref from it, as yourself over SSH (the `forge` host,
+dotfiles#2512, which needs the tailnet):
+`git -c core.hooksPath=/dev/null -C <restored>.git push --mirror forge:<org>/<name>.git`.
+Not `make gitea-git`: that runs as the agents' account, which cannot write an
+arbitrary repository or a protected branch (#2578). `core.hooksPath=/dev/null`
+keeps a global pre-push hook off a repository that is not yours to lint.
 Finish with `make gitea-reconcile APPLY=1`, which applies the declared settings and
 webhooks. A re-run should report nothing to do.
 

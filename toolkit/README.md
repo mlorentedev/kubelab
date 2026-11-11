@@ -203,11 +203,7 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit services gitea` | Reconcile the Gitea forge against its declaration |
 | `toolkit services gitea actions-secrets` | Deliver catalog-declared Actions secrets from SOPS to forge repositories (TOOL-062). |
 | `toolkit services gitea drop-empty` | Remove an EMPTY DECLARED repository, so a migration can create it in its place. |
-| `toolkit services gitea git` | Run `git` against the forge over HTTPS as its admin (break-glass credential). |
-| `toolkit services gitea issue` | Issues on the forge |
-| `toolkit services gitea issue create` | Open an issue as the same authoring identity as `pr create` (TOOL-078). Prints `#<number> <url>`. |
-| `toolkit services gitea pr` | Pull requests on the forge (open only; merging stays a human action) |
-| `toolkit services gitea pr create` | Open a pull request as the identity `gitea git` pushes with (TOOL-078). |
+| `toolkit services gitea git` | Run `git` against the forge over HTTPS as the agents' authoring account. |
 | `toolkit services gitea prune-runners` | Deregister Actions runners the declaration does not name. |
 | `toolkit services gitea reconcile` | Create declared organizations and repositories in Gitea; report undeclared ones. |
 | `toolkit services gitea rotate-token` | Revoke a Gitea machine token and clear its SOPS key so a re-provision re-mints it. |

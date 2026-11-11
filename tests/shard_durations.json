@@ -187,7 +187,6 @@
  "tests/test_gitea_actions_runner.py": 18.36,
  "tests/test_gitea_actions_secrets.py": 0.28,
  "tests/test_gitea_anonymous_surface.py": 4.14,
- "tests/test_gitea_authoring.py": 0.09,
  "tests/test_gitea_bootstrap_idempotence.py": 0.83,
  "tests/test_gitea_client_pagination.py": 0.01,
  "tests/test_gitea_drill.py": 0.18,

@@ -1348,15 +1348,14 @@ def gitea_git(
     ctx: typer.Context,
     env: Annotated[str, typer.Option("--env", "-e", help="Environment holding the forge credentials")] = "prod",
 ) -> None:
-    """Run `git` against the forge over HTTPS as its admin (break-glass credential).
+    """Run `git` against the forge over HTTPS as the agents' authoring account.
 
     `toolkit services gitea git -- clone https://gitea.kubelab.live/personal/resume.git`
 
-    An exception to ADR-062 D4 kept for agent authoring until #2296 decides which
-    identity authors; every operation is recorded as the forge's admin account.
-    Not the human path: a person clones over SSH, `git clone forge:personal/resume.git`
-    (dotfiles#2512). That key is also on `manu`, the admin: SSH removes the shared
-    password, not the privilege (#2296).
+    Authenticates as `apps.auth.identities.agent` with its token (AUTH-022, #2578), so
+    every operation is recorded as the agent, and it writes only where that account is
+    a declared writer. It never falls back to the admin password. Not the human path:
+    a person clones over SSH, `git clone forge:personal/resume.git` (dotfiles#2512).
 
     A WRAPPER AND NOT A CREDENTIAL HELPER GIT COULD CALL DIRECTLY, deliberately. A
     helper is a program that PRINTS the password when asked, so a helper installed
@@ -1392,79 +1391,27 @@ def _gitea_merged_config(env: str) -> dict[str, Any]:
     return ConfigurationManager(env, get_settings().project_root).get_merged_config()
 
 
-gitea_pr_app = typer.Typer(help="Pull requests on the forge (open only; merging stays a human action)")
-gitea_issue_app = typer.Typer(help="Issues on the forge")
-gitea_app.add_typer(gitea_pr_app, name="pr")
-gitea_app.add_typer(gitea_issue_app, name="issue")
-
-_REPO_HELP = "Repository as owner/name, e.g. personal/resume"
-_BODY_HELP = "Markdown file with the body (omit for an empty body)"
-
-
-def _read_body(body_file: Path | None) -> str:
-    return body_file.read_text(encoding="utf-8") if body_file else ""
-
-
-@gitea_pr_app.command("create")
-def gitea_pr_create(
-    repo: Annotated[str, typer.Option("--repo", help=_REPO_HELP)],
-    head: Annotated[str, typer.Option("--head", help="Branch with the change (already pushed)")],
-    base: Annotated[str, typer.Option("--base", help="Branch to merge into")],
-    title: Annotated[str, typer.Option("--title", help="Pull request title")],
-    body_file: Annotated[Path | None, typer.Option("--body-file", exists=True, dir_okay=False, help=_BODY_HELP)] = None,
-    env: Annotated[str, typer.Option("--env", "-e", help="Environment holding the forge credentials")] = "prod",
-) -> None:
-    """Open a pull request as the identity `gitea git` pushes with (TOOL-078).
-
-    Prints `#<number> <url>` and nothing else. The credential travels in the request's
-    basic-auth header only; see `toolkit.features.gitea_authoring` for why it is the
-    push credential and not a token.
-    """
-    import requests
-
-    from toolkit.features import gitea_authoring as ga
-    from toolkit.features.gitea_client import GiteaError
-
-    try:
-        client = ga.authoring_client(_gitea_merged_config(env))
-        opened = ga.open_pull(client, repo, head=head, base=base, title=title, body=_read_body(body_file))
-    except (ga.AuthoringError, GiteaError, requests.RequestException) as exc:
-        logger.error(str(exc))
-        raise typer.Exit(1) from exc
-    console.print(f"#{opened.number} {opened.url}")
-
-
-@gitea_issue_app.command("create")
-def gitea_issue_create(
-    repo: Annotated[str, typer.Option("--repo", help=_REPO_HELP)],
-    title: Annotated[str, typer.Option("--title", help="Issue title")],
-    body_file: Annotated[Path | None, typer.Option("--body-file", exists=True, dir_okay=False, help=_BODY_HELP)] = None,
-    env: Annotated[str, typer.Option("--env", "-e", help="Environment holding the forge credentials")] = "prod",
-) -> None:
-    """Open an issue as the same authoring identity as `pr create` (TOOL-078). Prints `#<number> <url>`."""
-    import requests
-
-    from toolkit.features import gitea_authoring as ga
-    from toolkit.features.gitea_client import GiteaError
-
-    try:
-        client = ga.authoring_client(_gitea_merged_config(env))
-        opened = ga.open_issue(client, repo, title=title, body=_read_body(body_file))
-    except (ga.AuthoringError, GiteaError, requests.RequestException) as exc:
-        logger.error(str(exc))
-        raise typer.Exit(1) from exc
-    console.print(f"#{opened.number} {opened.url}")
-
-
 def _actions_secrets_client(merged: dict[str, Any]) -> "GiteaBasicAuthClient":
-    """The authoring client for the forge named in `merged`; exits 1 when no credential resolves."""
-    from toolkit.features import gitea_authoring as ga
+    """Superadmin basic auth for the forge named in `merged`; exits 1 when the password is absent.
 
-    try:
-        return ga.authoring_client(merged)
-    except ga.AuthoringError as exc:
-        logger.error(str(exc))
-        raise typer.Exit(1) from exc
+    Writing a repository's Actions secrets needs repo-admin, which no machine token
+    holds (one owner-level identity per organization is #1781). Until then this is
+    the same superadmin client `drop-empty`, `migrate` and `prune-runners` build. It
+    used to borrow the authoring client, which was this same credential until #2578
+    moved authoring to the agents' account.
+    """
+    from toolkit.features.gitea_client import GiteaBasicAuthClient
+
+    gitea = merged["apps"]["services"]["core"]["gitea"]
+    admin_password = gitea.get("admin_password")
+    if not admin_password:
+        logger.error(
+            "missing apps.services.core.gitea.admin_password in SOPS — writing Actions secrets needs "
+            "repo-admin, which no machine token holds (#1781). Re-provision the Beelink."
+        )
+        raise typer.Exit(1)
+    superadmin = str(merged["apps"]["auth"]["identities"]["superadmin"])
+    return GiteaBasicAuthClient(f"https://{gitea['domain']}", superadmin, str(admin_password))
 
 
 def _report_actions_secrets_plan(plan: "ActionsSecretsPlan", env: str, apply: bool) -> bool:
