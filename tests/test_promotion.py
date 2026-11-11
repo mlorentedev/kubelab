@@ -172,6 +172,130 @@ class TestPromoteReadsTheRegistry:
             promotion.resolve_image_sha("staging", "ghost")
 
 
+class TestPromoteUsesTheEntrysRegistry:
+    """IDP-053 AC2: the tag is looked up where the entry says its image lives, else in the platform registry."""
+
+    _REGISTRY = (
+        "products:\n"
+        "  beta:\n"
+        "    repository: personal/beta\n"
+        "    forge: gitea\n"
+        "    receiver: generic\n"
+        "    image_registry: gitea.kubelab.live/personal\n"
+        "    private: true\n"
+        "    pull_credential: {username: reviewer, secret: gitea.registry_pull}\n"
+        "    events: {staging: beta-image-published}\n"
+    )
+
+    def _promote(self, env_patched, monkeypatch, tmp_path: Path, registry_body: str, app: str) -> MagicMock:
+        root, _ = env_patched
+        _write_values(root)
+        path = tmp_path / "products.yaml"
+        path.write_text(registry_body, encoding="utf-8")
+        monkeypatch.setattr(product_registry, "registry_path", lambda: path)
+        promotion.ConfigurationManager.return_value.get_env_vars.return_value[
+            f"APPS_PLATFORM_{app.upper()}_IMAGE_NAME"
+        ] = app
+        exists = MagicMock(return_value=True)
+        monkeypatch.setattr(promotion, "tag_exists", exists)
+        promotion.promote("staging", app, "sha-0123456789ab")
+        return exists
+
+    def test_a_product_with_an_image_registry_is_checked_there(self, env_patched, monkeypatch, tmp_path) -> None:
+        exists = self._promote(env_patched, monkeypatch, tmp_path, self._REGISTRY, "beta")
+
+        exists.assert_called_once_with("gitea.kubelab.live/personal", "beta", "sha-0123456789ab")
+
+    def test_a_product_without_one_is_checked_in_the_platform_registry(
+        self, env_patched, monkeypatch, tmp_path
+    ) -> None:
+        body = self._REGISTRY.replace("    image_registry: gitea.kubelab.live/personal\n    private: true\n", "")
+        body = body.replace("    pull_credential: {username: reviewer, secret: gitea.registry_pull}\n", "")
+
+        exists = self._promote(env_patched, monkeypatch, tmp_path, body, "beta")
+
+        exists.assert_called_once_with("docker.io/mlorentedev", "beta", "sha-0123456789ab")
+
+
+def _prod_residue(registry_path: Path, prod_values: Path, prod_snapshots: Path) -> list[str]:
+    """What a product without a prod lane leaves in prod: a values block (with or without a pin) or a snapshot."""
+    prod = yaml.safe_load(prod_values.read_text(encoding="utf-8")) or {}
+    blocks = ((prod.get("apps") or {}).get("platform")) or {}
+    found = []
+    for app in product_registry.load_registry(registry_path).products:
+        if promotion.has_prod_lane(app, registry_path):
+            continue
+        if app in blocks:
+            found.append(f"{app}: apps.platform.{app} in {prod_values.name}")
+        if (prod_snapshots / f"{app}.yaml").exists():
+            found.append(f"{app}: {prod_snapshots.name}/{app}.yaml")
+    return found
+
+
+class TestProdLane:
+    """IDP-053 D5: ``events.prod`` is the declaration of a prod lane; without it prod is closed."""
+
+    @pytest.fixture(autouse=True)
+    def _fixture_registry(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(product_registry, "registry_path", lambda: FIXTURE_REGISTRY)
+
+    def test_promote_to_prod_is_refused_for_a_product_with_no_events_prod(self, env_patched, monkeypatch) -> None:
+        root, generator = env_patched
+        exists = MagicMock(return_value=True)
+        monkeypatch.setattr(promotion, "tag_exists", exists)
+
+        with pytest.raises(ValueError, match=r"(?s)ERROR:.*third.*events\.prod.*WHY:.*FIX:"):
+            promotion.promote("prod", "third", "1.0.0")
+
+        exists.assert_not_called()
+        generator.return_value.generate.assert_not_called()
+
+    def test_the_same_product_still_promotes_to_staging(self, env_patched, monkeypatch) -> None:
+        root, generator = env_patched
+        _write_values(root)
+        promotion.ConfigurationManager.return_value.get_env_vars.return_value["APPS_PLATFORM_THIRD_IMAGE_NAME"] = (
+            "third"
+        )
+        monkeypatch.setattr(promotion, "tag_exists", MagicMock(return_value=True))
+
+        promotion.promote("staging", "third", "sha-abc1234")
+
+        generator.return_value.generate.assert_called_once_with("staging")
+
+    def test_a_product_that_declares_events_prod_and_an_in_tree_one_have_a_lane(self) -> None:
+        assert promotion.has_prod_lane("web")
+        assert promotion.has_prod_lane("api")  # in-tree: released, never dispatched, so it declares no events
+        assert not promotion.has_prod_lane("third")
+
+    def test_the_committed_prod_state_holds_nothing_for_a_product_without_a_lane(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        residue = _prod_residue(
+            root / "infra" / "config" / "products.yaml",
+            root / "infra" / "config" / "values" / "prod.yaml",
+            root / "infra" / "config" / "products" / "contracts" / "prod",
+        )
+        assert residue == []
+
+    @pytest.mark.parametrize("block", ["third: {domain: third.example.test}", "third: {version: 1.0.0}"])
+    def test_a_prod_values_block_for_it_is_found_pinned_or_not(self, tmp_path: Path, block: str) -> None:
+        """Unpinned it would deploy ``:latest``; pinned it would run without a lane: both are findings."""
+        values = tmp_path / "prod.yaml"
+        values.write_text(f"apps:\n  platform:\n    {block}\n", encoding="utf-8")
+
+        assert _prod_residue(FIXTURE_REGISTRY, values, tmp_path / "snapshots") == [
+            "third: apps.platform.third in prod.yaml"
+        ]
+
+    def test_a_prod_snapshot_for_it_is_found(self, tmp_path: Path) -> None:
+        values = tmp_path / "prod.yaml"
+        values.write_text("apps:\n  platform:\n    web: {version: 1.0.0}\n", encoding="utf-8")
+        snapshots = tmp_path / "snapshots"
+        snapshots.mkdir()
+        (snapshots / "third.yaml").write_text("{}", encoding="utf-8")
+
+        assert _prod_residue(FIXTURE_REGISTRY, values, snapshots) == ["third: snapshots/third.yaml"]
+
+
 _COMMON = """\
 # common values
 registry: docker.io/mlorentedev

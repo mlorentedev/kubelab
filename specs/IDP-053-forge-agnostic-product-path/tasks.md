@@ -58,16 +58,16 @@ Depends on S1a. Files: `toolkit/features/generator_k8s.py`, `toolkit/features/pr
 `toolkit/features/registry.py`, `toolkit/features/product_render.py` (test only: `CONTRACT_KEYS`
 is NOT edited, D4).
 
-- [ ] [AC2] Failing test: the generated overlay image for a product with `image_registry` is
+- [x] [AC2] Failing test: the generated overlay image for a product with `image_registry` is
   `<image_registry>/<name>:<tag>`, and the committed overlays for `web` are byte-identical
   (`make validate-sync ENV=staging` / `ENV=prod` stay clean)
-- [ ] [AC2] `_build_context` and `_resolve_image` take the registry from the product's entry, falling back to `REGISTRY`
-- [ ] [AC2] Failing test in `tests/test_product_registry.py`: `"image_registry" not in CONTRACT_KEYS` (D4)
-- [ ] [AC2] Failing tests in `tests/test_promotion.py`: `promote --env prod` for a product with no `events.prod` is refused (D5); a prod values block without `version` for a staging-only product fails
-- [ ] [AC2] Implement the refusal and the committed-test for staging-only products
-- [ ] [AC2] Failing tests for `tag_exists` on a non-`docker.io` host: 200 is True, 404 is False, 401/403/unreachable is None with a warning naming the registry (D3); injectable HTTP, no network in tests
-- [ ] [AC2] Implement the OCI `HEAD /v2/<name>/manifests/<tag>` transport
-- [ ] [AC2] New `tests/test_prod_images_always_on.py`: no prod overlay image points at a forge host (D7)
+- [x] [AC2] `_build_context` and `_resolve_image` take the registry from the product's entry, falling back to `REGISTRY`
+- [x] [AC2] Failing test in `tests/test_product_registry.py`: `"image_registry" not in CONTRACT_KEYS` (D4) (already on master from the previous slice: `test_image_registry_is_not_a_contract_key`)
+- [x] [AC2] Failing tests in `tests/test_promotion.py`: `promote --env prod` for a product with no `events.prod` is refused (D5); a prod values block without `version` for a staging-only product fails
+- [x] [AC2] Implement the refusal and the committed-test for staging-only products
+- [x] [AC2] Failing tests for `tag_exists` on a non-`docker.io` host: 200 is True, 404 is False, 401/403/unreachable is None with a warning naming the registry (D3); injectable HTTP, no network in tests
+- [x] [AC2] Implement the OCI `HEAD /v2/<name>/manifests/<tag>` transport
+- [x] [AC2] New `tests/test_prod_images_always_on.py`: no prod overlay image points at a forge host (D7)
 
 Acceptance: `make validate-sync ENV=staging && make validate-sync ENV=prod` and
 `.venv/bin/python -m pytest -q tests/test_promotion.py tests/test_product_registry.py tests/test_prod_images_always_on.py`

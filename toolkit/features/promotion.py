@@ -68,6 +68,27 @@ def _require_platform_app(app: str, reason: str) -> None:
         )
 
 
+def has_prod_lane(app: str, path: Path | None = None) -> bool:
+    """Whether ``app`` may run in prod (IDP-053 D5): a contract-managed product declares it with ``events.prod``.
+
+    An in-tree product has no events by construction (it is released, not dispatched),
+    so it is not judged by them.
+    """
+    entry = product_registry.product(app, path)
+    return not entry.contract_managed or entry.events.prod is not None
+
+
+def _require_prod_lane(env: str, app: str) -> None:
+    """Refuse a prod promotion for a product that declares no prod lane, with ERROR / WHY / FIX."""
+    if env == "prod" and not has_prod_lane(app):
+        raise ValueError(
+            f"ERROR: '{app}' declares no events.prod in {product_registry.registry_path()}, so it has no prod lane\n"
+            "WHY: a prod values block without a version falls back to ':latest', and a staging-only product "
+            "has no prod hostname, snapshot or release behind it\n"
+            f"FIX: add events.prod to the '{app}' entry once it is meant to run in prod, or promote it to staging"
+        )
+
+
 def resolve_image_sha(env: str, app: str) -> str:
     """Return the immutable ``sha-<short>`` pinned for a platform app in ``values/<env>.yaml``.
 
@@ -111,9 +132,9 @@ def read_pinned_version(env: str, app: str) -> str | None:
 
 
 def _resolve_image(env: str, app: str) -> tuple[str, str]:
-    """Return ``(registry, image_name)`` for an app from the merged config."""
+    """Return ``(registry, image_name)`` for an app: the entry's registry, else the merged config's."""
     env_vars = ConfigurationManager(env, settings.project_root).get_env_vars()
-    registry = env_vars.get("REGISTRY", "docker.io/mlorentedev")
+    registry = product_registry.product(app).image_registry or env_vars.get("REGISTRY", "docker.io/mlorentedev")
     image_name = env_vars.get(f"APPS_PLATFORM_{app.upper()}_IMAGE_NAME")
     if not image_name:
         raise ValueError(f"No image_name configured for platform app '{app}'")
@@ -205,6 +226,7 @@ def promote(env: str, app: str, version: str) -> None:
     if env == "dev":
         raise ValueError("Promotion targets K8s environments (staging|prod), not dev")
     _require_platform_app(app, "edge services (e.g. errors) are not promoted via this command")
+    _require_prod_lane(env, app)
 
     registry, image_name = _resolve_image(env, app)
 
