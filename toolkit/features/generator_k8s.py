@@ -9,7 +9,7 @@ from toolkit.core.templating import create_renderer
 from toolkit.features.configuration import ConfigurationManager
 from toolkit.features.generator_base import BaseGenerator
 from toolkit.features.k8s_secrets import SECRET_DEFINITIONS
-from toolkit.features.product_registry import platform_apps
+from toolkit.features.product_registry import platform_apps, product
 
 
 class K8sGenerator(BaseGenerator):
@@ -227,7 +227,7 @@ class K8sGenerator(BaseGenerator):
         config_manager = ConfigurationManager(env, self.project_root)
         env_vars = config_manager.get_env_vars()
 
-        registry = env_vars.get("REGISTRY", "docker.io/mlorentedev")
+        default_registry = env_vars.get("REGISTRY", "docker.io/mlorentedev")
         namespace = "kubelab"
 
         # Default resource limits from global config
@@ -254,6 +254,8 @@ class K8sGenerator(BaseGenerator):
             enable_auth_val = self._find_var(env_vars, component, "ENABLE_AUTH")
             enable_auth = bool(enable_auth_val and enable_auth_val.lower() in ("true", "1", "yes"))
 
+            # The registry is the product's own (IDP-053 D4); only an entry that names none uses the platform's.
+            registry = product(component).image_registry or default_registry
             image = f"{registry}/{image_name}:{version}"
             image_pull_policy = self._resolve_pull_policy(version)
 

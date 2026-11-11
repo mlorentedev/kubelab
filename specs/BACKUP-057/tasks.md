@@ -146,5 +146,5 @@ The size decides whether R = 30 fits the free tier. It is measured by the watche
 
 - [ ] Every acceptance criterion is covered by a test and has a `features.json` entry with a non-vacuous verification
 - [ ] `make test` and lint green
-- [ ] (Recipient retired by #2935; the Actions secret goes after merge) #1852 is closed and `.sops.yaml` lists only the human recipient. Until then the lock is liftable through the CI key, so the spec does not archive
+- [x] (✓ 2026-11-03: #2935 retired the recipient, the `SOPS_AGE_KEY` Actions secret is deleted, and the owner confirmed the USB copy is gone) #1852 is closed and `.sops.yaml` lists only the human recipient. Until then the lock is liftable through the CI key, so the spec does not archive
 - [ ] `verification.md` filled; independent `dotf spec review` (a different model); archive PR closes #1920

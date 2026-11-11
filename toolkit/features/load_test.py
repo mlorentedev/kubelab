@@ -12,12 +12,17 @@ The rate limiter (30/s per host) is not edited. A run applies
 infra/load-test/limiter-bypass-route.yaml, a header-scoped route with the same
 chain minus `rate-limit`, and deletes it in a `finally`. A 429 on that route means
 the bypass is not in force, so the step reads invalid rather than as capacity.
+
+The header's value is drawn fresh for each run and never recorded (#3012): a route
+a dead run leaves behind then bypasses nothing anyone can send, and the next run's
+`apply` replaces it.
 """
 
 from __future__ import annotations
 
 import json
 import re
+import secrets
 import shlex
 import subprocess
 from concurrent.futures import ThreadPoolExecutor
@@ -47,7 +52,8 @@ EDGE_STABLE_SECONDS = 120
 EDGE_WAIT_SECONDS = 900
 
 BYPASS_HEADER = "X-Load-Test"
-BYPASS_VALUE = "ops-054"
+BYPASS_PLACEHOLDER = "__LOAD_TEST_BYPASS_VALUE__"  # the manifest's stand-in for the run's value
+BYPASS_VALUE_SHAPE = re.compile(r"[0-9a-f]{32}")
 ROUTE_NAME = "load-test"
 ROUTE_MANIFEST = "infra/load-test/limiter-bypass-route.yaml"
 SCRIPT = "infra/load-test/constant-rate.js"
@@ -119,8 +125,31 @@ def refuse_unknown_encoding(value: str) -> None:
         raise LoadTestRefused(f"accept-encoding must be one of {ACCEPT_ENCODINGS}, not {value!r}")
 
 
+def new_bypass_value() -> str:
+    """The header value for one run: 128 random bits, so a leftover route opens nothing."""
+    return secrets.token_hex(16)
+
+
+def render_route(manifest: str, value: str) -> str:
+    """The bypass route with this run's value in every rule.
+
+    The value lands inside a Traefik matcher, so only the shape `new_bypass_value`
+    draws is accepted; anything else could rewrite the rule.
+    """
+    if not BYPASS_VALUE_SHAPE.fullmatch(value):
+        raise LoadTestRefused("the bypass value must be 32 lowercase hex characters, drawn per run")
+    if BYPASS_PLACEHOLDER not in manifest:
+        raise LoadTestRefused(f"the route manifest has no {BYPASS_PLACEHOLDER}: it would arm a fixed value")
+    return manifest.replace(BYPASS_PLACEHOLDER, value)
+
+
 def k6_env(
-    target: Target, address: str, rate: int, seconds: int, bypass: bool, accept_encoding: str | None = None
+    target: Target,
+    address: str,
+    rate: int,
+    seconds: int,
+    bypass: str | None,
+    accept_encoding: str | None = None,
 ) -> dict[str, str]:
     env = {
         "LT_HOST": target.host,
@@ -129,8 +158,8 @@ def k6_env(
         "LT_RATE": str(rate),
         "LT_SECONDS": str(seconds),
     }
-    if bypass:
-        env |= {"LT_BYPASS_HEADER": BYPASS_HEADER, "LT_BYPASS_VALUE": BYPASS_VALUE}
+    if bypass is not None:
+        env |= {"LT_BYPASS_HEADER": BYPASS_HEADER, "LT_BYPASS_VALUE": bypass}
     if accept_encoding is not None:
         refuse_unknown_encoding(accept_encoding)
         env["LT_ACCEPT_ENCODING"] = accept_encoding
@@ -253,11 +282,13 @@ class Lab:
         )  # fmt: skip
         return done.stdout
 
-    def kubectl(self, *args: str, impersonate: bool = False) -> str:
+    def kubectl(self, *args: str, impersonate: bool = False, stdin: str | None = None) -> str:
         cmd = ["kubectl", "--kubeconfig", self.kubeconfig, *args]
         if impersonate:
             cmd.append(f"--as={self.operator_as}")
-        return subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", timeout=60, check=True).stdout
+        return subprocess.run(
+            cmd, input=stdin, capture_output=True, text=True, encoding="utf-8", timeout=60, check=True
+        ).stdout
 
     def assert_cluster(self) -> None:
         """The kubeconfig reaches the single staging node, or nothing is applied."""
@@ -265,8 +296,10 @@ class Lab:
         if names != [f"node/{self.target_node}"]:
             raise LoadTestRefused(f"kubeconfig reaches {names}, not node/{self.target_node}")
 
-    def arm(self) -> None:
-        self.kubectl("apply", "-f", str(self.root / ROUTE_MANIFEST), impersonate=True)
+    def arm(self, value: str) -> None:
+        """Apply, not create: a route a dead run left is replaced, so it lives until the next run at most."""
+        manifest = (self.root / ROUTE_MANIFEST).read_text(encoding="utf-8")
+        self.kubectl("apply", "-f", "-", impersonate=True, stdin=render_route(manifest, value))
 
     def disarm(self) -> None:
         self.kubectl("delete", "-f", str(self.root / ROUTE_MANIFEST), "--ignore-not-found", impersonate=True)
@@ -322,10 +355,13 @@ def run_step(
     address: str,
     rate: int,
     seconds: int,
-    bypass: bool,
+    bypass: str | None,
     accept_encoding: str | None = None,
 ) -> dict[str, Any]:
-    """One step with the node's figures around it. The generator's CPU decides its validity."""
+    """One step with the node's figures around it. The generator's CPU decides its validity.
+
+    `bypass` is the run's header value, or None for a step under the limiter.
+    """
     env = k6_env(target, address, rate, seconds, bypass, accept_encoding)
     before = {n: lab.cpu_line(n) for n in (lab.target_node, lab.generator)}
     stat_before = lab.cpu_stat(target.workload)
@@ -344,7 +380,7 @@ def run_step(
     step["throttled_ms"] = throttled_ms(stat_before, lab.cpu_stat(target.workload))
     step["edge_restarts"] = edge_restarts_between(edge_before, lab.edge_state())
     step["pod_replaced"] = lab.pod(target.workload)["metadata"]["uid"] != pod_before
-    step["reasons"] = classify(step, rate, bypass)
+    step["reasons"] = classify(step, rate, bypass is not None)
     return step
 
 
@@ -470,7 +506,7 @@ def run(
 
     stable_edge()
     baselines = [
-        run_step(lab, image, script, t, address, BASELINE_RATE, seconds, bypass=False, accept_encoding=accept_encoding)
+        run_step(lab, image, script, t, address, BASELINE_RATE, seconds, bypass=None, accept_encoding=accept_encoding)
         for t in targets
     ]
     ramps: list[dict[str, Any]] = []
@@ -488,16 +524,18 @@ def run(
         "ramps": ramps,
     }
     checkpoint({**result, "incomplete": True})
+    bypass = new_bypass_value()  # held in memory only: never in `result`, so never in docs/load-test
     try:
-        lab.arm()
+        lab.arm(bypass)
         time.sleep(SETTLE_SECONDS)  # Traefik watches the CRD; give the router time to load
         for repeat in range(1, repeats + 1):
             for target in targets:
 
                 def one(rate: int, target: Target = target) -> dict[str, Any]:
                     return run_step(
-                        lab, image, script, target, address, rate, seconds, bypass=True, accept_encoding=accept_encoding
-                    )
+                        lab, image, script, target, address, rate, seconds,
+                        bypass=bypass, accept_encoding=accept_encoding,
+                    )  # fmt: skip
 
                 done = ramp(one, steps, lambda: time.sleep(SETTLE_SECONDS))
                 ramps.append({"target": target.name, "repeat": repeat, "steps": done, "knee": knee(done)})

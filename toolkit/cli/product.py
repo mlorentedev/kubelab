@@ -2,10 +2,11 @@
 
 They read files and print results: no SOPS key, no network, no forge. The
 receiver workflow fetches the contract; these commands only judge it (D8).
-``ready``, ``resolve`` and ``release-contract`` are the exceptions: the operator's
-gate before a product moves to the generic receiver, the receiver's resolution of
-an image tag to its commit, and the prod promotion's fetch of the release's
-contract read the product repository through the forge adapter.
+``ready``, ``resolve``, ``fetch-contract`` and ``release-contract`` are the exceptions: the
+operator's gate before a product moves to the generic receiver, the receiver's resolution
+of an image tag to its commit, its fetch of the contract there, and the prod promotion's
+fetch of the release's contract read the product repository through the forge adapter.
+``route`` reads the registry alone, to say which runner a product's forge reads need.
 ``list`` and ``app-for-event`` answer from the product registry
 (``infra/config/products.yaml``) for the callers that cannot import it: the
 Makefile and the workflows.
@@ -19,7 +20,7 @@ from typing import Annotated
 import typer
 import yaml
 
-from toolkit.features import product_ready, product_registry, product_release, product_render
+from toolkit.features import product_ready, product_receiver, product_registry, product_release, product_render
 from toolkit.features.product_contract import ContractError, validate_contract
 from toolkit.features.product_guards import validate_registered
 
@@ -206,36 +207,106 @@ def release_contract(
         typer.echo(f"OK: {out} is the kubelab.yaml of {release.repository} {version} ({release.sha}, {release.digest})")
 
 
+def _refused(e: ContractError, as_json: bool) -> typer.Exit:
+    typer.echo(json.dumps({"ok": False, **e.as_dict()}) if as_json else str(e), err=not as_json)
+    return typer.Exit(1)
+
+
+def _echo(fields: dict[str, object], as_json: bool) -> None:
+    """One JSON object, or one ``key=value`` line per field: what ``$GITHUB_OUTPUT`` takes."""
+    if as_json:
+        typer.echo(json.dumps(fields))
+    else:
+        typer.echo("\n".join(f"{k}={v if isinstance(v, str) else json.dumps(v)}" for k, v in fields.items()))
+
+
 @app.command("resolve")
 def resolve(
-    name: Annotated[str, typer.Option("--app", help="A registered product with a remote repository")],
-    tag: Annotated[str, typer.Option("--tag", help="The immutable sha-<hex> image tag the product published")],
+    name: Annotated[str | None, typer.Option("--app", help="A registered product with a remote repository")] = None,
+    tag: Annotated[
+        str | None, typer.Option("--tag", help="The immutable sha-<hex> image tag the product published")
+    ] = None,
     as_json: Annotated[bool, typer.Option("--json", help="Print one JSON object instead of text")] = False,
+    event: Annotated[
+        str | None,
+        typer.Option(
+            "--event", help="The trigger (repository_dispatch or workflow_dispatch): decide as the receiver does"
+        ),
+    ] = None,
+    event_type: Annotated[str, typer.Option("--event-type", help="With --event: a dispatch's event type")] = "",
+    dry_run: Annotated[str, typer.Option("--dry-run", help="With --event: a manual run's dry_run input")] = "true",
+    ref: Annotated[str, typer.Option("--ref", help="With --event: the ref the run started from")] = "",
+    default_branch: Annotated[
+        str, typer.Option("--default-branch", help="With --event: this repository's default branch")
+    ] = "",
 ) -> None:
     """Resolve an image tag to its commit and say whether the product's default branch has it.
 
-    Exit 1 if the tag names no single commit, or one the product never merged.
+    Exit 1 if the tag names no single commit, or one the product never merged. With --event it
+    is the receiver's whole resolve step: --tag is the dispatch payload's (or the manual run's)
+    tag, --app a manual run's, and the answer is the skip flag and the outputs the promote job reads.
     """
+    if event is None and (name is None or tag is None):
+        raise typer.BadParameter("--app and --tag are required unless --event is given")
     try:
-        answer = product_ready.resolve(name, tag)
+        if event is not None:
+            received = product_receiver.receive(
+                event,
+                app=name or "",
+                tag=tag or "",
+                event_type=event_type,
+                dry_run=dry_run,
+                ref=ref,
+                default_branch=default_branch,
+            )
+            _echo(received, as_json)
+            return
+        answer = product_receiver.resolve(name or "", tag or "")
     except ContractError as e:
-        if as_json:
-            typer.echo(json.dumps({"ok": False, **e.as_dict()}))
-        else:
-            typer.echo(str(e), err=True)
-        raise typer.Exit(1) from None
+        raise _refused(e, as_json) from None
     if not answer.on_default_branch:
-        refusal = {
-            "error": f"commit {answer.sha} is not on {answer.repository}'s default branch",
-            "why": "the image and the contract must come from a commit the product merged.",
-            "fix": "dispatch the tag of a commit on the default branch.",
-        }
+        refusal = product_receiver.not_merged(answer)
         if as_json:
-            typer.echo(json.dumps({"ok": False, **refusal, "sha": answer.sha, "on_default_branch": False}))
+            typer.echo(json.dumps({"ok": False, **refusal.as_dict(), "sha": answer.sha, "on_default_branch": False}))
         else:
-            typer.echo("\n".join(f"{key.upper()}: {value}" for key, value in refusal.items()), err=True)
+            typer.echo(str(refusal), err=True)
         raise typer.Exit(1)
     if as_json:
         typer.echo(json.dumps({"ok": True, **dataclasses.asdict(answer)}))
     else:
         typer.echo(f"OK: {tag} is commit {answer.sha} of {answer.repository}, on the default branch")
+
+
+@app.command("fetch-contract")
+def fetch_contract(
+    name: Annotated[str, typer.Option("--app", help="A registered product with a remote repository")],
+    sha: Annotated[str, typer.Option("--sha", help="The full commit sha `resolve` printed")],
+    out: Annotated[
+        Path, typer.Option("--out", help="Where to write kubelab.yaml; nothing is written if it is missing")
+    ],
+    as_json: Annotated[bool, typer.Option("--json", help="Print one JSON object instead of text")] = False,
+) -> None:
+    """Read the product's kubelab.yaml at a commit through its forge and write it to --out; exit 1 if it cannot."""
+    try:
+        fetched = product_receiver.fetch_contract(name, sha, out)
+    except ContractError as e:
+        raise _refused(e, as_json) from None
+    if as_json:
+        typer.echo(json.dumps({"ok": True, **dataclasses.asdict(fetched), "contract": str(out)}))
+    else:
+        typer.echo(f"OK: {out} is the kubelab.yaml of {fetched.repository} at {fetched.sha}")
+
+
+@app.command("route")
+def route(
+    name: Annotated[str, typer.Option("--app", help="A registered product with a remote repository")],
+    hosted_runner: Annotated[
+        str, typer.Option("--hosted-runner", help="The repository's RUNNER_DOCKER: what a hosted forge's reads run on")
+    ] = "",
+    as_json: Annotated[bool, typer.Option("--json", help="Print one JSON object instead of text")] = False,
+) -> None:
+    """Print the product's forge and the runs-on its forge reads need, from the registry alone; exit 1 if none."""
+    try:
+        _echo(product_receiver.route(name, hosted_runner), as_json)
+    except ContractError as e:
+        raise _refused(e, as_json) from None

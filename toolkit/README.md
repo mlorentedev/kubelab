@@ -169,11 +169,13 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit obs watcher-run` | Run a CronJob once now, print its log, and delete the Job. |
 | `toolkit product` | Validate and render kubelab.yaml product contracts, and read the product registry (ADR-067). |
 | `toolkit product app-for-event` | Name the app a dispatch event type belongs to; exit 1 if the registry maps it to none. |
+| `toolkit product fetch-contract` | Read the product's kubelab.yaml at a commit through its forge and write it to --out; exit 1 if it cannot. |
 | `toolkit product list` | List the registered products, in registry order. |
 | `toolkit product ready` | Check the contract at the commit staging runs, as the generic receiver would; exit 1 if it would refuse. |
 | `toolkit product release-contract` | Fetch the contract at the release's commit, proven by digest, and write it to --out; exit 1 if refused. |
 | `toolkit product render` | Render a contract into apps.platform.<app>; without a flag, print the contract-owned keys. |
 | `toolkit product resolve` | Resolve an image tag to its commit and say whether the product's default branch has it. |
+| `toolkit product route` | Print the product's forge and the runs-on its forge reads need, from the registry alone; exit 1 if none. |
 | `toolkit product show` | Print where a product comes from: its forge, repository and receiver; exit 1 if unregistered. |
 | `toolkit product validate` | Validate a product contract against the schema, and with --registry against the platform; exit 1 if refused. |
 | `toolkit registry` | Container registry maintenance (tag pruning). |

@@ -25,7 +25,7 @@ Before it starts, avoid a staging deploy window: a pod replaced during a step ma
 
 1. Checks the kubeconfig reaches exactly the staging node, and pulls the k6 image declared at `load_test.image` in `common.yaml` on ace2, recording its digest.
 2. Baseline: 25 requests per second against each target through the real route, limiter included.
-3. Applies `infra/load-test/limiter-bypass-route.yaml`, a route that only matches requests carrying `X-Load-Test: ops-054`, with the real chain minus `rate-limit`. The `rate-limit` Middleware is not edited and no other request bypasses it.
+3. Applies `infra/load-test/limiter-bypass-route.yaml`, a route that only matches requests carrying `X-Load-Test` with a value drawn for this run, with the real chain minus `rate-limit`. The value is rendered over the manifest's placeholder, applied from stdin and recorded nowhere, so a route a dead run leaves behind bypasses nothing anyone can send; the next run's apply replaces it (#3012). The `rate-limit` Middleware is not edited and no other request bypasses it.
 4. Ramps each target at 50, 100, 200, 400, 800, 1000, 1200, 1400, 1600, 2000, 3200 and 6400 requests per second, 60 s a step, 15 s apart, and stops at the first unhealthy step. Three ramps.
 5. Deletes the route and the image, including when a step fails.
 

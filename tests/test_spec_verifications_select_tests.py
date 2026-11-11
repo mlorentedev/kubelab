@@ -57,7 +57,6 @@ UNWRITTEN = frozenset(
         "AI-024-hermes-reach-f7",
         "AI-024-hermes-reach-f8",
         "AI-024-hermes-reach-f9",
-        "BACKUP-057-f1",
         "NET-005-lab-edge-site-modes-f11",
         "TOOL-080-forge-pr-reviewer-f8",
     }

@@ -58,16 +58,16 @@ Depends on S1a. Files: `toolkit/features/generator_k8s.py`, `toolkit/features/pr
 `toolkit/features/registry.py`, `toolkit/features/product_render.py` (test only: `CONTRACT_KEYS`
 is NOT edited, D4).
 
-- [ ] [AC2] Failing test: the generated overlay image for a product with `image_registry` is
+- [x] [AC2] Failing test: the generated overlay image for a product with `image_registry` is
   `<image_registry>/<name>:<tag>`, and the committed overlays for `web` are byte-identical
   (`make validate-sync ENV=staging` / `ENV=prod` stay clean)
-- [ ] [AC2] `_build_context` and `_resolve_image` take the registry from the product's entry, falling back to `REGISTRY`
-- [ ] [AC2] Failing test in `tests/test_product_registry.py`: `"image_registry" not in CONTRACT_KEYS` (D4)
-- [ ] [AC2] Failing tests in `tests/test_promotion.py`: `promote --env prod` for a product with no `events.prod` is refused (D5); a prod values block without `version` for a staging-only product fails
-- [ ] [AC2] Implement the refusal and the committed-test for staging-only products
-- [ ] [AC2] Failing tests for `tag_exists` on a non-`docker.io` host: 200 is True, 404 is False, 401/403/unreachable is None with a warning naming the registry (D3); injectable HTTP, no network in tests
-- [ ] [AC2] Implement the OCI `HEAD /v2/<name>/manifests/<tag>` transport
-- [ ] [AC2] New `tests/test_prod_images_always_on.py`: no prod overlay image points at a forge host (D7)
+- [x] [AC2] `_build_context` and `_resolve_image` take the registry from the product's entry, falling back to `REGISTRY`
+- [x] [AC2] Failing test in `tests/test_product_registry.py`: `"image_registry" not in CONTRACT_KEYS` (D4) (already on master from the previous slice: `test_image_registry_is_not_a_contract_key`)
+- [x] [AC2] Failing tests in `tests/test_promotion.py`: `promote --env prod` for a product with no `events.prod` is refused (D5); a prod values block without `version` for a staging-only product fails
+- [x] [AC2] Implement the refusal and the committed-test for staging-only products
+- [x] [AC2] Failing tests for `tag_exists` on a non-`docker.io` host: 200 is True, 404 is False, 401/403/unreachable is None with a warning naming the registry (D3); injectable HTTP, no network in tests
+- [x] [AC2] Implement the OCI `HEAD /v2/<name>/manifests/<tag>` transport
+- [x] [AC2] New `tests/test_prod_images_always_on.py`: no prod overlay image points at a forge host (D7)
 
 Acceptance: `make validate-sync ENV=staging && make validate-sync ENV=prod` and
 `.venv/bin/python -m pytest -q tests/test_promotion.py tests/test_product_registry.py tests/test_prod_images_always_on.py`
@@ -189,10 +189,10 @@ Depends on S5a and the API note. Files: `toolkit/features/forge_adapter.py`,
 `toolkit/features/gitea_client.py` (new read methods plus their `SCOPE_BY_METHOD` entries),
 `docs/lessons/` or the spec's `verification.md` (the note).
 
-- [ ] [AC8] API note first: run a local Gitea 1.27.3 (as `scope-lab.py` does) and record, for each adapter method, the endpoint, the status codes and the edge cases (unknown vs ambiguous short sha, `compare` direction, raw at a commit, annotated tag). Commit it before code
-- [ ] [AC8] Failing tests with recorded responses: each of the four methods on the Gitea implementation; unknown and ambiguous short sha are told apart; a missing file is an error with ERROR / WHY / FIX
-- [ ] [AC8] Implement on `GiteaClient`; each new method is mapped in `SCOPE_BY_METHOD` and the test that pins the method-to-scope map passes with `read:repository` only
-- [ ] [AC8] The factory selects the Gitea implementation for `forge: gitea`
+- [x] [AC8] API note first: run a local Gitea 1.27.3 (as `scope-lab.py` does) and record, for each adapter method, the endpoint, the status codes and the edge cases (unknown vs ambiguous short sha, `compare` direction, raw at a commit, annotated tag). Commit it before code
+- [x] [AC8] Failing tests with recorded responses: each of the four methods on the Gitea implementation; unknown and ambiguous short sha are told apart; a missing file is an error with ERROR / WHY / FIX
+- [x] [AC8] Implement on `GiteaClient`; each new method is mapped in `SCOPE_BY_METHOD` and the test that pins the method-to-scope map passes with `read:repository` only
+- [x] [AC8] The factory selects the Gitea implementation for `forge: gitea`
 
 Acceptance: `.venv/bin/python -m pytest -q tests/test_forge_adapter.py tests/test_gitea_token_scopes.py tests/test_gitea_token_scope_drift.py`
 
@@ -212,9 +212,9 @@ Depends on S5a. Moves the workflow's inline `gh api` shell into testable command
 changing the workflow's behaviour (the workflow edit itself is S6b). Files:
 `toolkit/cli/product.py`, `toolkit/features/product_receiver.py` (new), tests.
 
-- [ ] [AC9] Failing tests: `product resolve` returns the same JSON the workflow's resolve step builds today for a GitHub fixture
-- [ ] [AC9] `toolkit product fetch-contract --app --sha` reads `kubelab.yaml` at the commit through the adapter and writes it
-- [ ] [AC9] Failing test then implement `toolkit product route --app` printing `{forge, runs_on}` from `products.yaml` only (GitHub keeps `vars.RUNNER_DOCKER`'s ubuntu default, Gitea selects the self-hosted label)
+- [x] [AC9] Failing tests: `product resolve` returns the same JSON the workflow's resolve step builds today for a GitHub fixture
+- [x] [AC9] `toolkit product fetch-contract --app --sha` reads `kubelab.yaml` at the commit through the adapter and writes it
+- [x] [AC9] Failing test then implement `toolkit product route --app` printing `{forge, runs_on}` from `products.yaml` only (GitHub keeps `vars.RUNNER_DOCKER`'s ubuntu default, Gitea selects the self-hosted label)
 
 Acceptance: `.venv/bin/python -m pytest -q tests/test_product_receiver.py tests/test_forge_adapter.py`
 
