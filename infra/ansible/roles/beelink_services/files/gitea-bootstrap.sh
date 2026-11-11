@@ -318,3 +318,9 @@ fi
 if [ -n "${GITEA_AGENT_USER:-}" ]; then
   ensure_machine_account "$GITEA_AGENT_USER" "$GITEA_AGENT_EMAIL"
 fi
+
+# The Gitea Renovate run's account (IDP-036 AC6). Absent until
+# `apps.auth.identities.renovate` is declared, like the two above.
+if [ -n "${GITEA_RENOVATE_USER:-}" ]; then
+  ensure_machine_account "$GITEA_RENOVATE_USER" "$GITEA_RENOVATE_EMAIL"
+fi

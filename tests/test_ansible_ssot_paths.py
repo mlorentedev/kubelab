@@ -75,6 +75,9 @@ ABSENT_BY_DESIGN = {
     # its catalog entry lands with the first such site (NET-005 task 4). The
     # gateway role refuses a `wifi_psk` profile without it.
     "secrets.networking.edge.uplink.psk",
+    # The Gitea Renovate run's login (IDP-036 AC6) is the operator's to name, and
+    # every task for the account gates on it, so a forge without it mints nothing.
+    "gitea_config.apps.auth.identities.renovate",
 }
 
 

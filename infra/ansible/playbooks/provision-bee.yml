@@ -366,6 +366,13 @@
         gitea_agent_email: "{{ gitea_config.apps.auth.identities.agent | default('') }}@{{ gitea_config.apps.services.core.gitea.domain }}"
         gitea_agent_scopes: "{{ gitea_config.apps.services.core.gitea.token_scopes.agent }}"
         gitea_agent_token: "{{ gitea_secrets.apps.services.core.gitea.agent_token | default('') }}"
+        # IDP-036 AC6 -- the Gitea Renovate run's account, a machine identity minted
+        # like the agent's. Empty until apps.auth.identities.renovate is declared,
+        # and every task for it skips while it is.
+        gitea_renovate_user: "{{ gitea_config.apps.auth.identities.renovate | default('') }}"
+        gitea_renovate_email: "{{ gitea_config.apps.auth.identities.renovate | default('') }}@{{ gitea_config.apps.services.core.gitea.domain }}"
+        gitea_renovate_scopes: "{{ gitea_config.apps.services.core.gitea.token_scopes.renovate }}"
+        gitea_renovate_token: "{{ gitea_secrets.apps.services.core.gitea.renovate_token | default('') }}"
         # The superadmin's API token (TOOL-035). Minted by the same mechanism and
         # gated the same way. Two reasons it exists, and only the first is obvious:
         # Gitea puts the creating account in a new organization's `Owners` team, so

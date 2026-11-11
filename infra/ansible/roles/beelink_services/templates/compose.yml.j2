@@ -161,6 +161,10 @@ services:
       # Empty when the row is absent, and the script then skips it.
       GITEA_AGENT_USER: "{{ gitea_agent_user }}"
       GITEA_AGENT_EMAIL: "{{ gitea_agent_email }}"
+      # IDP-036 AC6. The Gitea Renovate run's account, from
+      # apps.auth.identities.renovate. Empty until declared; the script skips it.
+      GITEA_RENOVATE_USER: "{{ gitea_renovate_user }}"
+      GITEA_RENOVATE_EMAIL: "{{ gitea_renovate_email }}"
     volumes:
       - {{ beelink_gitea_data_dir }}:/data
       - {{ beelink_deploy_dir }}/gitea-bootstrap.sh:/scripts/bootstrap.sh:ro

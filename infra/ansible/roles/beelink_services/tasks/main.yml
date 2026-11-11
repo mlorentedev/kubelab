@@ -546,6 +546,7 @@
         and (not gitea_reviewer_token or not gitea_review_notice_token
              or not gitea_issue_reader_token))
     or (gitea_agent_user | length > 0 and not gitea_agent_token)
+    or (gitea_renovate_user | length > 0 and not gitea_renovate_token)
   failed_when: not _gitea_record_tool.stat.executable | default(false)
   tags: [gitea]
 
@@ -568,6 +569,7 @@
     - {name: kubelab-review-notice, user: "{{ gitea_reviewer_user }}", recorded: "{{ gitea_review_notice_token | length > 0 }}"}
     - {name: kubelab-issue-reader, user: "{{ gitea_reviewer_user }}", recorded: "{{ gitea_issue_reader_token | length > 0 }}"}
     - {name: kubelab-agent, user: "{{ gitea_agent_user }}", recorded: "{{ gitea_agent_token | length > 0 }}"}
+    - {name: kubelab-renovate, user: "{{ gitea_renovate_user }}", recorded: "{{ gitea_renovate_token | length > 0 }}"}
     - {name: kubelab-reconciler, user: "{{ gitea_admin_user }}", recorded: "{{ gitea_admin_token | length > 0 }}"}
   loop_control:
     label: "{{ item.name }}"
@@ -799,6 +801,41 @@
   delegate_to: localhost
   become: false
   when: gitea_agent_user | length > 0 and not gitea_agent_token
+  changed_when: true
+  no_log: true
+  tags: [gitea]
+
+# The Gitea Renovate run's token (IDP-036 AC6): the same pair as the agent's, gated
+# on the login being declared and the SOPS key being empty. Its reach is the
+# organization team the reconciler grants it; the scope only says what it may do there.
+- name: Mint the Renovate account's scoped token
+  command:
+    argv:
+      - docker
+      - exec
+      - gitea
+      - su
+      - git
+      - -c
+      - >-
+        gitea admin user generate-access-token
+        --username {{ gitea_renovate_user }}
+        --token-name kubelab-renovate
+        --scopes {{ gitea_renovate_scopes }}
+        --raw
+  register: _gitea_renovate_token
+  when: gitea_renovate_user | length > 0 and not gitea_renovate_token
+  changed_when: _gitea_renovate_token.rc == 0
+  no_log: true
+  tags: [gitea]
+
+- name: Record the Renovate token in SOPS
+  command: "{{ playbook_dir }}/../../../.venv/bin/toolkit secrets set apps.services.core.gitea.renovate_token --env {{ gitea_identity_env }} --stdin"
+  args:
+    stdin: "{{ _gitea_renovate_token.stdout }}"
+  delegate_to: localhost
+  become: false
+  when: gitea_renovate_user | length > 0 and not gitea_renovate_token
   changed_when: true
   no_log: true
   tags: [gitea]
