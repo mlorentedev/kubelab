@@ -36,8 +36,9 @@ after staging pins its build, so it is never an ancestor of the pin.
 
 **Rule**: Before merging a release PR, check that staging's pin for that app
 has the release's source: run
-`git diff --stat <pin> origin/master -- apps/api ':!apps/api/CHANGELOG.md' ':!apps/api/version.txt'`,
-which must print nothing. Then verify a promotion by
+`git diff --stat <pin> <release PR head> -- apps/api ':!apps/api/CHANGELOG.md' ':!apps/api/version.txt'`,
+which must print nothing. Use the release PR's head, not `origin/master`:
+master may already carry later `apps/api` changes the release does not ship. Then verify a promotion by
 what prod does, not by the version it reports: a green digest check proves the
 tags are one artifact, not that it is the artifact the changelog describes.
 
