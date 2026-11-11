@@ -27,6 +27,8 @@ from dataclasses import dataclass
 from typing import Any
 
 SAMPLE_SECONDS = 2
+# /proc/stat counts in USER_HZ, a userspace ABI constant (sysconf(_SC_CLK_TCK)), whatever the kernel's HZ.
+USER_HZ = 100
 SEPARATOR = "\n@@\n"
 
 # Counters and gauges of the Go runtime, summed over their label sets.
@@ -130,8 +132,11 @@ def node_command(edge_uid: str, workload_uid: str) -> str:
 
 
 def _busy(before: list[int], after: list[int]) -> tuple[int, int, int]:
-    """Elapsed, busy and softirq jiffies between two /proc/stat rows (idle and iowait are not busy)."""
-    delta = [b - a for a, b in zip(before, after, strict=False)]
+    """Elapsed, busy and softirq jiffies between two /proc/stat rows (idle and iowait are not busy).
+
+    Only user..steal are elapsed time: guest and guest_nice are already counted in user and nice.
+    """
+    delta = [b - a for a, b in zip(before[:8], after[:8], strict=False)]
     idle = delta[3] + (delta[4] if len(delta) > 4 else 0)
     softirq = delta[6] if len(delta) > 6 else 0
     return sum(delta), sum(delta) - idle, softirq
@@ -160,7 +165,7 @@ def _edge_row(a: dict[str, float], b: dict[str, float], dt: float) -> dict[str, 
     return row
 
 
-def _node_row(a: dict[str, Any], b: dict[str, Any], dt: float) -> dict[str, Any]:
+def _node_row(a: dict[str, Any], b: dict[str, Any]) -> dict[str, Any]:
     ncpu = sum(1 for name in b["cpus"] if name != "cpu")
     elapsed, busy, softirq = _busy(a["cpus"]["cpu"], b["cpus"]["cpu"])
     if elapsed <= 0 or ncpu == 0:
@@ -172,14 +177,19 @@ def _node_row(a: dict[str, Any], b: dict[str, Any], dt: float) -> dict[str, Any]
     }
     per_cpu = [_busy(a["cpus"][n], b["cpus"][n]) for n in b["cpus"] if n != "cpu" and n in a["cpus"]]
     row["max_cpu_busy_pct"] = round(max((100 * u / e for e, u, _ in per_cpu if e > 0), default=0.0), 1)
+    # The cgroups divide by the wall time the kernel counted between the two reads, not by the
+    # sampler's stamps: those are taken before an ssh read that a saturated node answers 3 to 8 s
+    # late, by varying amounts, which put 5.56 cores of Traefik on a 4-core node (#3295).
+    wall = elapsed / ncpu / USER_HZ
     cores = {}
     for key, name in (("edge_usec", "edge_cgroup_cores"), ("workload_usec", "workload_cores")):
         if a[key] is not None and b[key] is not None and b[key] >= a[key]:
-            cores[name] = round((b[key] - a[key]) / 1e6 / dt, 2)
+            cores[name] = round((b[key] - a[key]) / 1e6 / wall, 2)
     row |= cores
     if len(cores) == 2:
-        # /proc/stat and the cgroups are read moments apart, so the remainder can dip below zero.
-        row["other_cores"] = round(max(row["node_cores"] - sum(cores.values()), 0.0), 2)
+        # /proc/stat and the cgroups are still read milliseconds apart, so the remainder can dip below
+        # zero. It is not clamped: a negative figure is that skew, and a 0.0 then means zero.
+        row["other_cores"] = round(row["node_cores"] - sum(cores.values()), 2)
     return row
 
 
@@ -192,7 +202,7 @@ def interval(a: dict[str, Any], b: dict[str, Any], start: float) -> dict[str, An
     if a["edge"] is not None and b["edge"] is not None:
         row |= _edge_row(a["edge"], b["edge"], dt)
     if a["node"] is not None and b["node"] is not None:
-        row |= _node_row(a["node"], b["node"], dt)
+        row |= _node_row(a["node"], b["node"])
     if a["generator"] is not None and b["generator"] is not None:
         elapsed, busy, _ = _busy(a["generator"], b["generator"])
         if elapsed > 0:

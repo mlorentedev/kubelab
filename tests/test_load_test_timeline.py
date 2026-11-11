@@ -8,6 +8,7 @@ The timeline reads what staging already exposes and changes nothing on the clust
 
 from __future__ import annotations
 
+import contextlib
 import pathlib
 import subprocess
 
@@ -95,11 +96,52 @@ class TestInterval:
         # 1,000 jiffies elapsed over 2 CPUs: 800 busy -> 1.6 cores, 200 of them softirq -> 0.4 cores.
         assert row["node_cores"] == 1.6
         assert row["softirq_cores"] == 0.4
-        assert row["edge_cgroup_cores"] == 2.5
-        assert row["workload_cores"] == 0.25
-        assert row["other_cores"] == 0.0  # 1.6 - 2.5 - 0.25 clamps: jiffies and cgroups are not read at one instant
+        # The cgroups divide by the kernel's 5 s (1,000 jiffies over 2 CPUs at USER_HZ 100), not the stamps' 2 s.
+        assert row["edge_cgroup_cores"] == 1.0
+        assert row["workload_cores"] == 0.1
+        assert row["other_cores"] == 0.5
         assert row["max_cpu_busy_pct"] == 80.0
         assert row["generator_busy_pct"] == 20.0
+
+    def test_cgroup_cores_use_the_kernels_clock_not_the_sample_stamps(self) -> None:
+        """A saturated node answers late and unevenly (#3295): the stamps say 2 s, the kernel says 5 s.
+
+        Two CPUs at USER_HZ 100 count 200 jiffies a second, so 1,000 jiffies are 5 s of wall time.
+        Over the stamps' 2 s the 5 CPU-seconds of Traefik would read 2.5 cores on a 2-core node.
+        """
+        n1 = tl.parse_node(_node(1000, 3000, 100, 10_000_000, 2_000_000))
+        n2 = tl.parse_node(_node(1800, 3200, 100, 15_000_000, 2_500_000))
+        row = tl.interval(self._sample(10.0, None, n1), self._sample(12.0, None, n2), 10.0)
+        assert row["node_cores"] == 1.6
+        assert row["edge_cgroup_cores"] == 1.0
+        assert row["workload_cores"] == 0.1
+        assert row["edge_cgroup_cores"] + row["workload_cores"] <= row["node_cores"]
+        assert row["other_cores"] == 0.5
+
+    def test_uneven_reads_never_put_more_in_the_cgroups_than_the_node_ran(self) -> None:
+        """Stamps 2.0 s and then 5.5 s apart, while the kernel counted 3 s and 4 s."""
+        usage = [(0, 0), (2_400_000, 900_000), (5_600_000, 2_100_000)]
+        jiffies = [(0, 0), (480, 600), (1120, 1400)]  # (busy, elapsed) over 2 CPUs: 3 s, then 4 s
+        stamps = [0.0, 2.0, 7.5]
+        nodes = [tl.parse_node(_node(b, e - b, 0, u, w)) for (b, e), (u, w) in zip(jiffies, usage, strict=True)]
+        samples = [self._sample(t, None, n) for t, n in zip(stamps, nodes, strict=True)]
+        for a, b in zip(samples, samples[1:], strict=False):
+            row = tl.interval(a, b, 0.0)
+            assert row["edge_cgroup_cores"] + row["workload_cores"] <= row["node_cores"] + 0.01
+
+    def test_a_negative_remainder_is_shown_not_clamped(self) -> None:
+        """/proc/stat and the cgroups are read milliseconds apart; a remainder below zero says so."""
+        n1 = tl.parse_node(_node(1000, 3000, 100, 0, 0))
+        n2 = tl.parse_node(_node(1800, 3200, 100, 4_000_000, 4_500_000))  # 8.5 CPU-seconds in 5 s: 1.7 cores
+        row = tl.interval(self._sample(0.0, None, n1), self._sample(2.0, None, n2), 0.0)
+        assert row["other_cores"] == -0.1
+
+    def test_guest_time_is_not_counted_twice_in_the_wall_clock(self) -> None:
+        """guest and guest_nice are already inside user and nice, so they are not elapsed time."""
+        before = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        after = [300, 0, 0, 100, 0, 0, 0, 0, 250, 0]
+        elapsed, busy, _ = tl._busy(before, after)
+        assert (elapsed, busy) == (400, 300)
 
     def test_a_restarted_edge_is_marked_not_read_as_negative_rates(self) -> None:
         a = tl.parse_edge(EDGE_METRICS)
@@ -171,8 +213,8 @@ class TestLabReaders:
         }
         lab.pod = lambda workload, namespace="kubelab": pods[workload]  # type: ignore[method-assign]
         lab.kubectl = lambda *a, **k: calls.append(("kubectl", a, k)) or EDGE_METRICS  # type: ignore[method-assign]
-        lab.ssh = lambda node, cmd, stdin=None, timeout=60: (
-            calls.append(("ssh", node, cmd, timeout))
+        lab.ssh = lambda node, cmd, stdin=None, timeout=60, options=(): (
+            calls.append(("ssh", node, cmd, timeout, options))
             or (  # type: ignore[method-assign]
                 "cpu 1 0 0 9 0 0 0" if node == "gen" else _node(100, 300, 20, 1, 2)
             )
@@ -192,7 +234,7 @@ class TestLabReaders:
         readers = self._lab(calls).timeline_readers("api")
         assert readers.node()["conntrack"] == 400
         assert readers.generator() == [1, 0, 0, 9, 0, 0, 0]
-        (_, node, cmd, timeout), (_, gen, _, gen_timeout) = calls
+        (_, node, cmd, timeout, _), (_, gen, _, gen_timeout, _) = calls
         assert (node, gen) == ("node", "gen")
         assert "pod0fc2_eab5.slice" in cmd and "pod1a2b.slice" in cmd
         assert max(timeout, gen_timeout) <= tl.SAMPLE_SECONDS * 5  # a hung read must not outlive the step
@@ -212,7 +254,17 @@ class TestStepCarriesItsTimeline:
         monkeypatch.setattr(lab, "pod", lambda *_a, **_k: {"metadata": {"uid": "u"}})
         monkeypatch.setattr(lab, "edge_state", lambda: ("a", 0))
         monkeypatch.setattr(lab, "ssh", lambda *_a, **_k: "")
-        monkeypatch.setattr(lab, "timeline_readers", lambda w: seen.append(("readers", w)) or "readers")
+        monkeypatch.setattr(lab, "timeline_readers", lambda w, o=(): seen.append(("readers", w, o)) or "readers")
+
+        @contextlib.contextmanager
+        def multiplexed(nodes: tuple, seconds: int):  # type: ignore[no-untyped-def]
+            seen.append(("open", nodes, seconds))
+            try:
+                yield ("-o", "ControlPath=x")
+            finally:
+                seen.append(("close", nodes))
+
+        monkeypatch.setattr(lab, "multiplexed", multiplexed)
         monkeypatch.setattr(lt, "_sample_mid_step", lambda *_a: ({}, 0))
         monkeypatch.setattr(lt, "parse_summary", lambda _s: {})
         monkeypatch.setattr(lt, "classify", lambda *_a: [])
@@ -235,6 +287,72 @@ class TestStepCarriesItsTimeline:
         seen: list = []
         step = self._step(self._fake(monkeypatch, seen), 0)
         assert "timeline" not in step and seen == []
+
+    def test_a_sampled_step_reads_over_one_connection_per_node(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A handshake per sample cost ace1 0.1 to 0.2 cores at rest, on the node under test (#3295)."""
+        seen: list = []
+        self._step(self._fake(monkeypatch, seen), 2)
+        opened = next(e for e in seen if e[0] == "open")
+        assert opened[1] == ("node", "gen")
+        assert opened[2] >= 60 + lt.TIMELINE_TAIL_SECONDS  # the connection outlives the sampling
+        assert ("readers", "api", ("-o", "ControlPath=x")) in seen
+        assert seen[-1] == ("close", ("node", "gen"))
+
+    def test_the_connections_close_when_the_step_fails(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        seen: list = []
+        lab = self._fake(monkeypatch, seen)
+
+        def broken(*_a: object, **_k: object) -> str:
+            raise subprocess.CalledProcessError(1, "ssh")
+
+        monkeypatch.setattr(lab, "ssh", broken)
+        with pytest.raises(subprocess.CalledProcessError):
+            self._step(lab, 2)
+        assert ("close", ("node", "gen")) in seen
+
+
+class TestMultiplexed:
+    """The step's ssh master: opened per node, closed per node, and never in the operator's ~/.ssh."""
+
+    def _run(self, monkeypatch: pytest.MonkeyPatch, fail_open: bool = False) -> tuple[list, tuple]:
+        argvs: list = []
+
+        def run(argv: list, **kwargs: object) -> subprocess.CompletedProcess:
+            argvs.append(argv)
+            if fail_open and "-fN" in argv:
+                raise subprocess.TimeoutExpired(argv, 15)
+            return subprocess.CompletedProcess(argv, 0, "", "")
+
+        monkeypatch.setattr(lt.subprocess, "run", run)
+        lab = lt.Lab(REPO, "kc", "op", "node", "gen")
+        with lab.multiplexed(("node", "gen"), 90) as options:
+            control = next(o for o in options if o.startswith("ControlPath="))
+            path = control.split("=", 1)[1]
+            assert len(path.replace("%C", "x" * 40)) < 100  # a unix socket path caps near 104 bytes on macOS
+            assert pathlib.Path(path).parent.is_dir()
+            lab.ssh("node", "true", options=options)
+        assert not pathlib.Path(path).parent.exists()
+        return argvs, options
+
+    def test_one_master_per_node_then_exit_per_node(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        argvs, options = self._run(monkeypatch)
+        masters = [a for a in argvs if "-fN" in a]
+        exits = [a for a in argvs if "-O" in a]
+        assert [a[-1] for a in masters] == ["node", "gen"]
+        assert all("ControlMaster=yes" in a and "ControlPersist=90" in a for a in masters)
+        assert [a[-1] for a in exits] == ["node", "gen"]
+        assert "ControlMaster=no" in options  # a reader never becomes a master that outlives the step
+
+    def test_a_reader_carries_the_options_before_the_host(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        argvs, options = self._run(monkeypatch)
+        (reader,) = [a for a in argvs if a[-1] == "true"]
+        assert reader[reader.index("node") - len(options) : reader.index("node")] == list(options)
+
+    def test_a_master_that_fails_to_open_does_not_fail_the_step(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Only that the failure is swallowed. That ssh then connects directly is ssh's behaviour, not this
+        code's: checked by hand against ace1 on 2026-11-11, with the socket missing and with a stale one."""
+        argvs, _ = self._run(monkeypatch, fail_open=True)
+        assert any(a[-1] == "true" for a in argvs)
 
 
 class TestRunPassesTheInterval:

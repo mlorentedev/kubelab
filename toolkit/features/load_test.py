@@ -24,8 +24,12 @@ import json
 import re
 import secrets
 import shlex
+import shutil
 import subprocess
+import tempfile
+from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -43,6 +47,8 @@ TOP_AFTER_SECONDS = 45  # metrics-server averages over about 15 s
 # the sampler, so the rise and fall of the edge's rate mark where k6 ran (#3102).
 TIMELINE_TAIL_SECONDS = 10
 TIMELINE_READ_TIMEOUT = 8
+# The step's ssh masters outlive the sampling by this much, and are closed explicitly anyway.
+MUX_MARGIN_SECONDS = 60
 
 # Declared before the first run, so the knee cannot be chosen after seeing the data.
 MAX_ERROR_RATE = 0.01
@@ -258,7 +264,8 @@ def knee(steps: list[dict[str, Any]]) -> dict[str, Any]:
 
 def cpu_percent(before: str, after: str) -> float:
     """Busy share of the node between two `cpu` lines of /proc/stat."""
-    first, second = ([int(x) for x in line.split()[1:]] for line in (before, after))
+    # user..steal only: guest and guest_nice are already counted in user and nice.
+    first, second = ([int(x) for x in line.split()[1:9]] for line in (before, after))
     delta = [b - a for a, b in zip(first, second, strict=True)]
     total, idle = sum(delta), delta[3] + delta[4]
     return round(100 * (total - idle) / total, 1) if total else 0.0
@@ -281,12 +288,46 @@ class Lab:
         self.root, self.kubeconfig, self.operator_as = root, kubeconfig, operator_as
         self.target_node, self.generator = target_node, generator
 
-    def ssh(self, node: str, command: str, stdin: str | None = None, timeout: int = 60) -> str:
+    def ssh(
+        self, node: str, command: str, stdin: str | None = None, timeout: int = 60, options: tuple[str, ...] = ()
+    ) -> str:
         done = subprocess.run(
-            ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", node, command],
+            ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", *options, node, command],
             input=stdin, capture_output=True, text=True, encoding="utf-8", timeout=timeout, check=True,
         )  # fmt: skip
         return done.stdout
+
+    @contextmanager
+    def multiplexed(self, nodes: tuple[str, ...], seconds: int) -> Iterator[tuple[str, ...]]:
+        """One ssh connection per node for a step's timeline, so a sample costs a session, not a handshake.
+
+        A handshake per sample cost ace1 0.1 to 0.2 cores at rest, on the node under test (#3295).
+        The masters live in a directory of their own, never the operator's ~/.ssh, and are closed
+        when the step ends, failed or not. A master that does not open leaves the readers on direct
+        connections: with `ControlMaster=no`, ssh connects directly when the socket is missing or stale
+        (checked against ace1, both cases exit 0).
+        """
+        control = tempfile.mkdtemp(prefix="lt-", dir="/tmp")  # a unix socket path caps near 104 bytes on macOS
+        path = ("-o", f"ControlPath={control}/%C")
+        try:
+            for node in nodes:
+                self._ssh_control(node, *path, "-o", "ControlMaster=yes", "-o", f"ControlPersist={seconds}", "-fN")
+            yield (*path, "-o", "ControlMaster=no")
+        finally:
+            for node in nodes:
+                self._ssh_control(node, *path, "-O", "exit")
+            shutil.rmtree(control, ignore_errors=True)
+
+    @staticmethod
+    def _ssh_control(node: str, *args: str) -> None:
+        try:
+            subprocess.run(
+                ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", *args, node],
+                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                timeout=15, check=False,
+            )  # fmt: skip
+        except (subprocess.SubprocessError, OSError):
+            pass  # best effort both ways: a missing master costs a handshake per read, not the step
 
     def kubectl(self, *args: str, impersonate: bool = False, stdin: str | None = None) -> str:
         cmd = ["kubectl", "--kubeconfig", self.kubeconfig, *args]
@@ -348,7 +389,7 @@ class Lab:
         out = self.ssh(node, "grep MemAvailable /proc/meminfo")
         return int(out.split()[1]) // 1024
 
-    def timeline_readers(self, workload: str) -> tl.Readers:
+    def timeline_readers(self, workload: str, ssh_options: tuple[str, ...] = ()) -> tl.Readers:
         """Resolve the pods once per step; each sample is then one GET and two ssh reads."""
         edge = self.pod(EDGE_WORKLOAD, EDGE_NAMESPACE)
         ports = [p for c in edge["spec"]["containers"] for p in c.get("ports", []) if p.get("name") == "metrics"]
@@ -360,9 +401,11 @@ class Lab:
             edge=lambda: tl.parse_edge(
                 self.kubectl("get", "--raw", f"{path}/proxy/metrics", f"--request-timeout={TIMELINE_READ_TIMEOUT}s")
             ),
-            node=lambda: tl.parse_node(self.ssh(self.target_node, command, timeout=TIMELINE_READ_TIMEOUT)),
+            node=lambda: tl.parse_node(
+                self.ssh(self.target_node, command, timeout=TIMELINE_READ_TIMEOUT, options=ssh_options)
+            ),
             generator=lambda: tl.parse_cpu_line(
-                self.ssh(self.generator, "head -1 /proc/stat", timeout=TIMELINE_READ_TIMEOUT)
+                self.ssh(self.generator, "head -1 /proc/stat", timeout=TIMELINE_READ_TIMEOUT, options=ssh_options)
             ),
         )
 
@@ -393,20 +436,27 @@ def run_step(
     stat_before = lab.cpu_stat(target.workload)
     pod_before = lab.pod(target.workload)["metadata"]["uid"]
     edge_before = lab.edge_state()
-    readers = lab.timeline_readers(target.workload) if sample_seconds > 0 else None
-    with ThreadPoolExecutor(max_workers=3) as pool:
-        timeline = (
-            pool.submit(tl.sample_timeline, readers, seconds + TIMELINE_TAIL_SECONDS, sample_seconds)
-            if readers is not None
-            else None
-        )
-        k6 = pool.submit(lab.ssh, lab.generator, k6_command(image, env), script, seconds + 120)
-        mid = pool.submit(_sample_mid_step, lab, target.workload, min(TOP_AFTER_SECONDS, seconds))
-        stdout = k6.result()
-        top, memory = mid.result()
+    with ExitStack() as stack:
+        readers = None
+        if sample_seconds > 0:
+            sampled = seconds + TIMELINE_TAIL_SECONDS
+            nodes = (lab.target_node, lab.generator)
+            options = stack.enter_context(lab.multiplexed(nodes, sampled + MUX_MARGIN_SECONDS))
+            readers = lab.timeline_readers(target.workload, options)
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            timeline = (
+                pool.submit(tl.sample_timeline, readers, seconds + TIMELINE_TAIL_SECONDS, sample_seconds)
+                if readers is not None
+                else None
+            )
+            k6 = pool.submit(lab.ssh, lab.generator, k6_command(image, env), script, seconds + 120)
+            mid = pool.submit(_sample_mid_step, lab, target.workload, min(TOP_AFTER_SECONDS, seconds))
+            stdout = k6.result()
+            top, memory = mid.result()
+            sampled_rows = timeline.result() if timeline is not None else None
     step: dict[str, Any] = {"rate": rate, "target": target.name, **parse_summary(stdout)}
-    if timeline is not None:
-        step["timeline"] = timeline.result()
+    if sampled_rows is not None:
+        step["timeline"] = sampled_rows
     step["node_cpu"] = cpu_percent(before[lab.target_node], lab.cpu_line(lab.target_node))
     step["generator_cpu"] = cpu_percent(before[lab.generator], lab.cpu_line(lab.generator))
     step["node_mem_available_mb"] = memory
