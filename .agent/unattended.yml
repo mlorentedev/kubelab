@@ -1,0 +1,32 @@
+version: 1
+run_id: "autopilot-2026-11-11"
+armed_by: manu
+armed_at: 2026-11-11T07:44:57Z
+expires_at: 2026-11-11T19:44:57Z
+objective: "Land every IDP-053 slice the agent may merge and leave the owner-merge slices as triaged, ready PRs."
+scope:
+  write_paths:
+    - "toolkit/**"
+    - "tests/**"
+    - "specs/IDP-053-forge-agnostic-product-path/**"
+    - "docs/lessons/**"
+    - "docs/adr/adr-067-*.md"
+    - "infra/k8s/base/edge/coredns-custom.yaml"
+  frozen_paths: [".github/**", ".agent/**", "infra/config/**", "**/AGENTS.md", "toolkit/features/deploy_shape.py"]
+  frozen_exceptions: {"toolkit/features/deploy_shape.py": "S9 worktree only (owner merges)"}
+  max_files: 12
+  max_loc: 300
+allowed_commands: [dotf, gh, git, make, uv]
+queue:
+  source: bitacora
+  filter: "mlorentedev/kubelab#2612 (IDP-053) slices, then tickets for this line of work (resume deploy via kubelab)"
+  max_items: 6
+budget:
+  max_iterations: 8
+  max_minutes_per_iteration: 40
+  max_consecutive_failures: 2
+authority:
+  merge: standing-grant   # agent-merge slices only (S8); S2a, S3c, S9 stay open for the owner
+  push: true
+  open_pr: true
+  advisor_tier: top
