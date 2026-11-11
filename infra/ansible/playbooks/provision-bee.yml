@@ -170,6 +170,37 @@
       no_log: true
       tags: [always]
 
+    # IDP-036 AC4. The Gitea Renovate run's engine image and version live once,
+    # in ci-workflows' renovate/engine.json, read here at the same tag the run's
+    # global config extends (renovate_preset_tag below), so one pin moves both.
+    # Resolved at provision, on the controller: a version reaches the node only
+    # through a provisioned PR, never at run time. `always` because the role
+    # reads it under any of its tags; raw.githubusercontent needs no token.
+    - name: Fetch the Renovate engine pin from ci-workflows
+      ansible.builtin.uri:
+        url: "https://raw.githubusercontent.com/mlorentedev/ci-workflows/{{ gitea_config.ci.renovate.preset_tag }}/renovate/engine.json"
+        return_content: true
+      register: _renovate_engine
+      delegate_to: localhost
+      become: false
+      run_once: true
+      changed_when: false
+      check_mode: false
+      tags: [always]
+
+    - name: Refuse an engine pin that is not an image and a version
+      ansible.builtin.assert:
+        that:
+          - _renovate_engine.json.image is string
+          - _renovate_engine.json.image is regex('^[a-z0-9./_-]+$')
+          - _renovate_engine.json.version is string
+          - _renovate_engine.json.version is regex('^\d+\.\d+\.\d+$')
+        fail_msg: >-
+          ci-workflows renovate/engine.json at {{ gitea_config.ci.renovate.preset_tag }}
+          is not {"image": <repository>, "version": <x.y.z>}: {{ _renovate_engine.json }}
+        quiet: true
+      tags: [always]
+
     - name: Generate Headscale pre-auth key (via VPS)
       command: >
         docker exec headscale headscale preauthkeys create
@@ -246,6 +277,8 @@
         renovate_gitea_organizations: "{{ gitea_config.apps.services.core.gitea.organizations }}"
         # IDP-036 AC3: the one pinned ci-workflows tag the preset and engine are read at.
         renovate_preset_tag: "{{ gitea_config.ci.renovate.preset_tag }}"
+        # IDP-036 AC4: {image, version} from engine.json at that same tag (pre_tasks).
+        renovate_engine: "{{ _renovate_engine.json }}"
         # SEC-GITEA-001 (#1389). `health_path` has been declared in common.yaml
         # since the move and was read by NOTHING: the compose healthcheck
         # hardcoded /api/v1/version instead. That divergence was invisible while

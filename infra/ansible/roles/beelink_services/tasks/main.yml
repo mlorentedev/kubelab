@@ -207,6 +207,19 @@
     mode: "0644"
   tags: [gitea, renovate]
 
+# The engine image, from ci-workflows' engine.json at the preset's tag (AC4; the
+# play fetches and checks it). The image joins the stack's bounded pull with the
+# unit that runs it (AC2), not before: pulled now it would cost every Beelink
+# provision a multi-GB fetch behind the edge for a container nothing starts.
+- name: Install the Renovate run environment
+  template:
+    src: renovate.env.j2
+    dest: "{{ beelink_deploy_dir }}/renovate/renovate.env"
+    owner: root
+    group: root
+    mode: "0644"
+  tags: [gitea, renovate]
+
 # --- Boot ordering: bind address must exist before Docker publishes on it ---
 - name: Install the Tailscale address wait helper
   copy:
