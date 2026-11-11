@@ -57,7 +57,7 @@ func TestPopulateConfigForge(t *testing.T) {
 
 	t.Run("absent", func(t *testing.T) {
 		for _, key := range []string{
-			"FORGE_GITEA_TOKEN", "INFRA_FORGE_GITHUB_APP_ID",
+			"FORGE_GITEA_TOKEN", "INFRA_FORGE_GITEA_URL", "INFRA_FORGE_GITHUB_APP_ID",
 			"INFRA_FORGE_GITHUB_INSTALLATION_ID", "FORGE_GITHUB_PRIVATE_KEY",
 		} {
 			t.Setenv(key, "")
@@ -66,7 +66,7 @@ func TestPopulateConfigForge(t *testing.T) {
 		if err != nil {
 			t.Fatalf("populateConfig() without forge credentials failed: %v", err)
 		}
-		if cfg.Forge.GiteaToken != "" || cfg.Forge.GitHubPrivateKey != "" ||
+		if cfg.Forge.GiteaToken != "" || cfg.Forge.GiteaURL != "" || cfg.Forge.GitHubPrivateKey != "" ||
 			cfg.Forge.GitHubAppID != "" || cfg.Forge.GitHubInstallationID != "" {
 			t.Fatalf("absent credentials must stay empty, got %+v", cfg.Forge)
 		}
@@ -74,6 +74,7 @@ func TestPopulateConfigForge(t *testing.T) {
 
 	t.Run("present", func(t *testing.T) {
 		t.Setenv("FORGE_GITEA_TOKEN", "gitea-token")
+		t.Setenv("INFRA_FORGE_GITEA_URL", "http://gitea:3000")
 		t.Setenv("INFRA_FORGE_GITHUB_APP_ID", "1")
 		t.Setenv("INFRA_FORGE_GITHUB_INSTALLATION_ID", "2")
 		t.Setenv("FORGE_GITHUB_PRIVATE_KEY", "pem-body")
@@ -81,8 +82,8 @@ func TestPopulateConfigForge(t *testing.T) {
 		if err != nil {
 			t.Fatalf("populateConfig() with forge credentials failed: %v", err)
 		}
-		want := "gitea-token|1|2|pem-body"
-		got := cfg.Forge.GiteaToken + "|" + cfg.Forge.GitHubAppID + "|" +
+		want := "http://gitea:3000|gitea-token|1|2|pem-body"
+		got := cfg.Forge.GiteaURL + "|" + cfg.Forge.GiteaToken + "|" + cfg.Forge.GitHubAppID + "|" +
 			cfg.Forge.GitHubInstallationID + "|" + cfg.Forge.GitHubPrivateKey
 		if got != want {
 			t.Fatalf("forge credentials read from the wrong variables: got %q, want %q", got, want)

@@ -87,6 +87,24 @@ func (m ForgeModel) LastRead(ctx context.Context, src forge.Source) (time.Time, 
 	return *asOf, nil
 }
 
+// Sources lists every source the store has a row for, read or found unreachable,
+// ordered by forge, owner and repository. It seeds the catalog at start.
+func (m ForgeModel) Sources(ctx context.Context) ([]forge.Source, error) {
+	db, err := Pool(m.Conf)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := db.Query(ctx, `SELECT forge, owner, repo FROM forge_source ORDER BY forge, owner, repo`)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (forge.Source, error) {
+		var s forge.Source
+		err := r.Scan(&s.Forge, &s.Owner, &s.Repo)
+		return s, err
+	})
+}
+
 // SaveRead writes the source row first, because forge_item holds a foreign key to it.
 func (m ForgeModel) SaveRead(ctx context.Context, src forge.Source, items []forge.Item, asOf time.Time) error {
 	db, err := Pool(m.Conf)

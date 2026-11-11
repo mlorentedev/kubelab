@@ -3,42 +3,63 @@ package api
 import (
 	"context"
 	"log"
-	"net/http"
+	"time"
 
 	"github.com/mlorentedev/kubelab/apps/api/internal/forge"
 	"github.com/mlorentedev/kubelab/apps/api/internal/store"
 	"github.com/mlorentedev/kubelab/apps/api/pkg/config"
 )
 
+// ForgeView is the forge view's runtime: one reader per forge, and the catalog
+// that both the reconcile and the console read, so the page shows exactly the
+// sources being read. Catalog is nil when the declaration does not parse.
+type ForgeView struct {
+	Readers map[string]forge.Reader
+	Catalog *forge.Catalog
+	Model   store.ForgeModel
+}
+
+// seedTimeout bounds the start-up read of the sources already stored.
+const seedTimeout = 5 * time.Second
+
+// NewForgeView builds the readers once: a forge's listing and its reads then
+// share one hourly ceiling (AC4). The catalog is seeded from the store, so a pod
+// that cannot list its forge at start still shows what it read before (AC1).
+func NewForgeView(ctx context.Context, conf *config.Config) *ForgeView {
+	readers := forge.NewReaders(forge.Credentials{
+		GitHubAppID:          conf.Forge.GitHubAppID,
+		GitHubInstallationID: conf.Forge.GitHubInstallationID,
+		GitHubPrivateKey:     conf.Forge.GitHubPrivateKey,
+		GiteaURL:             conf.Forge.GiteaURL,
+		GiteaToken:           conf.Forge.GiteaToken,
+	})
+	view := &ForgeView{Readers: readers, Model: store.ForgeModel{Conf: conf.Postgres}}
+	declared, err := forge.ParseSources(conf.Forge.Sources)
+	if err != nil {
+		log.Printf("forge view: sources: %v", err)
+		return view
+	}
+	view.Catalog = &forge.Catalog{Declared: declared, Listers: forge.Listers(readers)}
+	if conf.Postgres.Configured() {
+		seedCtx, cancel := context.WithTimeout(ctx, seedTimeout)
+		defer cancel()
+		known, err := view.Model.Sources(seedCtx)
+		if err != nil {
+			log.Printf("forge view: seed from the store: %v", err)
+		}
+		view.Catalog.Seed(known)
+	}
+	return view
+}
+
 // StartForgeReconcile starts the reconcile when the environment gives it a database
 // and sources. It never stops the API from starting: a bad declaration is logged.
-func StartForgeReconcile(ctx context.Context, conf *config.Config) {
-	sources, err := forge.ParseSources(conf.Forge.Sources)
-	if err != nil {
-		log.Printf("forge reconcile not started: %v", err)
+func StartForgeReconcile(ctx context.Context, conf *config.Config, view *ForgeView) {
+	if view.Catalog == nil || len(view.Catalog.Declared) == 0 || !conf.Postgres.Configured() {
 		return
 	}
-	if len(sources) == 0 || !conf.Postgres.Configured() {
-		return
-	}
-	client := &http.Client{Transport: &forge.Ceiling{Limit: forge.HourlyCallCeiling}}
-	github := &forge.GitHub{BaseURL: "https://api.github.com", HTTP: client}
-	if conf.Forge.GitHubPrivateKey != "" {
-		tokens := &forge.AppTokens{
-			BaseURL:        github.BaseURL,
-			AppID:          conf.Forge.GitHubAppID,
-			InstallationID: conf.Forge.GitHubInstallationID,
-			PrivateKeyPEM:  conf.Forge.GitHubPrivateKey,
-			HTTP:           client,
-		}
-		github.Tokens = tokens.Token
-	}
-	r := &forge.Reconciler{
-		Readers: map[string]forge.Reader{"github": github},
-		Sources: sources,
-		Model:   store.ForgeModel{Conf: conf.Postgres},
-	}
+	r := &forge.Reconciler{Readers: view.Readers, Catalog: view.Catalog, Model: view.Model}
 	go r.Run(ctx, forge.ReconcilePeriod, forge.RetryPeriod)
-	projector := &forge.Projector{Log: store.ForgeModel{Conf: conf.Postgres}}
+	projector := &forge.Projector{Log: view.Model}
 	go projector.Run(ctx, forge.ProjectPeriod)
 }
