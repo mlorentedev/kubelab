@@ -76,31 +76,34 @@ def test_no_prod_overlay_image_points_at_a_forge_host(hosts: set[str]) -> None:
     assert on_forge(prod_overlay_images(), hosts) == []
 
 
-def test_the_scan_reads_the_overlays_it_guards(hosts: set[str]) -> None:
+@pytest.fixture(scope="module")
+def forge() -> str:
+    """The forge's host as ``common.yaml`` names it (``apps.services.core.gitea.domain``), never a copy of it."""
+    return str(yaml.safe_load(COMMON.read_text(encoding="utf-8"))["apps"]["services"]["core"]["gitea"]["domain"])
+
+
+def test_the_scan_reads_the_overlays_it_guards(hosts: set[str], forge: str) -> None:
     """A scan that found nothing would pass for any overlay: it has to see the images prod runs."""
     images = [image for refs in prod_overlay_images().values() for image in refs]
     assert "docker.io/mlorentedev/kubelab-web" in "".join(images)
-    assert "gitea.kubelab.live" in hosts
+    assert forge and forge in hosts, "the forge's own host (apps.services.core.gitea.domain) must be guarded"
 
 
 class TestTheScanCatchesAForgeImage:
-    def test_a_container_image_on_the_forge_is_found(self, tmp_path: Path, hosts: set[str]) -> None:
+    def test_a_container_image_on_the_forge_is_found(self, tmp_path: Path, hosts: set[str], forge: str) -> None:
+        image = f"{forge}/personal/beta:sha-0123456789ab"
         (tmp_path / "deploy.yaml").write_text(
-            "spec:\n  template:\n    spec:\n      containers:\n"
-            "        - image: gitea.kubelab.live/personal/beta:sha-0123456789ab\n",
-            encoding="utf-8",
+            f"spec:\n  template:\n    spec:\n      containers:\n        - image: {image}\n", encoding="utf-8"
         )
 
-        assert on_forge(prod_overlay_images(tmp_path), hosts) == [
-            "deploy.yaml: gitea.kubelab.live/personal/beta:sha-0123456789ab"
-        ]
+        assert on_forge(prod_overlay_images(tmp_path), hosts) == [f"deploy.yaml: {image}"]
 
-    def test_a_kustomize_rename_to_the_forge_is_found(self, tmp_path: Path, hosts: set[str]) -> None:
+    def test_a_kustomize_rename_to_the_forge_is_found(self, tmp_path: Path, hosts: set[str], forge: str) -> None:
         (tmp_path / "kustomization.yaml").write_text(
-            "images:\n  - name: x\n    newName: gitea.kubelab.live/personal/x\n", encoding="utf-8"
+            f"images:\n  - name: x\n    newName: {forge}/personal/x\n", encoding="utf-8"
         )
 
-        assert on_forge(prod_overlay_images(tmp_path), hosts) == ["kustomization.yaml: gitea.kubelab.live/personal/x"]
+        assert on_forge(prod_overlay_images(tmp_path), hosts) == [f"kustomization.yaml: {forge}/personal/x"]
 
     def test_the_forge_host_of_a_registered_product_counts_too(self, tmp_path: Path) -> None:
         path = tmp_path / "products.yaml"

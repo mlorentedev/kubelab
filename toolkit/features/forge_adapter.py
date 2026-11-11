@@ -83,6 +83,8 @@ class GitHubForge:
     """``ForgeAdapter`` over ``gh api``, making the calls the receiver workflow made inline."""
 
     name = "GitHub"
+    #: GitHub-hosted runners reach github.com: the receiver keeps its hosted default (``RUNNER_DOCKER``).
+    RUNS_ON: tuple[str, ...] = ()
 
     def __init__(self, repository: str, runner: Runner) -> None:
         self.repository = repository
@@ -129,6 +131,8 @@ class GiteaForge:
     """``ForgeAdapter`` over ``GiteaClient``: the reads of lesson-733, each needing ``read:repository`` only."""
 
     name = "Gitea"
+    #: The forge is reachable only from the homelab: its reads run on the self-hosted runner's labels.
+    RUNS_ON: tuple[str, ...] = ("self-hosted", "linux", "docker")
     #: The ``GiteaClient`` methods this makes; a test observes the calls and compares them with this.
     READS = ("get_repo", "get_commit", "compare_ahead", "get_raw_file", "get_tag")
 
@@ -194,6 +198,14 @@ def _gitea_forge(repository: str, _runner: Runner) -> GiteaForge:
 
 
 _IMPLEMENTATIONS: dict[str, Callable[[str, Runner], ForgeAdapter]] = {"github": GitHubForge, "gitea": _gitea_forge}
+
+
+_RUNS_ON: dict[str, tuple[str, ...]] = {"github": GitHubForge.RUNS_ON, "gitea": GiteaForge.RUNS_ON}
+
+
+def runs_on(forge: str) -> list[str]:
+    """The runner labels a forge's reads need, or ``[]`` when a hosted runner reaches it (the caller's default)."""
+    return list(_RUNS_ON.get(forge, ()))
 
 
 def adapter_for(app: str, entry: Product, runner: Runner | None = None) -> ForgeAdapter:
