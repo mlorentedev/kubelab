@@ -2,9 +2,10 @@
 
 They read files and print results: no SOPS key, no network, no forge. The
 receiver workflow fetches the contract; these commands only judge it (D8).
-``ready`` and ``release-contract`` are the exceptions: the operator's gate
-before a product moves to the generic receiver, and the prod promotion's fetch of
-the release's contract, read the product repository through ``gh``.
+``ready``, ``resolve`` and ``release-contract`` are the exceptions: the operator's
+gate before a product moves to the generic receiver, the receiver's resolution of
+an image tag to its commit, and the prod promotion's fetch of the release's
+contract read the product repository through the forge adapter.
 ``list`` and ``app-for-event`` answer from the product registry
 (``infra/config/products.yaml``) for the callers that cannot import it: the
 Makefile and the workflows.
@@ -203,3 +204,38 @@ def release_contract(
         typer.echo(json.dumps({"ok": True, **dataclasses.asdict(release), "contract": str(out)}))
     else:
         typer.echo(f"OK: {out} is the kubelab.yaml of {release.repository} {version} ({release.sha}, {release.digest})")
+
+
+@app.command("resolve")
+def resolve(
+    name: Annotated[str, typer.Option("--app", help="A registered product with a remote repository")],
+    tag: Annotated[str, typer.Option("--tag", help="The immutable sha-<hex> image tag the product published")],
+    as_json: Annotated[bool, typer.Option("--json", help="Print one JSON object instead of text")] = False,
+) -> None:
+    """Resolve an image tag to its commit and say whether the product's default branch has it.
+
+    Exit 1 if the tag names no single commit, or one the product never merged.
+    """
+    try:
+        answer = product_ready.resolve(name, tag)
+    except ContractError as e:
+        if as_json:
+            typer.echo(json.dumps({"ok": False, **e.as_dict()}))
+        else:
+            typer.echo(str(e), err=True)
+        raise typer.Exit(1) from None
+    if not answer.on_default_branch:
+        refusal = {
+            "error": f"commit {answer.sha} is not on {answer.repository}'s default branch",
+            "why": "the image and the contract must come from a commit the product merged.",
+            "fix": "dispatch the tag of a commit on the default branch.",
+        }
+        if as_json:
+            typer.echo(json.dumps({"ok": False, **refusal, "sha": answer.sha, "on_default_branch": False}))
+        else:
+            typer.echo("\n".join(f"{key.upper()}: {value}" for key, value in refusal.items()), err=True)
+        raise typer.Exit(1)
+    if as_json:
+        typer.echo(json.dumps({"ok": True, **dataclasses.asdict(answer)}))
+    else:
+        typer.echo(f"OK: {tag} is commit {answer.sha} of {answer.repository}, on the default branch")

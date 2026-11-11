@@ -14,21 +14,19 @@ before anything is written, so the prod promotion opens no PR for them.
 
 from __future__ import annotations
 
-import re
 import shutil
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
 from toolkit.features import product_ready, product_registry
+from toolkit.features.forge_adapter import ForgeAdapter, ForgeError
 from toolkit.features.product_contract import ContractError
 from toolkit.features.product_guards import validate_registered
 from toolkit.features.registry import SHA_TAG_HEX_LENGTHS, SHA_TAG_PREFIX, reads_digests, tag_digest
 
 #: The git tag a product's release-please cuts for image ``<version>``.
 RELEASE_TAG_PREFIX = "v"
-
-_FULL_SHA = re.compile(r"^[0-9a-f]{40}$")
 
 
 @dataclass(frozen=True)
@@ -40,37 +38,16 @@ class Release:
     digest: str
 
 
-def _repository(app: str, registry: Path | None) -> str:
-    try:
-        entry = product_registry.product(app, registry)
-    except product_registry.RegistryError as e:
-        raise ContractError(
-            str(e),
-            "the registry alone admits a product, and names the repository its contract is fetched from.",
-            "admit the product in infra/config/products.yaml first.",
-        ) from None
-    if entry.forge != "github" or entry.repository is None:
-        raise ContractError(
-            f"'{app}' has no release contract (forge: {entry.forge})",
-            "only a product received from a GitHub repository renders prod from a contract; "
-            "an in-tree product's prod values are hand-authored.",
-            "promote it without a render; nothing reads a contract for it.",
-        )
-    return entry.repository
-
-
-def _release_commit(repository: str, version: str) -> str:
+def _release_commit(forge: ForgeAdapter, version: str) -> str:
     tag = f"{RELEASE_TAG_PREFIX}{version}"
-    answer = product_ready._gh("api", f"repos/{repository}/commits/{tag}", "--jq", ".sha")
-    sha = answer.stdout.strip()
-    if answer.returncode != 0 or not _FULL_SHA.match(sha):
+    try:
+        return forge.resolve_tag(tag)
+    except ForgeError as e:
         raise ContractError(
-            f"{repository} has no release tag {tag}",
-            f"prod renders the contract at the commit the release was cut from. GitHub answered: "
-            f"{(answer.stderr or sha).strip()}",
-            f"promote a version {repository} has released, or push its {tag} tag.",
-        )
-    return sha
+            f"{forge.repository} has no release tag {tag}",
+            f"prod renders the contract at the commit the release was cut from. {forge.name} answered: {e}",
+            f"promote a version {forge.repository} has released, or push its {tag} tag.",
+        ) from None
 
 
 def _prove_image(app: str, version: str, sha: str, registry: Path | None) -> str:
@@ -119,23 +96,22 @@ def _prove_image(app: str, version: str, sha: str, registry: Path | None) -> str
 
 def fetch_release_contract(app: str, version: str, dest: Path, registry: Path | None = None) -> Release:
     """Write the contract of ``app``'s release ``version`` to ``dest``, or raise ``ContractError`` and write nothing."""
-    repository = _repository(app, registry)
-    sha = _release_commit(repository, version)
+    forge = product_ready.forge_for(app, registry)
+    sha = _release_commit(forge, version)
     digest = _prove_image(app, version, sha, registry)
-    fetched = product_ready._gh(
-        "api", "-H", "Accept: application/vnd.github.raw", f"repos/{repository}/contents/kubelab.yaml?ref={sha}"
-    )
-    if fetched.returncode != 0:
+    try:
+        fetched = forge.read_file(product_ready.CONTRACT_PATH, sha)
+    except ForgeError:
         raise ContractError(
-            f"{repository} has no readable kubelab.yaml at {RELEASE_TAG_PREFIX}{version} ({sha})",
+            f"{forge.repository} has no readable kubelab.yaml at {RELEASE_TAG_PREFIX}{version} ({sha})",
             "a product is deployed only from the contract committed with its image (ADR-067); "
             "a release older than its kubelab.yaml cannot render prod.",
             "promote a release that carries kubelab.yaml.",
-        )
+        ) from None
     with tempfile.TemporaryDirectory() as scratch:
-        path = Path(scratch) / "kubelab.yaml"
-        path.write_text(fetched.stdout, encoding="utf-8")
+        path = Path(scratch) / product_ready.CONTRACT_PATH
+        path.write_text(fetched, encoding="utf-8")
         validate_registered(path, app, registry)
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(path, dest)
-    return Release(app=app, repository=repository, version=version, sha=sha, digest=digest)
+    return Release(app=app, repository=forge.repository, version=version, sha=sha, digest=digest)
