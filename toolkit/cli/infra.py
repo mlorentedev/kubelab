@@ -362,6 +362,13 @@ def load_test_run(
     sample_seconds: Annotated[
         int, typer.Option("--sample-seconds", help="Seconds between timeline samples in each step; 0 turns it off")
     ] = 2,
+    warmup_seconds: Annotated[
+        int,
+        typer.Option(
+            "--warmup-seconds",
+            help="Seconds each step runs before its verdict reads; reported as the cold burst. 0 turns it off",
+        ),
+    ] = 30,  # load_test.WARMUP_SECONDS, which a test holds this to
     output: Annotated[str, typer.Option("--output", help="Results directory")] = "docs/load-test",
 ) -> None:
     """Measure staging: a baseline under the limiter, then ramps to the first degraded step.
@@ -409,6 +416,7 @@ def load_test_run(
                 min_rate=min_rate,
                 accept_encoding=accept_encoding,
                 sample_seconds=sample_seconds,
+                warmup=warmup_seconds,
             )
         )
     except (LoadTestRefused, subprocess.SubprocessError, OSError) as e:
