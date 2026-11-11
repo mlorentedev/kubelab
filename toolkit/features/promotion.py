@@ -28,6 +28,7 @@ from toolkit.core.logging import logger
 from toolkit.features import product_registry
 from toolkit.features.configuration import ConfigurationManager
 from toolkit.features.generator_k8s import K8sGenerator
+from toolkit.features.product_guards import declared_envs
 from toolkit.features.registry import tag_exists
 from toolkit.scripts import sync_k8s_images
 
@@ -65,6 +66,22 @@ def _require_platform_app(app: str, reason: str) -> None:
     if app not in apps:
         raise ValueError(
             f"App '{app}' is not a platform app: {product_registry.registry_path()} admits {apps}; {reason}"
+        )
+
+
+def has_prod_lane(app: str, path: Path | None = None) -> bool:
+    """Whether ``app`` may run in prod (IDP-053 D5): the registry's lanes, as ``declared_envs`` reads them."""
+    return "prod" in declared_envs(product_registry.product(app, path))
+
+
+def _require_prod_lane(env: str, app: str) -> None:
+    """Refuse a prod promotion for a product that declares no prod lane, with ERROR / WHY / FIX."""
+    if env == "prod" and not has_prod_lane(app):
+        raise ValueError(
+            f"ERROR: '{app}' declares no events.prod in {product_registry.registry_path()}, so it has no prod lane\n"
+            "WHY: a prod values block without a version falls back to ':latest', and a staging-only product "
+            "has no prod hostname, snapshot or release behind it\n"
+            f"FIX: add events.prod to the '{app}' entry once it is meant to run in prod, or promote it to staging"
         )
 
 
@@ -111,9 +128,9 @@ def read_pinned_version(env: str, app: str) -> str | None:
 
 
 def _resolve_image(env: str, app: str) -> tuple[str, str]:
-    """Return ``(registry, image_name)`` for an app from the merged config."""
+    """Return ``(registry, image_name)`` for an app: the entry's registry, else the merged config's."""
     env_vars = ConfigurationManager(env, settings.project_root).get_env_vars()
-    registry = env_vars.get("REGISTRY", "docker.io/mlorentedev")
+    registry = product_registry.product(app).image_registry or env_vars.get("REGISTRY", "docker.io/mlorentedev")
     image_name = env_vars.get(f"APPS_PLATFORM_{app.upper()}_IMAGE_NAME")
     if not image_name:
         raise ValueError(f"No image_name configured for platform app '{app}'")
@@ -205,6 +222,7 @@ def promote(env: str, app: str, version: str) -> None:
     if env == "dev":
         raise ValueError("Promotion targets K8s environments (staging|prod), not dev")
     _require_platform_app(app, "edge services (e.g. errors) are not promoted via this command")
+    _require_prod_lane(env, app)
 
     registry, image_name = _resolve_image(env, app)
 

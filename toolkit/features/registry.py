@@ -17,6 +17,7 @@ else is I/O. That split keeps the policy unit-testable without a network.
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -76,15 +77,33 @@ def select_stale_tags(
     return [name for name in stale_sha + rc if name not in protected]
 
 
-def tag_exists(registry: str, image_name: str, tag: str) -> bool | None:
-    """Whether ``tag`` exists for an image. ``None`` (skip) for non-Docker-Hub registries.
+# What an OCI registry may answer a manifest read with; asking for none returns 404 on some.
+_MANIFEST_TYPES = ", ".join(
+    (
+        "application/vnd.oci.image.index.v1+json",
+        "application/vnd.oci.image.manifest.v1+json",
+        "application/vnd.docker.distribution.manifest.list.v2+json",
+        "application/vnd.docker.distribution.manifest.v2+json",
+    )
+)
 
-    Anonymous read — used by promotion to refuse promoting a tag that does not
+
+def tag_exists(
+    registry: str, image_name: str, tag: str, http: Callable[..., httpx.Response] | None = None
+) -> bool | None:
+    """Whether ``tag`` exists for an image. ``None`` (unverified) when the registry will not say.
+
+    Anonymous read, used by promotion to refuse promoting a tag that does not
     exist (it would ``ImagePullBackOff``). Lives here so all registry access has
-    one home; promotion no longer carries its own copy of the Docker Hub URL.
+    one home. Docker Hub is read through its own API; any other registry through
+    an OCI ``HEAD /v2/<name>/manifests/<tag>`` (``http`` replaces ``httpx.head``
+    for tests): 200 is ``True``, 404 ``False``, and a private registry (401/403),
+    any other answer or an unreachable host is ``None`` with a warning naming the
+    registry (IDP-053 D3). The receiver holds no registry credential (ADR-067 C2),
+    so a private image stays unverified here; ``promote`` proceeds on ``None``.
     """
-    if not registry.startswith("docker.io/"):
-        return None
+    if not registry.startswith(_ANONYMOUS_HOST):
+        return _oci_tag_exists(registry, image_name, tag, http or httpx.head)
     namespace = registry.split("/", 1)[1]
     url = f"{_HUB}/repositories/{namespace}/{image_name}/tags/{tag}"
     try:
@@ -93,6 +112,21 @@ def tag_exists(registry: str, image_name: str, tag: str) -> bool | None:
         logger.warning(f"Could not reach registry to verify tag ({exc}); skipping check")
         return None
     return resp.status_code == 200
+
+
+def _oci_tag_exists(registry: str, image_name: str, tag: str, http: Callable[..., httpx.Response]) -> bool | None:
+    host, _, owner = registry.partition("/")
+    repository = "/".join(part for part in (owner, image_name) if part)
+    url = f"https://{host}/v2/{repository}/manifests/{tag}"
+    try:
+        resp = http(url, headers={"Accept": _MANIFEST_TYPES}, timeout=15.0)
+    except httpx.HTTPError as exc:
+        logger.warning(f"{host}: {image_name}:{tag} unverified, the registry is unreachable ({exc})")
+        return None
+    if resp.status_code in (200, 404):
+        return resp.status_code == 200
+    logger.warning(f"{host}: {image_name}:{tag} unverified, the registry answered HTTP {resp.status_code}")
+    return None
 
 
 def tag_digest(registry: str, image_name: str, tag: str) -> str | None:
