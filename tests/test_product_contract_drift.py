@@ -260,12 +260,21 @@ def test_render_for_staging_accepts_a_staging_only_contract(staging_only_contrac
 
 
 def test_a_product_with_no_prod_lane_needs_no_prod_snapshot(values_copy: Path, tmp_path: Path) -> None:
-    """Fixture registry: `third` declares only `events.staging`. With web's prod snapshot alone, nothing is missing."""
-    prod_dir = tmp_path / "snaps" / "prod"
-    prod_dir.mkdir(parents=True)
-    shutil.copy(WEB, prod_dir / "web.yaml")
+    """Fixture registry: `third` declares only `events.staging`. Staging asks for its snapshot; prod does not.
 
-    assert snapshot_gaps(FIXTURE_REGISTRY, tmp_path / "snaps", env="prod", values_dir=values_copy) == ([], [])
+    The staging half proves the tree is not simply ignored: the same tree that leaves `third`
+    missing in staging leaves nothing missing in prod.
+    """
+    snaps = tmp_path / "snaps"
+    (snaps / "prod").mkdir(parents=True)
+    shutil.copy(WEB, snaps / "web.yaml")
+    shutil.copy(WEB, snaps / "prod" / "web.yaml")
+
+    staging_missing, _ = snapshot_gaps(FIXTURE_REGISTRY, snaps, env="staging", values_dir=values_copy)
+    prod_missing, _ = snapshot_gaps(FIXTURE_REGISTRY, snaps, env="prod", values_dir=values_copy)
+
+    assert "third" in staging_missing
+    assert prod_missing == []
 
 
 def test_render_refuses_oidc(tmp_path: Path) -> None:
