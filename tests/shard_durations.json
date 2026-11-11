@@ -197,7 +197,6 @@
  "tests/test_gitea_actions_secrets.py": 0.29,
  "tests/test_gitea_agent_identity.py": 4.14,
  "tests/test_gitea_anonymous_surface.py": 8.07,
- "tests/test_gitea_authoring.py": 0.09,
  "tests/test_gitea_bootstrap_idempotence.py": 1.48,
  "tests/test_gitea_branch_protection.py": 4.68,
  "tests/test_gitea_client_pagination.py": 0.01,

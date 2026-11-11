@@ -1,17 +1,23 @@
 """Run `git` against the Gitea forge with a credential that never reaches a terminal.
 
-AN EXCEPTION TO ADR-062 D4, NOT A SANCTIONED PATH. It authenticates as the
-forge's sole admin with the password D4 reserves for when Authelia is unavailable,
-and it checks no such condition. Every operation it runs is recorded as that
-account, and while a rotation is applied to the forge but not yet merged to SOPS
-it fails. Agents author through it today because no other identity is allowed
-to: the admin token cannot push, and the bot can (since #1616) but ADR-065 D1
-keeps authoring off the machine identity. Which identity should author is #2296.
+WHO PUSHES. The agents' authoring account (`apps.auth.identities.agent`, AUTH-022),
+with its API token as the password of an HTTPS basic-auth login, which Gitea
+accepts. Its token carries `write:issue,write:repository`, and its write reaches
+only the repositories that name it under `writers:` in `gitea.organizations`, as
+a collaborator; the default branch of each of those is protected, with a push
+whitelist that does not include it (AUTH-024). So an agent pushes a branch and
+opens a pull request, and every operation is recorded as the agent.
+
+Until #2578 this path authenticated as the forge's sole admin with the password
+ADR-062 D4 reserves for when Authelia is unavailable, and checked no such
+condition, because no non-admin identity could author. AUTH-022 created one.
+There is NO FALLBACK to that password: with the token absent the run fails and
+names the key, because a fallback would put the break-glass credential back on
+the routine path the first time a token went missing.
+
 It is NOT the human path: a person works on the forge over SSH with the key on
 their own account, through the `forge` host that dotfiles declares and pins
-(dotfiles#2512) -- `git clone forge:personal/resume.git`. That account is
-`manu`, the same sole admin, so SSH does not separate the identity either; it
-removes the shared password, not the privilege (#2296).
+(dotfiles#2512) -- `git clone forge:personal/resume.git`.
 
 WHY HTTPS NEEDS IT. The forge's SSH is published on the mesh only, and over HTTPS
 no workstation holds a per-human credential for `gitea.kubelab.live` -- only `github.com`,
@@ -21,20 +27,14 @@ lands in `.git/config` and in every error message that echoes the address; a
 copy-paste puts it in a transcript, which is a durable artefact nothing scans and
 nothing can un-print.
 
-WHICH CREDENTIAL, AND WHY IT IS NOT A TOKEN. Measured by consequence against prod
-on 2026-09-04, pushing a ref to `personal/resume` and deleting it:
-
-    admin_token     403 Forbidden at the HTTP layer -- it has no `write:repository`
-                    and must not: that scope is a standing DELETE capability
-    bot_token       reaches receive-pack, refused by the pre-receive hook with
-                    `User permission denied for writing` (before #1616 widened the
-                    team; it can push now, but authoring is not the bot's role --
-                    ADR-065 D1 puts the machine identity in reconciliation)
-    admin_password  created the ref
-
-So the credential is `apps.services.core.gitea.admin_password`, which is already in
-SOPS and is already what `GiteaBasicAuthClient` uses for the one operation no token
-may perform. No third long-lived token, and no new scope.
+WHY THE OTHER TOKENS ARE NOT IT. Measured by consequence against prod on
+2026-09-04, pushing a ref to `personal/resume` and deleting it: `admin_token` is
+refused with 403 at the HTTP layer (no `write:repository`, deliberately: that
+scope on a token holding admin reach is a standing DELETE capability), and the
+bot reaches receive-pack but authoring is not its role (ADR-065 D1 puts the
+machine identity in reconciliation). That measurement is also what shows Gitea
+honours a token as a basic-auth password on the git endpoints: the admin token
+was refused by its scope, not by the login.
 
 NOTE THE PROBE, because it is the reason this docstring can say "measured": a
 `git push --dry-run` crosses Gitea's token-scope gate and stops there, so it
@@ -95,23 +95,23 @@ class GiteaGitError(Exception):
 
 
 def resolve_git_credential(merged: Mapping[str, Any]) -> tuple[str, str]:
-    """`(username, password)` for the forge, from a merged configuration.
+    """`(login, token)` of the agents' authoring account, from a merged configuration.
 
     SEPARATE FROM THE RUNNER so a test can assert WHICH credential is chosen
     without running git, and so the choice is stated in one place rather than
-    inlined at a call site where a later edit could quietly swap it for a token.
+    inlined at a call site where a later edit could quietly swap it back.
     """
     gitea = merged["apps"]["services"]["core"]["gitea"]
-    username = str(merged["apps"]["auth"]["identities"]["superadmin"])
-    password = gitea.get("admin_password")
-    if not password:
+    username = str(merged["apps"]["auth"]["identities"]["agent"])
+    token = gitea.get("agent_token")
+    if not token:
         raise GiteaGitError(
-            "apps.services.core.gitea.admin_password is absent from SOPS, and it is the only "
-            "credential in the store that may push: admin_token is refused at the scope layer "
-            "(no write:repository, deliberately) and the bot is not the authoring identity "
-            "(ADR-065 D1). Add it with `toolkit secrets set`, or run git as yourself."
+            "apps.services.core.gitea.agent_token is absent from SOPS, and it is the only "
+            f"credential this command pushes with: it authenticates as the agents' account ({username}). "
+            "Mint it with `make provision NODE=bee ENV=prod TAGS=gitea` (AUTH-022); there is no "
+            "fallback to the admin password, which ADR-062 D4 keeps for break-glass."
         )
-    return username, str(password)
+    return username, str(token)
 
 
 def build_env(username: str, password: str, base_env: Mapping[str, str] | None = None) -> dict[str, str]:

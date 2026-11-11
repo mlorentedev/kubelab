@@ -412,7 +412,7 @@ def _invoke(monkeypatch: pytest.MonkeyPatch, config: dict[str, Any], forge: _Cli
     import toolkit.cli.services as cli
 
     monkeypatch.setattr(cli, "_gitea_merged_config", lambda env: config)
-    monkeypatch.setattr("toolkit.features.gitea_authoring.authoring_client", lambda merged: forge)
+    monkeypatch.setattr(cli, "_actions_secrets_client", lambda merged: forge)
     return CliRunner().invoke(cli.app, ["gitea", "actions-secrets", *args])
 
 
@@ -578,3 +578,39 @@ def test_a_repository_the_forge_cannot_list_is_reported_not_a_crash(monkeypatch:
     assert "could not list" in result.output
     assert forge.puts == []
     assert not isinstance(result.exception, GiteaError)
+
+
+def test_the_delivery_client_is_the_superadmin_and_not_the_agent() -> None:
+    """Writing Actions secrets needs repo-admin, which no machine token holds (#1781).
+
+    Until #2578 this client was borrowed from the authoring path, so moving authoring
+    to the agents' account would have silently moved this too and every PUT would
+    then be refused. Asserting the login pins it to the superadmin explicitly.
+    """
+    import toolkit.cli.services as cli
+
+    config = _merged()
+    config["apps"]["services"]["core"]["gitea"]["agent_token"] = "agent-token"
+    config["apps"]["auth"]["identities"]["agent"] = "dedalo"
+
+    client = cli._actions_secrets_client(config)
+
+    assert client.base_url == "https://gitea.example.invalid"
+    assert (client.username, client._password) == ("manu", "pw")
+
+
+def test_no_admin_password_is_a_clean_exit_naming_the_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    import typer
+
+    import toolkit.cli.services as cli
+
+    errors: list[str] = []
+    monkeypatch.setattr(cli.logger, "error", lambda message, *a, **k: errors.append(str(message)))
+    config = _merged()
+    del config["apps"]["services"]["core"]["gitea"]["admin_password"]
+
+    with pytest.raises(typer.Exit) as exc:
+        cli._actions_secrets_client(config)
+
+    assert exc.value.exit_code == 1
+    assert len(errors) == 1 and "apps.services.core.gitea.admin_password" in errors[0]
