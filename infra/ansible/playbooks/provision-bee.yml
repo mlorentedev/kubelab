@@ -244,6 +244,8 @@
         # IDP-036 AC1: the Renovate run's repository list is rendered from the
         # declaration the reconciler creates repositories from, never a second list.
         renovate_gitea_organizations: "{{ gitea_config.apps.services.core.gitea.organizations }}"
+        # IDP-036 AC3: the one pinned ci-workflows tag the preset and engine are read at.
+        renovate_preset_tag: "{{ gitea_config.ci.renovate.preset_tag }}"
         # SEC-GITEA-001 (#1389). `health_path` has been declared in common.yaml
         # since the move and was read by NOTHING: the compose healthcheck
         # hardcoded /api/v1/version instead. That divergence was invisible while

@@ -46,6 +46,18 @@
       "depNameTemplate": "node",
       "datasourceTemplate": "node-version",
       "versioningTemplate": "node"
+    },
+    {
+      "customType": "regex",
+      "description": "The ci-workflows tag the Gitea Renovate run extends its preset at and reads its engine from (IDP-036). depName is the repository, so a manager added later for this file's own `extends` reference lands in the same branch.",
+      "managerFilePatterns": [
+        "/^infra/config/values/common\\.yaml$/"
+      ],
+      "matchStrings": [
+        "(?m)^\\s+preset_tag:\\s+(?<currentValue>v\\d+\\.\\d+\\.\\d+)\\s*$"
+      ],
+      "depNameTemplate": "mlorentedev/ci-workflows",
+      "datasourceTemplate": "github-tags"
     }
   ],
   "packageRules": [
