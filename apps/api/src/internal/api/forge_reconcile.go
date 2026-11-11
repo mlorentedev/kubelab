@@ -24,7 +24,8 @@ const seedTimeout = 5 * time.Second
 
 // NewForgeView builds the readers once: a forge's listing and its reads then
 // share one hourly ceiling (AC4). The catalog is seeded from the store, so a pod
-// that cannot list its forge at start still shows what it read before (AC1).
+// that cannot list its forge at start still shows what it read before (AC1). A
+// seed that fails here is retried by the reconcile (#3247).
 func NewForgeView(ctx context.Context, conf *config.Config) *ForgeView {
 	readers := forge.NewReaders(forge.Credentials{
 		GitHubAppID:          conf.Forge.GitHubAppID,
@@ -58,7 +59,7 @@ func StartForgeReconcile(ctx context.Context, conf *config.Config, view *ForgeVi
 	if view.Catalog == nil || len(view.Catalog.Declared) == 0 || !conf.Postgres.Configured() {
 		return
 	}
-	r := &forge.Reconciler{Readers: view.Readers, Catalog: view.Catalog, Model: view.Model}
+	r := &forge.Reconciler{Readers: view.Readers, Catalog: view.Catalog, Model: view.Model, Known: view.Model.Sources}
 	go r.Run(ctx, forge.ReconcilePeriod, forge.RetryPeriod)
 	projector := &forge.Projector{Log: view.Model}
 	go projector.Run(ctx, forge.ProjectPeriod)

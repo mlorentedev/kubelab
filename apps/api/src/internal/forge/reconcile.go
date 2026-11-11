@@ -35,6 +35,10 @@ type Reconciler struct {
 	Catalog *Catalog // what to read; each cycle lists its wildcards first
 	Model   ReadModel
 	Now     func() time.Time // nil means time.Now
+	// Known returns the sources already stored. A cycle that leaves a wildcard with
+	// neither a listing nor a seed asks it again, so a seed the start could not take
+	// is retried (#3247). Nil never asks.
+	Known func(context.Context) ([]Source, error)
 }
 
 // Once lists the catalog's wildcards and reads every source. Neither a failed
@@ -45,7 +49,21 @@ func (r *Reconciler) Once(ctx context.Context) []Source {
 	if err := r.Catalog.Resolve(ctx); err != nil {
 		log.Printf("forge reconcile: listing: %v", err)
 	}
+	r.seed(ctx)
 	return r.read(ctx, r.Catalog.Current())
+}
+
+// seed asks the store for what it already read while a wildcard is unresolved.
+func (r *Reconciler) seed(ctx context.Context) {
+	if r.Known == nil || len(r.Catalog.Unresolved()) == 0 {
+		return
+	}
+	known, err := r.Known(ctx)
+	if err != nil {
+		log.Printf("forge reconcile: seed from the store: %v", err)
+		return
+	}
+	r.Catalog.Seed(known)
 }
 
 func (r *Reconciler) read(ctx context.Context, sources []Source) []Source {

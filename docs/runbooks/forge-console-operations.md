@@ -67,7 +67,10 @@ GitHub > Settings > Applications > Installed GitHub Apps > kubelab-console >
 Repository access.
 
 A listing that fails keeps the last set it had; at a pod start, the set is
-seeded from `forge_source`, so the console still shows what it read before. With
+seeded from `forge_source`, so the console still shows what it read before. A
+seed that fails at start (`forge view: seed from the store:` in the log) is asked
+again on every reconcile cycle while a wildcard has no listing, and logged as
+`forge reconcile: seed from the store:` if it fails again (#3247). With
 nothing listed and nothing in the store (a first deploy, or the App without
 access), the console shows the wildcard itself (`github:mlorentedev/*`) as
 unreachable and never read, not an empty GitHub. A
