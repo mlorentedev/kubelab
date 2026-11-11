@@ -668,6 +668,13 @@ ci:
         required_contexts:
           - PR gate
           - GitGuardian Security Checks
+  # The Gitea Renovate run (IDP-036) extends mlorentedev/ci-workflows'
+  # `renovate/default` preset at this tag, and reads the engine image from
+  # `renovate/engine.json` at the same tag. Declared once here and bumped by the
+  # `github-tags` regex manager in renovate.json; the beelink_services role holds
+  # no tag of its own (tests/test_beelink_renovate_preset.py).
+  renovate:
+    preset_tag: v0.4.0
 
 # ===========================================================================
 # K3S CLUSTER
