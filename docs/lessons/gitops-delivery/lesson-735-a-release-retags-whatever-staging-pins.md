@@ -26,9 +26,9 @@ published release and a green promotion together shipped no change at all.
 
 **Solution**: The tag was not moved, since a published semver keeps its digest
 (ADR-056). The fix ships in the next release, cut only after staging pins a
-build that contains it: 1.7.2 re-tags `sha-59f1c41`, and
-`git diff 59f1c41 <release> -- apps/api` is empty apart from the version
-files. #3266 adds the missing check. The publish fails unless the pinned
+build that contains it. The 1.7.2 release PR (#3275) re-tags `sha-59f1c41`,
+and `git diff 59f1c41 15cd1f0 -- apps/api`, its head on 2026-11-11, touches
+only `CHANGELOG.md` and `version.txt`. #3266 adds the missing check. The publish fails unless the pinned
 commit and the release commit have the same `apps/api` source, not counting
 `CHANGELOG.md` and `version.txt`, and the failure names the deploy that has to
 land first. An ancestor check cannot work here: the release commit is created
