@@ -266,7 +266,7 @@ class TestStepCarriesItsTimeline:
 
         monkeypatch.setattr(lab, "multiplexed", multiplexed)
         monkeypatch.setattr(lt, "_sample_mid_step", lambda *_a: ({}, 0))
-        monkeypatch.setattr(lt, "parse_summary", lambda _s: {})
+        monkeypatch.setattr(lt, "parse_summary", lambda *_a: {})
         monkeypatch.setattr(lt, "classify", lambda *_a: [])
         monkeypatch.setattr(
             tl, "sample_timeline", lambda r, seconds, every: seen.append((r, seconds, every)) or [{"t": every}]

@@ -362,6 +362,13 @@ def load_test_run(
     sample_seconds: Annotated[
         int, typer.Option("--sample-seconds", help="Seconds between timeline samples in each step; 0 turns it off")
     ] = 2,
+    warmup_seconds: Annotated[
+        int,
+        typer.Option(
+            "--warmup-seconds",
+            help="Seconds each step runs before its verdict reads; reported as the cold burst. 0 turns it off",
+        ),
+    ] = 30,  # load_test.WARMUP_SECONDS, which a test holds this to
     output: Annotated[str, typer.Option("--output", help="Results directory")] = "docs/load-test",
 ) -> None:
     """Measure staging: a baseline under the limiter, then ramps to the first degraded step.
@@ -369,11 +376,10 @@ def load_test_run(
     Takes no URL. Writes <date>-<commit>[-N].json and .md, and always removes the route
     it applies. Exits 0 with results, 1 when refused or when a step could not run.
     """
-    import json
     import subprocess
     from datetime import datetime, timezone
 
-    from toolkit.features.load_test import LoadTestRefused, build_targets, render, resolve_nodes, run
+    from toolkit.features.load_test import LoadTestRefused, build_targets, dumps_result, render, resolve_nodes, run
 
     try:
         lab, staging, prod = _load_test_lab(env)
@@ -392,7 +398,7 @@ def load_test_run(
 
         def save(result: dict[str, Any]) -> None:
             result = {**result, "date": now.strftime("%Y-%m-%dT%H:%MZ"), "commit": commit}
-            base.with_suffix(".json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+            base.with_suffix(".json").write_text(dumps_result(result), encoding="utf-8")
             base.with_suffix(".md").write_text(render(result), encoding="utf-8")
 
         image = staging["load_test"]["image"]
@@ -409,6 +415,7 @@ def load_test_run(
                 min_rate=min_rate,
                 accept_encoding=accept_encoding,
                 sample_seconds=sample_seconds,
+                warmup=warmup_seconds,
             )
         )
     except (LoadTestRefused, subprocess.SubprocessError, OSError) as e:
