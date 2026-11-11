@@ -4,6 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 737 | [A rate over the client's clock is skewed when the read arrives late; divide by the kernel's clock from the same read](lesson-737-a-rate-over-the-clients-clock-is-skewed-when-the-read-is-late.md) | 2026-11-11 |
 | 733 | [Gitea answers an ambiguous short sha with the same 404 as an unknown one](lesson-733-gitea-answers-an-ambiguous-short-sha-with-the-same-404-as-an-unknown-one.md) | 2026-11-10 |
 | 727 | [A fork per file is invisible on Linux and a hung commit on Windows](lesson-727-a-fork-per-file-is-invisible-on-linux-and-a-hung-commit-on-windows.md) | 2026-11-09 |
 | 725 | [A secret written before its permissions land is a secret on disk, and a failed hardening leaves it there](lesson-725-a-secret-written-before-its-permissions-land-is-a-secret-on-disk.md) | 2026-11-07 |
