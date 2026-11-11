@@ -39,16 +39,16 @@ owner: manu
 Files: `toolkit/features/product_registry.py`, `toolkit/features/registry.py`,
 `infra/config/products.yaml` (schema comment only, no new entry), tests below.
 
-- [ ] [P] [AC1] Failing tests in `tests/test_product_registry.py`: `image_registry` and `private`
+- [x] [P] [AC1] Failing tests in `tests/test_product_registry.py`: `image_registry` and `private`
   parse; `derived_image` returns `<image_registry>/<image_name or app>`; `private` without
   `image_registry` or `pull_credential` is refused with ERROR / WHY / FIX; two private entries on
   one host naming different credentials are refused (D6)
-- [ ] [AC1] Add `image_registry`, `private`, `pull_credential` (username + catalog key) to `Product`; `derived_image` honours `image_registry`
-- [ ] [AC1] Failing test in `tests/test_registry_prune.py`: a product whose registry is not
+- [x] [AC1] Add `image_registry`, `private`, `pull_credential` (username + catalog key) to `Product`; `derived_image` honours `image_registry`
+- [x] [AC1] Failing test in `tests/test_registry_prune.py`: a product whose registry is not
   `platform_registry()` is skipped by `image_repositories`, and
   `test_the_committed_set_is_the_three_kubelab_repositories` still passes
-- [ ] [AC1] `image_repositories` skips non-default-registry products instead of raising on `/`
-- [ ] Mutation check on both new guards: `make mutate FILE=toolkit/features/product_registry.py TEST=tests/test_product_registry.py`
+- [x] [AC1] `image_repositories` skips non-default-registry products instead of raising on `/`
+- [x] Mutation check on both new guards: `make mutate FILE=toolkit/features/product_registry.py TEST=tests/test_product_registry.py`
 
 Acceptance: `.venv/bin/python -m pytest -q tests/test_product_registry.py tests/test_registry_prune.py`
 

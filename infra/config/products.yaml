@@ -14,6 +14,15 @@
 #   events      repository_dispatch event types per lane. Never renamed: GitHub
 #               accepts a dispatch nobody listens for with a 204 and drops it.
 #   image_name  only where the derived image (<registry>/<app>) is wrong.
+#   image_registry  where CI pushed the image: a host and its owner path, no scheme
+#               (gitea.kubelab.live/personal). Absent, the platform registry in
+#               common.yaml applies. The host lives only here (IDP-053 D4); the
+#               prune janitor skips a product whose registry is not the platform's.
+#   private     true when the image needs a login to pull (default false). Needs
+#               image_registry and pull_credential; Docker Hub private is not supported.
+#   pull_credential  {username: <registry login>, secret: <catalog key of the token>}.
+#               The token stays in SOPS; the pull Secret is rendered at apply time.
+#               Two private entries on one registry host name one credential (D6).
 products:
   api:
     forge: in-tree
