@@ -81,6 +81,11 @@ def test_staging_must_be_staging_dot_prod_even_when_both_zones_are_listed() -> N
     assert "staging.x.dev" in err.fix
 
 
+def test_the_prod_relation_is_equality_not_a_suffix_match() -> None:
+    """`staging.example-product.test` ends with `product.test`, and is still not `staging.product.test`."""
+    _refused("staging.example-product.test", "product.test")
+
+
 def test_the_prod_relation_binds_a_wildcard_label_too() -> None:
     _refused("shop.staging.kubelab.live", "shop.example-product.test")
 

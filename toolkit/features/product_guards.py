@@ -84,8 +84,8 @@ def check_staging_hostname(contract: Contract, zones: Iterable[str]) -> None:
     """
     host = contract.hostnames.staging
     listed = set(zones) - {WILDCARD_ZONE}
-    label, _, parent = host.partition(".")
-    if host not in listed and not (parent == WILDCARD_ZONE and label):
+    _, _, parent = host.partition(".")
+    if host not in listed and not (parent == WILDCARD_ZONE):
         domain = host.removeprefix("staging.")
         fix = (
             f'add "{host}" to networking.staging_zones in infra/config/values/common.yaml'
