@@ -455,3 +455,56 @@ def test_release_contract_on_a_gitea_product_reads_through_the_adapter_and_the_p
     (client,) = _GiteaReads.instances
     assert [call[0] for call in client.calls] == ["get_tag", "get_raw_file"]
     assert client.calls[1][-1] == SHA, "the contract is read at the release commit, not a branch"
+
+
+class TestDockerHubThroughTheInjectedTransport:
+    def test_a_docker_hub_proof_makes_no_call_of_its_own_when_http_is_injected(
+        self, private_registry: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An injected ``http`` is the only transport: a Hub image must not reach the network behind it."""
+
+        def real_call(*args: Any, **kwargs: Any) -> httpx.Response:
+            raise AssertionError("a real httpx call was made")
+
+        monkeypatch.setattr(registry.httpx, "get", real_call)
+        monkeypatch.setattr(registry.httpx, "request", real_call)
+        seen: list[str] = []
+
+        def http(method: str, url: str, **kwargs: Any) -> httpx.Response:
+            seen.append(f"{method} {url}")
+            return httpx.Response(200, json={"digest": DIGEST})
+
+        assert registry.tag_digest("docker.io/ns", "kubelab-web", VERSION, http=http) == DIGEST
+        assert seen == [f"GET {registry._HUB}/repositories/ns/kubelab-web/tags/{VERSION}"]
+
+    def test_a_release_proof_of_a_hub_image_uses_the_injected_transport(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        path = tmp_path / "products.yaml"
+        path.write_text(
+            "products:\n  resume:\n    forge: github\n    repository: acme/resume\n    receiver: generic\n"
+            "    image_registry: docker.io/acme\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(registry.httpx, "get", MagicMock(side_effect=AssertionError("a real httpx call")))
+
+        def http(method: str, url: str, **kwargs: Any) -> httpx.Response:
+            return httpx.Response(200, json={"digest": DIGEST})
+
+        assert _prove(path, http, _secret(None)) == DIGEST
+
+
+class TestADelegatedLoginIsRefusedAndSaidSo:
+    def test_the_refusal_tells_the_operator_a_delegating_registry_is_not_supported(
+        self, private_registry: Path, warnings: MagicMock
+    ) -> None:
+        seen: list[str] = []
+        challenge = 'Bearer realm="https://auth.elsewhere.example/token",service="ghcr.io"'
+
+        with pytest.raises(ContractError) as refused:
+            _prove(private_registry, _challenging(challenge, seen), _secret(PULL_TOKEN))
+
+        assert [call.split(" ", 1)[0] for call in seen] == ["HEAD"], "the credential must not leave the registry"
+        assert "another host" in refused.value.fix and "explicit decision" in refused.value.fix
+        assert "ghcr.io" in refused.value.error
+        assert "delegates" in warnings.call_args.args[0] and "not supported" in warnings.call_args.args[0]

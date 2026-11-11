@@ -94,8 +94,9 @@ def _unreadable(image: str, version: str, host: str, credential: RegistryCredent
         f"{host} gave no manifest digest to {reader}: the tag is absent, the registry refused the read "
         "(a private package needs `private: true` and a `pull_credential` on the product's registry entry), "
         "or it does not speak the OCI manifest API.",
-        f"confirm {host} lets {reader} pull {image} (and that {version} was pushed there), "
-        "then run the promotion again.",
+        f"confirm {host} lets {reader} pull {image} (and that {version} was pushed there), then run the promotion "
+        "again. A registry that delegates its login to another host is not supported by this reader; "
+        "that needs an explicit decision, not a retry.",
     )
 
 

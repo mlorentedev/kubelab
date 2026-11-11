@@ -163,13 +163,14 @@ def tag_digest(
     one image treats ``None`` as no proof. Docker Hub is read anonymously through its
     API; any other registry through an OCI manifest ``HEAD``, trading ``credential``
     (or nothing, for a public package) for a bearer token when the registry asks
-    (IDP-053 D3, the authenticated half). ``http`` replaces ``httpx.request`` for tests.
+    (IDP-053 D3, the authenticated half). ``http`` replaces ``httpx.request`` (``httpx.get`` on Docker Hub) for tests.
     """
     if not is_docker_hub(registry):
         return _oci_tag_digest(registry, image_name, tag, credential, http or httpx.request)
     namespace = registry.split("/", 1)[1]
     try:
-        resp = httpx.get(f"{_HUB}/repositories/{namespace}/{image_name}/tags/{tag}", timeout=15.0)
+        url = f"{_HUB}/repositories/{namespace}/{image_name}/tags/{tag}"
+        resp = httpx.get(url, timeout=15.0) if http is None else http("GET", url, timeout=15.0)
     except httpx.HTTPError as exc:
         logger.warning(f"Could not reach registry to read the digest of {image_name}:{tag} ({exc})")
         return None
@@ -258,8 +259,14 @@ def _bearer_token(
     params = dict(_CHALLENGE_PARAM.findall(challenge))
     realm = urlsplit(params.get("realm", ""))
     own = urlsplit(f"https://{host}")
-    if not challenge.lower().startswith("bearer ") or not _is_own_endpoint(realm, own):
-        logger.warning(f"{host}: unread, it asked for a login this client does not speak or at a host not its own")
+    if not challenge.lower().startswith("bearer "):
+        logger.warning(f"{host}: unread, it asked for a login this client does not speak (not a Bearer challenge)")
+        return None
+    if not _is_own_endpoint(realm, own):
+        logger.warning(
+            f"{host}: unread, its token endpoint is not its own https endpoint; a registry that delegates its "
+            "login to another host (as Docker Hub does) is not supported by this reader"
+        )
         return None
     query = {"service": params.get("service", host), "scope": params.get("scope", f"repository:{repository}:pull")}
     auth = (credential.username, credential.token) if credential else None
