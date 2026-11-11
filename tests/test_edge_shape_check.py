@@ -269,10 +269,20 @@ def test_the_probe_writes_one_line_per_connect(tmp_path: Path) -> None:
     (bin_dir / "curl").chmod(0o755)
     (bin_dir / "sleep").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
     (bin_dir / "sleep").chmod(0o755)
+    # A fake clock: the real one can tick between computing the deadline and the
+    # first check, and on a loaded runner the loop then never runs (#3306).
+    # The first two calls read 0, every later one reads 100: exactly one connect.
+    calls = tmp_path / "date-calls"
+    (bin_dir / "date").write_text(
+        f'#!/bin/sh\necho x >> "{calls}"\n'
+        f'[ "$(wc -l < "{calls}")" -le 2 ] && echo 0 || echo 100\n',
+        encoding="utf-8",
+    )
+    (bin_dir / "date").chmod(0o755)
     probe = tmp_path / "probe"
     script = s.probe_start_script(seconds=1).replace(s.PROBE_FILE, str(probe)).replace("nohup ", "").replace(" &", "")
     env: dict[str, Any] = {"PATH": f"{bin_dir}:/usr/bin:/bin"}
     subprocess.run(["sh", "-c", script], env=env, check=True, timeout=10)
     window = s.Window("t", None, True)
     s.read_probe(probe.read_text(encoding="utf-8"), window)
-    assert window.connects_ms and window.connects_ms[0] == pytest.approx(12)
+    assert window.connects_ms == [pytest.approx(12)]
