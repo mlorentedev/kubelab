@@ -358,6 +358,9 @@ def load_test_run(
     accept_encoding: Annotated[
         str | None, typer.Option("--accept-encoding", help="gzip or identity; unset, k6 sends gzip")
     ] = None,
+    sample_seconds: Annotated[
+        int, typer.Option("--sample-seconds", help="Seconds between timeline samples in each step; 0 turns it off")
+    ] = 2,
     output: Annotated[str, typer.Option("--output", help="Results directory")] = "docs/load-test",
 ) -> None:
     """Measure staging: a baseline under the limiter, then ramps to the first degraded step.
@@ -404,6 +407,7 @@ def load_test_run(
                 checkpoint=save,
                 min_rate=min_rate,
                 accept_encoding=accept_encoding,
+                sample_seconds=sample_seconds,
             )
         )
     except (LoadTestRefused, subprocess.SubprocessError, OSError) as e:
