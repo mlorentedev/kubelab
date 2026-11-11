@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import base64
 import dataclasses
+import json
+import re
 import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -16,6 +18,7 @@ from toolkit.config.constants import is_placeholder
 from toolkit.core.logging import logger
 from toolkit.features.configuration import ConfigurationManager, UserPasswordHashMissing, resolve_user_identity
 from toolkit.features.k8s_kubeconfig import output_path
+from toolkit.features.product_registry import Registry, load_registry
 from toolkit.features.secret_consumers import restart_consumers
 
 
@@ -36,8 +39,15 @@ class SecretMapping:
     # would take `apply-secrets ENV=staging` down for a workload staging never
     # runs (proposal, "Out of scope: Staging").
     envs: tuple[str, ...] | None = None
+    secret_type: str = "Opaque"  # the K8s Secret `type`
+    # (registry host, login) of an image pull Secret. Its one required key is the
+    # token, so a missing or placeholder token is refused like any other; the
+    # `.dockerconfigjson` is rendered from the three at apply time (IDP-053 D6).
+    registry_login: tuple[str, str] | None = None
 
 
+DOCKERCONFIGJSON = "kubernetes.io/dockerconfigjson"
+_TOKEN_KEY = "token"
 WATCHER_SECRET = "r2-backup-watcher-secrets"
 
 # ── Secret definitions (declarative) ──────────────────────────────────────────
@@ -239,6 +249,52 @@ def _definitions_for_env(env: str, definitions: list[SecretMapping]) -> list[Sec
     return [m for m in definitions if m.envs is None or env in m.envs]
 
 
+def pull_secret_name(host: str) -> str:
+    """The image pull Secret for a registry host: one per host, in the shared namespace (D6)."""
+    return "pull-" + re.sub(r"[^a-z0-9]+", "-", host.lower()).strip("-")
+
+
+def pull_secret_mappings(registry: Registry) -> list[SecretMapping]:
+    """One image pull Secret per registry host that holds a private product's image.
+
+    Generated, so a new private product adds no entry here. The registry already
+    refuses two credentials for one host; two hosts that slug alike would still
+    collide on a name, so those are refused here.
+    """
+    from toolkit.features.secrets_manager import SECRET_CATALOG
+
+    by_host = {
+        entry.image_host: entry.pull_credential
+        for entry in registry.products.values()
+        # A pull_credential exists only on a private entry: the registry refuses it otherwise.
+        if entry.pull_credential is not None and entry.image_host is not None
+    }
+    mappings: list[SecretMapping] = []
+    hosts: dict[str, str] = {}
+    for host, credential in sorted(by_host.items()):
+        name = pull_secret_name(host)
+        if name in hosts:
+            raise ValueError(f"registry hosts {hosts[name]} and {host} both name the pull Secret {name}")
+        hosts[name] = host
+        # Scoped as the token is: a mapping for a key catalogued for one env must not fail the others.
+        envs = next((spec.envs for spec in SECRET_CATALOG if spec.key_path == credential.secret), None)
+        mappings.append(
+            SecretMapping(
+                name=name,
+                keys={_TOKEN_KEY: credential.secret.upper().replace(".", "_")},
+                envs=envs,
+                secret_type=DOCKERCONFIGJSON,
+                registry_login=(host, credential.username),
+            )
+        )
+    return mappings
+
+
+def _dockerconfigjson(host: str, username: str, token: str) -> str:
+    auth = base64.b64encode(f"{username}:{token}".encode()).decode("ascii")
+    return json.dumps({"auths": {host: {"username": username, "password": token, "auth": auth}}})
+
+
 def _get_kubeconfig(env: str) -> str:
     """Get kubeconfig path for the given environment."""
     return str(output_path(env))
@@ -318,7 +374,8 @@ def apply_secrets(env: str, project_root: Path, dry_run: bool = False) -> bool:
     # is absence, not a placeholder — so it is filtered out here rather than
     # tripping either guard below.
     applicable = [
-        _resolve_config_keys(m, cm.get_merged_config()) for m in _definitions_for_env(env, SECRET_DEFINITIONS)
+        _resolve_config_keys(m, cm.get_merged_config())
+        for m in _definitions_for_env(env, [*SECRET_DEFINITIONS, *pull_secret_mappings(load_registry())])
     ]
 
     # 2. Pre-deploy guard (TOOL-019 / C6): never push a placeholder value to a cluster.
@@ -612,8 +669,8 @@ def _build_users_database(cm: ConfigurationManager) -> str:
     return yaml.safe_dump({"users": db}, sort_keys=False, default_flow_style=False, allow_unicode=True)
 
 
-def _render_secret_manifest(name: str, namespace: str, data: dict[str, str]) -> str:
-    """Render an Opaque Secret as YAML with base64-encoded `data` — in-process.
+def _render_secret_manifest(name: str, namespace: str, data: dict[str, str], secret_type: str = "Opaque") -> str:
+    """Render a Secret (Opaque unless SECRET_TYPE says otherwise) as YAML with base64-encoded `data` — in-process.
 
     The single delivery primitive (audit C5 / Design Tension #2): building the
     manifest here and applying it via `kubectl apply -f -` (stdin) means no secret
@@ -625,7 +682,7 @@ def _render_secret_manifest(name: str, namespace: str, data: dict[str, str]) -> 
         "apiVersion": "v1",
         "kind": "Secret",
         "metadata": {"name": name, "namespace": namespace},
-        "type": "Opaque",
+        "type": secret_type,
         "data": {k: base64.b64encode(v.encode("utf-8")).decode("ascii") for k, v in data.items()},
     }
     return yaml.safe_dump(manifest, sort_keys=False, default_flow_style=False)
@@ -659,6 +716,9 @@ def _secret_data(
             data[k8s_key] = value
 
     data.update(extra_literals)
+    if mapping.registry_login and not missing:
+        host, username = mapping.registry_login
+        data = {".dockerconfigjson": _dockerconfigjson(host, username, data[_TOKEN_KEY])}
     return data, missing
 
 
@@ -711,7 +771,7 @@ def _apply_single_secret(
     # Render in-process (no secret in argv) and apply via stdin. A dry run asks
     # the API server what a real apply would do (#1810): kubectl answers with a
     # verdict per object and never echoes a value.
-    manifest = _render_secret_manifest(mapping.name, namespace, data)
+    manifest = _render_secret_manifest(mapping.name, namespace, data, mapping.secret_type)
     apply_args = ["apply", "--dry-run=server", "-f", "-"] if dry_run else ["apply", "-f", "-"]
     try:
         apply_result = subprocess.run(
