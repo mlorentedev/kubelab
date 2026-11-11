@@ -741,7 +741,10 @@ class GiteaClient:
             if exc.status_code == 404:
                 return None
             raise
-        return str(body["commit"]["sha"])
+        sha = (body.get("commit") or {}).get("sha")
+        if not sha:
+            raise GiteaError(f"Gitea API GET /repos/{owner}/{name}/tags/{tag} answered no commit sha")
+        return str(sha)
 
 
 class GiteaBasicAuthClient(GiteaClient):

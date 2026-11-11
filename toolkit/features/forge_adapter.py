@@ -152,7 +152,10 @@ class GiteaForge:
             # extension that resolves proves some commit continues it, so the prefix is shared.
             if any(self._read(self._client.get_commit, short + digit) for digit in "0123456789abcdef"):
                 raise ForgeError(f"more than one commit starts with {short}")
-            raise ForgeError(f"no commit starts with {short}")
+            # Two commits that also share the next digit read the same, so say what was ruled out.
+            raise ForgeError(
+                f"no commit starts with {short} (or commits sharing it share its next digit too: pass more digits)"
+            )
         if not _FULL_SHA.match(str(sha)) or not str(sha).startswith(short):
             raise ForgeError(f"{short} resolved to '{sha}', which does not start with it")
         return str(sha)

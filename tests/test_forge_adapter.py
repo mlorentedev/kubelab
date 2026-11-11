@@ -231,7 +231,8 @@ def test_gitea_tells_an_unknown_short_sha_from_an_ambiguous_one() -> None:
     with pytest.raises(ForgeError) as many:
         ambiguous.resolve_commit("f765")
 
-    assert "no commit" in str(no_such.value) and "more than one" not in str(no_such.value)
+    assert "no commit" in str(no_such.value) and "more digits" in str(no_such.value)
+    assert "more than one" not in str(no_such.value)
     assert "more than one" in str(many.value) and "no commit" not in str(many.value)
 
 
@@ -295,6 +296,13 @@ def test_gitea_resolve_tag_refuses_a_missing_tag_and_a_commit_that_is_not_a_sha(
         absent.resolve_tag("v9.9.9")
     with pytest.raises(ForgeError, match="not a full commit sha"):
         odd.resolve_tag("v1")
+
+
+def test_gitea_resolve_tag_answers_a_body_with_no_commit_as_a_forge_error_not_a_key_error() -> None:
+    forge, _ = _gitea({f"/repos/{REPO}/tags/v1": (200, '{"name": "v1", "id": "x"}')})
+
+    with pytest.raises(ForgeError, match="commit"):
+        forge.resolve_tag("v1")
 
 
 def test_gitea_read_file_returns_the_raw_bytes_at_the_commit() -> None:
