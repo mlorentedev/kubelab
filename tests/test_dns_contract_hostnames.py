@@ -79,6 +79,20 @@ def test_a_prod_hostname_with_no_record_is_refused_naming_zones_json(tmp_path: p
     assert "shop.mlorente.dev" in message and "zones.json" in message
 
 
+def test_a_contract_with_no_prod_hostname_needs_no_public_record(tmp_path: pathlib.Path) -> None:
+    """A product with no prod lane yet (IDP-053 AC5) declares no `hostnames.prod`: there is nothing to resolve.
+
+    The skip is `host and host not in records`; this pins it so that a rewrite to `hostnames["prod"]`
+    (a KeyError) or to a truthiness-free comparison (`None` is not in the records) cannot land silently.
+    """
+    contract = yaml.safe_load((SNAPSHOT_DIR / "web.yaml").read_text(encoding="utf-8"))
+    del contract["hostnames"]["prod"]
+    (tmp_path / "staging-only-app.yaml").write_text(yaml.safe_dump(contract), encoding="utf-8")
+    assert "prod" not in yaml.safe_load((tmp_path / "staging-only-app.yaml").read_text(encoding="utf-8"))["hostnames"]
+
+    assert _unresolvable(tmp_path, _committed()) == []
+
+
 def test_a_staging_hostname_needs_no_public_record(tmp_path: pathlib.Path) -> None:
     contract = yaml.safe_load((SNAPSHOT_DIR / "web.yaml").read_text(encoding="utf-8"))
     contract["hostnames"]["staging"] = "shop.staging.mlorente.dev"

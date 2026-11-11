@@ -9,6 +9,7 @@ import yaml
 
 from toolkit.config import settings as settings_module
 from toolkit.features import product_registry
+from toolkit.features.product_guards import apps_declaring
 from toolkit.features.product_registry import RegistryError, UnknownEventError
 
 REPO = Path(__file__).resolve().parents[1]
@@ -47,15 +48,20 @@ class TestPlatformApps:
         A product admitted to the registry before its ``apps.platform.<app>`` block
         carries those three would be iterated and then dropped with a debug line,
         never deployed. A block alone is not enough: a first ``promote`` writes one
-        holding only ``version``.
+        holding only ``version``. Only the envs the entry declares a lane for are
+        held to it: a product with no ``events.prod`` does not run in prod (IDP-053 D5).
         """
-        common, overlay = _platform_blocks("common"), _platform_blocks(env)
-        missing = {}
-        for app in product_registry.platform_apps():
-            block = {**(common.get(app) or {}), **(overlay.get(app) or {})}
-            if absent := [field for field in DEPLOY_FIELDS if not block.get(field)]:
-                missing[app] = absent
+        assert apps_declaring(env), f"no registered product declares a {env} lane: nothing was checked"
+        missing = _undeployable(env, _platform_blocks("common"), _platform_blocks(env))
         assert not missing, f"registered, but common.yaml + {env}.yaml lack what generator_k8s needs: {missing}"
+
+    def test_a_product_with_no_prod_lane_is_not_held_to_a_prod_block(self, fixture_registry: Path) -> None:
+        """Fixture registry: `third` declares only `events.staging`; its staging block alone is enough."""
+        staging = {"third": {"image_name": "third", "domain": "staging.third.dev", "default_port": 8080}}
+
+        assert set(_undeployable("staging", {}, {}, fixture_registry)) == {"api", "web", "third"}
+        assert set(_undeployable("staging", {}, staging, fixture_registry)) == {"api", "web"}
+        assert set(_undeployable("prod", {}, {}, fixture_registry)) == {"api", "web"}
 
     def test_the_registry_keeps_the_order_common_yaml_declares(self) -> None:
         """The generators iterate the registry, so its order is their output order.
@@ -386,6 +392,18 @@ class TestDerivedImage:
             assert product_registry.derived_image(app) == deployed, app
             checked += 1
         assert checked > 0
+
+
+def _undeployable(
+    env: str, common: dict[str, dict], overlay: dict[str, dict], registry: Path | None = None
+) -> dict[str, list[str]]:
+    """``{app: fields it lacks}`` for each product declaring a lane in ``env``."""
+    missing = {}
+    for app in apps_declaring(env, registry):
+        block = {**(common.get(app) or {}), **(overlay.get(app) or {})}
+        if absent := [field for field in DEPLOY_FIELDS if not block.get(field)]:
+            missing[app] = absent
+    return missing
 
 
 def _platform_blocks(env: str) -> dict[str, dict]:

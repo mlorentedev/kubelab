@@ -67,12 +67,20 @@ class ContractError(Exception):
 
 
 class Hostnames(BaseModel):
-    """The public hostname of the product in each kubelab environment."""
+    """The public hostname of the product in each kubelab environment it runs in.
+
+    ``staging`` is required: every product lands there first. ``prod`` is declared
+    once the product has a prod lane (``events.prod`` in the registry); a product
+    that has none yet omits it.
+    """
 
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
 
     staging: Hostname = Field(description="Hostname served by the staging cluster, e.g. staging.example.dev.")
-    prod: Hostname = Field(description="Hostname served by the prod cluster, e.g. example.dev.")
+    prod: Hostname | None = Field(
+        default=None,
+        description="Hostname served by the prod cluster, e.g. example.dev. Omit it until the product has a prod lane.",
+    )
 
 
 class Contract(BaseModel):
@@ -161,7 +169,10 @@ _FIELD_FIX = {
     "image": "give the image repository alone, e.g. docker.io/<owner>/<product>, with no :tag or @digest.",
     "port": "set port to the container's listening port, an integer from 1 to 65535 (not quoted).",
     "health_path": "give an HTTP path that starts with '/', e.g. /healthz.",
-    "hostnames": "declare exactly hostnames.staging and hostnames.prod, each a lowercase FQDN with no scheme or path.",
+    "hostnames": (
+        "declare hostnames.staging, and hostnames.prod once the product has a prod lane (it is optional before "
+        "that), each a lowercase FQDN with no scheme or path."
+    ),
     "auth": "set auth to one of: public, forwardauth, oidc.",
     "secrets": "list secret names as dotted lowercase keys, e.g. apps.platform.<app>.api_key; values never go here.",
 }

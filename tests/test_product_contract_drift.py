@@ -180,6 +180,103 @@ def test_render_check_exits_one_and_names_the_drifted_keys(values_copy: Path, mo
     assert "default_port" in result.output
 
 
+@pytest.fixture
+def staging_only_contract(tmp_path: Path) -> Path:
+    """web's snapshot with `hostnames.prod` removed: the contract of a product with no prod lane (IDP-053 AC5)."""
+    path = tmp_path / "web.yaml"
+    text = WEB.read_text(encoding="utf-8")
+    assert "  prod: mlorente.dev\n" in text
+    path.write_text(text.replace("  prod: mlorente.dev\n", ""), encoding="utf-8")
+    return path
+
+
+def _assert_explained(err: ContractError) -> None:
+    assert [line.split(":", 1)[0] for line in str(err).splitlines()] == ["ERROR", "WHY", "FIX"]
+    assert "prod" in err.error
+    assert "hostnames.prod" in err.fix
+
+
+def test_a_staging_only_contract_renders_for_staging_and_matches_the_values(staging_only_contract: Path) -> None:
+    differences, compared = drift(validate_contract(staging_only_contract), "web", "staging")
+
+    assert differences == {}
+    assert compared == len(OWNED_KEYS)
+
+
+@pytest.mark.parametrize("operation", ["rendered", "drift", "write"])
+def test_a_staging_only_contract_is_refused_for_prod(
+    operation: str, staging_only_contract: Path, values_copy: Path
+) -> None:
+    """The refusal comes before any key is derived, so no `https://None` can reach a values file."""
+    contract = validate_contract(staging_only_contract)
+    before = (values_copy / "prod.yaml").read_text(encoding="utf-8")
+    calls = {
+        "rendered": lambda: product_render.rendered(contract, "web", "prod"),
+        "drift": lambda: drift(contract, "web", "prod", values_dir=values_copy),
+        "write": lambda: write(contract, "web", "prod", values_dir=values_copy),
+    }
+
+    with pytest.raises(ContractError) as excinfo:
+        calls[operation]()
+
+    _assert_explained(excinfo.value)
+    assert (values_copy / "prod.yaml").read_text(encoding="utf-8") == before
+
+
+def test_the_prod_refusal_does_not_depend_on_which_keys_are_derived(staging_only_contract: Path) -> None:
+    """The refusal is about the env, not about a hostname key: a mapping with none of them is refused too."""
+    only_port = {"default_port": CONTRACT_KEYS["default_port"]}
+
+    with pytest.raises(ContractError) as excinfo:
+        product_render.rendered(validate_contract(staging_only_contract), "web", "prod", only_port)
+
+    _assert_explained(excinfo.value)
+
+
+def test_no_derivation_reads_an_absent_environment(staging_only_contract: Path) -> None:
+    """A mapping used directly, past `rendered`, still cannot turn a missing prod hostname into text."""
+    contract = validate_contract(staging_only_contract)
+
+    for key in ("domain", "site_domain", "site_url"):
+        with pytest.raises(ContractError) as excinfo:
+            CONTRACT_KEYS[key](contract, "prod")
+        _assert_explained(excinfo.value)
+        assert CONTRACT_KEYS[key](contract, "staging") in {"staging.mlorente.dev", "https://staging.mlorente.dev"}
+
+
+def test_render_for_prod_refuses_a_staging_only_contract_with_error_why_fix(staging_only_contract: Path) -> None:
+    result = _render("--env", "prod", "--app", "web", contract=staging_only_contract)
+
+    assert result.exit_code == 1
+    assert [line.split(":", 1)[0] for line in result.output.splitlines()] == ["ERROR", "WHY", "FIX"]
+    assert "hostnames.prod" in result.output
+
+
+def test_render_for_staging_accepts_a_staging_only_contract(staging_only_contract: Path) -> None:
+    result = _render("--env", "staging", "--app", "web", "--check", contract=staging_only_contract)
+
+    assert result.exit_code == 0, result.output
+    assert f"compared {len(CONTRACT_KEYS)} contract-owned keys for web/staging" in result.output
+
+
+def test_a_product_with_no_prod_lane_needs_no_prod_snapshot(values_copy: Path, tmp_path: Path) -> None:
+    """Fixture registry: `third` declares only `events.staging`. Staging asks for its snapshot; prod does not.
+
+    The staging half proves the tree is not simply ignored: the same tree that leaves `third`
+    missing in staging leaves nothing missing in prod.
+    """
+    snaps = tmp_path / "snaps"
+    (snaps / "prod").mkdir(parents=True)
+    shutil.copy(WEB, snaps / "web.yaml")
+    shutil.copy(WEB, snaps / "prod" / "web.yaml")
+
+    staging_missing, _ = snapshot_gaps(FIXTURE_REGISTRY, snaps, env="staging", values_dir=values_copy)
+    prod_missing, _ = snapshot_gaps(FIXTURE_REGISTRY, snaps, env="prod", values_dir=values_copy)
+
+    assert "third" in staging_missing
+    assert prod_missing == []
+
+
 def test_render_refuses_oidc(tmp_path: Path) -> None:
     contract = tmp_path / "web.yaml"
     contract.write_text(WEB.read_text(encoding="utf-8").replace("auth: public", "auth: oidc"), encoding="utf-8")

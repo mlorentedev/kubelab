@@ -116,12 +116,12 @@ Files: `toolkit/features/product_contract.py`, `toolkit/features/product_guards.
 `toolkit/features/product_render.py`, `toolkit/schemas/kubelab-product.schema.json`
 (regenerated, not counted), tests (see the list in `proposal.md`).
 
-- [ ] [P] [AC5] Failing tests: a contract with no `hostnames.prod` validates; `_FIELD_FIX["hostnames"]` text no longer says "exactly staging and prod"; the committed JSON Schema equals the model
-- [ ] [AC5] Make `Hostnames.prod` optional; regenerate the schema with `python -m toolkit.features.product_contract --write-schema`
-- [ ] [AC5] Failing tests: `_check_hostnames` loops only the envs the registry entry's `events` declares; `product render --env prod` for a staging-only product is refused with ERROR / WHY / FIX
-- [ ] [AC5] Implement; `CONTRACT_KEYS` derivation for `domain`, `site_domain`, `site_url` does not read an absent env
-- [ ] [AC5] Failing tests in the six red tests named in `proposal.md`: a staging-only fixture needs no prod tile, no prod snapshot, no prod e2e expectation and no prod DNS record; `test_dns_contract_hostnames.py` gets a case pinning the existing skip
-- [ ] [AC5] Make `test_platform_tiles_cover_registry`, `test_e2e_expectations_cover_registry` and `test_product_registry` loop the envs the entry declares
+- [x] [P] [AC5] Failing tests: a contract with no `hostnames.prod` validates; `_FIELD_FIX["hostnames"]` text no longer says "exactly staging and prod"; the committed JSON Schema equals the model
+- [x] [AC5] Make `Hostnames.prod` optional; regenerate the schema with `python -m toolkit.features.product_contract --write-schema`
+- [x] [AC5] Failing tests: `_check_hostnames` loops only the envs the registry entry's `events` declares; `product render --env prod` for a staging-only product is refused with ERROR / WHY / FIX
+- [x] [AC5] Implement; `CONTRACT_KEYS` derivation for `domain`, `site_domain`, `site_url` does not read an absent env
+- [x] [AC5] Failing tests in the six red tests named in `proposal.md`: a staging-only fixture needs no prod tile, no prod snapshot, no prod e2e expectation and no prod DNS record; `test_dns_contract_hostnames.py` gets a case pinning the existing skip
+- [x] [AC5] Make `test_platform_tiles_cover_registry`, `test_e2e_expectations_cover_registry` and `test_product_registry` loop the envs the entry declares
 
 Acceptance: `.venv/bin/python -m pytest -q tests/test_product_contract.py tests/test_product_contract_schema.py tests/test_product_contract_drift.py tests/test_product_contract_guards.py tests/test_dns_contract_hostnames.py tests/test_platform_tiles_cover_registry.py tests/test_e2e_expectations_cover_registry.py tests/test_product_registry.py`
 
