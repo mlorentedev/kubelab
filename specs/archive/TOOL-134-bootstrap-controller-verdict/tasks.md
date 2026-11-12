@@ -18,60 +18,60 @@ owner: manu
 ## Setup
 
 - [ ] Branch created from main: `fix/bootstrap-controller-verdict`
-- [ ] `proposal.md` is complete and acceptance criteria are testable
-- [ ] No open questions left in `proposal.md` "Risks / open questions"
+- [x] `proposal.md` is complete and acceptance criteria are testable
+- [x] No open questions left in `proposal.md` "Risks / open questions"
 
 ## Implementation
 
 ### AC1 — the verdict describes the state after the attempt
 
-- [ ] [AC1] Write failing test `test_install_path_hands_off_after_installing`: stub `PATH` with no
+- [x] [AC1] Write failing test `test_install_path_hands_off_after_installing`: stub `PATH` with no
       `make` and no `poetry`, stub `apt-get` and `curl` so both installs appear to succeed,
       assert the script reaches the hand-off (`make setup-ansible` invoked) and exits 0
-- [ ] [AC1] Restructure the make block: `bad` fires only in `--check` or after a failed
+- [x] [AC1] Restructure the make block: `bad` fires only in `--check` or after a failed
       attempt; the pre-install state is `note`, not `bad`
-- [ ] [AC1] Restructure the poetry block the same way, keeping the `~/.local/bin` PATH export
-- [ ] [AC1] Verify the hand-off guard now counts only unresolved prerequisites; keep the
+- [x] [AC1] Restructure the poetry block the same way, keeping the `~/.local/bin` PATH export
+- [x] [AC1] Verify the hand-off guard now counts only unresolved prerequisites; keep the
       existing `[ERROR] %d prerequisite(s) above are unresolved` wording
 
 ### AC2 — `--check` models privilege
 
-- [ ] [AC2] Write failing test `test_check_mode_reports_a_passworded_sudo`: stub `sudo` that
+- [x] [AC2] Write failing test `test_check_mode_reports_a_passworded_sudo`: stub `sudo` that
       fails for `-n` and succeeds otherwise, stub `make`/`poetry` absent, run `--check`,
       assert exit 1 and a message naming root/sudo
-- [ ] [AC2] Add `can_root()` (`id -u` = 0, else `sudo -n true 2>/dev/null`) and call it from
+- [x] [AC2] Add `can_root()` (`id -u` = 0, else `sudo -n true 2>/dev/null`) and call it from
       the install branches and from `--check`
-- [ ] [AC2] In `--check`, report "root is not available without a password" and
+- [x] [AC2] In `--check`, report "root is not available without a password" and
       `note "run 'sudo -v' first, then re-run"`; in install mode, exit 1 before apt
 
 ### AC3 — nothing waits on a prompt
 
-- [ ] [AC3] Write failing test `test_as_root_never_invokes_sudo_without_dash_n`: assert the
+- [x] [AC3] Write failing test `test_as_root_never_invokes_sudo_without_dash_n`: assert the
       script text contains no bare `sudo "$@"` / `sudo ` invocation lacking `-n`
-- [ ] [AC3] Change `as_root` to `sudo -n "$@"`
+- [x] [AC3] Change `as_root` to `sudo -n "$@"`
 
 ### AC4 — apt failure is legible
 
-- [ ] [AC4] Write failing test `test_apt_update_is_not_quiet_quiet`: assert the make install
+- [x] [AC4] Write failing test `test_apt_update_is_not_quiet_quiet`: assert the make install
       path does not pass `-qq` to `apt-get update`
-- [ ] [AC4] Drop `-qq` from `as_root apt-get update`
+- [x] [AC4] Drop `-qq` from `as_root apt-get update`
 
 ### Closing work
 
-- [ ] Re-read the whole script end to end; the two install blocks must read the same way
-- [ ] Refactor for clarity (extract, rename, dedupe)
-- [ ] Confirm `--check` still installs nothing and still exits 1 for a genuinely broken machine
+- [x] Re-read the whole script end to end; the two install blocks must read the same way
+- [x] Refactor for clarity (extract, rename, dedupe)
+- [x] Confirm `--check` still installs nothing and still exits 1 for a genuinely broken machine
 
 ## Closing
 
-- [ ] Every acceptance criterion from `proposal.md` is covered by at least one test
-- [ ] Every acceptance criterion has a matching entry in `features.json` with a non-vacuous verification command
-- [ ] `poetry run pytest tests/test_bootstrap_controller_script.py -q` green
-- [ ] `poetry run pytest -q` green (no regressions)
-- [ ] `poetry run ruff check toolkit tests` and `poetry run mypy toolkit` clean
-- [ ] No unrelated changes in the diff (no scope creep)
-- [ ] `verification.md` filled in
-- [ ] PR opened referencing this spec folder, body from `.github/pull_request_template.md`, `Closes #3234`
+- [x] Every acceptance criterion from `proposal.md` is covered by at least one test
+- [x] Every acceptance criterion has a matching entry in `features.json` with a non-vacuous verification command
+- [x] `poetry run pytest tests/test_bootstrap_controller_script.py -q` green
+- [x] `poetry run pytest -q` green (no regressions)
+- [x] `poetry run ruff check toolkit tests` and `poetry run mypy toolkit` clean
+- [x] No unrelated changes in the diff (no scope creep)
+- [x] `verification.md` filled in
+- [x] PR opened referencing this spec folder, body from `.github/pull_request_template.md`, `Closes #3234`
 
 ## Machine-readable features
 
