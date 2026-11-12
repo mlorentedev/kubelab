@@ -40,6 +40,7 @@
 2. After S2c and S5c: mint both tokens; set the two GitHub Actions secrets.
 3. #3286's workflow part is blocked on S2c: the variable to export is the Gitea registry pull token's, not `GHCR_PULL_TOKEN` (no private product is on GHCR, and no such SOPS key exists). An attempt to set `GHCR_PULL_TOKEN` created an empty repo secret, deleted at once; no value existed to expose.
 4. #3289 waits on S5c's mint.
+4b. Decide what happens to this run branch, `run/autopilot-2026-11-12`: keep it as the record, or delete it.
 5. RES-113: the owner set the stall rule on 2026-11-12 (#794): a provider failure, or answer failures on 2 or more postings, with nothing scored. The accepted gap is that poisoned postings can accumulate until #790 lands, so #790 should be next on resume.
 
 ## Tickets filed
@@ -61,3 +62,7 @@
 
 - The CI watcher counted superseded cancelled runs as failures, which led to unneeded reruns. Fixed in the watcher (latest run per check name).
 - A builder twice reverted uncommitted work with `git checkout --` while reverting a mutation. Nothing was lost. It now checks for a clean tree before each mutation batch.
+- The wake-lock was not running at wrap-up. caffeinate (pid 79422) had already exited, so this report does not claim the host stayed awake for the whole window.
+- `dotf forge pr create --draft` opens a ready PR on Gitea, so resume #796, #797 and #798 opened ready. Filed as dotfiles#3406.
+- resume worktrees for the merged PRs were removed. `dotf pr triage-queue` cannot run on the Gitea-hosted resume repo; every resume PR carries its own `## Review triage` comment.
+- kubelab `dotf pr triage-queue` exits 1 on #3382, which another session opened (encoding slice 8). It is not this run's.
