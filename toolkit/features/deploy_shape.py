@@ -258,7 +258,9 @@ class GhApi:
     """`gh api`, so the token comes from GH_TOKEN and never reaches a command line."""
 
     def _run(self, args: list[str]) -> str:
-        done = subprocess.run(["gh", "api", *args], capture_output=True, text=True, check=False, timeout=60)
+        done = subprocess.run(
+            ["gh", "api", *args], capture_output=True, text=True, encoding="utf-8", check=False, timeout=60
+        )
         if done.returncode != 0:
             raise RuntimeError(f"gh api {args[-1]} failed: {done.stderr.strip()[:300]}")
         return done.stdout

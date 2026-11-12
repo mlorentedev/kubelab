@@ -76,7 +76,7 @@ kubelab/
 ### Making Changes to Services
 
 1. Navigate to service in `infra/stacks/services/{category}/{service}/`
-2. Update configuration (docker-compose, .env files)
+2. Update the compose files, and the values they read in `infra/config/values/*.yaml`
 3. Test:
    ```bash
    poetry run toolkit services up {service-name}
@@ -233,15 +233,13 @@ Configuration is SSOT-driven — never edit `.env` files or generated output dir
 - Use specific base image tags (avoid `latest`)
 - Don't run as root user
 - Clean up package caches
-- Copy `.env` files when needed for build
+- Never copy an env file into an image; build-time values are `ARG`s
 
 Example:
 ```dockerfile
 FROM node:20-alpine AS builder
 WORKDIR /app
 
-# Copy env file for build-time variables
-COPY .env.dev .env
 
 COPY package*.json ./
 RUN npm ci --only=production
@@ -293,8 +291,8 @@ poetry run toolkit config generate traefik --env dev
 poetry run toolkit secrets show
 poetry run toolkit secrets audit
 
-# Deployment
-poetry run toolkit deployment deploy --env staging
+# Deployment: pin an image tag, then let Argo CD sync it (docs/runbooks/gitops-delivery-promotion.md)
+poetry run toolkit deployment promote --env staging --app api --version sha-<short>
 ```
 
 ## Questions?

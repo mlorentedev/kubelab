@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.8.0](https://github.com/mlorentedev/kubelab/compare/api-v1.7.2...api-v1.8.0) (2026-11-12)
+
+
+### Features
+
+* **api:** count the days the operator opens the console ([#3334](https://github.com/mlorentedev/kubelab/issues/3334)) ([0b1bfaf](https://github.com/mlorentedev/kubelab/commit/0b1bfaf21038873f25a26ca6ff05595b5157b1d0))
+
 ## [1.7.2](https://github.com/mlorentedev/kubelab/compare/api-v1.7.1...api-v1.7.2) (2026-11-11)
 
 

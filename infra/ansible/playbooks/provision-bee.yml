@@ -423,6 +423,11 @@
         gitea_renovate_email: "{{ gitea_config.apps.auth.identities.renovate | default('') }}@{{ gitea_config.apps.services.core.gitea.domain }}"
         gitea_renovate_scopes: "{{ gitea_config.apps.services.core.gitea.token_scopes.renovate }}"
         gitea_renovate_token: "{{ gitea_secrets.apps.services.core.gitea.renovate_token | default('') }}"
+        # IDP-036 AC3 -- the github.com token the run's `github>` preset fetch needs: the
+        # same value as ci-workflows' `RENOVATE_TOKEN` (owner decision 2026-11-12), recorded
+        # by hand, so empty until `toolkit secrets set` has run. The run is not enabled
+        # without it.
+        renovate_github_com_token: "{{ gitea_secrets.apps.services.core.gitea.renovate_github_com_token | default('') }}"
         # The superadmin's API token (TOOL-035). Minted by the same mechanism and
         # gated the same way. Two reasons it exists, and only the first is obvious:
         # Gitea puts the creating account in a new organization's `Owners` team, so
