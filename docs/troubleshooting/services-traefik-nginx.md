@@ -9,7 +9,7 @@ owner: manu
 
 # Traefik & Error Pages Troubleshooting
 
-Service-specific troubleshooting for the KubeLab edge layer: Traefik reverse proxy and Nginx caching/static serving.
+Service-specific troubleshooting for the KubeLab edge layer: the Traefik reverse proxy and the `errors` service that serves the branded error pages.
 
 ## Traefik
 
@@ -109,8 +109,13 @@ A request to a down backend returns Traefik's plain "no available server" or a b
 # Is the errors workload up?
 kubectl --kubeconfig ~/.kube/kubelab-staging-config -n kubelab get deploy,svc errors
 
-# Does the route carry the middleware? Read the rendered object, not the patch.
-kubectl kustomize infra/k8s/overlays/staging | grep -n "error-pages"
+# Does this route carry the middleware? Read the route's own middlewares list:
+# the string "error-pages" also matches the Middleware object itself.
+kubectl --kubeconfig ~/.kube/kubelab-staging-config -n kubelab \
+  get ingressroute <route> -o jsonpath='{.spec.routes[*].middlewares[*].name}'
+
+# Offline, for every route in both overlays at once:
+poetry run pytest tests/test_error_pages_coverage.py
 ```
 
 #### Solution
