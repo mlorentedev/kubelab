@@ -59,9 +59,9 @@ def errors_container() -> Iterator[tuple[str, str]]:
             except OSError:
                 time.sleep(0.2)
         else:
-            logs = subprocess.run(["docker", "logs", name], capture_output=True, text=True, encoding="utf-8").stderr[
-                -400:
-            ]
+            logs = subprocess.run(
+                ["docker", "logs", name], capture_output=True, text=True, encoding="utf-8", errors="replace"
+            ).stderr[-400:]
             raise RuntimeError(f"the errors image did not answer /health within 10s: {logs}")
         yield name, url
     finally:
@@ -166,7 +166,9 @@ def test_the_error_pages_served_are_logged(
     # only the answer shows that a page was served, and which location served it.
     assert (code, headers["content-type"].split(";")[0]) == (200, served)
     for _ in range(25):
-        logs = subprocess.run(["docker", "logs", name], capture_output=True, text=True, encoding="utf-8").stdout
+        logs = subprocess.run(
+            ["docker", "logs", name], capture_output=True, text=True, encoding="utf-8", errors="replace"
+        ).stdout
         if probe in logs:
             return
         time.sleep(0.2)

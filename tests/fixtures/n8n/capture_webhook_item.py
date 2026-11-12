@@ -182,9 +182,9 @@ def main() -> None:
             form_response = post_when_ready(url, FORM_BODY, "application/x-www-form-urlencoded")
         except Exception:
             print(
-                subprocess.run(["docker", "logs", container], capture_output=True, text=True, encoding="utf-8").stdout[
-                    -3000:
-                ]
+                subprocess.run(
+                    ["docker", "logs", container], capture_output=True, text=True, encoding="utf-8", errors="replace"
+                ).stdout[-3000:]
             )
             raise
         finally:

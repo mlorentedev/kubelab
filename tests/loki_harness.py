@@ -181,7 +181,7 @@ def run_loki() -> Iterator[Loki]:
                 pass
             if time.monotonic() > deadline:
                 logs = subprocess.run(
-                    ["docker", "logs", container], capture_output=True, text=True, encoding="utf-8"
+                    ["docker", "logs", container], capture_output=True, text=True, encoding="utf-8", errors="replace"
                 ).stderr[-800:]
                 pytest.fail(f"Loki did not become ready in 90 s: {logs}")
             time.sleep(1)
