@@ -30,6 +30,7 @@ from toolkit.features.product_guards import validate_registered
 from toolkit.features.registry import (
     SHA_TAG_HEX_LENGTHS,
     SHA_TAG_PREFIX,
+    BearerCache,
     RegistryCredential,
     catalog_secret,
     is_docker_hub,
@@ -113,7 +114,8 @@ def _prove_image(
     image = product_registry.derived_image(app, registry)
     host, image_name = image.rsplit("/", 1)
     credential = _credential(app, host, product_registry.product(app, registry), secret)
-    digest_of = functools.partial(tag_digest, credential=credential, http=http)
+    # One bearer serves every tag of the image: a miss across all the sha lengths trades for it once (#3287).
+    digest_of = functools.partial(tag_digest, credential=credential, http=http, bearers=BearerCache())
     released = digest_of(host, image_name, version)
     if released is None:
         raise _unreadable(image, version, host, credential)

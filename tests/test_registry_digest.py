@@ -49,7 +49,7 @@ class _Oci:
         if url.startswith(self.realm):
             return self._token(kwargs.get("auth"))
         assert url.startswith(f"https://{self.host}/v2/"), f"a read left the registry: {url}"
-        if kwargs.get("headers", {}).get("Authorization") != f"Bearer {BEARER}":
+        if not self._accepts(kwargs.get("headers", {}).get("Authorization")):
             repository = url.split("/v2/", 1)[1].split("/manifests/", 1)[0]
             challenge = f'Bearer realm="{self.realm}",service="{self.host}",scope="repository:{repository}:pull"'
             return httpx.Response(401, headers={"www-authenticate": challenge})
@@ -61,10 +61,19 @@ class _Oci:
     def _token(self, auth: tuple[str, str] | None) -> httpx.Response:
         if self.login is not None and auth != self.login:
             return httpx.Response(401)
-        return httpx.Response(200, json={"token": BEARER})
+        return httpx.Response(200, json={"token": self._issue()})
+
+    def _issue(self) -> str:
+        return BEARER
+
+    def _accepts(self, authorization: str | None) -> bool:
+        return authorization == f"Bearer {BEARER}"
 
     def manifest_reads(self) -> list[tuple[str, str, dict[str, Any]]]:
         return [c for c in self.calls if not c[1].startswith(self.realm)]
+
+    def token_exchanges(self) -> list[tuple[str, str, dict[str, Any]]]:
+        return [c for c in self.calls if c[1].startswith(self.realm)]
 
 
 @pytest.fixture
@@ -455,6 +464,96 @@ def test_release_contract_on_a_gitea_product_reads_through_the_adapter_and_the_p
     (client,) = _GiteaReads.instances
     assert [call[0] for call in client.calls] == ["get_tag", "get_raw_file"]
     assert client.calls[1][-1] == SHA, "the contract is read at the release commit, not a branch"
+
+
+class _Rotating(_Oci):
+    """An OCI registry whose bearers are numbered and last ``lifetime`` manifest reads (``None``: for good)."""
+
+    def __init__(self, *args: Any, lifetime: int | None = None, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.lifetime, self.issued, self.uses = lifetime, 0, 0
+
+    def _issue(self) -> str:
+        self.issued, self.uses = self.issued + 1, 0
+        return f"bearer-{self.issued}"
+
+    def _accepts(self, authorization: str | None) -> bool:
+        if authorization != f"Bearer bearer-{self.issued}" or self.lifetime is not None and self.uses >= self.lifetime:
+            return False
+        self.uses += 1
+        return True
+
+
+def _anonymous(reads: list[tuple[str, str, dict[str, Any]]]) -> list[tuple[str, str, dict[str, Any]]]:
+    return [read for read in reads if "Authorization" not in read[2].get("headers", {})]
+
+
+class TestOneBearerPerProof:
+    """A bearer is scoped to one repository and valid for all its tags, so a proof trades for it once (#3287)."""
+
+    def test_a_missing_sha_tag_costs_one_token_exchange_not_one_per_length(self, private_registry: Path) -> None:
+        http = _Oci("ghcr.io", "https://ghcr.io/token", {VERSION: DIGEST}, login=(BOT, PULL_TOKEN))
+
+        with pytest.raises(ContractError):
+            _prove(private_registry, http, _secret(PULL_TOKEN))
+
+        lengths = len(registry.SHA_TAG_HEX_LENGTHS)
+        assert len(http.token_exchanges()) == 1
+        assert len(_anonymous(http.manifest_reads())) == 1, "only the first read may go out unauthenticated"
+        assert len(http.manifest_reads()) == 2 + lengths, "the release tag, once more with the bearer, then each length"
+
+    def test_a_bearer_that_expires_mid_proof_is_refreshed_once_and_the_proof_goes_on(
+        self, private_registry: Path
+    ) -> None:
+        digests = {VERSION: DIGEST, f"sha-{SHA[:10]}": DIGEST}
+        http = _Rotating("ghcr.io", "https://ghcr.io/token", digests, login=(BOT, PULL_TOKEN), lifetime=3)
+
+        assert _prove(private_registry, http, _secret(PULL_TOKEN)) == DIGEST
+
+        assert len(http.token_exchanges()) == 2
+
+    def test_a_bearer_the_registry_keeps_refusing_is_refreshed_once_then_refused(self, warnings: MagicMock) -> None:
+        path, http = "ghcr.io/acme", _Rotating("ghcr.io", "https://ghcr.io/token", {VERSION: DIGEST}, lifetime=1)
+        bearers = registry.BearerCache()
+        assert registry.tag_digest(path, "web", VERSION, CREDENTIAL, http=http, bearers=bearers) == DIGEST
+        http.lifetime = 0  # the registry now refuses every bearer, the fresh one included
+
+        assert registry.tag_digest(path, "web", VERSION, CREDENTIAL, http=http, bearers=bearers) is None
+
+        assert len(http.token_exchanges()) == 2, "one exchange to get in, one refresh, no loop"
+        assert "401" in warnings.call_args.args[0]
+        reads = len(http.manifest_reads())
+        registry.tag_digest(path, "web", VERSION, CREDENTIAL, http=http, bearers=bearers)
+        assert len(_anonymous(http.manifest_reads()[reads:])) == 1, "a refused bearer is not kept for the next read"
+
+    def test_a_shared_cache_serves_two_reads_of_one_repository_with_one_exchange(self) -> None:
+        path, http = _oci("ghcr", {VERSION: DIGEST, "other": OTHER})
+        bearers = registry.BearerCache()
+
+        assert registry.tag_digest(path, "web", VERSION, CREDENTIAL, http=http, bearers=bearers) == DIGEST
+        assert registry.tag_digest(path, "web", "other", CREDENTIAL, http=http, bearers=bearers) == OTHER
+
+        assert len(http.token_exchanges()) == 1
+        assert BEARER not in repr(bearers)
+
+    def test_a_bearer_is_never_used_for_another_repository(self) -> None:
+        path, http = _oci("ghcr", {VERSION: DIGEST})
+        bearers = registry.BearerCache()
+
+        registry.tag_digest(path, "web", VERSION, CREDENTIAL, http=http, bearers=bearers)
+        registry.tag_digest(path, "api", VERSION, CREDENTIAL, http=http, bearers=bearers)
+
+        scopes = [call[2]["params"]["scope"] for call in http.token_exchanges()]
+        assert scopes == ["repository:acme/web:pull", "repository:acme/api:pull"]
+
+    def test_without_a_cache_every_read_trades_for_its_own_bearer(self) -> None:
+        """Nothing is kept between calls unless the caller hands a cache in: no module-level state."""
+        path, http = _oci("ghcr", {VERSION: DIGEST})
+
+        registry.tag_digest(path, "web", VERSION, CREDENTIAL, http=http)
+        registry.tag_digest(path, "web", VERSION, CREDENTIAL, http=http)
+
+        assert len(http.token_exchanges()) == 2
 
 
 class TestDockerHubThroughTheInjectedTransport:
