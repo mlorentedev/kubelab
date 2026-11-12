@@ -1362,7 +1362,7 @@ def vikunja_audit_users(
     # homelab is on-demand, so "unreachable" is a normal state here rather than an
     # exceptional one. Without a bound the command hangs instead of failing.
     try:
-        res = subprocess.run(cmd, text=True, capture_output=True, timeout=EXEC_TIMEOUT)
+        res = subprocess.run(cmd, text=True, encoding="utf-8", capture_output=True, timeout=EXEC_TIMEOUT)
     except subprocess.TimeoutExpired:
         logger.error(
             f"timed out after {EXEC_TIMEOUT}s reading the Vikunja user table in {env} — "

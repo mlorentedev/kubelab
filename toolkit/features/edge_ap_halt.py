@@ -187,6 +187,7 @@ def _run(networking: dict[str, Any], script: str) -> tuple[int, str]:
             check=False,
             stdout=subprocess.PIPE,
             text=True,
+            encoding="utf-8",
             errors="replace",
             timeout=SESSION_TIMEOUT_S,
         )
