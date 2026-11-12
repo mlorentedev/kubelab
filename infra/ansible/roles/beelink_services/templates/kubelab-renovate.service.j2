@@ -1,0 +1,45 @@
+# {{ ansible_managed }}
+# One Renovate run against the Gitea forge (IDP-036 AC2), started hourly by
+# kubelab-renovate.timer. The wrapper probes Gitea first and skips with exit 0
+# when it does not answer.
+[Unit]
+Description=Renovate run against the Gitea forge
+Documentation=https://github.com/mlorentedev/kubelab/blob/master/docs/runbooks/renovate-gitea.md
+# Ordered after the stack's unit, not pulled in by it. Requires= or Wants= on
+# kubelab-compose.service would make a timer tick start the forge's whole stack
+# on a node whose operator stopped it, and recreate its containers
+# (--force-recreate there). The run only has to come after the stack when both
+# start at boot, and the wrapper's probe covers the rest.
+After=kubelab-compose.service docker.service network-online.target
+Requires=docker.service
+Wants=network-online.target
+
+[Service]
+# oneshot: the run ends and the unit with it, so the timer's next tick starts it
+# again, and a tick that finds the previous run still going starts nothing.
+Type=oneshot
+# The wrapper reads RENOVATE_IMAGE from this file; the container reads the rest of
+# it through docker's --env-file. It is 0600 and read here by root.
+EnvironmentFile={{ beelink_deploy_dir }}/renovate/renovate.env
+# Everything the wrapper needs, here and nowhere else: the wrapper defaults none.
+# The probe is the address Gitea is published on, the one the provision verifies
+# (a container reporting healthy says nothing about whether its port is reachable),
+# so a forge bound to nothing is skipped rather than run against.
+Environment=KUBELAB_RENOVATE_HEALTH_URL=http://{{ tailscale_ip }}:{{ gitea_http_port }}{{ gitea_health_path }}
+# The network's own name, as compose.yml.j2 pins it with `name:`, not the
+# project-prefixed one compose would otherwise create.
+Environment=KUBELAB_RENOVATE_NETWORK=kubelab
+# The cap, from role defaults (renovate_memory_limit), where its measurement is recorded.
+Environment=KUBELAB_RENOVATE_MEMORY={{ renovate_memory_limit }}
+Environment=KUBELAB_RENOVATE_NAME=kubelab-renovate
+Environment=KUBELAB_RENOVATE_ENV_FILE={{ beelink_deploy_dir }}/renovate/renovate.env
+Environment=KUBELAB_RENOVATE_CONFIG={{ beelink_deploy_dir }}/renovate/config.yaml
+Environment=KUBELAB_RENOVATE_CONFIG_MOUNT={{ renovate_config_container_path }}
+ExecStart={{ beelink_deploy_dir }}/renovate-run.sh
+# A oneshot has no start timeout unless it is given one, so a hung engine would
+# hold the unit, and every tick after it would find it still running. 45 min leaves
+# the next hourly tick a run to start, and is generous for the fleet's five
+# repositories. The first run's duration is recorded on #1384 and this is set from it.
+TimeoutStartSec=45min
+StandardOutput=journal
+StandardError=journal

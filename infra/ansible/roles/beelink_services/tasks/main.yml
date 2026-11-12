@@ -12,12 +12,19 @@
 # pulls, act_runner's only when the template renders it; a test fails if the two
 # drift apart. First, so a refused pull leaves the node as it was: past the
 # templates, the rerun would see no change and skip the handlers they notify (#2812).
+#
+# The Renovate engine (IDP-036 AC2) joins it only while the run is enabled: its
+# unit runs the image with `--pull never`, so a missing engine fails every tick, and
+# a node whose forge has no machine account yet would otherwise fetch a multi-GB
+# image behind the edge for a container nothing starts. Tagged `renovate` as well,
+# so `--tags renovate`, which installs the timer, pulls what the timer runs.
 - name: Pull the service images
   ansible.builtin.import_tasks: "{{ playbook_dir }}/_includes/image-pull.yml"
   vars:
     image_pull_name: the Beelink services
     image_pull_images: >-
-      {{ [gitea_image] + ([runner_image] if runner_enabled | bool else []) + ([act_runner_image] if act_runner_enabled | bool else []) }}
+      {{ [gitea_image] + ([runner_image] if runner_enabled | bool else []) + ([act_runner_image] if act_runner_enabled | bool else []) + ([renovate_engine.image ~ ':' ~ renovate_engine.version] if renovate_enabled | bool else []) }}
+  tags: [renovate]
 
 # --- Cleanup legacy Ollama (bare metal) ---
 - name: Check if Ollama service exists
@@ -188,7 +195,7 @@
 # declaration and which has no role default on purpose: a play that forgot it
 # fails this task on an undefined variable. Do not add `| default({})`: that
 # turns the loud failure into an empty list, and Renovate would cover nothing,
-# silently. Nothing runs Renovate yet; the timer that reads this file is AC2.
+# silently. The timer further down is what reads this file (AC2).
 - name: Create the Renovate config directory
   file:
     path: "{{ beelink_deploy_dir }}/renovate"
@@ -208,18 +215,99 @@
   tags: [gitea, renovate]
 
 # The engine image, from ci-workflows' engine.json at the preset's tag (AC4; the
-# play fetches and checks it). The image joins the stack's bounded pull with the
-# unit that runs it (AC2), not before: pulled now it would cost every Beelink
-# provision a multi-GB fetch behind the edge for a container nothing starts.
+# play fetches and checks it). The image joins the stack's bounded pull only while
+# the run is enabled (the first task of this role), not before: pulled for a node
+# that cannot run it, it would cost the provision a multi-GB fetch behind the edge.
+#
+# The file carries the machine account's token (AC6). `template` shows a diff for
+# what it writes, and a diff is a log line, so the task is no_log: a changed token
+# reads as `changed` and nothing else.
 - name: Install the Renovate run environment
   template:
     src: renovate.env.j2
     dest: "{{ beelink_deploy_dir }}/renovate/renovate.env"
     owner: root
     group: root
-    # 0600: systemd reads it as root, and an EnvironmentFile is where a token
-    # would land next (AC6); no local user on the CI-runner host needs it.
+    # 0600: systemd reads it as root, and an EnvironmentFile is where the token
+    # lands; no local user on the CI-runner host needs it.
     mode: "0600"
+  no_log: true
+  tags: [gitea, renovate]
+
+# --- The Renovate run's timer (IDP-036 AC2) ---
+# Gated on `renovate_enabled`: the account declared and its token recorded. Until
+# then the run installs nothing, and a timer an earlier provision left is stopped
+# below, so removing `apps.auth.identities.renovate` stops the run instead of
+# leaving it firing with a stale token.
+#
+# Not here yet: the read-only GITHUB_COM_TOKEN the `github>` preset fetch needs.
+# It is the next change's, and its gate joins `renovate_enabled` with it. Until it
+# lands, that fetch from github.com is unauthenticated and rate-limited.
+- name: Install the Renovate run wrapper
+  copy:
+    src: renovate-run.sh
+    dest: "{{ beelink_deploy_dir }}/renovate-run.sh"
+    owner: root
+    group: root
+    mode: "0755"
+  when: renovate_enabled | bool
+  tags: [gitea, renovate]
+
+- name: Install the Renovate service unit
+  template:
+    src: kubelab-renovate.service.j2
+    dest: /etc/systemd/system/kubelab-renovate.service
+    owner: root
+    group: root
+    mode: "0644"
+  when: renovate_enabled | bool
+  notify: Reload systemd for kubelab-renovate
+  tags: [gitea, renovate]
+
+- name: Install the Renovate timer unit
+  template:
+    src: kubelab-renovate.timer.j2
+    dest: /etc/systemd/system/kubelab-renovate.timer
+    owner: root
+    group: root
+    mode: "0644"
+  when: renovate_enabled | bool
+  notify: Reload systemd for kubelab-renovate
+  tags: [gitea, renovate]
+
+# Only the timer is enabled: the service has no [Install] of its own, and the
+# timer starts it. Starting the timer does not run the service, so a provision
+# never launches a Renovate run.
+- name: Enable and start the Renovate timer
+  systemd:
+    name: kubelab-renovate.timer
+    enabled: true
+    state: started
+  when: renovate_enabled | bool
+  # Under --check the unit file was never written, so systemd cannot find a timer
+  # this run is introducing. Only the dry run may skip past that; a real run still
+  # fails on it.
+  ignore_errors: "{{ ansible_check_mode }}"
+  tags: [gitea, renovate]
+
+# `systemd` fails on a unit it cannot find, so the stop is gated on the file: a
+# node that never had the timer is not an error, and one that did is stopped and
+# disabled. The files stay where they are; with the timer off nothing reads them.
+- name: Look for a Renovate timer left by an earlier provision
+  stat:
+    path: /etc/systemd/system/kubelab-renovate.timer
+  register: _renovate_timer_present
+  when: not (renovate_enabled | bool)
+  tags: [gitea, renovate]
+
+- name: Stop and disable the Renovate timer when the run is not enabled
+  systemd:
+    name: kubelab-renovate.timer
+    enabled: false
+    state: stopped
+  when:
+    - not (renovate_enabled | bool)
+    - _renovate_timer_present.stat.exists
   tags: [gitea, renovate]
 
 # --- Boot ordering: bind address must exist before Docker publishes on it ---

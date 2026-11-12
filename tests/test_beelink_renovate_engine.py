@@ -51,7 +51,12 @@ def _tag_expression() -> str:
 
 def _render_env(engine: dict) -> str:
     env = ansible_env(str(ROLE / "templates"), undefined=StrictUndefined)
-    return env.get_template("renovate.env.j2").render(ansible_managed="Ansible managed", renovate_engine=engine)
+    return env.get_template("renovate.env.j2").render(
+        ansible_managed="Ansible managed",
+        renovate_engine=engine,
+        gitea_renovate_token="not-a-token",  # noqa: S106 - the template needs one; only RENOVATE_IMAGE is read here
+        renovate_config_container_path="/config.yaml",
+    )
 
 
 def test_the_play_fetches_the_engine_exactly_once() -> None:
@@ -114,15 +119,19 @@ def _settings(rendered: str) -> list[str]:
     return [line for line in rendered.splitlines() if line.strip() and not line.lstrip().startswith("#")]
 
 
-def test_the_env_file_carries_the_fetched_image_and_nothing_else() -> None:
-    """Exactly one line: a second, literal `RENOVATE_IMAGE` would win in systemd."""
-    assert _settings(_render_env({"image": "example/renovate", "version": "1.2.3"})) == [
+def _image_lines(rendered: str) -> list[str]:
+    return [line for line in _settings(rendered) if line.startswith("RENOVATE_IMAGE=")]
+
+
+def test_the_env_file_carries_the_fetched_image_exactly_once() -> None:
+    """One line: a second, literal `RENOVATE_IMAGE` would win in systemd."""
+    assert _image_lines(_render_env({"image": "example/renovate", "version": "1.2.3"})) == [
         "RENOVATE_IMAGE=example/renovate:1.2.3"
     ]
 
 
 def test_the_env_file_follows_the_engine_not_a_literal() -> None:
-    assert _settings(_render_env({"image": "other/renovate", "version": "9.9.9"})) == [
+    assert _image_lines(_render_env({"image": "other/renovate", "version": "9.9.9"})) == [
         "RENOVATE_IMAGE=other/renovate:9.9.9"
     ]
 
