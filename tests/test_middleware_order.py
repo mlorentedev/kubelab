@@ -287,6 +287,7 @@ def test_resolver_agrees_with_kustomize(env: str) -> None:
         ["kubectl", "kustomize", str(K8S / "overlays" / env)],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=120,
     )
     if result.returncode != 0:

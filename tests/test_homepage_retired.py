@@ -67,6 +67,7 @@ def test_no_overlay_renders_it(overlay: str) -> None:
         check=True,
         capture_output=True,
         text=True,
+        encoding="utf-8",
     ).stdout
     assert "gethomepage" not in rendered
     assert "home.kubelab.live" not in rendered

@@ -192,7 +192,7 @@ def node(tmp_path: Path, request: pytest.FixtureRequest):
         if now is not None:
             env["FAKE_NOW"] = str(now)
         argv = ["bash", str(script)] + (["--check"] if check else [])
-        proc = subprocess.run(argv, env=env, capture_output=True, text=True, timeout=30)
+        proc = subprocess.run(argv, env=env, capture_output=True, text=True, encoding="utf-8", timeout=30)
         calls = (fake_dir / "calls").read_text(encoding="utf-8").splitlines() if (fake_dir / "calls").exists() else []
         # `verbs` accumulates across runs (a test may assert on a sequence);
         # `run.calls` holds this run's calls only.

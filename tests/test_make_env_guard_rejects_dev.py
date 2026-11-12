@@ -206,6 +206,7 @@ class TestTheGuardBites:
             cwd=REPO_ROOT,
             capture_output=True,
             text=True,
+            encoding="utf-8",
         ).stdout
         guards = [ln for ln in out.splitlines() if ln.startswith("test ") and f"make {target} " in ln]
         assert guards, f"{target}: no guard line found in its expansion"

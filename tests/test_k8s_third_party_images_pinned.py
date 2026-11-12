@@ -32,6 +32,7 @@ def _rendered_images(overlay: str) -> set[str]:
         check=True,
         capture_output=True,
         text=True,
+        encoding="utf-8",
     ).stdout
     return {m.group("ref") for m in _IMAGE.finditer(out)}
 
