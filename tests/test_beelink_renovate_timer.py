@@ -16,8 +16,8 @@ hourly timer. Three properties are worth a test, and none of them is "the file p
   retried from nothing), so an engine missing from the bounded pull is a unit that
   fails on every tick.
 
-The role gates the whole run on the account and its token being declared and recorded,
-so a forge without them gets no timer, and one that has one stops it.
+The role gates the whole run on the account, its token and the github.com token being
+declared and recorded, so a forge without them gets no timer, and one that has one stops it.
 """
 
 from __future__ import annotations
@@ -46,6 +46,7 @@ SERVICE = "kubelab-renovate.service"
 TIMER = "kubelab-renovate.timer"
 DEPLOY_DIR = "/opt/kubelab"
 TOKEN = "tok-not-a-real-secret"  # noqa: S105 - a fixture, rendered into a temp file only
+GITHUB_TOKEN = "ghp_not-a-real-secret"  # noqa: S105 - a fixture, rendered into a temp file only
 GITEA_HEALTH = f"http://{COMMON['networking']['nodes']['beelink']['tailscale_ip']}:{COMMON['apps']['services']['core']['gitea']['default_port']}{COMMON['apps']['services']['core']['gitea']['health_path']}"
 
 
@@ -76,6 +77,7 @@ def _context(**overrides: Any) -> dict[str, Any]:
         "gitea_http_port": gitea["default_port"],
         "gitea_health_path": gitea["health_path"],
         "gitea_renovate_token": TOKEN,
+        "renovate_github_com_token": GITHUB_TOKEN,
         "gitea_renovate_user": COMMON["apps"]["auth"]["identities"]["renovate"],
         "renovate_engine": {"image": "example/renovate", "version": "1.2.3"},
     }
@@ -121,10 +123,12 @@ def _unit(template: str, **overrides: Any) -> dict[str, dict[str, list[str]]]:
     return sections
 
 
-def _enabled(user: str, token: str) -> bool:
+def _enabled(user: str, token: str, github_token: str = GITHUB_TOKEN) -> bool:
     expression = _defaults()["renovate_enabled"]
     env = ansible_env(".")
-    rendered = env.from_string(expression).render(gitea_renovate_user=user, gitea_renovate_token=token)
+    rendered = env.from_string(expression).render(
+        gitea_renovate_user=user, gitea_renovate_token=token, renovate_github_com_token=github_token
+    )
     return rendered.strip() == "True"
 
 
@@ -144,6 +148,7 @@ def test_the_renovate_login_is_declared_and_distinct() -> None:
 def test_the_env_file_delivers_the_token_the_platform_the_endpoint_and_the_config() -> None:
     env = _env_file()
     assert env["RENOVATE_TOKEN"] == TOKEN
+    assert env["GITHUB_COM_TOKEN"] == GITHUB_TOKEN
     assert env["RENOVATE_PLATFORM"] == "gitea"
     assert env["RENOVATE_IMAGE"] == "example/renovate:1.2.3"
     assert env["RENOVATE_CONFIG_FILE"].endswith("config.yaml")
@@ -376,6 +381,14 @@ def test_the_run_is_enabled_only_when_the_account_and_its_token_both_exist(user:
     assert _enabled(user, token) is enabled
 
 
+def test_the_run_is_not_enabled_without_the_github_token() -> None:
+    """The `github>` preset is fetched through the GitHub API: without the token every
+    hourly tick would run the engine and fail on a preset it cannot resolve. A node
+    without it takes the not-enabled path, which stops a timer left behind."""
+    assert _enabled("proteo", "tok", GITHUB_TOKEN) is True
+    assert _enabled("proteo", "tok", "") is False
+
+
 RENOVATE_UNIT_TASKS = [
     "Install the Renovate run wrapper",
     "Install the Renovate service unit",
@@ -461,6 +474,7 @@ def _pull_images(**variables: Any) -> list[str]:
         "renovate_enabled": True,
         "gitea_renovate_user": "x",
         "gitea_renovate_token": "y",
+        "renovate_github_com_token": "z",
     }
     context.update(variables)
     return ast.literal_eval(env.from_string(expression).render(**context))
