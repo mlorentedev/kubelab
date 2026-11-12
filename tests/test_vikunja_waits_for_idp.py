@@ -28,7 +28,10 @@ def _render(overlay: str) -> list[dict]:
     if shutil.which("kubectl") is None:
         pytest.skip("kubectl not on PATH: cannot render the overlay (a skip is CANNOT CHECK, not OK)")
     out = subprocess.run(
-        ["kubectl", "kustomize", str(REPO / "infra/k8s/overlays" / overlay)], capture_output=True, text=True
+        ["kubectl", "kustomize", str(REPO / "infra/k8s/overlays" / overlay)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
     )
     assert out.returncode == 0, out.stderr
     return [doc for doc in yaml.safe_load_all(out.stdout) if doc]
@@ -56,7 +59,7 @@ def test_vikunja_starts_only_after_its_idp_answers(overlay: str) -> None:
     # and leaves `| grep` at the start of a line, which sh rejects.
     command = waits[0]["command"]
     assert command[:2] == ["sh", "-c"], command
-    parsed = subprocess.run(["sh", "-n", "-c", command[2]], capture_output=True, text=True)
+    parsed = subprocess.run(["sh", "-n", "-c", command[2]], capture_output=True, text=True, encoding="utf-8")
     assert parsed.returncode == 0, parsed.stderr
     assert f"${{{AUTHURL}}}/.well-known/openid-configuration" in script
     # Authelia answers 200 on any path, so only the document's content proves

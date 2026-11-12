@@ -32,7 +32,9 @@ def test_importing_the_cli_builds_no_configuration_manager() -> None:
         print("imported")
         """
     )
-    done = subprocess.run([sys.executable, "-c", script], cwd=ROOT, capture_output=True, text=True, timeout=120)
+    done = subprocess.run(
+        [sys.executable, "-c", script], cwd=ROOT, capture_output=True, text=True, encoding="utf-8", timeout=120
+    )
     assert done.returncode == 0 and "imported" in done.stdout, done.stderr[-2000:]
 
 
@@ -53,7 +55,9 @@ def test_help_decrypts_nothing() -> None:
         print("exit", result.exit_code)
         """
     )
-    done = subprocess.run([sys.executable, "-c", script], cwd=ROOT, capture_output=True, text=True, timeout=120)
+    done = subprocess.run(
+        [sys.executable, "-c", script], cwd=ROOT, capture_output=True, text=True, encoding="utf-8", timeout=120
+    )
     assert done.returncode == 0 and "exit 0" in done.stdout, (done.stdout + done.stderr)[-2000:]
 
 

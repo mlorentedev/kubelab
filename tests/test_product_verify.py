@@ -408,7 +408,9 @@ class TestDescendsFrom:
         import subprocess
 
         def git(*args: str) -> str:
-            return subprocess.run(["git", *args], cwd=tmp_path, capture_output=True, text=True, check=True).stdout
+            return subprocess.run(
+                ["git", *args], cwd=tmp_path, capture_output=True, text=True, encoding="utf-8", check=True
+            ).stdout
 
         git("init", "-q", "-b", "master")
         git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "a")
@@ -447,7 +449,9 @@ class TestDescendsFrom:
             cwd=tmp_path,
             check=True,
         )
-        c = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmp_path, capture_output=True, text=True).stdout.strip()
+        c = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=tmp_path, capture_output=True, text=True, encoding="utf-8"
+        ).stdout.strip()
         monkeypatch.chdir(clone)
         assert not descends_from(b, c)
         assert descends_from(b, c, fetch=True)
@@ -500,8 +504,9 @@ class TestTargetsAt:
     @staticmethod
     def _without(lane: str, path: str) -> str:
         """Web's tree, except that its snapshots declare no ``lane`` hostname (#3250)."""
-        import yaml
         from pathlib import Path
+
+        import yaml
 
         text = Path(path).read_text(encoding="utf-8")
         if "/contracts/" not in path:
@@ -511,9 +516,7 @@ class TestTargetsAt:
         return yaml.safe_dump(contract)
 
     @pytest.mark.parametrize(("asked", "other"), [("prod", "staging"), ("staging", "prod")])
-    def test_a_contract_without_the_asked_hostname_is_a_refusal_naming_the_lane(
-        self, asked: str, other: str
-    ) -> None:
+    def test_a_contract_without_the_asked_hostname_is_a_refusal_naming_the_lane(self, asked: str, other: str) -> None:
         """A ``NoContractError`` (a ValueError), not a ``KeyError``, which would name only ``'prod'``."""
         with pytest.raises(NoContractError) as refused:
             targets_at(HEAD, "web", asked, lambda _rev, path: self._without(asked, path))
