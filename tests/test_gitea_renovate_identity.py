@@ -129,8 +129,16 @@ def test_the_playbook_reads_the_login_the_grant_and_the_secret_from_the_ssot() -
 
 
 def test_the_playbook_hands_the_github_com_token_to_the_role() -> None:
-    playbook = PLAYBOOK.read_text(encoding="utf-8")
-    assert f"renovate_github_com_token: \"{{{{ gitea_secrets.{GITHUB_COM_TOKEN_KEY} | default('') }}}}\"" in playbook
+    # Read from the role entry's own vars, not the file's text: a substring
+    # match also passes on a comment, and on a value handed to another role.
+    plays = yaml.safe_load(PLAYBOOK.read_text(encoding="utf-8"))
+    (role_vars,) = [
+        entry["vars"]
+        for play in plays
+        for entry in play.get("roles") or []
+        if isinstance(entry, dict) and str(entry.get("role", "")).endswith("/beelink_services")
+    ]
+    assert role_vars["renovate_github_com_token"] == f"{{{{ gitea_secrets.{GITHUB_COM_TOKEN_KEY} | default('') }}}}"
 
 
 def test_the_bootstrap_creates_the_account_only_once_named() -> None:
