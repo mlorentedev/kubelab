@@ -135,6 +135,7 @@ def _git(cwd: pathlib.Path, *args: str) -> subprocess.CompletedProcess:
         check=True,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         env={**os.environ, **_GIT_ENV},
     )
 
@@ -229,6 +230,7 @@ def _run_step(
         env=env,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=120,
     )
     return proc, calls.read_text(encoding="utf-8").splitlines()
@@ -241,6 +243,7 @@ def _remote_branches(remote: pathlib.Path) -> list[str]:
         check=True,
         capture_output=True,
         text=True,
+        encoding="utf-8",
     )
     return sorted(out.stdout.split())
 
@@ -252,6 +255,7 @@ def _remote_file(remote: pathlib.Path, ref: str, path: str) -> str:
         check=True,
         capture_output=True,
         text=True,
+        encoding="utf-8",
     )
     return out.stdout
 

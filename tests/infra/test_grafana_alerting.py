@@ -72,6 +72,7 @@ def _kubectl(args: list[str], env: str, timeout: int = 30) -> subprocess.Complet
         ["kubectl", "--kubeconfig", _kubeconfig(env), *args],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
         timeout=timeout,
     )
@@ -114,6 +115,7 @@ def grafana_api(env: str) -> Iterator[ProvisioningGet]:
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
+        encoding="utf-8",
     )
     try:
         port = _await_port(proc)
