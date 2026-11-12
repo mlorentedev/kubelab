@@ -10,19 +10,27 @@ created: "2026-03-28"
 > Master reference for all KubeLab deploy flows and operational commands.
 > When in doubt, check here first. Updated 2026-03-28.
 
-## Daily: Push code (GitOps)
+## Daily: Merge a PR (GitOps)
 
-ArgoCD auto-syncs from master. No manual deploy needed.
+`master` is protected: every change reaches it through a reviewed PR, never a
+direct push. Both Argo CD Applications track `master`, so a merged manifest change
+syncs to staging and prod without a manual deploy.
 
 ```bash
-git push   # ArgoCD detects change → syncs staging + prod automatically
+git push -u origin <branch>
+gh pr create --repo mlorentedev/kubelab --draft   # mark ready, get it green and reviewed, then merge
 ```
+
+Images are not changed by editing manifests. Staging receives every `master`
+build through an auto-opened deploy PR, and prod moves only through a deliberate
+promotion PR (`toolkit deployment promote`). See
+[gitops-delivery-promotion.md](gitops-delivery-promotion.md).
 
 Verify: `https://argo.kubelab.live` → both Applications should be Synced + Healthy.
 
 ## On change: Security headers / Traefik middleware
 
-K8s (staging + prod): ArgoCD auto-syncs from Git.
+K8s (staging + prod): Argo CD syncs the change once its PR merges to `master`.
 
 VPS (Docker Compose Traefik): requires manual deploy:
 ```bash
