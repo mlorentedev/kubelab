@@ -72,6 +72,7 @@ def _drift(toolkit: str) -> subprocess.CompletedProcess[str]:
         cwd=REPO,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
     )
 
@@ -117,6 +118,7 @@ def test_the_drift_gate_runs_only_the_generators_it_compares() -> None:
         cwd=REPO,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=True,
     )
     assert "for _svc in k8s ansible;" in run.stdout

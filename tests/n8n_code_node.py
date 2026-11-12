@@ -81,7 +81,7 @@ def run_code_node(js: str, items: list[dict[str, Any]], env: dict[str, str] | No
       (err) => {{ console.error(err); process.exit(1); }},
     );
     """
-    proc = subprocess.run(["node", "-e", script], capture_output=True, text=True, check=True)
+    proc = subprocess.run(["node", "-e", script], capture_output=True, text=True, encoding="utf-8", check=True)
     return json.loads(proc.stdout.strip())
 
 
@@ -108,7 +108,7 @@ def run_items_node(js: str, items: list[Any], prior: dict[str, Any] | None = Non
     }})();
     console.log(JSON.stringify(result[0].json));
     """
-    proc = subprocess.run(["node", "-e", script], capture_output=True, text=True, check=True)
+    proc = subprocess.run(["node", "-e", script], capture_output=True, text=True, encoding="utf-8", check=True)
     return json.loads(proc.stdout.strip())
 
 

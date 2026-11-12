@@ -74,6 +74,7 @@ def test_only_prune_1_prunes() -> None:
             ["make", "-n", "-C", str(REPO), "backup-node", "NODE=beelink", "ENV=prod", f"PRUNE={value}"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
             check=True,
         ).stdout
         assert ("prune=true" in out) is expected, (value, out)
@@ -88,6 +89,7 @@ def test_an_unrecognised_prune_value_is_refused_not_ignored() -> None:
         ["make", "-n", "-C", str(REPO), "backup-node", "NODE=beelink", "ENV=prod", "PRUNE=true"],
         capture_output=True,
         text=True,
+        encoding="utf-8",
     )
     assert proc.returncode != 0
     assert "PRUNE" in proc.stderr
@@ -99,7 +101,11 @@ def test_the_deploy_can_be_limited_to_one_node() -> None:
 
     def expand(*args: str) -> str:
         return subprocess.run(
-            ["make", "-n", "-C", str(REPO), "backup", "ENV=prod", *args], capture_output=True, text=True, check=True
+            ["make", "-n", "-C", str(REPO), "backup", "ENV=prod", *args],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            check=True,
         ).stdout
 
     assert "-l beelink" in expand("NODE=beelink")

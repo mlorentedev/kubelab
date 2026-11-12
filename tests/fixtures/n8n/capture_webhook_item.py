@@ -173,6 +173,7 @@ def main() -> None:
             ],
             capture_output=True,
             text=True,
+            encoding="utf-8",
             check=True,
         ).stdout.strip()
         try:
@@ -180,7 +181,11 @@ def main() -> None:
             response = post_when_ready(url, PROBE_BODY, "application/json")
             form_response = post_when_ready(url, FORM_BODY, "application/x-www-form-urlencoded")
         except Exception:
-            print(subprocess.run(["docker", "logs", container], capture_output=True, text=True).stdout[-3000:])
+            print(
+                subprocess.run(["docker", "logs", container], capture_output=True, text=True, encoding="utf-8").stdout[
+                    -3000:
+                ]
+            )
             raise
         finally:
             subprocess.run(["docker", "stop", container], capture_output=True, check=False)

@@ -79,6 +79,7 @@ def _run(
         check=False,
         capture_output=True,
         text=True,
+        encoding="utf-8",
     )
     calls = [line.split()[0] for line in log.read_text(encoding="utf-8").splitlines() if not line.startswith("env ")]
     return calls, done
@@ -125,8 +126,12 @@ def test_the_venv_is_installed_in_the_worktree(tmp_path: pathlib.Path) -> None:
         check=False,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         # An activated venv elsewhere would take the install regardless of the setting.
-        env={**{k: v for k, v in os.environ.items() if k != "POETRY_VIRTUALENVS_IN_PROJECT"}, "VIRTUAL_ENV": "/elsewhere"},
+        env={
+            **{k: v for k, v in os.environ.items() if k != "POETRY_VIRTUALENVS_IN_PROJECT"},
+            "VIRTUAL_ENV": "/elsewhere",
+        },
     )
     assert done.returncode == 0, done.stderr
     assert log.read_text(encoding="utf-8").split() == ["true:"]
@@ -143,6 +148,7 @@ def test_an_install_that_leaves_no_toolkit_in_the_worktree_fails(tmp_path: pathl
         check=False,
         capture_output=True,
         text=True,
+        encoding="utf-8",
     )
     assert done.returncode != 0
     assert "bin/toolkit" in done.stderr
@@ -187,11 +193,18 @@ class TestRelocatedVenv:
         fake, _ = _fake_poetry(tmp_path, lock_is_fresh=True, venv=venv_dir)
         done = subprocess.run(
             # Not venv_dir itself: path equality would keep it whatever the detector said.
-            ["make", "--no-print-directory", "worktree-init", f"POETRY={fake}", f"WORKTREE_VENV={tmp_path / 'wt' / '.venv'}"],
+            [
+                "make",
+                "--no-print-directory",
+                "worktree-init",
+                f"POETRY={fake}",
+                f"WORKTREE_VENV={tmp_path / 'wt' / '.venv'}",
+            ],
             cwd=REPO,
             check=False,
             capture_output=True,
             text=True,
+            encoding="utf-8",
             env={**os.environ, "PATH": f"{tmp_path}{os.pathsep}{os.environ['PATH']}"},
         )
         assert done.returncode == 0, done.stderr
@@ -215,6 +228,7 @@ class TestRelocatedVenv:
             check=False,
             capture_output=True,
             text=True,
+            encoding="utf-8",
         )
         assert done.returncode != 0
         assert (venv_dir / "bin" / "pytest").exists(), "an interrupted rebuild must not strand the worktree"
@@ -259,6 +273,7 @@ class TestRelocatedVenv:
             check=False,
             capture_output=True,
             text=True,
+            encoding="utf-8",
         )
         assert done.returncode != 0
         assert (cache / "bin" / "pytest").exists(), "the venv set aside must come back when the check fails"
