@@ -73,13 +73,6 @@ KNOWN_STALE: dict[tuple[str, str], str] = {
         "docs/runbooks/onboard-vpn-fleet-agent.md",
         "infra headscale mint-agent-key",
     ): "named as VPN-ACL-007's future wrapper",
-    # -- Components no dev stack runs any more: these sections need rewriting, not a rename (#836).
-    (
-        "docs/troubleshooting/networking-dns.md",
-        "edge restart dns-gateway",
-    ): "dns-gateway has no stack; section to rewrite",
-    ("docs/troubleshooting/networking-dns.md", "edge restart nginx"): "nginx has no stack; section to rewrite",
-    ("docs/troubleshooting/services-traefik-nginx.md", "edge restart nginx"): "nginx has no stack; section to rewrite",
 }
 
 

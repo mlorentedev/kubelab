@@ -7,7 +7,7 @@ created: "2026-02-08"
 owner: manu
 ---
 
-# Traefik & Nginx Troubleshooting
+# Traefik & Error Pages Troubleshooting
 
 Service-specific troubleshooting for the KubeLab edge layer: Traefik reverse proxy and Nginx caching/static serving.
 
@@ -89,63 +89,43 @@ for i in {1..10}; do curl -s https://api.kubelab.live/health; done
 - Verify all backend instances are healthy
 - Check sticky session cookie configuration if session affinity is required
 
-## Nginx
+## Error pages
 
-### Cache Not Working
+There is no standalone Nginx tier. The edge is K3s Traefik, and the only Nginx is
+the one inside the `errors` service (`edge/errors/`), which serves the branded error
+pages. Traefik reaches it through the `error-pages` Middleware in
+`infra/k8s/base/edge/errors.yaml` (ADR-072).
+
+### Branded page not shown for a backend failure
 
 #### Problem
 
-Nginx proxy cache is not serving cached content.
+A request to a down backend returns Traefik's plain "no available server" or a bare
+5xx instead of the branded page.
 
 #### Diagnostic Steps
 
 ```bash
-# Check cache directory
-docker exec nginx ls -la /var/cache/nginx
+# Is the errors workload up?
+kubectl --kubeconfig ~/.kube/kubelab-staging-config -n kubelab get deploy,svc errors
 
-# Verify cache configuration
-docker exec nginx cat /etc/nginx/nginx.conf | grep proxy_cache
+# Does the route carry the middleware? Read the rendered object, not the patch.
+kubectl kustomize infra/k8s/overlays/staging | grep -n "error-pages"
 ```
 
 #### Solution
 
-```bash
-# Clear cache
-docker exec nginx rm -rf /var/cache/nginx/
-toolkit edge restart nginx
-```
+- The middleware intercepts **502, 503 and 504 only**. A 4xx or a 500 is the app's
+  own answer and passes through on purpose, with its headers intact (ADR-072).
+- A route without `error-pages` must be declared in `edge.errors.coverage.exceptions`
+  in `common.yaml`. `tests/test_error_pages_coverage.py` fails on a rule that has
+  neither.
+- A page that never shows: `tests/test_error_pages_reachable.py` fails on an HTML file
+  in `edge/errors/html/errors/` that no Middleware range or nginx `error_page` targets.
 
 #### Prevention
 
-- Monitor cache hit ratio in access logs
-- Set appropriate cache TTLs for different content types
-
-### Custom Error Pages Not Showing
-
-#### Problem
-
-Default Nginx error pages appear instead of custom branded pages.
-
-#### Diagnostic Steps
-
-```bash
-# Verify error page files exist
-docker exec nginx ls -la /usr/share/nginx/errors/
-
-# Check error page configuration
-docker exec nginx cat /etc/nginx/nginx.conf | grep error_page
-
-# Test error pages
-curl -I https://kubelab.live/nonexistent   # Should return custom 404
-```
-
-#### Solution
-
-- Verify error page files are mounted in the container
-- Check Nginx configuration syntax: `docker exec nginx nginx -t`
-- Ensure `error_page` directives reference the correct file paths
-
-#### Prevention
-
-- Include error page tests in the deployment verification suite
-- Mount error pages via Docker volumes for easy updates
+- Run `make test` before merging any IngressRoute change: the two tests above render
+  both overlays.
+- The `errors` image is promoted like any custom app (`edge.errors.version` in
+  `common.yaml`), never hand-pinned.
