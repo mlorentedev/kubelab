@@ -67,7 +67,9 @@ Entries = dict[int, tuple[str, str, float]]
 
 
 def _default_run(argv: list[str], *, env: Optional[dict[str, str]] = None) -> tuple[int, str, str]:
-    proc = subprocess.run(argv, capture_output=True, text=True, env={**os.environ, **(env or {})}, check=False)
+    proc = subprocess.run(
+        argv, capture_output=True, text=True, encoding="utf-8", env={**os.environ, **(env or {})}, check=False
+    )
     return proc.returncode, proc.stdout, proc.stderr
 
 

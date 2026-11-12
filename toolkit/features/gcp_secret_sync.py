@@ -104,6 +104,7 @@ def _gcloud(args: list[str], project_id: str, stdin_data: str | None = None) -> 
             input=stdin_data,
             capture_output=True,
             text=True,
+            encoding="utf-8",
             check=False,
         )
     except FileNotFoundError as exc:
