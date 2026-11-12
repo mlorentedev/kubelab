@@ -2,7 +2,7 @@
 
 - **Armed:** 2026-11-12T06:59:46Z, envelope `785275e2`. **Expires:** 18:59:46Z (the owner asked for 16h; the cap is 12h).
 - **Objective:** carry IDP-053 forward (land what the agent may merge, leave owner-merge slices triaged and ready), and work the resume follow-ups of the daily command.
-- **Status:** in progress (report written at 13:15Z, updated at the end).
+- **Status:** ended at 17:40Z, with the owner back. The resume line is drained: RES-113 is archived (#798) and #777 is closed. Four kubelab PRs wait for the owner's merge.
 
 ## Landed
 
@@ -16,6 +16,12 @@
 | resume | #779 | `resume daily` | |
 | resume | #786 (`4d97dfa9`) | `scan` exits non-zero when no board was read | #778 |
 | resume | #784 (`aa815ea7`) | A pre-filtered day is not a failed run; a step exception is reported by type only | #783 |
+| resume | #792 (`bcc83dde`) | scan and evaluate redact the text of exceptions they handle; secret-shaped fixtures built at runtime, two exact `.gitleaksignore` fingerprints | #789 |
+| resume | #787 (`ed2e1c58`) | `daily` logs the attempt's start, so a retried Job's digest can be recovered by hand | #782 |
+| resume | #791 (`b3476552`) | A posting that fails to fetch no longer turns every run red; `stalled` means the evaluator failed and nothing was scored | #788 |
+| resume | #796 (`fb83749d`) | One posting whose evaluation always fails no longer turns every run red (owner's rule) | #794 |
+| resume | #797 (`5dbb898a`) | The `daily: started` line no longer wraps | #795 |
+| resume | #798 (`ba2c3d1a`) | Archive RES-113 with its closing review (third independent round: PASS-WITH-GAPS) | #777 |
 
 ## Ready PRs (owner merges)
 
@@ -34,14 +40,17 @@
 2. After S2c and S5c: mint both tokens; set the two GitHub Actions secrets.
 3. #3286's workflow part is blocked on S2c: the variable to export is the Gitea registry pull token's, not `GHCR_PULL_TOKEN` (no private product is on GHCR, and no such SOPS key exists). An attempt to set `GHCR_PULL_TOKEN` created an empty repo secret, deleted at once; no value existed to expose.
 4. #3289 waits on S5c's mint.
-5. RES-113: a contract decision was made unattended (resume#777 comment): a run is stalled only when the evaluator failed and nothing was scored.
+5. RES-113: the owner set the stall rule on 2026-11-12 (#794): a provider failure, or answer failures on 2 or more postings, with nothing scored. The accepted gap is that poisoned postings can accumulate until #790 lands, so #790 should be next on resume.
 
 ## Tickets filed
 
 - resume #785: the redacting filter misses tracebacks and query-string keys.
-- resume #788: a posting that fails to fetch every day turned every run red (fix in #791).
+- resume #788: a posting that fails to fetch every day turned every run red (closed by #791).
 - resume #789: scan and evaluate print the text of exceptions they handle.
 - resume #790: a posting that can never be fetched is retried forever.
+- resume #793: CI's gitleaks scans every ref, so one branch's leak fails every PR.
+- resume #794: one posting whose evaluation always fails turns every run red (RES-113 re-review, FAIL; rule decided by the owner).
+- resume #795: the `daily: started` line wraps at a narrow terminal.
 
 ## Out of the envelope
 
