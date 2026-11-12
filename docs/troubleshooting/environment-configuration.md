@@ -9,133 +9,104 @@ owner: manu
 
 # Environment & Configuration Issues
 
-Problems related to environment variables, configuration files, and template processing in KubeLab.
+Problems with the values a container receives and with generated configuration in KubeLab.
+
+There are no `.env` files to edit. Every value comes from one SSOT: `infra/config/values/{common,<env>}.yaml` for non-secrets and SOPS (`infra/config/secrets/<env>.enc.yaml`) for secrets. `toolkit services up` merges them, flattens each nested key to an upper-case variable (`apps.platform.api.default_port` becomes `APPS_PLATFORM_API_DEFAULT_PORT`) and passes the result to Docker Compose, which interpolates it into `infra/stacks/**/compose.*.yml`.
 
 ## Missing Environment Variables
 
 ### Problem
 
-Container fails to start due to missing required environment variables.
+A container fails to start, or starts with an empty value, because a variable its compose file reads is not set.
 
 ### Diagnostic Steps
 
 ```bash
-# Check required variables
-grep -r "required" apps/api/src/pkg/config/
+# Which variable does the compose file read?
+grep -n "environment:" -A20 infra/stacks/apps/api/compose.base.yml
 
-# Verify env file exists
-ls -la infra/compose/apps/api/.env.dev
+# Is the non-secret value declared? (prints one SSOT value, never a secret)
+poetry run toolkit config get apps.platform.api.default_port
 
-# Compare with example
-diff infra/compose/apps/api/.env.dev.example infra/compose/apps/api/.env.dev
+# Is every catalogued secret present for the environment?
+make secrets-audit
 
-# Check container environment
-docker exec container-name env | sort
+# What did the container actually receive?
+docker exec <container> env | sort
 ```
+
+`make secrets-audit` lists a missing key and still exits 0, so read its output.
 
 ### Solution
 
-```bash
-# Copy from example
-cp infra/compose/apps/api/.env.dev.example infra/compose/apps/api/.env.dev
-
-# Validate the generated configuration
-make validate
-
-# Generate missing values
-toolkit credentials generate db-password
-toolkit credentials generate jwt-secret
-
-# Source from .env file
-set -a; source infra/compose/apps/api/.env.dev; set +a
-```
+- A non-secret: add it under its nested key in `infra/config/values/common.yaml`, or in `<env>.yaml` when it differs per environment.
+- A secret: register it in `SECRET_CATALOG` (`toolkit/features/secrets_manager.py`) and set it with `poetry run toolkit secrets set <key.path> --env <env> --stdin`.
+- Restart the service so Compose reads the new value: `poetry run toolkit services restart api`.
 
 ### Prevention
 
-- Keep `.env.example` files up to date with all required variables
-- Run `make validate` before starting services
-- Document new environment variables when adding features
+- Run `make validate` and `make secrets-audit` after adding a variable.
+- Never put a SOPS value in a K8s ConfigMap; it goes in a Secret (see `CLAUDE.md`).
 
 ## Invalid Configuration Values
 
 ### Problem
 
-Services fail to start due to malformed configuration values.
+A service fails to start because a value is malformed or a compose file does not parse.
 
 ### Diagnostic Steps
 
 ```bash
-# Validate compose files
-docker compose -f infra/compose/apps/api/docker-compose.dev.yml config
+# YAML syntax of the stack and the values
+pre-commit run yamllint --files infra/stacks/apps/api/*.yml infra/config/values/*.yaml
 
-# Check YAML syntax
-yamllint -c infra/config/yamllint.yml infra/compose/apps/api/
+# The value as the SSOT holds it
+poetry run toolkit config get apps.platform.api.site_url
 
-# Verify template expansion
-ENVIRONMENT=dev toolkit config generate
-cat edge/traefik/config/dynamic/app-api.yml
+# Port already taken on the host
+lsof -nP -iTCP:8080 -sTCP:LISTEN
 ```
 
 ### Solution
 
+Fix the value in `infra/config/values/*.yaml` (spaces, not tabs), then regenerate and restart:
+
 ```bash
-# Fix YAML indentation (use spaces, not tabs)
-
-# Validate URLs
-echo $DATABASE_URL | grep -E '^postgres://.+:.+@.+:.+/.+$'
-
-# Check port conflicts
-netstat -tulpn | grep :8080
-
-# Regenerate configs
-rm -rf edge/traefik/config/dynamic/
-ENVIRONMENT=dev toolkit config generate
+make config-generate ENV=dev
+poetry run toolkit services restart api
 ```
 
 ### Prevention
 
-- Use `yamllint` in CI to catch syntax errors
-- Validate environment variables with schema (e.g., Pydantic in toolkit)
-- Test configuration generation in CI
+- The pre-commit hooks run yamllint on every staged YAML file.
+- CI runs `make config-check-drift ENV=<env>` for staging and prod.
 
 ## Template Processing Errors
 
 ### Problem
 
-Template variables (`${VAR}`) not replaced in generated configuration files.
+A generated file (Traefik static or dynamic config, Ansible inventory, Terraform variables) is missing, stale or wrong.
 
 ### Diagnostic Steps
 
 ```bash
-# Check template syntax
-grep -r '\${.*}' edge/traefik/templates/
+# Templates are Jinja2, rendered by the toolkit; nothing is envsubst-ed
+ls edge/traefik/templates/
 
-# Verify environment is set
-echo $ENVIRONMENT
+# Render for one environment and look at the output
+make config-generate ENV=dev
+ls edge/traefik/generated/dev/
 
-# Test template manually
-envsubst < edge/traefik/templates/app-api.template.yml
+# Does the committed output match what the generator renders?
+make config-check-drift ENV=staging
 ```
 
 ### Solution
 
-```bash
-# Use toolkit for generation (handles env loading)
-ENVIRONMENT=dev toolkit config generate
-
-# Check .env file is loaded
-source infra/config/env/.env.dev
-env | grep TRAEFIK
-
-# Verify template paths in constants
-cat toolkit/config/constants.py | grep TEMPLATE
-
-# Debug template processor
-poetry run python -c "from toolkit.features.template_processor import TemplateProcessor; print(TemplateProcessor.process_template('template.yml'))"
-```
+- Edit the template (`*.j2`) or the SSOT value it reads, never the generated file.
+- Regenerate with `make config-generate ENV=<env>` and commit the template, the value and the output together.
 
 ### Prevention
 
-- Always use `toolkit config generate` instead of manual `envsubst`
-- Validate generated configs are free of unexpanded variables
-- Add template expansion tests to CI
+- `make config-check-drift ENV=<env>` fails when a committed output differs from what the generator renders.
+- `make validate` sanity-checks the generated files.
