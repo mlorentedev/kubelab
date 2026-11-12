@@ -28,6 +28,8 @@ The run exists only while `apps.auth.identities.renovate` is declared and its to
 installs nothing; the next `make provision NODE=bee ENV=prod` installs the timer, pulls the engine and starts
 the timer. Remove the identity and the next provision stops and disables the timer.
 
+The account's organization membership is converged by the forge reconciler, not by the provision: `make gitea-reconcile ENV=prod` plans it and `APPLY=1` applies it, one `renovate` team per declared organization (write on every unit, no repository creation, all repositories) with the account in it, and the same run reports that the account owns nothing. Run it after the provision that creates the account, since a team cannot take a member that does not exist yet.
+
 The engine image and version come from `ci-workflows`' `renovate/engine.json` at `ci.renovate.preset_tag`;
 bump that one tag and the next provision moves both.
 

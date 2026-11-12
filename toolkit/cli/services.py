@@ -475,6 +475,7 @@ def gitea_reconcile(
     from toolkit.features.gitea_client import GiteaError
     from toolkit.features.gitea_repos import (
         READ_TEAM,
+        RENOVATE_TEAM,
         TEAM_NAME,
         execute,
         format_plan,
@@ -496,12 +497,17 @@ def gitea_reconcile(
     # The agents' authoring account (AUTH-022) is held to the same rule: it
     # writes where a repository declares it, and owns nothing.
     agent = merged["apps"]["auth"]["identities"].get("agent")
+    # The Renovate run's account (IDP-036 AC6): a member of the `renovate` write team in
+    # each declared organization, and an owner of nothing. Absent until declared.
+    renovate = merged["apps"]["auth"]["identities"].get("renovate")
 
     owners: list[str] = []
 
     def report_ownership() -> None:
         # Every account is reported before anything fails, so one run names all of them.
         accounts = [(bot_username, "AC4"), (reviewer, "TOOL-080 AC5"), (agent, "AUTH-022 AC3")]
+        if renovate:
+            accounts.append((renovate, "IDP-036 AC6"))
         for login, criterion in accounts:
             if login and _report_machine_ownership(admin, str(login), criterion=criterion):
                 owners.append(str(login))
@@ -585,6 +591,15 @@ def gitea_reconcile(
                 review_team = admin.get_team(org, READ_TEAM.name) if org in existing_orgs else None
                 members = tuple(admin.list_team_members(int(review_team["id"]))) if review_team else ()
                 existing_review_teams[org] = (review_team, members)
+        # The Renovate team per declared organization, read the same way and for the
+        # same reason: membership is half of that grant.
+        existing_renovate_teams = None
+        if renovate:
+            existing_renovate_teams = {}
+            for org in declared:
+                renovate_team = admin.get_team(org, RENOVATE_TEAM.name) if org in existing_orgs else None
+                renovate_members = tuple(admin.list_team_members(int(renovate_team["id"]))) if renovate_team else ()
+                existing_renovate_teams[org] = (renovate_team, renovate_members)
         # Each declared writer's collaborator row and access mode (AUTH-022), for the
         # repositories that declare writers. Both, because the mode alone reads `read`
         # on a public repository for an account with no grant (`get_collaborator_permission`).
@@ -632,6 +647,8 @@ def gitea_reconcile(
         declared_webhooks,
         reviewer=str(reviewer) if reviewer else None,
         existing_review_teams=existing_review_teams,
+        renovate=str(renovate) if renovate else None,
+        existing_renovate_teams=existing_renovate_teams,
         existing_repo_refs=existing_repo_refs,
         existing_collaborators=existing_collaborators,
         declared_protection=declared_protection,
@@ -780,6 +797,8 @@ def gitea_reconcile(
         logger.success(f"team ensured: {ensured}/{TEAM_NAME}")
     for ensured in report.review_teams_ensured:
         logger.success(f"team ensured: {ensured}/{READ_TEAM.name} (member {reviewer})")
+    for ensured in report.renovate_teams_ensured:
+        logger.success(f"team ensured: {ensured}/{RENOVATE_TEAM.name} (member {renovate})")
     # "settings applied" and not "settings set": each of these was PATCHed and then
     # read back, so the line reports a verified end state rather than an accepted
     # request. `ensure_settings` raises if the two disagree, which is why a name in

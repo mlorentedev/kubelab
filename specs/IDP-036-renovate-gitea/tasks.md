@@ -29,7 +29,7 @@ Spec ACs, not #1384's: `[AC<n>]` below names this proposal's criteria, which are
 - [x] [AC1] Template the repository list in `beelink_services` (`renovate-config.yaml.j2`, installed at `/opt/kubelab/renovate/config.yaml`; nothing reads it until AC2) ✓ 2026-11-09
 - [x] [AC3] Add to the same template `extends` the `ci-workflows` preset at a pinned tag, `onboarding: false` and `requireConfig: optional`. The tag is `ci.renovate.preset_tag` in `common.yaml` (owner decision 2026-11-10), bumped by a `github-tags` regex manager in `renovate.json` (`tests/test_beelink_renovate_preset.py`) ✓ 2026-11-10
 - [ ] [AC3] [AC6] Record a read-only `GITHUB_COM_TOKEN` in SOPS and `SECRET_CATALOG`, then dry-run against one Gitea repository: `renovate/default` resolves at the pinned tag and the engine comes from `renovate/engine.json`
-- [ ] [AC6] Declare the bot identity and its organization membership; mint and record its token with the role's existing mint-then-record pair, the mint gated on the SOPS entry being absent; register it in `SECRET_CATALOG`
+- [x] [AC6] Declare the bot identity and its organization membership; mint and record its token with the role's existing mint-then-record pair, the mint gated on the SOPS entry being absent; register it in `SECRET_CATALOG` ✓ 2026-11-12
 - [x] [AC2] Timer and oneshot service (`OnCalendar=hourly`, `Persistent=true`, after the forge's compose unit and a Gitea readiness wait, a container memory limit) ✓ 2026-11-12
 - [ ] [AC2] Provision Beelink twice: first run applies, second reports `changed=0`
 - [ ] [AC5] First run: a dashboard issue on each repository; record PR volume over two cycles on #1384
