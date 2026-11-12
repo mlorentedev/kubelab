@@ -1,13 +1,21 @@
 ---
 id: "kubelab-runbook-new-service"
 type: runbook
-status: active
+status: superseded
+superseded_by: deploy-new-k3s-service
 tags: [runbook, kubelab]
 created: "2026-02-09"
 owner: manu
 ---
 
-# Adding a New Service
+# Adding a New Service (retired)
+
+> **Superseded by [deploy-new-k3s-service](deploy-new-k3s-service.md).** This runbook
+> adds a service as Docker Compose files per environment, with `compose.staging.yml`
+> and `compose.prod.yml`. Staging and prod no longer run on Compose: they run on K3s,
+> delivered by Argo CD, and a new service reaches them through the steps in that
+> runbook. The Compose stacks under `infra/stacks/` remain for local development only.
+> This page is kept as the record of the earlier procedure, not as a current one.
 
 ## Overview
 
