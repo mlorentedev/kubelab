@@ -1055,6 +1055,9 @@ apps:
       # organization team: its write reaches only the repositories that name it
       # under `writers:` in `gitea.organizations`, as a collaborator.
       agent: dedalo
+      # The Gitea Renovate run's account (IDP-036 AC6) goes here as `renovate:
+      # <login>`, named by the operator. Until it is declared the role creates no
+      # account and mints no token: every task for it is gated on the login.
 
   # SSOT-014c: operator contact email. Single declaration site.
   # The toolkit config loader (configuration.py:get_merged_config) auto-fills
@@ -1309,6 +1312,15 @@ apps:
           # `write:repository` reaches only the repositories that list it under
           # `writers:`. `tests/test_gitea_agent_identity.py` ties it to `AGENT_SCOPES`.
           agent: "write:issue,write:repository"
+          # The Gitea Renovate run's account (IDP-036 AC6), pinned by EQUALITY to the
+          # grant Renovate's Gitea platform documents for Gitea >= 1.20: it pushes
+          # branches and opens pull requests (`write:repository`), keeps the
+          # Dependency Dashboard issue (`write:issue`), reads `/user` at start
+          # (`read:user`) and the organization's labels and teams
+          # (`read:organization`). `tests/test_gitea_renovate_identity.py` ties it to
+          # `RENOVATE_SCOPES`. Nothing is minted until `apps.auth.identities.renovate`
+          # names the account.
+          renovate: "read:organization,read:user,write:issue,write:repository"
         # Repository organization (ADR-065, TOOL-035 #1076). Reconciled by
         # `toolkit.features.gitea_repos`: declared-and-missing is created,
         # existing-and-undeclared is REPORTED and never removed.

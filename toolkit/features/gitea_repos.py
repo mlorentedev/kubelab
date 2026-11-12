@@ -566,7 +566,7 @@ def collaborator_needs_grant(live: tuple[bool, str] | None) -> bool:
 
 #: Identity keys that may never be exempt from branch protection (AUTH-024): the
 #: protection exists to route a machine writer's changes through a pull request.
-MACHINE_IDENTITIES: frozenset[str] = frozenset({"machine", "reviewer", "agent"})
+MACHINE_IDENTITIES: frozenset[str] = frozenset({"machine", "reviewer", "agent", "renovate"})
 
 
 @dataclass(frozen=True)

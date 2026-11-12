@@ -150,7 +150,7 @@ class FakeSession:
         return FakeResponse(404, None)
 
 
-IDENTITIES = {"machine": "hefesto", "superadmin": "manu", "reviewer": "argos", "agent": "dedalo"}
+IDENTITIES = {"machine": "hefesto", "superadmin": "manu", "reviewer": "argos", "agent": "dedalo", "renovate": "rnv"}
 DECLARED = {
     "bot": "write:repository,write:user,write:organization",
     "admin": "read:admin,write:organization,read:repository,read:user",
@@ -158,6 +158,7 @@ DECLARED = {
     "review_notice": "write:issue",
     "issue_reader": "read:issue",
     "agent": "write:issue,write:repository",
+    "renovate": "read:organization,read:user,write:issue,write:repository",
 }
 
 
@@ -173,6 +174,7 @@ def _all_converged() -> dict[tuple[str, str], FakeResponse]:
             _listing("hefesto", DECLARED["bot"], "bot"),
             _listing("manu", DECLARED["admin"], "admin"),
             _listing("dedalo", DECLARED["agent"], "agent"),
+            _listing("rnv", DECLARED["renovate"], "renovate"),
             # One account, two tokens: the listing is per user, so it carries both.
             (
                 ("GET", "/users/argos/tokens"),

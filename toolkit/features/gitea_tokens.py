@@ -99,6 +99,13 @@ ROTATABLE_TOKENS: dict[str, RotatableToken] = {
         token_name="kubelab-agent",
         identity="agent",
     ),
+    # The Gitea Renovate run's account (IDP-036 AC6): its own, because its pull
+    # requests and dashboard issue carry an author.
+    "renovate": RotatableToken(
+        secret_key="apps.services.core.gitea.renovate_token",
+        token_name="kubelab-renovate",
+        identity="renovate",
+    ),
 }
 
 #: What the reviewer's token must hold -- exactly, not at least. The requirement is a
@@ -128,6 +135,13 @@ ISSUE_READER_SCOPES: frozenset[str] = frozenset({"read:issue"})
 #: bounds it is that the account is in no team: it reaches only the repositories that
 #: declare it under `writers:` (AUTH-022).
 AGENT_SCOPES: frozenset[str] = frozenset({"write:issue", "write:repository"})
+
+#: What the Gitea Renovate run's token must hold -- exactly. Renovate's documented
+#: grant on its Gitea platform for Gitea >= 1.20: repository and issue write for its
+#: branches, pull requests and Dependency Dashboard, user read for `/user` at start,
+#: organization read for labels and teams. Not yet measured against this forge; the
+#: dry run is, and a 403 there widens this deliberately (IDP-036 AC6).
+RENOVATE_SCOPES: frozenset[str] = frozenset({"read:organization", "read:user", "write:issue", "write:repository"})
 
 
 @dataclass(frozen=True)

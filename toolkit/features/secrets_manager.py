@@ -829,6 +829,26 @@ SECRET_CATALOG: list[SecretSpec] = [
         expiry=Expiry.NEVER,
         envs=("prod",),
     ),
+    # The Gitea Renovate run (IDP-036 AC6). Its forge token is minted and recorded by
+    # the beelink_services role once `apps.auth.identities.renovate` names the account;
+    # until then this key is absent and the audit lists it, which is expected.
+    SecretSpec(
+        key_path="apps.services.core.gitea.renovate_token",
+        description=(
+            "Gitea API token of the Renovate run's account (apps.auth.identities.renovate); "
+            "read:organization + read:user + write:issue + write:repository (IDP-036)"
+        ),
+        # EXTERNAL for the reason `bot_token` gives: only Gitea honours what it mints.
+        kind=SecretKind.EXTERNAL,
+        services=("gitea",),
+        rotate_note=(
+            "`make gitea-rotate-token TOKEN=renovate ENV=prod APPLY=1` (revoke, then unset), then "
+            "`make provision NODE=bee ENV=prod TAGS=gitea` to re-mint. "
+            "The mint task is gated on this key being absent; never mint a second token by hand."
+        ),
+        expiry=Expiry.NEVER,
+        envs=("prod",),
+    ),
     SecretSpec(
         key_path="apps.services.core.github_app.private_key",
         description=(
