@@ -19,7 +19,7 @@ scope:
     - "toolkit/features/console_usage.py"
     - "toolkit/cli/console.py"
     - "toolkit/cli/__init__.py"
-    - "toolkit/cli/main.py"
+    - "toolkit/main.py"
     - "tests/test_console_usage*.py"
     - "Makefile"
   frozen_paths:
