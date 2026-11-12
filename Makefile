@@ -50,8 +50,6 @@ help:
 	@echo "  make secrets-audit      Audit secrets across all environments"
 	@echo "  make acme-token-scope   Ask Cloudflare what the ACME DNS-01 token may do (read-only)"
 	@echo "  make dev-full-reset     Full teardown + rebuild + restart"
-	@echo "  make dev-app APP=x      Start Astro app dev server (site)"
-	@echo "  make build-app APP=x    Build Astro app (static output)"
 	@echo ""
 	@echo "Infrastructure (Ansible):"
 	@echo "  make provision NODE=x ENV=y  Provision a node (NODE=ace1|ace2|aws1|bee|rpi3|rpi4|jetson|vps, ENV=staging|prod|hub) [TAGS=tag1,tag2] [EXTRA='k=v']"
