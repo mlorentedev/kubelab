@@ -22,6 +22,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -109,6 +110,11 @@ def _run(*args: str, path_prefix: Path | None = None) -> subprocess.CompletedPro
     if path_prefix is not None:
         env = dict(os.environ)
         env["PATH"] = f"{path_prefix}:{env['PATH']}"
+        # The script prepends ~/.local/bin to PATH whenever a poetry is there, so a
+        # developer seat that installed Poetry that way shadows the stub and the
+        # test asserts the seat's Poetry instead of the fake one. A stub PATH means
+        # a stub HOME too.
+        env["HOME"] = tempfile.mkdtemp(prefix="bootstrap-home-")
     # Relative path with cwd set to the repo: the `bash` on PATH may be WSL's,
     # which does not translate a Windows path and silently strips its
     # backslashes into a name that does not exist.
@@ -205,6 +211,240 @@ def test_check_mode_refuses_a_host_without_ansible(tmp_path: Path):
     assert result.returncode == 1, combined
     assert "the doctor refused this machine" in combined
     assert "can be a controller" not in combined, "a host whose doctor refused was still told it can be a controller"
+
+
+# --------------------------------------------------- the install path itself --
+
+# This script exists for one machine: the one that does not yet have make and
+# Poetry. Every test above exercises a machine that already has them, which is
+# the only machine that never needed the script — and that is how the defect
+# below survived. Reaching the install path means controlling PATH completely, so
+# the stub directory holds the fakes and a second directory holds symlinks to the
+# coreutils the script shells out to, with `make` and `poetry` absent from both.
+
+# `true` is in the list because `can_root` asks `sudo -n true`: the stub sudo
+# execs its arguments, and with PATH replaced wholesale the real `true` is not
+# reachable, so a missing entry here reads as "no root" and skips the install.
+_COREUTILS = ("sed", "id", "uname", "dirname", "env", "mkdir", "chmod", "cat", "rm", "basename", "tr", "grep", "true")
+
+# Creates a GNU make when asked to install one, the way the real apt-get would.
+# The hand-off target is reported on stdout so a test can see it ran.
+_APT_GET_INSTALLS_MAKE = """
+case "$1" in
+  install)
+    printf '#!/bin/sh\\n' > "STUBDIR/make"
+    printf 'case "$1" in --version) echo "GNU Make 4.3" ;; *) echo "HANDOFF:$*" ;; esac\\n' >> "STUBDIR/make"
+    printf 'exit 0\\n' >> "STUBDIR/make"
+    chmod +x "STUBDIR/make"
+    ;;
+esac
+exit 0
+"""
+
+# Answers the two `python3 -c` probes the version check makes, and — when it is
+# the pipe target of the Poetry installer (`python3 -`) — writes the binary the
+# script then looks for in ~/.local/bin.
+_PYTHON3_INSTALLS_POETRY = """
+case "$1" in
+  -)
+    mkdir -p "$HOME/.local/bin"
+    printf '#!/bin/sh\\necho "Poetry (version 2.5.1)"\\n' > "$HOME/.local/bin/poetry"
+    chmod +x "$HOME/.local/bin/poetry"
+    cat >/dev/null
+    ;;
+  *) echo "3.12.3" ;;
+esac
+exit 0
+"""
+
+_SUDO_ACCEPTS_DASH_N = 'shift\nexec "$@"\n'
+
+# The measured behaviour of a host whose sudo has no cached credential: `-n`
+# fails instead of prompting. A bare `sudo` would then block on /dev/tty.
+_SUDO_WANTS_A_PASSWORD = """
+case "$1" in
+  -n) echo "sudo: a password is required" >&2; exit 1 ;;
+  *) exec "$@" ;;
+esac
+"""
+
+
+def _isolated_host(tmp_path: Path, *, root_available: bool, poetry: bool = False) -> tuple[Path, Path]:
+    """A PATH holding nothing this script is looking for, plus the stubs it needs
+    to observe its own behaviour: no make, and an apt-get that would install one.
+
+    `poetry=True` reproduces the state the official installer leaves behind —
+    the binary in `~/.local/bin`, which the script prepends to PATH itself — so a
+    test can isolate one missing prerequisite from two."""
+    stub = tmp_path / "bin"
+    stub.mkdir()
+    real = tmp_path / "real"
+    real.mkdir()
+    for name in _COREUTILS:
+        source = shutil.which(name)
+        assert source, f"these tests shell out to {name}"
+        (real / name).symlink_to(source)
+
+    home = tmp_path / "home"
+    home.mkdir()
+    if poetry:
+        (home / ".local" / "bin").mkdir(parents=True)
+        _stub(home / ".local" / "bin", "poetry", 'echo "Poetry (version 2.5.1)"\nexit 0\n')
+
+    _stub(stub, "python3", _PYTHON3_INSTALLS_POETRY)
+    _stub(stub, "apt-get", _APT_GET_INSTALLS_MAKE.replace("STUBDIR", str(stub)))
+    _stub(stub, "curl", "exit 0\n")
+    _stub(stub, "sudo", _SUDO_ACCEPTS_DASH_N if root_available else _SUDO_WANTS_A_PASSWORD)
+    return stub, home
+
+
+def _run_isolated(stub: Path, home: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    """`bash` is invoked by absolute path: PATH is replaced wholesale, so the
+    interpreter would not otherwise resolve."""
+    bash = shutil.which("bash")
+    assert bash, "the script is bash"
+    env = dict(os.environ)
+    env["PATH"] = f"{stub}:{stub.parent / 'real'}"
+    env["HOME"] = str(home)
+    return subprocess.run(  # noqa: S603 - fixed argv, repo-local script
+        [bash, "scripts/bootstrap-controller.sh", *args],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env=env,
+        timeout=120,
+        check=False,
+    )
+
+
+@_needs_bash
+@_posix
+def test_install_path_hands_off_after_installing(tmp_path: Path):
+    """The defect: `bad` increments FAILED and `ok` does not decrement it, so the
+    hand-off sees the number of things that were missing at the start. On a stock
+    WSL image that is 2 — make and Poetry — and the script installs both, reports
+    `[ok]` for both, and then exits 1 without ever running `make setup-ansible`.
+    The verdict has to describe the machine after the attempt, not before it."""
+    stub, home = _isolated_host(tmp_path, root_available=True)
+
+    result = _run_isolated(stub, home)
+    combined = result.stdout + result.stderr
+
+    assert "GNU Make 4.3" in combined, (
+        "the fake install did not produce a make; the test is not exercising the install path"
+    )
+    assert "HANDOFF:setup-ansible" in combined, (
+        "the script installed what it reported missing and then refused to hand off to make:\n" + combined
+    )
+    assert result.returncode == 0, combined
+    assert "unresolved" not in combined, combined
+
+
+@_needs_bash
+@_posix
+def test_install_path_still_refuses_when_an_install_fails(tmp_path: Path):
+    """The other half of the same verdict: an install that does not take must
+    still block the hand-off. Removing the counter without this would turn the
+    script into one that always hands off."""
+    stub, home = _isolated_host(tmp_path, root_available=True)
+    # apt-get that reports success and installs nothing.
+    _stub(stub, "apt-get", "exit 0\n")
+
+    result = _run_isolated(stub, home)
+    combined = result.stdout + result.stderr
+
+    assert result.returncode == 1, combined
+    assert "HANDOFF:setup-ansible" not in combined, "the hand-off ran although make was never installed"
+    assert "unresolved" in combined, combined
+
+
+@_needs_bash
+@_posix
+def test_check_mode_reports_a_passworded_sudo(tmp_path: Path):
+    """`--check` promised an install it could not perform: on a host whose sudo
+    wants a password it printed `would install: make` and exited 0, and the run
+    that followed blocked on /dev/tty with no output. The privilege question is
+    part of whether this machine can be a controller, so the dry run has to
+    answer it."""
+    stub, home = _isolated_host(tmp_path, root_available=False)
+
+    result = _run_isolated(stub, home, "--check")
+    combined = result.stdout + result.stderr
+
+    assert result.returncode == 1, combined
+    assert "root is not available without a password" in combined, combined
+    assert "sudo -v" in combined, "the report names the problem but not the repair"
+    assert "installing " not in combined, "--check installed something"
+
+
+@_needs_bash
+@_posix
+def test_check_mode_counts_one_missing_prerequisite_as_one_failure(tmp_path: Path):
+    """A missing make and the root it would take to install it are one verdict,
+    not two. Counting both made the summary read `2 check(s) failed` for a
+    machine with exactly one thing wrong, and the count is what the operator
+    triages against."""
+    stub, home = _isolated_host(tmp_path, root_available=False, poetry=True)
+
+    result = _run_isolated(stub, home, "--check")
+    combined = result.stdout + result.stderr
+
+    assert result.returncode == 1, combined
+    assert "[ERROR] 1 check(s) failed" in combined, combined
+    assert "[FAIL] GNU make is missing" in combined, combined
+    # Root still has to be reported — it is why the install cannot happen — but as
+    # a note about the attempt, not as a second thing wrong with the machine.
+    assert "root is not available without a password" in combined, combined
+    assert "[FAIL] root" not in combined, combined
+
+
+@_needs_bash
+@_posix
+def test_install_mode_does_not_attempt_apt_without_root(tmp_path: Path):
+    """Not blocking is not the same as proceeding: with no passwordless root the
+    install must not be attempted at all, or the failure arrives as an apt error
+    that reads like a broken repository."""
+    stub, home = _isolated_host(tmp_path, root_available=False)
+
+    result = _run_isolated(stub, home)
+    combined = result.stdout + result.stderr
+
+    assert result.returncode == 1, combined
+    assert "root is not available without a password" in combined, combined
+    assert "GNU Make 4.3" not in combined, "apt-get ran without root"
+    assert "HANDOFF:setup-ansible" not in combined
+
+
+def _code_only(path: Path) -> str:
+    """The script's executable lines, without comment lines.
+
+    Asserted against these rather than the raw text so a comment that quotes the
+    rejected form — which is how the reason for the rejection survives — does not
+    read as an occurrence of it.
+    """
+    return "\n".join(
+        line for line in path.read_text(encoding="utf-8").splitlines() if not line.lstrip().startswith("#")
+    )
+
+
+def test_as_root_never_invokes_sudo_without_dash_n():
+    """`sudo` reads its password from /dev/tty, not stdin, so without `-n` a
+    non-interactive run does not fail — it waits, silently and indefinitely
+    (measured: PID alive at 123 s). No invocation in this script may prompt."""
+    text = _code_only(SCRIPT)
+    assert 'sudo "$@"' not in text, "as_root invokes sudo without -n, which blocks on /dev/tty"
+    assert re.search(r'sudo -n "\$@"', text), "as_root must invoke sudo with -n"
+
+
+def test_apt_update_is_not_quiet_quiet():
+    """`apt-get update -qq` was measured returning 0 while printing "Could not
+    open lock file … Permission denied", so the quiet flag hid the one failure a
+    bootstrap script must not hide. The install that follows is the real gate,
+    but a gate that only ever reports "still not GNU make" names the symptom."""
+    text = _code_only(SCRIPT)
+    assert re.search(r"apt-get update\b", text), "the script no longer refreshes the package index"
+    assert "apt-get update -qq" not in text, "-qq hides a permission or lock failure behind exit 0"
 
 
 @_needs_bash
