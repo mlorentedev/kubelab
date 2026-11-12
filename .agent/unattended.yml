@@ -1,0 +1,50 @@
+# Arming envelope for one unattended run. Read from the committed copy only.
+version: 1
+run_id: "20261112-ops065"
+armed_by: manu
+armed_at: 2026-11-12T07:05:42Z
+expires_at: 2026-11-12T19:05:42Z
+objective: >-
+  Measure from prod Loki which routes legitimately take longer than a candidate
+  response-header bound (OPS-065, #3076) through a tested toolkit command, record
+  it, and draft the ADR for the owner without landing it; then find what limits
+  staging's warm load-test capacity (#3308).
+scope:
+  write_paths:
+    - "toolkit/**"
+    - "tests/**"
+    - "docs/**"
+    - "specs/**"
+    - "infra/load-test/**"
+    - "Makefile"
+  frozen_paths:
+    - ".github/**"
+    - "harness/**"
+    - "**/AGENTS.md"
+    - "**/CLAUDE.md"
+    - ".agent/**"
+    - "infra/config/**"
+    - "infra/k8s/**"
+    - "infra/ansible/**"
+    - "release-please-config.json"
+    - ".release-please-manifest.json"
+  max_files: 12
+  max_loc: 300
+allowed_commands: [dotf, gh, git, make, poetry, kubectl-readonly]
+queue:
+  source: bitacora
+  filter: "issues #3076 (OPS-065 measure step and ADR draft) then #3308 (warm knee), plus defects found while working them"
+  max_items: 3
+budget:
+  max_iterations: 8
+  max_minutes_per_iteration: 90
+  max_consecutive_failures: 2
+authority:
+  merge: standing-grant         # never the OPS-065 ADR PR: owner decides it
+  push: true
+  open_pr: true
+  advisor_tier: top
+  prod_loki_read: true          # toolkit obs logs against prod, read-only, through the redactor
+  staging_load_test: true       # make load-test ENV=staging only; check Argo kubelab-staging targetRevision first
+  staging_deploy: false
+  prod_ansible: false
