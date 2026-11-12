@@ -119,7 +119,9 @@ esac
             "GITEA_BOOTSTRAP_STATE": str(marker),
             **extra,
         }
-        return subprocess.run(["sh", str(SCRIPT)], env=env, capture_output=True, text=True, timeout=60)
+        return subprocess.run(
+            ["sh", str(SCRIPT)], env=env, capture_output=True, text=True, encoding="utf-8", timeout=60
+        )
 
     return type(
         "Harness",

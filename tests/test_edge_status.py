@@ -130,7 +130,12 @@ class Edge:
             "EDGE_RESOLV_CONF": str(self.root / "etc" / "resolv.conf"),
         }
         result = subprocess.run(
-            [SHELL, str(SCRIPT), *(args or (UPLINK,))], capture_output=True, text=True, env=env, check=False
+            [SHELL, str(SCRIPT), *(args or (UPLINK,))],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            env=env,
+            check=False,
         )
         self.calls = calls.read_text(encoding="utf-8").splitlines() if calls.exists() else []
         return result

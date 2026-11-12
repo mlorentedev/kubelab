@@ -53,7 +53,10 @@ def _rendered_grafana_env(overlay: str) -> dict[str, str]:
     if shutil.which("kubectl") is None:
         pytest.skip("kubectl not on PATH: cannot render the overlay (a skip is CANNOT CHECK, not OK)")
     result = subprocess.run(
-        ["kubectl", "kustomize", str(REPO_ROOT / "infra/k8s/overlays" / overlay)], capture_output=True, text=True
+        ["kubectl", "kustomize", str(REPO_ROOT / "infra/k8s/overlays" / overlay)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
     )
     assert result.returncode == 0, result.stderr
     for doc in yaml.safe_load_all(result.stdout):

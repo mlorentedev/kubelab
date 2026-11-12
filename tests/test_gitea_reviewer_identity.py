@@ -159,7 +159,9 @@ esac
             "GITEA_CREATION_LIMIT_STATE_DIR": str(tmp_path),
             **extra,
         }
-        return subprocess.run(["sh", str(SCRIPT)], env=env, capture_output=True, text=True, timeout=60)
+        return subprocess.run(
+            ["sh", str(SCRIPT)], env=env, capture_output=True, text=True, encoding="utf-8", timeout=60
+        )
 
     return type("H", (), {"build": staticmethod(build), "run": staticmethod(run), "calls": calls})
 

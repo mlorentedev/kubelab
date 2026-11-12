@@ -97,7 +97,9 @@ def run(tmp_path: Path):
             env["SSH_ORIGINAL_COMMAND"] = command
         if ssh_client is not None:
             env["SSH_CLIENT"] = ssh_client
-        result = subprocess.run([SH, str(SCRIPT)], env=env, capture_output=True, text=True, timeout=30)
+        result = subprocess.run(
+            [SH, str(SCRIPT)], env=env, capture_output=True, text=True, encoding="utf-8", timeout=30
+        )
         lines = log.read_text(encoding="utf-8").splitlines() if log.exists() else []
         return result, lines
 
