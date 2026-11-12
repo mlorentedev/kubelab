@@ -25,6 +25,7 @@ const rate = Number(LT_RATE);
 const seconds = Number(LT_SECONDS);
 const warmup = Number(LT_WARMUP || 0);
 // A cap on the pool holds the connection count below what a cold burst would open (#3308).
+if (LT_MAX_VUS && !/^[1-9][0-9]*$/.test(LT_MAX_VUS)) throw new Error(`refusing to run: LT_MAX_VUS=${LT_MAX_VUS} is not a positive integer`);
 const maxVUs = LT_MAX_VUS ? Number(LT_MAX_VUS) : Math.max(200, rate * 2);
 const status429 = new Counter('status_429');
 const headers = LT_BYPASS_HEADER ? { [LT_BYPASS_HEADER]: LT_BYPASS_VALUE } : {};

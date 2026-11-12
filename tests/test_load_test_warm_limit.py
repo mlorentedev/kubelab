@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import pathlib
 
+import re
+
 import pytest
 
 from toolkit.features import load_test as lt
@@ -46,7 +48,14 @@ class TestTheBusiestCpu:
 class TestThePoolCap:
     def test_the_script_takes_a_cap(self) -> None:
         assert "LT_MAX_VUS" in SCRIPT
-        assert "maxVUs: maxVUs" in SCRIPT or "maxVUs," in SCRIPT
+        step = SCRIPT.split("scenarios:")[1]
+        # Its own line in the scenario: `Math.min(maxVUs, ...)` above must not satisfy this.
+        assert re.search(r"^\s+maxVUs,\s*$", step, re.M)
+
+    def test_the_script_refuses_a_cap_that_is_not_a_positive_integer(self) -> None:
+        """A hand-run `k6 run -e LT_MAX_VUS=0` gets a refusal, not k6's own option error."""
+        line = next(x for x in SCRIPT.splitlines() if "LT_MAX_VUS" in x and "throw" in x)
+        assert "refusing to run" in line
 
     def test_the_pre_allocated_users_never_exceed_the_cap(self) -> None:
         assert "Math.min(" in SCRIPT.split("preAllocatedVUs")[1].split("\n")[0]

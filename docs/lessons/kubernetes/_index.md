@@ -4,6 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 739 | [A load generator's connection pool can be the limit it measures](lesson-739-a-load-generators-connection-pool-can-be-the-limit-it-measures.md) | 2026-11-12 |
 | 736 | [An open-model load test's knee can be a cold connection burst, not request capacity](lesson-736-an-open-model-load-test-knee-can-be-a-cold-connection-burst.md) | 2026-11-11 |
 | 708 | [An ingress memory ceiling, measured, turned out to be CPU](lesson-708-an-ingress-memory-ceiling-measured-turned-out-to-be-cpu.md) | 2026-11-04 |
 | 703 | [A rolling pod must outlast its endpoint, whichever app showed the loss](lesson-703-a-rolling-pod-must-outlast-its-endpoint.md) | 2026-11-03 |
