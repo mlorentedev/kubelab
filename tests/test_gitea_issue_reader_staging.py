@@ -57,7 +57,7 @@ class TestRegistry:
         plan = plan_rotation("issue_reader_staging", {"reviewer": "argos"}, secret_present=True, store_env="staging")
 
         assert plan.store_env == "staging"
-        assert "staging" in format_rotation_plan(plan)
+        assert re.search(rf"SOPS key\s+{re.escape(READER_KEY)} \(staging\)", format_rotation_plan(plan))
 
 
 def _task(tasks: str, name: str) -> str:

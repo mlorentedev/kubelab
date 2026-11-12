@@ -21,7 +21,7 @@ metadata:
     kubelab.live/location: external
   annotations:
     kubelab.live/host: beelink
-    kubelab.live/description: "Gitea on the Beelink platform node (100.64.0.3), on-demand; read-only from staging"
+    kubelab.live/description: "Gitea on the Beelink tailnet address, on-demand; read-only from staging"
 spec:
   ports:
     - name: http
