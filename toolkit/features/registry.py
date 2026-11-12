@@ -118,10 +118,11 @@ def tag_exists(
     exist (it would ``ImagePullBackOff``). Lives here so all registry access has
     one home. Docker Hub is read through its own API; any other registry through
     an OCI ``HEAD /v2/<name>/manifests/<tag>`` (``http`` replaces ``httpx.head``
-    for tests): 200 is ``True``, 404 ``False``, and a private registry (401/403),
-    any other answer or an unreachable host is ``None`` with a warning naming the
-    registry (IDP-053 D3). The receiver holds no registry credential (ADR-067 C2),
-    so a private image stays unverified here; ``promote`` proceeds on ``None``.
+    for tests). Both answer the same way: 200 is ``True``, 404 ``False``, and a
+    private registry (401/403), a rate limit or 5xx, any other answer or an
+    unreachable host is ``None`` with a warning naming the registry (IDP-053 D3,
+    #3272). The receiver holds no registry credential (ADR-067 C2), so a private
+    image stays unverified here; ``promote`` proceeds on ``None``.
     """
     if not registry.startswith(_ANONYMOUS_HOST):
         return _oci_tag_exists(registry, image_name, tag, http or httpx.head)
@@ -130,9 +131,17 @@ def tag_exists(
     try:
         resp = httpx.get(url, timeout=15.0)
     except httpx.HTTPError as exc:
-        logger.warning(f"Could not reach registry to verify tag ({exc}); skipping check")
+        logger.warning(f"docker.io: {image_name}:{tag} unverified, the registry is unreachable ({exc})")
         return None
-    return resp.status_code == 200
+    return _tag_answer("docker.io", image_name, tag, resp.status_code)
+
+
+def _tag_answer(host: str, image_name: str, tag: str, status: int) -> bool | None:
+    """The tri-state a tag lookup's HTTP status means: 200 present, 404 absent, anything else unverified."""
+    if status in (200, 404):
+        return status == 200
+    logger.warning(f"{host}: {image_name}:{tag} unverified, the registry answered HTTP {status}")
+    return None
 
 
 def _oci_tag_exists(registry: str, image_name: str, tag: str, http: Callable[..., httpx.Response]) -> bool | None:
@@ -144,10 +153,7 @@ def _oci_tag_exists(registry: str, image_name: str, tag: str, http: Callable[...
     except httpx.HTTPError as exc:
         logger.warning(f"{host}: {image_name}:{tag} unverified, the registry is unreachable ({exc})")
         return None
-    if resp.status_code in (200, 404):
-        return resp.status_code == 200
-    logger.warning(f"{host}: {image_name}:{tag} unverified, the registry answered HTTP {resp.status_code}")
-    return None
+    return _tag_answer(host, image_name, tag, resp.status_code)
 
 
 def tag_digest(
