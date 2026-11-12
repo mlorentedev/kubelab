@@ -44,7 +44,7 @@ def _kubectl(kubeconfig: str, namespace: str, *args: str) -> list[str]:
 
 
 def _run_json(argv: list[str]) -> dict[str, Any]:
-    proc = subprocess.run(argv, capture_output=True, text=True, check=True)
+    proc = subprocess.run(argv, capture_output=True, text=True, encoding="utf-8", check=True)
     return json.loads(proc.stdout)
 
 
@@ -152,6 +152,7 @@ def check_drift(applications_dir: str, kubeconfig: str) -> DriftCheckResult:
         ["kubectl", "diff", "-f", applications_dir, "--kubeconfig", kubeconfig, "--request-timeout=15s"],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
     )
     if proc.returncode == 0:
@@ -198,6 +199,7 @@ def fetch_statuses(repo: str, sha: str) -> list[dict[str, Any]]:
         ["gh", "api", f"repos/{repo}/commits/{sha}/statuses?per_page=100"],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
     )
     if proc.returncode != 0:

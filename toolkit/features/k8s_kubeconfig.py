@@ -197,7 +197,7 @@ def resolve_ssh_hostname(ssh_alias: str) -> str:
     alias if ssh cannot be asked — the purge then no-ops, which is the same
     place we were before.
     """
-    result = subprocess.run(["ssh", "-G", ssh_alias], capture_output=True, text=True)
+    result = subprocess.run(["ssh", "-G", ssh_alias], capture_output=True, text=True, encoding="utf-8")
     if result.returncode != 0:
         return ssh_alias
     for line in result.stdout.splitlines():
@@ -307,7 +307,7 @@ def forget_host_key(hostname: str) -> bool:
     the same wording as `wait-node-ready.yml:98`, which made this decision first
     for the Ansible path; two mechanisms with one policy, not two policies.
     """
-    result = subprocess.run(["ssh-keygen", "-R", hostname], capture_output=True, text=True)
+    result = subprocess.run(["ssh-keygen", "-R", hostname], capture_output=True, text=True, encoding="utf-8")
     return result.returncode == 0
 
 
@@ -389,7 +389,7 @@ def fetch_kubeconfig(env: str, direct: bool = False) -> Path:
             )
 
     argv = fetch_argv(access.ssh_alias, accept_new=ephemeral)
-    result = subprocess.run(argv, capture_output=True, text=True)
+    result = subprocess.run(argv, capture_output=True, text=True, encoding="utf-8")
 
     if result.returncode == 0:
         raw = result.stdout
@@ -456,6 +456,7 @@ def _fetch_via_tunnel(env: str, access: ClusterAccess, common_path: Path | None 
             ],
             capture_output=True,
             text=True,
+            encoding="utf-8",
         )
 
     if result.returncode != 0:

@@ -81,7 +81,34 @@ run and record the peak on #1384, then set the value from it. (The unit's own cg
 client, so `systemctl status` memory figures say nothing about the engine.) Change the default in a PR and provision (`make provision NODE=bee ENV=prod TAGS=renovate`); the unit
 file is re-rendered and the next run uses it. A run killed for memory fails the unit with exit status 137.
 
-## Not covered yet
+## GitHub token
 
-The read-only `GITHUB_COM_TOKEN` the `github>` preset fetch needs is not delivered: that fetch is
-unauthenticated and rate-limited until the change that records it lands (spec task AC3/AC6).
+Renovate reads the shared preset (`github>mlorentedev/ci-workflows//renovate/default#<tag>`) through the GitHub
+API, so the run carries `GITHUB_COM_TOKEN`, delivered by `renovate.env` from
+`apps.services.core.gitea.renovate_github_com_token` (prod SOPS).
+
+**Where it comes from.** It is the same token as ci-workflows' weekly Renovate run, the Actions secret
+`RENOVATE_TOKEN` in `mlorentedev/ci-workflows`, whose source is the operator's `dotf secrets` ci group (owner
+decision 2026-11-12, instead of the read-only token the spec planned). It can write to the owner's GitHub
+repositories, and it now also sits in `renovate.env` (0600) on the Beelink. The run is not enabled while the key
+is empty: no timer is installed, and one left behind by an earlier provision is stopped.
+
+**Record it** (value on stdin, never in the command line):
+
+```bash
+toolkit secrets set apps.services.core.gitea.renovate_github_com_token --env prod --stdin
+make provision NODE=bee ENV=prod TAGS=renovate     # twice; the second reports changed=0
+```
+
+**Rotate it: both copies, together.**
+
+1. Rotate the token in the dotf secrets ci group.
+2. `dotf secrets sync ci --repo mlorentedev/ci-workflows RENOVATE_TOKEN` (the weekly GitHub run).
+3. `toolkit secrets set apps.services.core.gitea.renovate_github_com_token --env prod --stdin` (the same value).
+4. `make provision NODE=bee ENV=prod TAGS=renovate` (re-renders `renovate.env`).
+
+A rotation that stops after step 2 leaves the Beelink's hourly run on a dead token, and its preset fetch fails.
+
+**Expiry.** The catalog declares it `PROVIDER`: `make secrets-audit` ends with an "Expiry" section that asks
+GitHub when the token dies (`toolkit secrets check-expiry` runs the same check alone), and warns inside the
+window. A token minted with no expiry reports none.
