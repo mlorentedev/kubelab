@@ -1418,8 +1418,8 @@ def _actions_secrets_client(merged: dict[str, Any]) -> "GiteaBasicAuthClient":
     """Superadmin basic auth for the forge named in `merged`; exits 1 when the password is absent.
 
     Writing a repository's Actions secrets needs repo-admin, which no machine token
-    holds (one owner-level identity per organization is #1781). Until then this is
-    the same superadmin client `drop-empty`, `migrate` and `prune-runners` build. It
+    holds, by decision (ADR-062, 2026-11-11 amendment, #1781): this is an
+    operator-run command, and it uses the same superadmin client `drop-empty`, `migrate` and `prune-runners` build. It
     used to borrow the authoring client, which was this same credential until #2578
     moved authoring to the agents' account.
     """
@@ -1430,7 +1430,7 @@ def _actions_secrets_client(merged: dict[str, Any]) -> "GiteaBasicAuthClient":
     if not admin_password:
         logger.error(
             "missing apps.services.core.gitea.admin_password in SOPS — writing Actions secrets needs "
-            "repo-admin, which no machine token holds (#1781). Re-provision the Beelink."
+            "repo-admin, which no machine token holds (ADR-062, #1781). Re-provision the Beelink."
         )
         raise typer.Exit(1)
     superadmin = str(merged["apps"]["auth"]["identities"]["superadmin"])

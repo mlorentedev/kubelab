@@ -66,8 +66,31 @@ func StoreEvent(ctx context.Context, p config.Postgres, forgeName, deliveryID, e
 	return err
 }
 
+// RecordConsoleDay counts a day of console use for one identity (ADR-066 A8). The day is
+// the UTC date of `at`, and only the first visit of a day writes a row, so it reports
+// whether this call was that first visit.
+func RecordConsoleDay(ctx context.Context, p config.Postgres, identity string, at time.Time) (bool, error) {
+	db, err := Pool(p)
+	if err != nil {
+		return false, err
+	}
+	at = at.UTC()
+	tag, err := db.Exec(ctx, `INSERT INTO console_usage (identity, day, first_seen)
+		VALUES ($1, $2, $3) ON CONFLICT (identity, day) DO NOTHING`,
+		identity, at.Format(time.DateOnly), at)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() == 1, nil
+}
+
 // ForgeModel is the read model on Postgres.
 type ForgeModel struct{ Conf config.Postgres }
+
+// RecordConsoleDay counts a day of console use on the model's database.
+func (m ForgeModel) RecordConsoleDay(ctx context.Context, identity string, at time.Time) (bool, error) {
+	return RecordConsoleDay(ctx, m.Conf, identity, at)
+}
 
 // LastRead returns the zero time for a source never read.
 func (m ForgeModel) LastRead(ctx context.Context, src forge.Source) (time.Time, error) {

@@ -1,0 +1,16 @@
+# {{ ansible_managed }}
+# Hourly Renovate run (IDP-036 AC2). The service it starts is
+# kubelab-renovate.service, which skips itself when the forge is down.
+[Unit]
+Description=Hourly Renovate run against the Gitea forge
+
+[Timer]
+OnCalendar=hourly
+# The Beelink is on-demand (ADR-028): it is off most of the time, and an hour the
+# node slept through would otherwise be lost. Persistent=true runs one missed
+# tick when the node next powers on; the wrapper's probe then waits for the forge,
+# and the stack's own unit starts it (the service is ordered after that unit).
+Persistent=true
+
+[Install]
+WantedBy=timers.target

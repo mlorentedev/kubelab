@@ -66,3 +66,9 @@
     docker compose -f {{ beelink_deploy_dir }}/compose.yml
     up -d --force-recreate {{ act_runner_name }}
   changed_when: true
+
+# Its own handler rather than "Reload systemd for kubelab-compose": the name says
+# which unit's change asked for it, and the two can be notified independently.
+- name: Reload systemd for kubelab-renovate
+  systemd:
+    daemon_reload: true

@@ -429,6 +429,7 @@ def render(env: str, project_root: Path) -> list[dict[str, Any]]:
         ["kubectl", "kustomize", str(project_root / "infra" / "k8s" / "overlays" / env)],
         capture_output=True,
         text=True,
+        encoding="utf-8",
     )
     if result.returncode != 0:
         # It renders the checkout locally and needs no cluster, so a failure means the
@@ -443,7 +444,10 @@ def _kubectl_json(kubeconfig: Path, *args: str) -> Any:
     import subprocess
 
     result = subprocess.run(
-        ["kubectl", "--kubeconfig", str(kubeconfig), *args, "-o", "json"], capture_output=True, text=True
+        ["kubectl", "--kubeconfig", str(kubeconfig), *args, "-o", "json"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
     )
     return json.loads(result.stdout) if result.returncode == 0 and result.stdout else None
 

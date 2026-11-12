@@ -162,7 +162,7 @@ class CredentialsManager:
                 username,
                 password,
             ]
-            result = subprocess.run(command, capture_output=True, text=True, check=True)
+            result = subprocess.run(command, capture_output=True, text=True, encoding="utf-8", check=True)
             # htpasswd -Bn outputs "username:hash", we want "username:{BLOWFISH}hash" for Traefik.
             # The -Bn option outputs the bcrypt hash directly.
             # So, the output will be like "username:$2y$10$.."
@@ -226,7 +226,7 @@ class CredentialsManager:
                 "--password",
                 secret,
             ]
-            result = subprocess.run(command, capture_output=True, text=True, check=True)
+            result = subprocess.run(command, capture_output=True, text=True, encoding="utf-8", check=True)
             # Output format: "Digest: $argon2id$.."
             output = result.stdout.strip()
             if "Digest:" in output:
@@ -345,6 +345,7 @@ class CredentialsManager:
                 ["sops", "-d", "--output-type", "yaml", str(sops_file)],
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
                 check=True,
                 env=age_key_env(),  # auto-discover SOPS_AGE_KEY_FILE (toolkit/core/sops.py)
             )

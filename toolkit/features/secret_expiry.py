@@ -488,4 +488,7 @@ PROVIDER_CHECKS = {
     # The GHCR split (#2884): classic tokens, minted to expire on a date.
     "ghcr.pull_token": github_pat_expiry,
     "apps.services.core.gitea.actions_secrets.personal.resume.ghcr_token": github_pat_expiry,
+    # The Gitea Renovate run's github.com token (IDP-036): the same value as ci-workflows'
+    # `RENOVATE_TOKEN`, so it is asked of GitHub like any PAT and expires on that date.
+    "apps.services.core.gitea.renovate_github_com_token": github_pat_expiry,
 }

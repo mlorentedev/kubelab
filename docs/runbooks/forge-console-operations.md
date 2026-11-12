@@ -20,6 +20,7 @@ The console reads three tables in the API's Postgres tenant
 | `forge_source` | per source: `as_of` (last successful read), reachability | yes |
 | `forge_item` | the open and closed issues and pull requests read | yes |
 | `forge_event` | webhook deliveries, projected or not | no: an unprojected delivery is lost, and the next read covers the change it carried |
+| `console_usage` | one row per operator identity and UTC day the console page was opened (ADR-066 A8) | no: not read model, kept only by the nightly `pg_dumpall` of the VPS backup; never truncate it with the forge tables |
 
 ## Rebuild from the forges
 
