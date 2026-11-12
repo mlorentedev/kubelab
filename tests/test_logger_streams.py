@@ -64,6 +64,7 @@ def test_stdout_is_one_json_object_when_building_the_settings_warns(tmp_path: Pa
         env={"PATH": str(Path(sys.executable).parent)},
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=60,
     )
 

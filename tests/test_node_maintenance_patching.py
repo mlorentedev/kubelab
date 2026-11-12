@@ -359,7 +359,9 @@ def _run_hold_block(
     env = {"PATH": f"{bin_dir}:/usr/bin:/bin", "FAIL_HOLD": " ".join(fail_hold), "SHOWHOLD": " ".join(held_before)}
     env.update({f"STATE_{pkg.replace('.', '_').replace('-', '_')}": st for pkg, st in states.items()})
 
-    out = subprocess.run(["bash", "-c", harness], env=env, capture_output=True, text=True, check=True).stdout
+    out = subprocess.run(
+        ["bash", "-c", harness], env=env, capture_output=True, text=True, encoding="utf-8", check=True
+    ).stdout
     lines = dict(line.split("=", 1) for line in out.strip().splitlines())
     return set(lines["UNPROTECTED"].split()), set(lines["HELD"].split())
 

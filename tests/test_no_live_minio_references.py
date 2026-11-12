@@ -85,7 +85,7 @@ def live_minio_references() -> list[str]:
 def test_the_scan_sees_the_repository() -> None:
     # A scan that reads nothing passes vacuously. Prove it reads real files.
     tracked = subprocess.run(
-        ["git", "ls-files"], cwd=REPO_ROOT, check=True, capture_output=True, text=True
+        ["git", "ls-files"], cwd=REPO_ROOT, check=True, capture_output=True, text=True, encoding="utf-8"
     ).stdout.splitlines()
     assert "Makefile" in tracked
     assert len(tracked) > 500

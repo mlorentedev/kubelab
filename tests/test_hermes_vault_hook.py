@@ -23,7 +23,9 @@ ZONE = COMMON["apps"]["services"]["ai"]["hermes_kubelab"]["vault_zone"]
 
 
 def _git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True, check=False)
+    return subprocess.run(
+        ["git", "-C", str(repo), *args], capture_output=True, text=True, encoding="utf-8", check=False
+    )
 
 
 def _hook(hooks: Path, zone: str) -> Path:

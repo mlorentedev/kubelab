@@ -71,7 +71,7 @@ def capture(tmp_path: Path):
             "FAKE_LOG": str(log),
             "TRAILER": TRAILER,
         }
-        return subprocess.run(["bash", str(script)], capture_output=True, text=True, env=env)
+        return subprocess.run(["bash", str(script)], capture_output=True, text=True, encoding="utf-8", env=env)
 
     run.staging = staging  # type: ignore[attr-defined]
     run.sentinel = sentinel  # type: ignore[attr-defined]

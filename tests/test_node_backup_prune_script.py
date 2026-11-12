@@ -97,7 +97,9 @@ def prune(tmp_path: Path):
         (fake_dir / "unlock.rc").write_text(f"{unlock_rc}\n", encoding="utf-8")
         (fake_dir / "forget.rc").write_text(f"{forget_rc}\n", encoding="utf-8")
         env = {"PATH": os.environ["PATH"], "FAKE_DIR": str(fake_dir), "TMPDIR": str(scratch)}
-        proc = subprocess.run(["bash", str(script)], env=env, capture_output=True, text=True, timeout=30)
+        proc = subprocess.run(
+            ["bash", str(script)], env=env, capture_output=True, text=True, encoding="utf-8", timeout=30
+        )
         calls_file = fake_dir / "calls"
         calls = calls_file.read_text(encoding="utf-8").splitlines() if calls_file.exists() else []
         return proc, calls

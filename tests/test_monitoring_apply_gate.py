@@ -157,7 +157,11 @@ def test_only_a_1_turns_a_make_flag_on(value: str, flag: str | None) -> None:
     """`PRUNE=0`, written to be safe, must not delete every unseeded monitor."""
     root = Path(__file__).resolve().parent.parent
     out = subprocess.run(
-        ["make", "-n", "-C", str(root), "monitoring-apply", value], capture_output=True, text=True, check=True
+        ["make", "-n", "-C", str(root), "monitoring-apply", value],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=True,
     ).stdout
     line = next(text for text in out.splitlines() if "monitoring apply" in text)
     passed = {arg for arg in line.split() if arg in {"--prune", "--check"}}

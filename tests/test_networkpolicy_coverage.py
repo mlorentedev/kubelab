@@ -52,6 +52,7 @@ def _render(overlay: str) -> list[dict[str, Any]]:
             ["kubectl", "kustomize", str(REPO / "infra/k8s/overlays" / overlay)],
             capture_output=True,
             text=True,
+            encoding="utf-8",
             check=True,
         )
         _RENDERS[overlay] = [d for d in yaml.safe_load_all(out.stdout) if d]

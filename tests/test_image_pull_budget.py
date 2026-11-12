@@ -185,7 +185,7 @@ def _pull(images: list[str], failing: str = "") -> subprocess.CompletedProcess:
     and fails for the image named `failing`."""
     shell = ansible_env(".").from_string(_tasks()["Pull"]["ansible.builtin.shell"]).render(image_pull_images=images)
     docker = f'docker() {{ echo "$*"; [ "$2" != {failing!r} ]; }}; '
-    return subprocess.run(["sh", "-c", docker + shell], capture_output=True, text=True, check=False)
+    return subprocess.run(["sh", "-c", docker + shell], capture_output=True, text=True, encoding="utf-8", check=False)
 
 
 def test_the_pull_fetches_each_listed_image_by_name_and_stops_at_a_failure():

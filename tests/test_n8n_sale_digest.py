@@ -99,7 +99,7 @@ def run_digest(nodes: dict[str, Any], js: str | None = None, prelude: str = FAKE
       (err) => {{ console.error(err); process.exit(1); }},
     );
     """
-    proc = subprocess.run(["node", "-e", script], capture_output=True, text=True, check=True)
+    proc = subprocess.run(["node", "-e", script], capture_output=True, text=True, encoding="utf-8", check=True)
     out = json.loads(proc.stdout.strip())
     assert len(out) == 1, "the digest is one email"
     return out[0]

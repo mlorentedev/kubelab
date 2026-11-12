@@ -280,7 +280,7 @@ def _task_created(item: dict[str, Any]) -> bool:
     expression = node("Task Created?")["parameters"]["conditions"]["conditions"][0]["leftValue"]
     assert expression.startswith("={{") and expression.endswith("}}")
     script = f"const $json = {json.dumps(item)}; console.log(JSON.stringify({expression[3:-2]}));"
-    done = subprocess.run(["node", "-e", script], capture_output=True, text=True, check=True)
+    done = subprocess.run(["node", "-e", script], capture_output=True, text=True, encoding="utf-8", check=True)
     return json.loads(done.stdout)
 
 

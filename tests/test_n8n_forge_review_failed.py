@@ -94,7 +94,7 @@ def _already_told(comments_response: dict[str, Any], pr: dict[str, Any]) -> dict
     const out = (() => {{ {node_js(WORKFLOW, "Already Told?")} }})();
     console.log(JSON.stringify(out.json));
     """
-    proc = subprocess.run(["node", "-e", script], capture_output=True, text=True, check=False)
+    proc = subprocess.run(["node", "-e", script], capture_output=True, text=True, encoding="utf-8", check=False)
     if proc.returncode != 0:
         raise RuntimeError(next((l for l in proc.stderr.splitlines() if l.startswith("Error:")), proc.stderr))
     return json.loads(proc.stdout.strip())
