@@ -13,7 +13,7 @@ import http from 'k6/http';
 import exec from 'k6/execution';
 import { Counter } from 'k6/metrics';
 
-const { LT_HOST, LT_PATH, LT_ADDRESS, LT_RATE, LT_SECONDS, LT_WARMUP, LT_BYPASS_HEADER, LT_BYPASS_VALUE, LT_ACCEPT_ENCODING } = __ENV;
+const { LT_HOST, LT_PATH, LT_ADDRESS, LT_RATE, LT_SECONDS, LT_WARMUP, LT_MAX_VUS, LT_BYPASS_HEADER, LT_BYPASS_VALUE, LT_ACCEPT_ENCODING } = __ENV;
 
 // Second lock behind the toolkit's: this file refuses a host that is not a staging
 // name, and `hosts` below sends the name to the staging node whatever DNS says.
@@ -24,6 +24,8 @@ if (!/(^|\.)staging\.[a-z0-9.-]+$/.test(LT_HOST || '') || !LT_ADDRESS) {
 const rate = Number(LT_RATE);
 const seconds = Number(LT_SECONDS);
 const warmup = Number(LT_WARMUP || 0);
+// A cap on the pool holds the connection count below what a cold burst would open (#3308).
+const maxVUs = LT_MAX_VUS ? Number(LT_MAX_VUS) : Math.max(200, rate * 2);
 const status429 = new Counter('status_429');
 const headers = LT_BYPASS_HEADER ? { [LT_BYPASS_HEADER]: LT_BYPASS_VALUE } : {};
 // Unset, k6 sends its own `Accept-Encoding: gzip`; set, it replaces that (an A/B on compression).
@@ -61,8 +63,8 @@ export const options = {
       rate,
       timeUnit: '1s',
       duration: `${warmup + seconds}s`,
-      preAllocatedVUs: Math.max(20, Math.ceil(rate / 10)),
-      maxVUs: Math.max(200, rate * 2),
+      preAllocatedVUs: Math.min(maxVUs, Math.max(20, Math.ceil(rate / 10))),
+      maxVUs,
     },
   },
 };

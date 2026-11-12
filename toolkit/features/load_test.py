@@ -169,6 +169,7 @@ def k6_env(
     bypass: str | None,
     accept_encoding: str | None = None,
     warmup: int = 0,
+    max_vus: int | None = None,
 ) -> dict[str, str]:
     env = {
         "LT_HOST": target.host,
@@ -183,6 +184,10 @@ def k6_env(
     if accept_encoding is not None:
         refuse_unknown_encoding(accept_encoding)
         env["LT_ACCEPT_ENCODING"] = accept_encoding
+    if max_vus is not None:
+        if max_vus < 1:
+            raise LoadTestRefused(f"--max-vus must be at least 1, got {max_vus}")
+        env["LT_MAX_VUS"] = str(max_vus)
     return env
 
 
@@ -499,13 +504,14 @@ def run_step(
     accept_encoding: str | None = None,
     sample_seconds: int = 0,
     warmup: int = 0,
+    max_vus: int | None = None,
 ) -> dict[str, Any]:
     """One step with the node's figures around it. The generator's CPU decides its validity.
 
     `bypass` is the run's header value, or None for a step under the limiter.
     `sample_seconds` above zero adds the step's timeline, one row per interval.
     """
-    env = k6_env(target, address, rate, seconds, bypass, accept_encoding, warmup)
+    env = k6_env(target, address, rate, seconds, bypass, accept_encoding, warmup, max_vus)
     lasts = warmup + seconds
     before = {n: lab.cpu_line(n) for n in (lab.target_node, lab.generator)}
     stat_before = lab.cpu_stat(target.workload)
@@ -641,6 +647,7 @@ def run(
     accept_encoding: str | None = None,
     sample_seconds: int = 0,
     warmup: int = 0,
+    max_vus: int | None = None,
 ) -> dict[str, Any]:
     """Baseline under the limiter, then `repeats` ramps past it. Always removes the route.
 
@@ -658,6 +665,8 @@ def run(
         raise LoadTestRefused("sample seconds must be 0 (off) or positive")
     if warmup < 0:
         raise LoadTestRefused("warm-up seconds must be 0 (off) or positive")
+    if max_vus is not None and max_vus < 1:
+        raise LoadTestRefused(f"--max-vus must be at least 1, got {max_vus}")
     facts = {
         **_runtime_facts(lab, image),
         "accept_encoding": accept_encoding or "gzip (k6 default)",
@@ -690,6 +699,7 @@ def run(
             accept_encoding=accept_encoding,
             sample_seconds=sample_seconds,
             warmup=warmup,
+            max_vus=max_vus,
         )  # fmt: skip
         for t in targets
     ]
@@ -703,6 +713,7 @@ def run(
             "max_generator_cpu": MAX_GENERATOR_CPU,
             "step_seconds": seconds,
             "warmup_seconds": warmup,
+            "max_vus": max_vus,
             "settle_seconds": SETTLE_SECONDS,
         },
         "baseline": baselines,
@@ -720,6 +731,7 @@ def run(
                     return run_step(
                         lab, image, script, target, address, rate, seconds,
                         bypass=bypass, accept_encoding=accept_encoding, sample_seconds=sample_seconds, warmup=warmup,
+                        max_vus=max_vus,
                     )  # fmt: skip
 
                 done = ramp(one, steps, lambda: time.sleep(SETTLE_SECONDS))
