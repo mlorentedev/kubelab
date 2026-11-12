@@ -13,6 +13,11 @@ Documentation=https://github.com/mlorentedev/kubelab/blob/master/docs/runbooks/r
 After=kubelab-compose.service docker.service network-online.target
 Requires=docker.service
 Wants=network-online.target
+# A failed run pages through node_notify, like every other fleet timer, and a
+# later success closes the incident (#3322). A skip (forge not answering) exits
+# 0 and pages nothing. `%n` names this unit, so the notifier reads its journal.
+OnFailure=kubelab-notify@%n.service
+OnSuccess=kubelab-notify-recovered@%n.service
 
 [Service]
 # oneshot: the run ends and the unit with it, so the timer's next tick starts it
