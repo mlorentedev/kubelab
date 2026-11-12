@@ -1161,6 +1161,92 @@ def check_gitea_token_scopes(
     return 1 if failures else 0
 
 
+def _registry_session() -> Any:
+    """The HTTP session `registry-check` pulls with. A seam for tests."""
+    import requests
+
+    session = requests.Session()
+    # `requests` lets a `.netrc` entry (and proxy settings) from the operator's environment replace
+    # the Authorization header of a request without `auth`: a 200 would then attest the operator's
+    # own account, not the pull token.
+    session.trust_env = False
+    return session
+
+
+def _config_value(merged: dict[str, Any], dotted: str) -> Any:
+    node: Any = merged
+    for part in dotted.split("."):
+        node = node.get(part) if isinstance(node, dict) else None
+    return node
+
+
+@gitea_app.command("registry-check")
+def gitea_registry_check(
+    app_name: Annotated[str, typer.Option("--app", help="A private product in products.yaml")],
+    package: Annotated[
+        str | None,
+        typer.Option("--package", help="Pull <owner>/<name> instead of the app's own package"),
+    ] = None,
+    expect_denied: Annotated[
+        bool, typer.Option("--expect-denied", help="Pass only when the registry answers 401 or 403")
+    ] = False,
+    env: Annotated[
+        str, typer.Option("--env", "-e", help="Environment whose pinned tag and secrets are used")
+    ] = "staging",
+) -> None:
+    """Pull a manifest with a private product's pull token and report what the registry answers.
+
+    The token's grant is pinned by equality in `common.yaml`; whether it reaches a package is a
+    fact about the forge, so this settles it by consequence (IDP-053 S2c, AC4). Without
+    `--expect-denied` it exits 0 only on 200. With it, the pull is aimed at a package the token
+    must not read and it exits 0 only on 401 or 403. An empty `--package`, an unreachable
+    registry and any other status exit non-zero. The token is never printed.
+    """
+    from toolkit.features import product_registry, promotion
+    from toolkit.features.product_contract import ContractError
+    from toolkit.features.registry_check import check_pull, refuse_unpullable
+
+    try:
+        entry = product_registry.product(app_name)
+    except product_registry.UnknownProductError as exc:
+        console.print(f"[red]{escape(str(exc))}[/red]")
+        raise typer.Exit(1) from exc
+    unpullable = refuse_unpullable(entry, app_name)
+    if unpullable is not None:
+        console.print(escape(unpullable.message))
+        raise typer.Exit(1)
+    assert entry.pull_credential is not None  # noqa: S101 - narrowed by refuse_unpullable
+    secret = entry.pull_credential.secret
+    token = _config_value(_gitea_merged_config(env), secret)
+    tag = promotion.read_pinned_version(env, app_name)
+    if not isinstance(token, str) or not token or not tag:
+        missing = f"{secret} is not recorded for {env}" if not token else f"{app_name} has no version pinned in {env}"
+        console.print(
+            escape(
+                str(
+                    ContractError(
+                        missing,
+                        "the pull needs the token's value and the tag staging runs; with either absent it would "
+                        "prove nothing.",
+                        "mint the token (`make provision NODE=bee ENV=prod TAGS=gitea`) and pin the app's version.",
+                    )
+                )
+            )
+        )
+        raise typer.Exit(1)
+    result = check_pull(
+        entry,
+        app_name,
+        package=package,
+        expect_denied=expect_denied,
+        tag=tag,
+        token=token,
+        session=_registry_session(),
+    )
+    console.print(escape(result.message))
+    raise typer.Exit(0 if result.ok else 1)
+
+
 forge_app = typer.Typer(help="The console's forge integrations (CONSOLE-004)")
 app.add_typer(forge_app, name="forge")
 
