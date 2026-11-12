@@ -341,8 +341,11 @@ groups:
         title: A node's weekly backup check is outgrowing its time budget
         condition: C
         for: 10m
-        # No pack count for a day is no data, and that alerts: an unmeasured
-        # repository is exactly when the budget would be outgrown unseen.
+        # No pack count from ANY node for a day is no data, and that alerts. One
+        # node alone going unmeasured is not: its series drops out of the result
+        # while the others keep the rule evaluating (the shrink rule has the same
+        # gap). Its `pack count unknown` line is in the r2-size stream; a
+        # per-node presence check for sizes and packs is #3304.
         noDataState: Alerting
         execErrState: Alerting
         annotations:

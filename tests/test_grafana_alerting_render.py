@@ -121,17 +121,28 @@ def _without_tier(policy: dict) -> dict:
 
     A route that mirrors the root's receiver (TOOL-093: the failure alert must still
     page when a second route is added) carries the tier too, so it varies per
-    environment exactly as the root does and is compared without it. So does a route
-    pinned to one tier everywhere (BACKUP-081 keeps its alert on the log tier): in
-    staging it reads as the root's own. Where each such alert lands is pinned by its
-    own test (`test_backup_check_budget.py`, `test_forge_review_failed_route.py`).
+    environment exactly as the root does and is compared without it. A route pinned
+    to one tier in every environment (`pinned` below) reads as the root's own in
+    staging, so it is compared without its receiver too, but only once that receiver
+    is checked to be the pinned one: any other tier-routed alert keeps its receiver
+    in the comparison.
     """
-    tiers = set(EXPECTED_RECEIVER.values())
+    from tests.test_backup_check_budget import _check_budget_rule
+
+    pinned = {_check_budget_rule()["title"]: "apprise-log"}  # BACKUP-081: never a page
+    tier = policy["receiver"]
+
+    def _strip(route: dict) -> dict:
+        names = {value for name, op, value in route.get("object_matchers", []) if name == "alertname" and op == "="}
+        pin = next((pinned[n] for n in names if n in pinned), None)
+        if pin is not None:
+            assert route["receiver"] == pin, f"{sorted(names)} must route to {pin}, not {route['receiver']}"
+        elif route["receiver"] != tier:
+            return route
+        return {k: v for k, v in route.items() if k != "receiver"}
+
     out = {k: v for k, v in policy.items() if k not in ("receiver", "routes")}
-    out["routes"] = [
-        {k: v for k, v in route.items() if k != "receiver"} if route["receiver"] in tiers else route
-        for route in policy.get("routes", [])
-    ]
+    out["routes"] = [_strip(route) for route in policy.get("routes", [])]
     return out
 
 

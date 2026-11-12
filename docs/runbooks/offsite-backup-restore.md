@@ -309,10 +309,15 @@ within weeks, before the check times out (#2920).
    value that fits, record the measurement in its comment, and update the rate in
    `tests/test_backup_check_budget.py` if it moved. The rule's threshold must
    change with it; that test fails until it does.
+3. Deploy the role to the nodes before the alert's new threshold reaches prod:
+   `make backup ENV=prod`. `make backup-node` runs the unit already installed, so
+   until the role is deployed the node still reads 1/t of the old `t`. Repeat
+   step 1 to confirm the new value.
 
-With no data (no node reported a pack count for a day), the reason is in the
+With no data from every node for a day, the reason is in the
 `{container="r2-size"}` stream; a watcher that stopped is
-[R2 backup alert](#r2-backup-alert).
+[R2 backup alert](#r2-backup-alert). A single node with no pack count does not
+fire this rule: look for its `pack count unknown` line in that stream.
 
 ## Repository missing or replaced
 
