@@ -147,7 +147,7 @@ def check_flow(flow: Flow, net: dict[str, Any], runner: Callable[[list[str]], in
 
 
 def _default_runner(cmd: list[str]) -> int:
-    return subprocess.run(cmd, capture_output=True, text=True).returncode
+    return subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8").returncode
 
 
 def run_probe(net: dict[str, Any] | None = None, runner: Callable[[list[str]], int] = _default_runner) -> int:

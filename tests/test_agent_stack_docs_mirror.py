@@ -46,7 +46,7 @@ def mirror(tmp_path: Path):
 
 
 def _run(script: Path) -> subprocess.CompletedProcess[str]:
-    return subprocess.run([str(script)], capture_output=True, text=True, check=False, env=_git_env())
+    return subprocess.run([str(script)], capture_output=True, text=True, encoding="utf-8", check=False, env=_git_env())
 
 
 def test_both_trees_hold_the_docs_and_nothing_else_of_the_repository(mirror) -> None:

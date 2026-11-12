@@ -64,7 +64,9 @@ _CALL_TIMEOUT = 60
 
 def _default_run(argv: list[str]) -> tuple[int, str, str]:
     try:
-        proc = subprocess.run(argv, capture_output=True, text=True, check=False, timeout=_CALL_TIMEOUT)
+        proc = subprocess.run(
+            argv, capture_output=True, text=True, encoding="utf-8", check=False, timeout=_CALL_TIMEOUT
+        )
     except subprocess.TimeoutExpired:
         return 124, "", f"kubectl timed out after {_CALL_TIMEOUT}s"
     return proc.returncode, proc.stdout, proc.stderr
