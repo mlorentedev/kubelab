@@ -1,0 +1,53 @@
+version: 1
+run_id: ""
+armed_by: manu
+armed_at: 2026-11-12T07:11:53Z
+expires_at: 2026-11-12T19:01:53Z
+objective: >-
+  Ship CONSOLE-004's A8 delivery and its read side: land release #3337 and promote api 1.8.0
+  to prod (owner authorized this one version), then deliver #3341 (A8 read command), #3342
+  (AC6 structured log events) and the spec's task reconciliation.
+scope:
+  write_paths:
+    - "apps/api/**"
+    - "infra/k8s/overlays/*/generated/migrations.yaml"
+    - "infra/config/values/prod.yaml"
+    - "infra/k8s/overlays/prod/kustomization.yaml"
+    - "specs/CONSOLE-004-forge-task-view/**"
+    - "docs/runbooks/forge-console-operations.md"
+    - "docs/lessons/**"
+    - "toolkit/features/console_usage.py"
+    - "toolkit/cli/console.py"
+    - "toolkit/cli/__init__.py"
+    - "toolkit/cli/main.py"
+    - "tests/test_console_usage*.py"
+    - "Makefile"
+  frozen_paths:
+    - ".github/**"
+    - "harness/**"
+    - "**/AGENTS.md"
+    - "**/CLAUDE.md"
+    - ".agent/unattended.yml"
+    - "infra/ansible/**"
+    - "infra/config/secrets/**"
+    - "toolkit/features/gitea_*.py"
+    - "toolkit/cli/services.py"
+  max_files: 12
+  max_loc: 300
+allowed_commands: [dotf, gh, git, make, poetry, go, docker]
+queue:
+  source: explicit
+  items: ["#3337 release + promote api 1.8.0", "#3341", "#3342", "CONSOLE-004 tasks.md reconciliation"]
+  filter: "CONSOLE-004 (#2570) children named above; no other ticket"
+  max_items: 4
+budget:
+  max_iterations: 8
+  max_minutes_per_iteration: 60
+  max_consecutive_failures: 2
+authority:
+  merge: standing-grant
+  push: true
+  open_pr: true
+  advisor_tier: top
+  release_merge: "#3337 only (owner, 2026-11-12)"
+  prod_promote: "api 1.8.0 only (owner, 2026-11-12)"
