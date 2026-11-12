@@ -72,3 +72,16 @@ def test_undecided_calls_only_ever_go_down() -> None:
         f"{len(found)} text-mode subprocess calls name no encoding, ceiling {UNDECIDED_CEILING}. "
         'Add encoding="utf-8", or encoding=None for a tool that prints the locale code page:\n' + "\n".join(found)
     )
+
+
+def test_toolkit_has_no_undecided_call() -> None:
+    """`toolkit/` reached zero, so it holds at zero rather than sharing the ceiling.
+
+    The ceiling counts both roots together: a new undecided call in the toolkit would
+    pass while `tests/` still had headroom to spare.
+    """
+    found = [call for call in _all_undecided() if call.startswith("toolkit/")]
+    assert not found, (
+        'text-mode subprocess calls under toolkit/ must name an encoding: add encoding="utf-8", '
+        "or encoding=None for a tool that prints the locale code page:\n" + "\n".join(found)
+    )
