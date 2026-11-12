@@ -12,11 +12,11 @@ Three verdicts, never two:
     mechanical      every condition holds at one verified head sha
     not-mechanical  evaluated, and some condition does not hold: the PR takes
                     the normal review path
-    unknown         something could not be read or parsed: fails closed
-                    (two exceptions on a product's Gitea: it answers with an HTTP
-                    error, and the commit it could not place is not proven, so
-                    not-mechanical; it cannot be reached at all, a connection error
-                    or timeout, which is not a ForgeError, so unknown)
+    unknown         something could not be read or parsed: fails closed. On a
+                    product's Gitea that is an HTTP error status, a connection
+                    error or a timeout, the same as on GitHub (#3288). Missing
+                    Gitea settings are not a failed read: a configuration absence
+                    is not-mechanical, with ERROR / WHY / FIX
 
 The class itself (env, files, version path, tag pattern) is declared in the
 reviewer registry, `mechanical`, and read from there; this module names none of
@@ -36,7 +36,7 @@ from typing import Any, Protocol
 
 import yaml
 
-from toolkit.features.forge_adapter import ForgeAdapter, ForgeError, GitHubForge, Runner, adapter_for
+from toolkit.features.forge_adapter import ForgeAdapter, ForgeError, ForgeReadError, GitHubForge, Runner, adapter_for
 from toolkit.features.product_contract import ContractError
 from toolkit.features.product_registry import Product
 
@@ -312,13 +312,16 @@ def _provenance(forge: ForgeAdapter, old: str, new: str) -> str | None:
     never from a generator. A revert rolls back by building a newer commit, which
     passes; going back to an older image is a merge a human makes.
 
-    A `ForgeError` means the forge could not place a commit or answer: `evaluate` words it.
+    A `ForgeError` means the forge answered and could not place a commit: `evaluate` words
+    it. A `ForgeReadError` means it did not answer: it passes through, and the verdict is `unknown`.
     """
     sha = _commit(forge, new)
     if not forge.is_on_default_branch(sha):
         return f"{sha} is not on {forge.repository}'s default branch"
     try:
         previous = _commit(forge, old)
+    except ForgeReadError:
+        raise  # a read that failed says nothing about the pin: `evaluate` reads it as `unknown`
     except ForgeError as exc:
         raise ForgeError(f"the current pin cannot be placed: {exc}") from None
     if not forge.is_ahead_of(previous, sha):
@@ -359,6 +362,8 @@ def _proven(shape: Shape, forge_for: ForgeFor, products: Mapping[str, Product]) 
         return Shape(NOT_MECHANICAL, str(exc), app=shape.app, old=shape.old, new=shape.new)
     try:
         why = _provenance(forge, shape.old or "", shape.new or "")
+    except ForgeReadError:
+        raise  # not a refusal: the forge could not be read, so `evaluate` judges `unknown`
     except ForgeError as exc:
         why = _unproven(forge, shape.new or "", exc)
     return Shape(NOT_MECHANICAL, why, app=shape.app, old=shape.old, new=shape.new) if why else shape

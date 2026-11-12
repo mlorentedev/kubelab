@@ -18,6 +18,7 @@ import re
 from typing import Any
 
 import pytest
+import requests
 import yaml
 
 from toolkit.features.deploy_shape import (
@@ -501,14 +502,17 @@ class FakeGitea:
         self.ahead = ahead
         old_short = current_version("web").split("-", 1)[1]
         self.commits = commits if commits is not None else {SHORT: FULL, old_short: old_full("web")}
-        self.fail: GiteaError | None = None
+        #: A read that fails, by what it reads: "get_repo", or "pin" for the commit the PR moved off.
+        self.fail: dict[str, Exception] = {}
 
     def get_repo(self, owner: str, name: str) -> dict[str, str]:
-        if self.fail:
-            raise self.fail
+        if "get_repo" in self.fail:
+            raise self.fail["get_repo"]
         return {"default_branch": "main"}
 
     def get_commit(self, owner: str, name: str, ref: str) -> str | None:
+        if "pin" in self.fail and ref == current_version("web").split("-", 1)[1]:
+            raise self.fail["pin"]
         return self.commits.get(ref)
 
     def compare_ahead(self, owner: str, name: str, base: str, head: str) -> int:
@@ -563,24 +567,60 @@ class TestEvaluateGitea:
         shape = self.judge(decl, gitea_products, gitea)
         assert shape.verdict == "not-mechanical" and "resolved to" in shape.reason, shape.reason
 
-    def test_a_gitea_that_cannot_answer_is_refused_with_error_why_and_fix(self, decl, gitea_products) -> None:
+    @pytest.mark.parametrize(
+        ("reads", "failure"),
+        [
+            ("get_repo", GiteaError("Gitea API GET /repos/personal/web -> 502: Bad Gateway", 502)),
+            ("get_repo", requests.ConnectionError("connection refused")),
+            ("get_repo", requests.Timeout("read timed out")),
+            # The pin is read after the first proof; a failure there must not be reworded into a refusal.
+            ("pin", GiteaError("Gitea API GET /repos/personal/web/git/commits/abc -> 502: Bad Gateway", 502)),
+            ("pin", requests.ConnectionError("connection refused")),
+            ("pin", requests.Timeout("read timed out")),
+        ],
+        ids=["502", "connection-error", "timeout", "pin-502", "pin-connection-error", "pin-timeout"],
+    )
+    def test_a_gitea_that_cannot_be_read_is_unknown_however_it_fails(
+        self, decl, gitea_products, reads: str, failure: Exception
+    ) -> None:
+        """An outage proves nothing about the PR, so the verdict is `unknown` (#3288), as on the GitHub path."""
         gitea = FakeGitea(merged_and_forward())
-        gitea.fail = GiteaError("Gitea API GET /repos/personal/web answered 502")
+        gitea.fail = {reads: failure}
         shape = self.judge(decl, gitea_products, gitea)
-        assert shape.verdict == "not-mechanical"
-        assert all(part in shape.reason for part in ("ERROR:", "WHY:", "FIX:")), shape.reason
-        assert "502" in shape.reason
+        assert shape.verdict == "unknown", shape.reason
+        assert str(failure) in shape.reason, shape.reason
+
+    def test_the_github_path_reads_an_http_failure_as_unknown(self, decl, products) -> None:
+        """The reference the Gitea cases are held to: the same failure, on the product's GitHub repository."""
+        routes = routes_for("web", "mlorentedev/web")
+        routes[f"repos/mlorentedev/web/commits/{SHORT}"] = RuntimeError("HTTP 502")
+        assert evaluate(7, REPO, FakeApi(routes), decl, products).verdict == "unknown"
 
     def test_a_gitea_the_judge_cannot_reach_is_refused_with_error_why_and_fix(
         self, decl, gitea_products, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """The default factory reads GITEA_URL and the repo_reader token: unset, the product is not proven."""
+        """The default factory reads GITEA_URL and the repo_reader token: unset, the product is not proven.
+
+        Missing settings are a configuration absence, not an outage (#3288): `not-mechanical`, never `unknown`.
+        """
         monkeypatch.delenv("GITEA_URL", raising=False)
         monkeypatch.delenv("GITEA_REPO_READER_TOKEN", raising=False)
         shape = evaluate(7, REPO, FakeApi(routes_for("web", "mlorentedev/web")), decl, gitea_products)
         assert shape.verdict == "not-mechanical"
         assert all(part in shape.reason for part in ("ERROR:", "WHY:", "FIX:")), shape.reason
         assert "GITEA_URL" in shape.reason
+
+    @pytest.mark.parametrize("unset", ["GITEA_URL", "GITEA_REPO_READER_TOKEN"])
+    def test_either_missing_setting_alone_is_not_mechanical_with_error_why_and_fix(
+        self, decl, gitea_products, monkeypatch: pytest.MonkeyPatch, unset: str
+    ) -> None:
+        monkeypatch.setenv("GITEA_URL", "https://forge.invalid")
+        monkeypatch.setenv("GITEA_REPO_READER_TOKEN", "not-a-real-token")
+        monkeypatch.delenv(unset)
+        shape = evaluate(7, REPO, FakeApi(routes_for("web", "mlorentedev/web")), decl, gitea_products)
+        assert shape.verdict == "not-mechanical"
+        assert all(part in shape.reason for part in ("ERROR:", "WHY:", "FIX:")), shape.reason
+        assert unset in shape.reason
 
 
 class TestGhOverApi:
