@@ -24,7 +24,8 @@ import yaml
 DEFAULTS = Path("infra/ansible/roles/k3s_server/defaults/main.yml")
 THRESHOLD_KEY = "k3s_traefik_access_log_min_duration"
 STREAM = '{container="traefik"} | json | __error__=""'
-_ROUTER = re.compile(r"^(?P<ns>[a-z0-9]+)-(?P<name>.+)-(?P<hash>[0-9a-f]{20})@kubernetescrd$")
+# Anchored on the right: a namespace may hold hyphens (`kube-system`), a hash never does.
+_ROUTER = re.compile(r"^(?P<prefix>.+)-(?P<hash>[0-9a-f]{20})@kubernetescrd$")
 _UNITS = {"ns": 1, "us": 10**3, "ms": 10**6, "s": 10**9, "m": 60 * 10**9, "h": 3600 * 10**9}
 
 
@@ -98,7 +99,7 @@ def summarize(results: Mapping[str, list[dict[str, Any]]], routes: Sequence[str]
     seen: set[str] = set()
     for router, count in counts.items():
         m = _ROUTER.match(router)
-        name = m["name"] if m else router
+        name = _route_of(m["prefix"], routes) if m else router
         seen.add(name)
         rows.append(
             Row(
@@ -115,6 +116,14 @@ def summarize(results: Mapping[str, list[dict[str, Any]]], routes: Sequence[str]
         )
     rows += [Row(route=r, router=None, declared=True) for r in routes if r not in seen]
     return sorted(rows, key=lambda r: (-(r.max_s or 0), r.route))
+
+
+def _route_of(prefix: str, routes: Sequence[str]) -> str:
+    """The declared route a router's `<namespace>-<name>` prefix ends with, longest first."""
+    for route in sorted(routes, key=len, reverse=True):
+        if prefix.endswith(f"-{route}"):
+            return route
+    return prefix
 
 
 def ingressroutes(docs: Iterable[Mapping[str, Any]]) -> list[str]:

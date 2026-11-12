@@ -126,6 +126,7 @@ def list_nodes(ssh_target: str, container: str = "headscale") -> list[Node]:
         ],
         capture_output=True,
         text=True,
+        encoding="utf-8",
     )
     if result.returncode != 0:
         raise HeadscaleUnavailableError(f"could not ask headscale on {ssh_target}: {result.stderr.strip()}")
@@ -191,6 +192,7 @@ def _headscale(ssh_target: str, args: str, container: str = "headscale") -> str:
         ],
         capture_output=True,
         text=True,
+        encoding="utf-8",
     )
     if result.returncode != 0:
         raise HeadscaleUnavailableError(f"headscale {args} failed: {result.stderr.strip()}")

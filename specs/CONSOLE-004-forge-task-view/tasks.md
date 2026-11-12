@@ -31,19 +31,19 @@ created: "2026-10-21"
 
 ### 1. Read model and adapters
 
-- [ ] [P] [AC1] Contract tests for one read-adapter interface against recorded GitHub and Gitea responses
+- [x] [P] [AC1] Contract tests for one read-adapter interface against recorded GitHub and Gitea responses ✓ 2026-10-22 (#2635)
   - [x] ✓ 2026-10-22 Reader interface, unreachable-source error and the contract runner, with the recorded GitHub fixture (#2635)
   - [x] ✓ 2026-10-22 Gitea fixture (shape recorded from the live forge, values neutralised by hand) run through the same contract
   - [x] ✓ 2026-10-22 Pin the request in the contract: path and query are asserted per forge, mutation-proven (PR-Agent finding on #2635)
   - [x] ✓ 2026-10-22 Forge-neutral contract: expected items and counts are parameters (PR-Agent finding on #2635)
-- [ ] [AC1] Atlas migration in the `infra.postgres` tenant: items, event table, per-source `as_of` and reachability
+- [x] [AC1] Atlas migration in the `infra.postgres` tenant: items, event table, per-source `as_of` and reachability ✓ 2026-11-02 (#2933)
   - [x] ✓ 2026-11-02 Migration (#2933); the API connects as its own `api` tenant (#2932), decided by the operator over ADR-051 D2's owner role
-- [ ] [AC1] Implement the Gitea and GitHub adapters to make the contract tests pass
+- [x] [AC1] Implement the Gitea and GitHub adapters to make the contract tests pass ✓ 2026-11-12
   - [x] ✓ 2026-10-22 GitHub adapter: pagination, `since`, token only when set and never sent to another host (#2635)
   - [x] ✓ 2026-10-22 Gitea adapter: issues and pull requests are two listings, either failing fails the read
   - [x] ✓ 2026-11-01 A `read:issue` credential for the Gitea reader of its own: `issue_reader_token`, a third token on the reviewer's account (no new account), minted by `beelink_services` provisioning from `token_scopes.issue_reader`, catalogued, rotatable with `make gitea-rotate-token TOKEN=issue_reader`. No expiry is recorded because Gitea's token API has no expiry field (as `bot_token`). The token exists only after `make provision NODE=bee ENV=prod TAGS=gitea` runs
   - [x] ✓ 2026-11-01 [AC4] Deliver `issue_reader_token` to the API: `FORGE_GITEA_TOKEN` in `api-secrets` (optional, since staging has no Gitea token and the API starts without it), read by `config.Forge`, with `tests/test_forge_credentials_delivery.py` pinning that no credential lands in a ConfigMap. No NetworkPolicy is needed: NET-002 is ingress-only and the API is the caller, so egress is not restricted
-  - [ ] [AC4] Measure the grant: the first live read of an issue list with `type=pulls` confirms `read:issue` alone suffices; a 403 widens `token_scopes.issue_reader` deliberately, with `ISSUE_READER_SCOPES`
+  - [x] ✓ 2026-11-12 [AC4] Measure the grant: the first live read of an issue list with `type=pulls` confirms `read:issue` alone suffices; a 403 widens `token_scopes.issue_reader` deliberately, with `ISSUE_READER_SCOPES`. Measured in staging (#3267, the mint step below): its token holds `read:issue` only, and all five Gitea sources read reachable. `ListItems` reads `type=issues` then `type=pulls` and fails the whole read if either fails, so the pulls listing answered 200 under that grant
   - [x] ✓ 2026-11-01 [AC4] The webhook receiver's host passes Gitea's `ALLOWED_HOST_LIST` without widening it: #2887 pinned Gitea's container to public resolvers (lesson-682), so the receiver needs a name that resolves to a public address. That also means Gitea cannot resolve `*.staging.kubelab.live`, so a Gitea webhook never reaches staging, and AC5's probe must account for it
 - [x] [AC1] Regression test: a source that is down renders unreachable with its last read time, never empty ✓ 2026-11-06
 - [ ] [P] [AC4] Webhook receiver: reject an invalid HMAC, store the event before projecting it
@@ -81,7 +81,8 @@ created: "2026-10-21"
 
 ### 4. Observability
 
-- [ ] [P] [AC6] Structured log events for freshness, webhook failures, reconcile duration and outbox depth, through Vector to Loki
+- [x] [P] [AC6] Structured log events for freshness, webhook failures and reconcile duration, through Vector to Loki ✓ 2026-11-12 (#3342)
+- [ ] [P] [AC6] Outbox depth as a structured event (the pending deliveries the projector has not marked)
 - [ ] [AC6] Read-only Postgres role on a counts-only view, a Grafana datasource, and the dashboard (throughput, queue age, time to first review, time with a red CI, items by status, priority and area)
 - [ ] [AC6] The datasource credential reaches Grafana through a Secret (`secureJsonData`, read from env or file), never the plain `grafana-datasources` ConfigMap, and a change to it restarts Grafana (generated name or explicit restart)
 - [ ] [AC6] Grafana alert for a source not read within the declared bound
@@ -103,6 +104,8 @@ created: "2026-10-21"
   - [x] ✓ 2026-11-12 Code, tests and the rotation path (`store_env`), three mutations red
   - [x] ✓ 2026-11-12 Mint (`make provision NODE=bee ENV=prod TAGS=gitea`, `changed=0` on the rerun), recorded by #3331, `make apply-secrets ENV=staging`: no `no reader for this forge` since the API restarted, all five Gitea sources reachable with a fresh `as_of`, and `personal/resume` serves 76 issues against a Gitea page of 50
 - [ ] A8 usage counter (ADR-066 A8, ADR-074 sequence step 2), table `console_usage` keyed by identity and UTC day, written on `GET /console/` only: one daily row per operator identity read from `Remote-User`, in its own table outside the rebuildable projection and covered by the backup. It ships with the first prod promote of the console or right after it: A8's 14 days run from the day the console is live in prod (`console.kubelab.live`, api 1.4.0), and a day of use that was not recorded cannot be replayed
+  - [x] ✓ 2026-11-12 Shipped (#3334) and live in prod with api 1.8.0 (#3351): prod Loki shows the `console_usage` migration applied at 07:03Z
+  - [ ] Read back one row for an operator identity and today's UTC day after a visit to `console.kubelab.live/console/`; a table that exists is not a write path that runs
 - [ ] Read side of A8: a command that reports the longest run of days in any 14 consecutive with a `console_usage` row, so the gate below is read from the counter and not from memory
 - [ ] Hand over to the Vikunja retirement (#2587) only when both of its gates hold: parity, meaning the narrow writes of section 3 have shipped, and the operator has opened the console on at least 5 of 14 consecutive days, read from the counter. Until then Vikunja keeps running as the fallback A8 reverts to
 

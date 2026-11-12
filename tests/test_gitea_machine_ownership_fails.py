@@ -16,7 +16,7 @@ from tests.test_gitea_repo_reconcile import _NoForgeAdmin
 from toolkit.features.gitea_client import GiteaError
 from toolkit.features.gitea_repos import ReconcilePlan, RepoSpec
 
-IDENTITIES = {"bot": "hefesto", "reviewer": "mentor", "agent": "dedalo"}
+IDENTITIES = {"bot": "hefesto", "reviewer": "mentor", "agent": "dedalo", "renovate": "proteo"}
 
 
 class _Forge(_NoForgeAdmin):

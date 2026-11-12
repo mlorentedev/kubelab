@@ -1,4 +1,4 @@
-"""`registry.tag_exists` on a registry that is not Docker Hub (IDP-053 D3).
+"""`registry.tag_exists`, tri-state on Docker Hub and on any other registry (IDP-053 D3, #3272).
 
 Tri-state, with a real transport: an anonymous OCI ``HEAD /v2/<name>/manifests/<tag>``
 answers ``True`` (200) or ``False`` (404); a private registry (401/403), any other
@@ -94,3 +94,55 @@ class TestDockerHubKeepsItsOwnRoute:
 
         assert http.calls == []
         assert "hub.docker.com" in get.call_args.args[0]
+
+
+HUB = "docker.io/mlorentedev"
+
+
+def _hub_answers(monkeypatch: pytest.MonkeyPatch, status: int | Exception) -> MagicMock:
+    """Make the Docker Hub tags API answer with one status (or raise), recording the call."""
+    get = MagicMock(side_effect=status) if isinstance(status, Exception) else MagicMock(return_value=httpx.Response(status))
+    monkeypatch.setattr(registry.httpx, "get", get)
+    return get
+
+
+class TestTagExistsOnDockerHubIsTriState:
+    """Hub answers the same three ways as any other registry: present, absent, or unverified.
+
+    Reading a 429/5xx as "absent" made ``promote`` refuse an existing tag with a message
+    saying it does not exist (#3272).
+    """
+
+    def test_200_is_true(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _hub_answers(monkeypatch, 200)
+
+        assert registry.tag_exists(HUB, "kubelab-web", "1.0.0") is True
+
+    def test_404_is_false(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _hub_answers(monkeypatch, 404)
+
+        assert registry.tag_exists(HUB, "kubelab-web", "1.0.0") is False
+
+    @pytest.mark.parametrize("status", [401, 403, 429, 500, 502, 503])
+    def test_any_other_answer_is_none_naming_the_registry_and_status(
+        self, status: int, monkeypatch: pytest.MonkeyPatch, warnings: MagicMock
+    ) -> None:
+        _hub_answers(monkeypatch, status)
+
+        assert registry.tag_exists(HUB, "kubelab-web", "1.0.0") is None
+
+        (message,), _ = warnings.call_args
+        assert "docker.io" in message
+        assert "unverified" in message
+        assert str(status) in message
+
+    def test_an_unreachable_hub_is_none_naming_the_registry(
+        self, monkeypatch: pytest.MonkeyPatch, warnings: MagicMock
+    ) -> None:
+        _hub_answers(monkeypatch, httpx.ConnectError("no route"))
+
+        assert registry.tag_exists(HUB, "kubelab-web", "1.0.0") is None
+
+        (message,), _ = warnings.call_args
+        assert "docker.io" in message
+        assert "unverified" in message

@@ -658,6 +658,10 @@ class ReconcilePlan:
     # a forge without one plans exactly as it did before the field existed.
     review_teams_to_converge: tuple[str, ...] = ()
     reviewer: str | None = None
+    # The Renovate run's write team (IDP-036 AC6), shaped exactly like the pair above:
+    # empty and None while `apps.auth.identities.renovate` is not declared.
+    renovate_teams_to_converge: tuple[str, ...] = ()
+    renovate: str | None = None
     repos_to_configure: tuple[SettingsChange, ...] = ()
     repos_to_hook: tuple[WebhookChange, ...] = ()
     # Declared writers to make collaborators at `WRITER_PERMISSION` (AUTH-022).
@@ -717,6 +721,7 @@ class ReconcilePlan:
             and not self.repos_to_migrate
             and not self.teams_to_converge
             and not self.review_teams_to_converge
+            and not self.renovate_teams_to_converge
             and not self.repos_to_configure
             and not self.repos_to_hook
             and not self.collaborators_to_grant
@@ -767,6 +772,8 @@ def plan_reconcile(
     *,
     reviewer: str | None = None,
     existing_review_teams: Mapping[str, tuple[Mapping[str, Any] | None, Sequence[str]]] | None = None,
+    renovate: str | None = None,
+    existing_renovate_teams: Mapping[str, tuple[Mapping[str, Any] | None, Sequence[str]]] | None = None,
     existing_repo_refs: Mapping[str, bool],
     existing_collaborators: Mapping[str, Mapping[str, tuple[bool, str]] | None],
     declared_protection: BranchProtection | None = None,
@@ -865,6 +872,11 @@ def plan_reconcile(
     organization missing from the reads raises `KeyError`. Each entry is the org's
     `reviewers` team (None when absent) and that team's member logins.
 
+    `renovate` and `existing_renovate_teams` are the same pair for the Renovate run's
+    write team (IDP-036 AC6): optional while `apps.auth.identities.renovate` is
+    undeclared, and complete once it is, each entry being the org's `renovate` team
+    (None when absent) and its member logins.
+
     `existing_collaborators` maps every declared repository WITH writers to
     `{login: (is_collaborator, permission)}` for each of its declared writers, or to
     None when the forge does not hold the repository yet (AUTH-022). Required and
@@ -889,6 +901,11 @@ def plan_reconcile(
         raise ValueError(
             f"a reviewer ({reviewer!r}) is declared but existing_review_teams was not read. Planning "
             "nothing for it would report a forge where it can review no PR as converged."
+        )
+    if renovate and existing_renovate_teams is None:
+        raise ValueError(
+            f"a Renovate account ({renovate!r}) is declared but existing_renovate_teams was not read. "
+            "Planning nothing for it would report a forge where it can write to no repository as converged."
         )
     declared_orgs = set(declared)
     declared_repos = {f"{org}/{spec.name}" for org, specs in declared.items() for spec in specs}
@@ -943,6 +960,23 @@ def plan_reconcile(
                     READ_TEAM,
                     members=existing_review_teams[org][1],
                     member=reviewer,
+                )
+            )
+        )
+
+    # Every declared organization, as for the reviewer: Renovate opens PRs wherever the
+    # forge holds a repository, and an organization declared later inherits the team.
+    renovate_teams_to_converge: tuple[str, ...] = ()
+    if renovate and existing_renovate_teams is not None:
+        renovate_teams_to_converge = tuple(
+            sorted(
+                org
+                for org in declared_orgs
+                if team_needs_convergence(
+                    existing_renovate_teams[org][0],
+                    RENOVATE_TEAM,
+                    members=existing_renovate_teams[org][1],
+                    member=renovate,
                 )
             )
         )
@@ -1115,6 +1149,8 @@ def plan_reconcile(
         teams_to_converge=teams_to_converge,
         review_teams_to_converge=review_teams_to_converge,
         reviewer=reviewer,
+        renovate_teams_to_converge=renovate_teams_to_converge,
+        renovate=renovate,
         repos_to_configure=repos_to_configure,
         repos_to_hook=repos_to_hook,
         collaborators_to_grant=collaborators_to_grant,
@@ -1570,6 +1606,11 @@ def format_plan(plan: ReconcilePlan) -> str:
         lines.append(
             f"  ~ team {team_org}/{READ_TEAM.name}   converge to read over all repositories, member {plan.reviewer}"
         )
+    for team_org in plan.renovate_teams_to_converge:
+        lines.append(
+            f"  ~ team {team_org}/{RENOVATE_TEAM.name}   converge to write over all repositories, "
+            f"member {plan.renovate}"
+        )
     for grant in plan.collaborators_to_grant:
         lines.append(
             f"  ~ collaborator {grant.full_name}   {grant.login}: {grant.live or 'none'} -> {WRITER_PERMISSION}"
@@ -1875,6 +1916,11 @@ WRITE_TEAM = TeamGrant(name="reconcilers", permission="write", can_create_org_re
 #: (`specs/TOOL-080-forge-pr-reviewer/verification.md`).
 READ_TEAM = TeamGrant(name="reviewers", permission="read", can_create_org_repo=False)
 
+#: The Renovate run's team (IDP-036 AC6). Write on every unit so the account can push
+#: its branches and open PRs, and no repository creation: it owns nothing (ADR-065 D1),
+#: which `reconcilers` would not guarantee.
+RENOVATE_TEAM = TeamGrant(name="renovate", permission="write", can_create_org_repo=False)
+
 #: The write team's fields under their original names, which the CLI and the test
 #: suite address directly.
 TEAM_NAME = WRITE_TEAM.name
@@ -2037,6 +2083,7 @@ class ExecutionReport:
     repos_migrated: list[str] = field(default_factory=list)
     teams_ensured: list[str] = field(default_factory=list)
     review_teams_ensured: list[str] = field(default_factory=list)
+    renovate_teams_ensured: list[str] = field(default_factory=list)
     repos_configured: list[str] = field(default_factory=list)
     # `(full_name, url)`: a repository carries one hook per declaration (TOOL-080).
     repos_hooked: list[tuple[str, str]] = field(default_factory=list)
@@ -2112,9 +2159,9 @@ def ensure_team(
 
     if grant.can_create_org_repo is False and team.get("can_create_org_repo"):
         raise TeamPermissionError(
-            f"team {org}/{name} can create repositories, and it must not: it is a read team, and "
-            "read access is what contains its member. A member of a team with can_create_org_repo set "
-            "creates repositories it then owns, which is the opposite of what this grant declares."
+            f"team {org}/{name} can create repositories, and it must not: its grant declares no "
+            "repository creation. A member of a team with can_create_org_repo set creates repositories "
+            "it then owns, which is the opposite of what this grant declares (ADR-065 D1)."
         )
     if grant.can_create_org_repo and not team.get("can_create_org_repo"):
         raise TeamPermissionError(
@@ -2131,7 +2178,8 @@ def ensure_team(
             f"team {org}/{name} grants repo.code {units.get('repo.code')!r}, expected "
             f"{grant.permission!r}. For the write team that means it can create repositories but could "
             "not push to them, and the refusal is the same 403 as a missing token scope -- the trap "
-            "AUTH-004 AC5 already recorded once. For the read team it means its member can write."
+            "AUTH-004 AC5 already recorded once. For the read team it means its member can write, and for "
+            "the Renovate team that it cannot push its branches."
         )
 
     # THE SCOPE, WHICH EVERY CHECK ABOVE TAKES FOR GRANTED. A permission is a pair
@@ -2381,6 +2429,14 @@ def execute(
             report.review_teams_ensured.append(org)
         except Exception as exc:  # noqa: BLE001 - every failure is recorded, whatever its type
             _handle_failure(report, f"team {org}/{READ_TEAM.name}", exc)
+
+    # The Renovate run's write team, recorded the same way and for the same reason.
+    for org in sorted(set(plan.renovate_teams_to_converge) - failed_orgs):
+        try:
+            ensure_team(admin, org, member=plan.renovate, grant=RENOVATE_TEAM)
+            report.renovate_teams_ensured.append(org)
+        except Exception as exc:  # noqa: BLE001 - every failure is recorded, whatever its type
+            _handle_failure(report, f"team {org}/{RENOVATE_TEAM.name}", exc)
 
     for repo in plan.repos_to_create:
         if repo.org in failed_orgs:

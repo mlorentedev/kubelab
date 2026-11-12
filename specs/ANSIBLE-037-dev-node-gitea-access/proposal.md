@@ -20,6 +20,17 @@ The `dev_node` role provisions ace2 as the self-hosted CDE ([ADR-058](../../docs
 
 After this change, `make provision NODE=ace2 ENV=staging` leaves ace2 able to clone and push to a Gitea repository with no manual step, and a second run reports `changed=0`. The credential is the node's own, resolved from the identity SSOT, and removing it from Gitea makes the access fail until the node is re-provisioned.
 
+### D1 amendment (2026-11-12, owner decision on #1075): the node's key goes on the agents' account
+
+D1 below chose `hefesto` because on 2026-09-01 the identity map had no agent account. Since ADR-062's 2026-11-03 amendment, agents author as `apps.auth.identities.agent`, and #2578 moved every agent git path to that account. A key on `hefesto` would let an agent on ace2 push as the provisioning bot, which holds team write on every `personal/` repository, outside the attribution #2578 set up. So:
+
+- The per-node key is registered on the agents' account (`apps.auth.identities.agent`), not on `hefesto`. Its pushes reach a protected default branch only through a pull request, as with `make gitea-git`.
+- Registration runs from the controller through the admin API (`POST /admin/users/{agent}/keys`) with the superadmin at provision time, because `agent_token` has no `write:user`. The private half is still generated on the node and never transits.
+- D2's reasoning (a per-node key rather than a token at rest) is unchanged; only the account changes.
+- The role on master still registers on `hefesto` with `bot_token`. Changing it, and verifying AC1, AC4 and AC6 against the new account, is the remaining implementation work.
+
+The D1 text that follows is kept as the record of the original reasoning.
+
 ### D1 — the node authenticates as the machine identity, not as a human
 
 **Decision: ace2 provisions `hefesto` (`apps.auth.identities.machine`).** #1075 asks for this to be recorded rather than assumed, and the constraints already settle it:

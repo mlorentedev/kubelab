@@ -116,6 +116,21 @@ keeps one public name.
 The installation tokens the API mints from the App key last one hour and are
 renewed by the API; nothing to rotate.
 
+## Read the events
+
+The API writes one JSON line per forge event, with a stable `event` field, next
+to its text log (#3342). Query them in Grafana's Loki datasource:
+
+| Event | Written | LogQL |
+|---|---|---|
+| `forge_source_freshness` | per source, after each read attempt: `source`, `reachable`, `as_of`, `age_seconds` (no `as_of` for a source never read), `error` | `{namespace="kubelab", container="api"} \| json \| event="forge_source_freshness" \| reachable="false"` |
+| `forge_reconcile_cycle` | per pass: `scope` (`full`, or `retry` for the failed sources alone), `sources`, `failed`, `duration_ms` | `{namespace="kubelab", container="api"} \| json \| event="forge_reconcile_cycle" \| line_format "{{.scope}} {{.duration_ms}}ms {{.failed}}/{{.sources}}"` |
+| `forge_webhook_failure` | per refused or unprojected delivery: `forge`, `reason` (`signature`, `sources`, `store`, `unreadable`, `projection`), `delivery`, `status`, `error` | `sum by (reason) (count_over_time({namespace="kubelab", container="api"} \| json \| event="forge_webhook_failure" [1h]))` |
+
+A `signature` failure carries no `delivery`: the caller was not authenticated and
+chose every header. The oldest source, for an alert on staleness:
+`max by (source) (max_over_time({namespace="kubelab", container="api"} | json | event="forge_source_freshness" | unwrap age_seconds [20m]))`.
+
 ## Verify
 
 ```bash

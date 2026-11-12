@@ -52,6 +52,30 @@ class RegistryCredential:
     token: str = field(repr=False)
 
 
+class BearerCache:
+    """The pull bearers one proof has been issued, per ``(host, repository)``; a token never appears in its repr.
+
+    A bearer is scoped to one repository and valid for all its tags, so a caller reading many tags of
+    one image hands the same cache to every ``tag_digest`` call and trades for a bearer once (#3287).
+    Make one per proof: nothing is kept between proofs, and a long-lived credential never enters it.
+    """
+
+    def __init__(self) -> None:
+        self._tokens: dict[tuple[str, str], str] = {}
+
+    def __repr__(self) -> str:
+        return f"BearerCache({len(self._tokens)} bearers)"
+
+    def get(self, host: str, repository: str) -> str | None:
+        return self._tokens.get((host, repository))
+
+    def put(self, host: str, repository: str, token: str) -> None:
+        self._tokens[(host, repository)] = token
+
+    def drop(self, host: str, repository: str) -> None:
+        self._tokens.pop((host, repository), None)
+
+
 def catalog_secret(key: str) -> str | None:
     """The value the secrets catalog holds at ``key`` (a product's ``pull_credential.secret``), or ``None``.
 
@@ -118,10 +142,11 @@ def tag_exists(
     exist (it would ``ImagePullBackOff``). Lives here so all registry access has
     one home. Docker Hub is read through its own API; any other registry through
     an OCI ``HEAD /v2/<name>/manifests/<tag>`` (``http`` replaces ``httpx.head``
-    for tests): 200 is ``True``, 404 ``False``, and a private registry (401/403),
-    any other answer or an unreachable host is ``None`` with a warning naming the
-    registry (IDP-053 D3). The receiver holds no registry credential (ADR-067 C2),
-    so a private image stays unverified here; ``promote`` proceeds on ``None``.
+    for tests). Both answer the same way: 200 is ``True``, 404 ``False``, and a
+    private registry (401/403), a rate limit or 5xx, any other answer or an
+    unreachable host is ``None`` with a warning naming the registry (IDP-053 D3,
+    #3272). The receiver holds no registry credential (ADR-067 C2), so a private
+    image stays unverified here; ``promote`` proceeds on ``None``.
     """
     if not registry.startswith(_ANONYMOUS_HOST):
         return _oci_tag_exists(registry, image_name, tag, http or httpx.head)
@@ -130,9 +155,17 @@ def tag_exists(
     try:
         resp = httpx.get(url, timeout=15.0)
     except httpx.HTTPError as exc:
-        logger.warning(f"Could not reach registry to verify tag ({exc}); skipping check")
+        logger.warning(f"docker.io: {image_name}:{tag} unverified, the registry is unreachable ({exc})")
         return None
-    return resp.status_code == 200
+    return _tag_answer("docker.io", image_name, tag, resp.status_code)
+
+
+def _tag_answer(host: str, image_name: str, tag: str, status: int) -> bool | None:
+    """The tri-state a tag lookup's HTTP status means: 200 present, 404 absent, anything else unverified."""
+    if status in (200, 404):
+        return status == 200
+    logger.warning(f"{host}: {image_name}:{tag} unverified, the registry answered HTTP {status}")
+    return None
 
 
 def _oci_tag_exists(registry: str, image_name: str, tag: str, http: Callable[..., httpx.Response]) -> bool | None:
@@ -144,10 +177,7 @@ def _oci_tag_exists(registry: str, image_name: str, tag: str, http: Callable[...
     except httpx.HTTPError as exc:
         logger.warning(f"{host}: {image_name}:{tag} unverified, the registry is unreachable ({exc})")
         return None
-    if resp.status_code in (200, 404):
-        return resp.status_code == 200
-    logger.warning(f"{host}: {image_name}:{tag} unverified, the registry answered HTTP {resp.status_code}")
-    return None
+    return _tag_answer(host, image_name, tag, resp.status_code)
 
 
 def tag_digest(
@@ -156,6 +186,7 @@ def tag_digest(
     tag: str,
     credential: RegistryCredential | None = None,
     http: Callable[..., httpx.Response] | None = None,
+    bearers: BearerCache | None = None,
 ) -> str | None:
     """The manifest digest a tag names, or ``None`` when it cannot be read (absent tag, refused login, no digest).
 
@@ -164,9 +195,12 @@ def tag_digest(
     API; any other registry through an OCI manifest ``HEAD``, trading ``credential``
     (or nothing, for a public package) for a bearer token when the registry asks
     (IDP-053 D3, the authenticated half). ``http`` replaces ``httpx.request`` (``httpx.get`` on Docker Hub) for tests.
+    ``bearers`` keeps the bearer between calls: a read that finds the repository's bearer there sends it
+    first, and on a 401 (it expired) trades for a new one once. Without it each call trades for its own.
     """
     if not is_docker_hub(registry):
-        return _oci_tag_digest(registry, image_name, tag, credential, http or httpx.request)
+        cache = bearers if bearers is not None else BearerCache()
+        return _oci_tag_digest(registry, image_name, tag, credential, http or httpx.request, cache)
     namespace = registry.split("/", 1)[1]
     try:
         url = f"{_HUB}/repositories/{namespace}/{image_name}/tags/{tag}"
@@ -197,26 +231,53 @@ def _oci_tag_digest(
     tag: str,
     credential: RegistryCredential | None,
     http: Callable[..., httpx.Response],
+    bearers: BearerCache,
 ) -> str | None:
     host, _, owner = registry.partition("/")
     repository = "/".join(part for part in (owner, image_name) if part)
     subject = f"{host}: the digest of {image_name}:{tag}"
     url = f"https://{host}/v2/{repository}/manifests/{tag}"
-    headers = {"Accept": _MANIFEST_TYPES}
     try:
-        resp = http("HEAD", url, headers=headers, timeout=15.0)
-        if resp.status_code == 401:
-            token = _bearer_token(host, repository, resp.headers.get("www-authenticate", ""), credential, http)
-            if token is None:
-                return None
-            resp = http("HEAD", url, headers={**headers, "Authorization": f"Bearer {token}"}, timeout=15.0)
+        resp = _manifest_head(host, repository, url, credential, http, bearers)
     except httpx.HTTPError as exc:
         logger.warning(f"{subject} is unread, the registry is unreachable ({exc})")
+        return None
+    if resp is None:
         return None
     digest = _digest_or_none(resp.headers.get("docker-content-digest")) if resp.status_code == 200 else None
     if digest is None:
         logger.warning(f"{subject} is unread, the registry answered HTTP {resp.status_code} with no sha256 digest")
     return digest
+
+
+def _manifest_head(
+    host: str,
+    repository: str,
+    url: str,
+    credential: RegistryCredential | None,
+    http: Callable[..., httpx.Response],
+    bearers: BearerCache,
+) -> httpx.Response | None:
+    """HEAD a manifest with the repository's cached bearer (none yet: anonymously); ``None`` when no bearer can be had.
+
+    A 401 means the registry wants a bearer, or the cached one expired: trade the credential for a fresh one,
+    keep it, and read once more. A 401 to that fresh bearer is final and is not kept, so a refusal never loops.
+    """
+    headers = {"Accept": _MANIFEST_TYPES}
+    cached = bearers.get(host, repository)
+    if cached is not None:
+        headers["Authorization"] = f"Bearer {cached}"
+    resp = http("HEAD", url, headers=headers, timeout=15.0)
+    if resp.status_code != 401:
+        return resp
+    bearers.drop(host, repository)
+    token = _bearer_token(host, repository, resp.headers.get("www-authenticate", ""), credential, http)
+    if token is None:
+        return None
+    resp = http("HEAD", url, headers={**headers, "Authorization": f"Bearer {token}"}, timeout=15.0)
+    if resp.status_code != 401:
+        bearers.put(host, repository, token)
+    return resp
 
 
 def _token_of(resp: httpx.Response) -> str | None:

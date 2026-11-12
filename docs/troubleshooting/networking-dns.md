@@ -211,7 +211,7 @@ sudo dscacheutil -flushcache           # macOS
 
 ```bash
 # Check Traefik dashboard
-toolkit edge logs traefik | grep error
+toolkit services logs traefik | grep error
 
 # Verify router configuration
 docker exec traefik-container cat /etc/traefik/dynamic/app-api.yml
@@ -227,7 +227,7 @@ curl http://localhost:8080/api/http/services   # Traefik API
 ENVIRONMENT=dev toolkit config generate
 
 # Restart Traefik
-toolkit edge restart traefik
+toolkit services restart traefik
 
 # Verify container labels
 docker inspect api-container | grep traefik
@@ -270,7 +270,7 @@ docker network rm mlorente-network
 docker network create mlorente-network
 
 # Restart affected services
-toolkit apps down api && toolkit apps up api
+toolkit services down api && toolkit services up api
 
 # Check firewall rules
 sudo iptables -L -n | grep DOCKER
@@ -317,7 +317,7 @@ mtr api.kubelab.live
 toolkit edge restart nginx
 
 # Check backend health
-toolkit apps logs api --no-follow | grep "slow query"
+toolkit services logs api --no-follow | grep "slow query"
 
 # Database connection pool exhaustion
 docker exec postgres-container psql -c "SELECT * FROM pg_stat_activity;"

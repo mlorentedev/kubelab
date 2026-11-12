@@ -76,7 +76,7 @@ class ForgeAdapter(Protocol):
 
 def run_gh(*args: str) -> subprocess.CompletedProcess[str]:
     try:
-        return subprocess.run(["gh", *args], capture_output=True, text=True, check=False)  # noqa: S603, S607
+        return subprocess.run(["gh", *args], capture_output=True, text=True, encoding="utf-8", check=False)  # noqa: S603, S607
     except FileNotFoundError:
         raise ContractError(
             "the gh CLI is not installed", "the product's repository is read through it", "install gh and log in"

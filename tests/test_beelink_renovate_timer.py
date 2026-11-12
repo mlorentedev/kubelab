@@ -402,6 +402,14 @@ def test_every_unit_task_runs_only_when_the_run_is_enabled(name: str) -> None:
     assert "renovate_enabled | bool" in str(_task(name)["when"])
 
 
+def test_a_failed_run_pages_and_a_later_success_clears_it() -> None:
+    # A run failing every hour would otherwise live only in the journal of an
+    # on-demand node that ships no logs (#3322).
+    unit = _unit("kubelab-renovate.service.j2")
+    assert unit["Unit"]["OnFailure"] == ["kubelab-notify@%n.service"]
+    assert unit["Unit"]["OnSuccess"] == ["kubelab-notify-recovered@%n.service"]
+
+
 def test_a_timed_out_run_does_not_leave_its_engine_running() -> None:
     unit = _unit("kubelab-renovate.service.j2")
     assert unit["Service"]["ExecStopPost"] == ["-/usr/bin/docker rm -f ${KUBELAB_RENOVATE_NAME}"]

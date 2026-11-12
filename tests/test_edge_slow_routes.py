@@ -99,11 +99,39 @@ class TestTheRows:
 
     def test_a_router_from_no_declared_route_is_still_shown(self) -> None:
         rows = esr.summarize(self._results(), ["web"], [30])
-        assert any(r.route == "gitea" and r.declared is False for r in rows)
+        # Undeclared, its namespace cannot be told from its name, so it keeps the whole prefix.
+        assert any(r.route == "kubelab-gitea" and r.declared is False for r in rows)
 
     def test_rows_are_ordered_longest_first(self) -> None:
         rows = esr.summarize(self._results(), ["web", "gitea", "api"], [30])
         assert [r.route for r in rows] == ["gitea", "web", "api"]
+
+
+class TestTheRouterName:
+    def test_a_hyphenated_namespace_still_names_the_route(self) -> None:
+        rows = esr.summarize({"count": [_vec("kube-system-traefik-dashboard-0123456789abcdef0123@kubernetescrd", 1)]},
+                             ["traefik-dashboard"], [30])  # fmt: skip
+        assert [(r.route, r.declared) for r in rows] == [("traefik-dashboard", True)]
+
+    def test_a_router_from_another_provider_keeps_its_name(self) -> None:
+        rows = esr.summarize({"count": [_vec("dashboard@internal", 1)]}, ["web"], [30])
+        assert any(r.route == "dashboard@internal" and not r.declared for r in rows)
+
+
+class TestTheDeclaredRoutes:
+    def test_they_are_read_from_the_rendered_prod_overlay(self) -> None:
+        from toolkit.features.break_glass import render
+
+        routes = esr.ingressroutes(render("prod", REPO))
+        assert {"web", "gitea", "headscale", "uptime-kuma"} <= set(routes)
+
+    def test_nothing_overrides_the_threshold_the_report_reads(self) -> None:
+        """The floor is read from the role defaults, so a play or inventory override would go unseen."""
+        import subprocess
+
+        hits = subprocess.run(["git", "grep", "-l", esr.THRESHOLD_KEY, "--", "infra"], cwd=REPO,
+                              capture_output=True, text=True, encoding="utf-8", check=False).stdout.split()  # fmt: skip
+        assert sorted(hits) == sorted([str(esr.DEFAULTS), "infra/ansible/roles/k3s_server/templates/traefik-helmconfig.yaml.j2"])
 
 
 class TestTheReport:
@@ -112,8 +140,8 @@ class TestTheReport:
         text = esr.render(rows, window="7d", bounds=[30], logged_from_ns=10**9, days=[(f"2026-11-0{d}", 1) for d in range(5, 9)])
         assert "OriginDuration" in text and "upper bound" in text
         assert "no sample" in text
-        assert "| gitea | 9a007d33" not in text  # router column is the router's own suffix
-        assert "| gitea |" in text and "> 30 s" in text
+        assert "| gitea | 4d0b79276f78ba8cd4d5 | 571 |" in text  # the router column is the router's own suffix
+        assert "> 30 s" in text
 
     def test_it_says_how_far_back_the_log_reaches(self) -> None:
         text = esr.render([], window="7d", bounds=[30], logged_from_ns=10**9, days=[("2026-11-05", 12), ("2026-11-06", 900)])
