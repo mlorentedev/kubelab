@@ -482,21 +482,21 @@
 #
 # What the node ends up holding is a keypair it GENERATED ITSELF. The private
 # half is created on ace2 and never transits; the controller only ever handles
-# the public half and the bot's API token, which stays on the controller. That
+# the public half and the superadmin's credential, which stays on it. That
 # is strictly better than either alternative the GitHub block above weighs:
 # nothing is shipped to the node, and the node holds no `write:user` credential.
 #
-# Identity is the machine account (ADR-062 D1). Blast radius on the node is
-# repositories only, and revoking it is deleting one key from one account —
-# `DELETE /user/keys/{id}`, measured to fail closed within a second (R3).
+# Identity is the agents' account (ANSIBLE-037 D1 as amended 2026-11-12,
+# #1075). Blast radius on the node is repositories only, and revoking it is
+# deleting one key from one account, measured to fail closed within a second (R3).
 #
-# Empty token ON PURPOSE, matching the GitHub block: a run without the secret
+# Empty password ON PURPOSE, matching the GitHub block: a run without the secret
 # degrades to "not configured" and skips registration rather than authenticating
 # with an empty credential.
 # =============================================================================
 
 - name: Configure git access to the private forge
-  when: dev_node_gitea_bot_token | length > 0
+  when: dev_node_gitea_admin_password | length > 0
   tags: [dev_node, gitea, identity]
   block:
     - name: Ensure the developer user's .ssh directory exists
@@ -596,27 +596,27 @@
       check_mode: false
       failed_when: _gitea_key_fp.rc != 0 and not ansible_check_mode
 
-    # Registration runs on the CONTROLLER: the bot token is the credential that
-    # can add a key to the account, and it has no business being on the node.
+    # Every forge call runs on the CONTROLLER as the superadmin: the agents'
+    # token has no `write:user`, and the superadmin's credential has no
+    # business being on the node.
     #
-    # Looked up by fingerprint, which is a hash of the key material, so the
-    # forge answers "is this key registered" itself (#1300). The role used to
-    # list every key and compare material with a Jinja regex_replace whose
-    # replacement '\2' Jinja reads as the control character chr(2), so no key
-    # ever matched. Measured on ace2 2026-10-01: the first pass POSTed the key
-    # (201, reported ok), and every pass after it POSTed again into a 422.
-    # Filtering also keeps the answer off the first page of a paginated list.
-    # Asked of the named account, not of `/user/keys`: Gitea 1.25 restricts a
-    # fingerprint query to an owner only when the path names one, so
-    # `/user/keys?fingerprint=` would also answer with the same key held by
-    # another account, and the play would report a key it never registered here.
-    - name: Look up this node's key on the machine account
+    # Keys are looked up by fingerprint, a hash of the key material, so the
+    # forge answers "is this key registered" itself (#1300). Asked of the named
+    # account, not of `/user/keys`: Gitea 1.25 restricts a fingerprint query to
+    # an owner only when the path names one, and `/user/keys` would name the
+    # superadmin. The answers are matched on the fingerprint again below, so a
+    # forge that ignored the filter cannot pass node A's key off as node B's.
+    - name: Look up this node's key on each account it may be on
       ansible.builtin.uri:
         # yamllint disable-line rule:line-length
-        url: "{{ dev_node_gitea_api_url }}/users/{{ dev_node_gitea_user }}/keys?fingerprint={{ _gitea_key_fp.stdout.split(' ')[1] | urlencode }}"
-        headers:
-          Authorization: "token {{ dev_node_gitea_bot_token }}"
+        url: "{{ dev_node_gitea_api_url }}/users/{{ item }}/keys?fingerprint={{ _gitea_key_fp.stdout.split(' ')[1] | urlencode }}"
+        url_username: "{{ dev_node_gitea_admin_user }}"
+        url_password: "{{ dev_node_gitea_admin_password }}"
+        force_basic_auth: true
         return_content: true
+      loop:
+        - "{{ dev_node_gitea_former_user }}"
+        - "{{ dev_node_gitea_user }}"
       delegate_to: localhost
       become: false
       changed_when: false
@@ -626,12 +626,36 @@
       check_mode: false
       when: _gitea_key_fp.rc == 0
 
-    - name: Register this node's public key on the machine account
+    # Gitea refuses a public key another account already holds, so the key
+    # leaves the machine account, where it lived before #1075, first. Left
+    # there, it would also let an agent push as the provisioning bot.
+    - name: Remove this node's key from the machine account
       ansible.builtin.uri:
-        url: "{{ dev_node_gitea_api_url }}/user/keys"
+        url: "{{ dev_node_gitea_api_url }}/admin/users/{{ dev_node_gitea_former_user }}/keys/{{ item.id }}"
+        method: DELETE
+        url_username: "{{ dev_node_gitea_admin_user }}"
+        url_password: "{{ dev_node_gitea_admin_password }}"
+        force_basic_auth: true
+        status_code: [204]
+      loop: >-
+        {{ (_gitea_keys.results[0].json | default([]))
+           | selectattr('fingerprint', 'equalto', _gitea_key_fp.stdout.split(' ')[1]) | list }}
+      loop_control:
+        label: "{{ item.id }}"
+      delegate_to: localhost
+      become: false
+      no_log: true
+      register: _gitea_key_delete
+      changed_when: true
+      when: _gitea_key_fp.rc == 0
+
+    - name: Register this node's public key on the agents' account
+      ansible.builtin.uri:
+        url: "{{ dev_node_gitea_api_url }}/admin/users/{{ dev_node_gitea_user }}/keys"
         method: POST
-        headers:
-          Authorization: "token {{ dev_node_gitea_bot_token }}"
+        url_username: "{{ dev_node_gitea_admin_user }}"
+        url_password: "{{ dev_node_gitea_admin_password }}"
+        force_basic_auth: true
         body_format: json
         body:
           title: "{{ dev_node_gitea_key_title }}"
@@ -648,13 +672,10 @@
       # Idempotence is by KEY MATERIAL, through its fingerprint, not by title.
       # A title match with different material would leave the node holding a
       # key the forge does not know, and the play would still report changed=0.
-      # The forge filters by fingerprint (FindPublicKeyOptions in Gitea's
-      # routers/api/v1/user/key.go); matching it again here keeps a forge that
-      # ignored the filter from passing node A's key off as node B's.
       when:
         - _gitea_key_fp.rc == 0
         - >-
-          _gitea_keys.json | default([])
+          _gitea_keys.results[1].json | default([])
           | selectattr('fingerprint', 'equalto', _gitea_key_fp.stdout.split(' ')[1])
           | list | length == 0
 
