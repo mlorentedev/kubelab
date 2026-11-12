@@ -237,3 +237,39 @@ def test_a_token_with_no_declared_grant_is_unchecked_not_ok() -> None:
     client.session = FakeSession(_all_converged())  # type: ignore[assignment]
 
     assert check_gitea_token_scopes(client, IDENTITIES, declared, env="prod") != 0
+
+
+def _run_with(identities: dict[str, str], script: dict[tuple[str, str], FakeResponse]) -> tuple[int, FakeSession]:
+    from toolkit.cli.services import check_gitea_token_scopes
+    from toolkit.features.gitea_client import GiteaBasicAuthClient
+
+    client = GiteaBasicAuthClient("https://gitea.example", "manu", "pw")
+    session = FakeSession(script)
+    client.session = session  # type: ignore[assignment]
+    return check_gitea_token_scopes(client, identities, DECLARED, env="prod"), session
+
+
+def test_an_undeclared_identity_is_not_declared_and_never_listed(capsys) -> None:
+    """#3279: no login named means no account and nothing minted, a normal state, not a failed read.
+
+    The Renovate account (#1384) is the first: every role task skips until the operator
+    names `apps.auth.identities.renovate`. Listing `/users/?/tokens` read as unchecked.
+    """
+    identities = {k: v for k, v in IDENTITIES.items() if k != "reviewer"}
+    script = {k: v for k, v in _all_converged().items() if k != ("GET", "/users/argos/tokens")}
+
+    code, session = _run_with(identities, script)
+
+    assert code == 0
+    assert not [p for _, p in session.calls if "?" in p or "argos" in p], session.calls
+    assert "not declared, nothing minted" in capsys.readouterr().out
+
+
+def test_a_declared_identity_whose_listing_is_not_found_stays_unchecked() -> None:
+    """A 404 for a login the operator DID name is a real failure: the account is missing."""
+    script = _all_converged()
+    script[("GET", "/users/argos/tokens")] = FakeResponse(404, {"message": "user does not exist"})
+
+    code, _ = _run(script)
+
+    assert code != 0
