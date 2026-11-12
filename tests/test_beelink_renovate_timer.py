@@ -389,6 +389,20 @@ def test_every_unit_task_runs_only_when_the_run_is_enabled(name: str) -> None:
     assert "renovate_enabled | bool" in str(_task(name)["when"])
 
 
+def test_a_timed_out_run_does_not_leave_its_engine_running() -> None:
+    unit = _unit("kubelab-renovate.service.j2")
+    assert unit["Service"]["ExecStopPost"] == ["-/usr/bin/docker rm -f ${KUBELAB_RENOVATE_NAME}"]
+
+
+def test_no_task_rewrites_the_values_the_run_gate_reads() -> None:
+    # The pull and the unit tasks agree within one play only because the gate's
+    # inputs are the play's own vars, read once from SOPS. A set_fact on either
+    # would let the timer start in the same run that skipped the engine's pull.
+    for task in _tasks():
+        facts = task.get("set_fact") or task.get("ansible.builtin.set_fact") or {}
+        assert not {"gitea_renovate_user", "gitea_renovate_token", "renovate_enabled"} & set(facts), task.get("name")
+
+
 def test_a_disabled_run_stops_a_timer_it_left_behind_and_fails_nothing() -> None:
     probe = _task("Look for a Renovate timer left by an earlier provision")
     assert probe["stat"]["path"] == f"/etc/systemd/system/{TIMER}"

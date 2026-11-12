@@ -41,5 +41,9 @@ ExecStart={{ beelink_deploy_dir }}/renovate-run.sh
 # the next hourly tick a run to start, and is generous for the fleet's five
 # repositories. The first run's duration is recorded on #1384 and this is set from it.
 TimeoutStartSec=45min
+# A run cut at TimeoutStartSec kills only the docker client; the engine keeps
+# running on the daemon. Remove it as the unit stops, so a timed-out run does not
+# hold the memory cap and the token until the next tick's own cleanup.
+ExecStopPost=-/usr/bin/docker rm -f ${KUBELAB_RENOVATE_NAME}
 StandardOutput=journal
 StandardError=journal
