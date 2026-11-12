@@ -1,7 +1,7 @@
 ---
 id: "kubelab-runbook-pre-prod-verification"
 type: runbook
-status: active
+status: historical
 tags: [runbook, kubelab, verification, production]
 created: "2026-02-28"
 owner: manu
@@ -9,8 +9,13 @@ owner: manu
 
 # Pre-Production Verification Runbook
 
-> Comprehensive verification before moving from staging to production K3s (B6 migration).
-> Run this checklist in a single session. All checks must pass before proceeding.
+> **Historical.** This was the one-shot checklist for the B6 move of production onto
+> K3s, which is complete. It is kept as the record of that migration and is not a
+> current procedure: it names a three-node staging cluster and `~/.kube/kubelab-config`,
+> neither of which exists now. Validate a change today through the staging flow in
+> [gitops-delivery-promotion.md](gitops-delivery-promotion.md).
+
+Comprehensive verification before moving from staging to production K3s (B6 migration).
 
 ## Phase 1: STAGE-008 Soak Test Verification
 
