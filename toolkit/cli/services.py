@@ -1165,7 +1165,12 @@ def _registry_session() -> Any:
     """The HTTP session `registry-check` pulls with. A seam for tests."""
     import requests
 
-    return requests.Session()
+    session = requests.Session()
+    # `requests` lets a `.netrc` entry (and proxy settings) from the operator's environment replace
+    # the Authorization header of a request without `auth`: a 200 would then attest the operator's
+    # own account, not the pull token.
+    session.trust_env = False
+    return session
 
 
 def _config_value(merged: dict[str, Any], dotted: str) -> Any:

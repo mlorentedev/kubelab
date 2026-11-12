@@ -16,7 +16,7 @@ import pytest
 import requests
 
 from toolkit.features import product_registry
-from toolkit.features.registry_check import check_pull, manifest_status
+from toolkit.features.registry_check import NoVerdict, check_pull, manifest_status
 
 TOKEN = "fake-pull-token-do-not-leak"  # noqa: S105 - a test value
 HOST = "gitea.kubelab.live"
@@ -216,6 +216,118 @@ class TestTheRegistryAuthHandshake:
         assert "no verdict" in result.message and "another host" in result.message
         assert "evil.example" not in result.message
         assert [url for url, _ in session.calls] == [OTHER]
+
+
+class TestTheRealmAuthority:
+    """The realm is network input: only the registry's own scheme, host AND port may receive the login."""
+
+    PORTED = "forge.example:5000"
+    OWN_URL = f"https://{PORTED}/v2/personal/beta/manifests/{TAG}"
+
+    def _handshake(self, realm: str, host: str = PORTED):
+        challenge = {"WWW-Authenticate": f'Bearer realm="{realm}",service="registry"'}
+        session = Session(
+            {
+                f"https://{host}/v2/personal/beta/manifests/{TAG}": [Resp(401, challenge), Resp(200)],
+                realm: [Resp(200, body={"token": "bearer-value"})],
+            }
+        )
+        return session, manifest_status(session, host, "personal/beta", TAG, "reviewer", TOKEN)
+
+    def test_a_realm_on_the_same_host_and_port_is_answered(self) -> None:
+        session, status = self._handshake(f"https://{self.PORTED}/v2/token")
+
+        assert status == 200
+        assert [url for url, _ in session.calls][1] == f"https://{self.PORTED}/v2/token"
+
+    @pytest.mark.parametrize(
+        ("host", "realm"),
+        [
+            ("forge.example", "https://forge.example:443/v2/token"),
+            ("forge.example:443", "https://forge.example/v2/token"),
+            ("Forge.Example", "https://forge.example/v2/token"),
+        ],
+    )
+    def test_the_default_port_is_the_same_authority_as_none(self, host: str, realm: str) -> None:
+        _, status = self._handshake(realm, host=host)
+
+        assert status == 200
+
+    @pytest.mark.parametrize(
+        "realm",
+        [
+            "https://forge.example:6000/v2/token",
+            "https://forge.example/v2/token",
+            "https://forge.example:5000.evil.example/v2/token",
+            "https://forge.example:notaport/v2/token",
+        ],
+    )
+    def test_a_realm_on_another_port_gets_no_verdict_and_no_login(self, realm: str) -> None:
+        challenge = {"WWW-Authenticate": f'Bearer realm="{realm}",service="registry"'}
+        session = Session({self.OWN_URL: [Resp(401, challenge)]})
+
+        with pytest.raises(NoVerdict):
+            manifest_status(session, self.PORTED, "personal/beta", TAG, "reviewer", TOKEN)
+
+        assert [url for url, _ in session.calls] == [self.OWN_URL]
+
+    @pytest.mark.parametrize("expect_denied", [False, True])
+    def test_a_realm_that_is_not_https_gets_no_verdict_before_any_login_is_sent(
+        self, entry, expect_denied: bool
+    ) -> None:
+        plain = {"WWW-Authenticate": f'Bearer realm="http://{HOST}/v2/token",service="x"'}
+        session = Session({OWN: [Resp(401, plain)]})
+
+        result = _check(entry, session, expect_denied=expect_denied)
+
+        assert not result.ok and result.status is None
+        assert "no verdict" in result.message and "HTTPS" in result.message
+        assert [url for url, _ in session.calls] == [OWN]
+
+
+class TestTheLoginIsNotSwappedForTheOperatorsOwn:
+    """`requests` lets a `.netrc` entry replace the Authorization header of a request that carries no `auth`."""
+
+    def test_the_bearer_request_carries_the_bearer_token_not_a_netrc_login(
+        self, entry, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        import requests.adapters
+
+        import toolkit.cli.services as cli
+
+        netrc = tmp_path / "netrc"
+        netrc.write_text(f"machine {HOST} login operator password operators-own-password\n", encoding="utf-8")
+        netrc.chmod(0o600)
+        monkeypatch.setenv("NETRC", str(netrc))
+        challenge = {"WWW-Authenticate": f'Bearer realm="{REALM}",service="registry"'}
+        sent: list[tuple[str, str | None]] = []
+
+        class Registry(requests.adapters.BaseAdapter):
+            def send(self, request, **kwargs):  # noqa: ANN001, ANN003
+                sent.append((request.url or "", request.headers.get("Authorization")))
+                response = requests.Response()
+                response.url = request.url or ""
+                if (request.url or "").startswith(REALM):
+                    response.status_code, response._content = 200, b'{"token": "bearer-value"}'
+                elif request.headers.get("Authorization") == "Bearer bearer-value":
+                    response.status_code, response._content = 200, b"{}"
+                else:
+                    response.status_code, response._content = 401, b""
+                    response.headers.update(challenge)
+                response._content_consumed = True
+                return response
+
+            def close(self) -> None:
+                pass
+
+        session = cli._registry_session()
+        session.mount("https://", Registry())
+
+        result = _check(entry, session)
+
+        assert result.ok, (result.message, sent)
+        assert sent[-1] == (OWN, "Bearer bearer-value"), "the pull must carry the token it was exchanged for"
+        assert all("operator" not in (header or "") for _, header in sent)
 
 
 class TestTheTokenNeverLeaks:

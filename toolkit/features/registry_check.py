@@ -11,7 +11,7 @@ an unreachable registry proves nothing, so none of them may read as a denial (le
 
 The token rides only in the request's `auth`, never in a URL, a parameter we print or a message
 this module builds. A registry that challenges with a Bearer realm is answered there only when
-the realm is on the registry's own host: the challenge is input from the network.
+the realm is the registry's own HTTPS host and port: the challenge is input from the network.
 """
 
 from __future__ import annotations
@@ -75,14 +75,25 @@ def _refused(error: str, why: str, fix: str) -> CheckResult:
     return CheckResult(False, None, str(ContractError(error, why, fix)))
 
 
+def _authority(url: str) -> tuple[str, int] | None:
+    """The (host, port) an https URL reaches, the default port made explicit; None when it names none."""
+    parts = urlsplit(url)
+    try:
+        port = parts.port
+    except ValueError:
+        return None
+    return (parts.hostname, port or 443) if parts.hostname else None
+
+
 def manifest_status(session: _Session, host: str, package: str, tag: str, username: str, token: str) -> int:
     """The status the registry at `host` answers to a manifest GET for `package:tag` with this login.
 
     Basic first, which Gitea's registry accepts with an access token as the password. A registry
     that answers 401 with a Bearer challenge is asked for a token at its realm and the pull is
     repeated once with it; the status of that second request is the answer. A challenge that cannot
-    be answered (a realm on another host, a token endpoint with no token) raises `NoVerdict`: the
-    401 that carried it says nothing about the token, so it must not be returned as a denial.
+    be answered (a realm that is not HTTPS or is on another host or port, a token endpoint with no
+    token) raises `NoVerdict`: the 401 that carried it says nothing about the token, so it must not
+    be returned as a denial.
     """
     url = f"https://{host}/v2/{package}/manifests/{tag}"
     first = session.get(url, auth=(username, token), headers={"Accept": ACCEPT}, timeout=TIMEOUT, allow_redirects=False)
@@ -91,10 +102,12 @@ def manifest_status(session: _Session, host: str, package: str, tag: str, userna
         return first.status_code
     params = dict(_CHALLENGE_PARAM.findall(challenge))
     realm = params.get("realm", "")
-    if urlsplit(realm).hostname != host:
-        # Never send the login to a host the registry did not serve us from, and never read the
-        # 401 that carried the challenge as a denial: the token was not tested.
-        raise NoVerdict("the registry's challenge points at another host, so the token was never tested")
+    # Never send the login anywhere but the registry's own scheme, host and port, and never read
+    # the 401 that carried the challenge as a denial: the token was not tested.
+    if urlsplit(realm).scheme != "https":
+        raise NoVerdict("the registry's challenge points at a realm that is not HTTPS, so the token was never tested")
+    if _authority(realm) is None or _authority(realm) != _authority(url):
+        raise NoVerdict("the registry's challenge points at another host or port, so the token was never tested")
     asked = session.get(
         realm,
         auth=(username, token),
