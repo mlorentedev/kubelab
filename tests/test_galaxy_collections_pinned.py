@@ -232,7 +232,7 @@ def test_the_refusal_names_the_collections_the_cause_and_the_way_out() -> None:
 
 def test_setup_ansible_shows_the_install_and_fails_with_it() -> None:
     recipe = subprocess.run(
-        ["make", "-n", "-C", str(REPO), "setup-ansible"], capture_output=True, text=True, check=True
+        ["make", "-n", "-C", str(REPO), "setup-ansible"], capture_output=True, text=True, encoding="utf-8", check=True
     ).stdout
     install = next(line for line in recipe.splitlines() if "collection install" in line)
     assert "/dev/null" not in install, "the install output is the only report of what it did"

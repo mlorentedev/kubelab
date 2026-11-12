@@ -28,7 +28,9 @@ def test_chown_takes_long_options(tmp_path) -> None:
     ref, target = tmp_path / "ref", tmp_path / "target"
     ref.touch()
     target.touch()
-    result = subprocess.run(["chown", f"--reference={ref}", str(target)], capture_output=True, text=True, check=False)
+    result = subprocess.run(
+        ["chown", f"--reference={ref}", str(target)], capture_output=True, text=True, encoding="utf-8", check=False
+    )
     assert result.returncode == 0, result.stderr
 
 

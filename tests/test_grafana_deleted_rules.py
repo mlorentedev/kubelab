@@ -126,6 +126,7 @@ class TestTheDeletionSurvivesTheRender:
             ["kubectl", "kustomize", str(REPO_ROOT / f"infra/k8s/overlays/{env}")],
             capture_output=True,
             text=True,
+            encoding="utf-8",
             check=False,
             timeout=120,
         )

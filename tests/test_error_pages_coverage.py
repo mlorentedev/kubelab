@@ -27,7 +27,10 @@ def _rules(overlay: str) -> list[tuple[str, str, set[str]]]:
     if shutil.which("kubectl") is None:
         pytest.skip("kubectl not on PATH: cannot render the overlay (a skip is CANNOT CHECK, not OK)")
     out = subprocess.run(
-        ["kubectl", "kustomize", str(REPO / "infra/k8s/overlays" / overlay)], capture_output=True, text=True
+        ["kubectl", "kustomize", str(REPO / "infra/k8s/overlays" / overlay)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
     )
     assert out.returncode == 0, out.stderr
     rules = []
@@ -70,9 +73,5 @@ def test_every_exception_still_has_a_reason() -> None:
 def test_no_exception_is_stale() -> None:
     """An entry that matches no rule missing the middleware in any overlay is a lie in the SSOT."""
     gaps = [(r, m) for o in OVERLAYS for r, m, names in _rules(o) if "error-pages" not in names]
-    stale = [
-        e
-        for e in EXCEPTIONS
-        if not any(e["route"] == r and e.get("match", "") in m for r, m in gaps)
-    ]
+    stale = [e for e in EXCEPTIONS if not any(e["route"] == r and e.get("match", "") in m for r, m in gaps)]
     assert not stale, f"exceptions that no longer match a rule without the middleware: {stale}"

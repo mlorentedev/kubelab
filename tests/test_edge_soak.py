@@ -198,7 +198,11 @@ def _run_log_command(log_dir: Path) -> list[str]:
     from toolkit.features.edge_soak import log_command
 
     result = subprocess.run(
-        [SHELL, "-c", log_command(str(log_dir / "kern.log"))], capture_output=True, text=True, check=False
+        [SHELL, "-c", log_command(str(log_dir / "kern.log"))],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
     )
     return result.stdout.splitlines()
 

@@ -46,7 +46,10 @@ def _middleware_statuses() -> set[int]:
     found: set[int] = set()
     for overlay in OVERLAYS:
         out = subprocess.run(
-            ["kubectl", "kustomize", str(ROOT / "infra/k8s/overlays" / overlay)], capture_output=True, text=True
+            ["kubectl", "kustomize", str(ROOT / "infra/k8s/overlays" / overlay)],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
         )
         assert out.returncode == 0, out.stderr
         for doc in yaml.safe_load_all(out.stdout):

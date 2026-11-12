@@ -53,7 +53,10 @@ def _rendered(overlay: str) -> dict[str, str]:
     if shutil.which("kubectl") is None:
         pytest.skip("kubectl not on PATH: cannot render the overlay (a skip is CANNOT CHECK, not OK)")
     out = subprocess.run(
-        ["kubectl", "kustomize", str(REPO / "infra/k8s/overlays" / overlay)], capture_output=True, text=True
+        ["kubectl", "kustomize", str(REPO / "infra/k8s/overlays" / overlay)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
     )
     assert out.returncode == 0, out.stderr
     for doc in yaml.safe_load_all(out.stdout):

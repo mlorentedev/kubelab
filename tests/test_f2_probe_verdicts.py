@@ -35,7 +35,9 @@ def _verdict(tmp_path: Path, gh_stderr: str) -> str:
         "F2_RESULT": str(result),
         "F2_WORK": str(tmp_path / "work"),
     }
-    subprocess.run(["bash", str(PROBE)], env=env, capture_output=True, text=True, timeout=30, check=False)
+    subprocess.run(
+        ["bash", str(PROBE)], env=env, capture_output=True, text=True, encoding="utf-8", timeout=30, check=False
+    )
     return result.read_text(encoding="utf-8").strip()
 
 

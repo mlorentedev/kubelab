@@ -214,7 +214,9 @@ class Edge:
         if expect:
             env["EDGE_EXPECT"] = expect
         argv = args or (LAN, LAN_ADDRESS, UPLINK, AP, LAN_CIDR)
-        return subprocess.run([SHELL, str(SCRIPT), *argv], capture_output=True, text=True, env=env, check=False)
+        return subprocess.run(
+            [SHELL, str(SCRIPT), *argv], capture_output=True, text=True, encoding="utf-8", env=env, check=False
+        )
 
 
 def _failures(result: subprocess.CompletedProcess[str]) -> list[str]:

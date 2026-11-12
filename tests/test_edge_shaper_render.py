@@ -193,6 +193,7 @@ def test_the_unit_passes_systemd_analyze_verify(tmp_path: Path) -> None:
         ["systemd-analyze", "verify", "--man=no", str(tmp_path / UNIT)],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         env={"SYSTEMD_UNIT_PATH": f"{tmp_path}:", "PATH": "/usr/bin:/bin"},
         check=False,
     )
