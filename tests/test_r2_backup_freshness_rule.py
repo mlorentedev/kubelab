@@ -32,6 +32,8 @@ from tests.test_r2_backup_watcher_probe import FAKE_NC, FAKE_RESTIC, PREFIX, PRO
 
 FRESHNESS = "backup032-on-demand-freshness"
 SHRINK = "backup032-r2-backup-shrink"
+BUDGET = "backup081-check-budget"
+UNMEASURED = "backup083-node-sizes-unmeasured"
 HEALTH = "obs015-r2-backup-health"
 WATCHER_MANIFEST = REPO / "infra/k8s/base/services/r2-backup-watcher.yaml"
 NODE_BACKUP_DEFAULTS = REPO / "infra/ansible/roles/node_backup/defaults/main.yml"
@@ -84,6 +86,8 @@ class Node:
     age: int | None = 3600
     # What size.sh wrote for the node's prefix; None is its listing failing.
     size: int | None = 1_000_000
+    # What size.sh wrote for the packs under the node's `data/`; None is its listing failing.
+    packs: int | None = 100
 
 
 def _probe(tmp_path: pathlib.Path, nodes: list[Node], now: int) -> list[dict]:
@@ -111,6 +115,7 @@ def _probe(tmp_path: pathlib.Path, nodes: list[Node], now: int) -> list[dict]:
                 encoding="utf-8",
             )
         sizes.append(f"node {node.name} {'null' if node.size is None else node.size} 1\n")
+        sizes.append(f"packs {node.name} {'null' if node.packs is None else node.packs} 1\n")
         if not node.up:
             (fake / f"{address}.down").write_text("", encoding="utf-8")
     targets = run / "targets.txt"
@@ -295,6 +300,52 @@ def test_a_single_probe_never_reads_as_a_shrink(case: Case) -> None:
     assert case.value(SHRINK, 60) == {"rpi4": 1.0}
 
 
+# ------------------------------------------------------------ unmeasured sizes
+
+DAY = 24 * 3600
+
+
+def _unmeasured(case: Case, offset: int) -> set[str]:
+    """Nodes the rule would alert on at `offset`: the rule's threshold is `lt 1`."""
+    return {node for node, v in case.value(UNMEASURED, offset).items() if v < 1}
+
+
+def _probe_a_day(case: Case, nodes: list[Node]) -> int:
+    """Probe every interval for 24 h; return the offset just after the last probe."""
+    for offset in range(0, DAY + 1, PROBE_INTERVAL):
+        case.probe(offset, nodes)
+    return DAY + 60
+
+
+@pytest.mark.parametrize("field", ["size", "packs"])
+def test_one_node_unmeasured_for_a_day_alerts_while_the_others_keep_the_rule_evaluating(case: Case, field) -> None:
+    """BACKUP-083 (#3304): the shrink and check-budget rules lose a node's series when its value is
+    `null`, and `noDataState` only fires when EVERY node is gone. This rule keeps the series."""
+    nodes = [Node("beelink", "on-demand", **{field: None}), Node("vps", "always-on")]
+    end = _probe_a_day(case, nodes)
+    assert case.value(UNMEASURED, end) == {"beelink": 0.0, "vps": 1.0}
+    assert _unmeasured(case, end) == {"beelink"}
+    # The gap this closes, on the real probe's lines: the old rule for the same field has no
+    # series for that node, so nothing about it can alert.
+    old = case.value(SHRINK if field == "size" else BUDGET, end)
+    assert "beelink" not in old and "vps" in old, old
+
+
+def test_a_node_measured_once_in_the_day_does_not_alert_until_that_probe_leaves_the_window(case: Case) -> None:
+    """One good probe in 24 h is a measured node: a single failed listing is not a page."""
+    case.probe(0, [Node("beelink", "on-demand"), Node("vps", "always-on")])
+    failing = [Node("beelink", "on-demand", size=None, packs=None), Node("vps", "always-on")]
+    for offset in range(PROBE_INTERVAL, DAY + 1, PROBE_INTERVAL):
+        case.probe(offset, failing)
+    assert _unmeasured(case, DAY - 60) == set()
+    assert _unmeasured(case, DAY + 60) == {"beelink"}
+
+
+def test_a_fully_measured_fleet_does_not_alert(case: Case) -> None:
+    end = _probe_a_day(case, [Node("beelink", "on-demand"), Node("vps", "always-on")])
+    assert case.value(UNMEASURED, end) == {"beelink": 1.0, "vps": 1.0}
+
+
 # --------------------------------------------------------------------- static
 
 
@@ -358,3 +409,19 @@ def test_the_shrink_rule_threshold_is_half() -> None:
     (threshold,) = next(d for d in rule["data"] if d["refId"] == "C")["model"]["conditions"]
     assert threshold["evaluator"] == {"type": "lt", "params": [0.5]}
     assert rule["noDataState"] == "Alerting"
+
+
+def test_the_unmeasured_sizes_rule_is_declared_to_alert_and_its_runbook_anchor_exists() -> None:
+    rule = _rule(UNMEASURED)
+    assert rule["noDataState"] == "Alerting" and rule["execErrState"] == "Alerting"
+    assert _hours(rule["for"]) > 0
+    (threshold,) = next(d for d in rule["data"] if d["refId"] == "C")["model"]["conditions"]
+    assert threshold["evaluator"] == {"type": "lt", "params": [1]}
+    expr = rule_expr(UNMEASURED)
+    assert "by (backup_node)" in expr and "unwrap sizes_measured" in expr and "[24h]" in expr
+    anchor = rule["annotations"]["runbook_url"].rsplit("#", 1)[1]
+    runbook = (REPO / "docs/runbooks/offsite-backup-restore.md").read_text(encoding="utf-8")
+    headings = {
+        re.sub(r"[^a-z0-9 -]", "", h.lower()).replace(" ", "-") for h in re.findall(r"^#+ (.+)$", runbook, re.M)
+    }
+    assert anchor in headings, f"{anchor} is not a heading of the runbook"
