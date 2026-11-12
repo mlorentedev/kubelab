@@ -78,6 +78,7 @@ def _git(repo: Path, *args: str) -> str:
         ["git", "-C", str(repo), *args],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
     )
     if done.returncode != 0:
@@ -170,6 +171,7 @@ def collections_off_declaration(declared: dict[str, str]) -> list[str]:
             ["ansible-galaxy", "collection", "list", "--format", "json"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
             check=False,
         )
     except OSError as exc:

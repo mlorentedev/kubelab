@@ -188,14 +188,16 @@ def _kubectl(kubeconfig: str, *args: str) -> list[str]:
 
 def _run_kubectl(kubeconfig: str, *args: str, stdin: str | None = None) -> str:
     """Run kubectl and return its stdout, or raise KubectlError with its stderr."""
-    proc = subprocess.run(_kubectl(kubeconfig, *args), input=stdin, capture_output=True, text=True)
+    proc = subprocess.run(_kubectl(kubeconfig, *args), input=stdin, capture_output=True, text=True, encoding="utf-8")
     if proc.returncode != 0:
         raise KubectlError(f"kubectl {' '.join(args[:2])} failed (exit {proc.returncode}): {proc.stderr.strip()}")
     return proc.stdout
 
 
 def get_cronjob(kubeconfig: str, name: str) -> dict[str, Any]:
-    proc = subprocess.run(_kubectl(kubeconfig, "get", "cronjob", name, "-o", "json"), capture_output=True, text=True)
+    proc = subprocess.run(
+        _kubectl(kubeconfig, "get", "cronjob", name, "-o", "json"), capture_output=True, text=True, encoding="utf-8"
+    )
     if proc.returncode != 0:
         raise LookupError(f"CronJob {name} not found in {NAMESPACE}: {proc.stderr.strip()}")
     return json.loads(proc.stdout)
@@ -213,7 +215,10 @@ def job_logs(kubeconfig: str, name: str) -> str:
     # Not check=True: a pod that never started has no log, and "no log" is
     # information for the caller, not a reason to skip the delete.
     proc = subprocess.run(
-        _kubectl(kubeconfig, "logs", f"job/{name}", "--all-containers=true"), capture_output=True, text=True
+        _kubectl(kubeconfig, "logs", f"job/{name}", "--all-containers=true"),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
     )
     return proc.stdout if proc.returncode == 0 else f"(no log: {proc.stderr.strip()})\n"
 
