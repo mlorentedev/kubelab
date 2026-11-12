@@ -131,15 +131,45 @@ func LiveDomain() string {
 	return conf.Forge.ConsoleDomain
 }
 
+// Usage records that `identity` opened the console at `at`, and reports whether it was
+// that identity's first visit of the day (ADR-066 A8). Nil records nothing.
+type Usage func(ctx context.Context, identity string, at time.Time) (bool, error)
+
+// usageTimeout bounds the counter's write, so a slow database delays the page by at most this.
+const usageTimeout = 2 * time.Second
+
 // Register adds the console's routes, answered only for its own host.
-func Register(r *gin.Engine, deps Deps, domain func() string) {
+func Register(r *gin.Engine, deps Deps, domain func() string, usage Usage) {
 	g := r.Group("/console", onlyHost(domain))
 	g.GET("", func(c *gin.Context) { c.Redirect(http.StatusMovedPermanently, "/console/") })
-	g.GET("/", func(c *gin.Context) { c.Data(http.StatusOK, "text/html; charset=utf-8", consolePage) })
+	g.GET("/", func(c *gin.Context) {
+		recordUsage(c, usage)
+		c.Data(http.StatusOK, "text/html; charset=utf-8", consolePage)
+	})
 	g.GET("/queue", func(c *gin.Context) { queueHandler(c, deps) })
 	// The bare host opens the page until apps/console serves `/` (ADR-074 D5). A 302,
 	// not a 301: browsers keep a 301 indefinitely, and `/` will become the frontend's.
 	r.GET("/", onlyHost(domain), func(c *gin.Context) { c.Redirect(http.StatusFound, "/console/") })
+}
+
+// recordUsage counts the page open for the identity Authelia names in Remote-User. A request
+// that names none is not counted: the host check alone can be satisfied from inside the
+// cluster, and only a request that came through Authelia carries the header. A failed write
+// is logged and never fails the page.
+func recordUsage(c *gin.Context, usage Usage) {
+	identity := strings.TrimSpace(c.GetHeader("Remote-User"))
+	if usage == nil || identity == "" {
+		return
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), usageTimeout)
+	defer cancel()
+	first, err := usage(ctx, identity, time.Now())
+	switch {
+	case err != nil:
+		log.Printf("console usage: record %s: %v", identity, err)
+	case first:
+		log.Printf("console usage: first visit of the day for %s", identity)
+	}
 }
 
 // onlyHost answers 404 unless the request names the console's host. Traefik routes
