@@ -69,6 +69,8 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit config generate` | Generate configuration files from templates (Traefik, Ansible, Terraform). |
 | `toolkit config get` | Print one NON-SECRET value from the SSOT, for scripts and Makefile targets. |
 | `toolkit config validate` | Validate generated configuration files (sanity check). |
+| `toolkit console` | Forge console: read what the console records. |
+| `toolkit console usage` | Report the A8 usage gate: days the console was opened, in the best 14-day window. |
 | `toolkit credentials` | Generate credentials and manage GitHub secrets. |
 | `toolkit credentials delete-gh-secret` | Delete a single GitHub secret. |
 | `toolkit credentials extract-common` | Extract shared infrastructure secrets into common.enc.yaml. |
