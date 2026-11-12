@@ -1085,7 +1085,15 @@ def check_gitea_token_scopes(
 
     failures = 0
     for label, spec in ROTATABLE_TOKENS.items():
-        username = identities.get(spec.identity, "?")
+        username = identities.get(spec.identity)
+        if username is None:
+            # No login named means no account and nothing minted: the role skips every
+            # task for it (#3279). Normal until the operator declares it, not a failed read.
+            console.print(
+                f"  {label:<9} ?/{spec.token_name}  not declared, nothing minted"
+                f" — `apps.auth.identities.{spec.identity}` is unset"
+            )
+            continue
         prefix = f"  {label:<9} {username}/{spec.token_name}"
         if label not in declared:
             console.print(f"{prefix}  [yellow]unchecked[/yellow] — no `token_scopes.{label}` declared")
