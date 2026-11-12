@@ -90,8 +90,12 @@ def catalog_secret(key: str) -> str | None:
     Otherwise the catalog is SOPS, so this resolves only where the age key is: a runner with
     neither gets ``None`` and the caller refuses by name. Tests inject a lookup instead.
     """
-    from_env = os.environ.get(catalog_secret_variable(key), "").strip()
+    variable = catalog_secret_variable(key)
+    from_env = os.environ.get(variable, "").strip()
     if from_env:
+        # The source, never the value: a stale exported variable shadows a rotated SOPS entry,
+        # and a 401 alone would not say which one was used.
+        logger.info(f"catalog secret {key}: using {variable} from the environment, not SOPS")
         return from_env
     from toolkit.features.configuration import ConfigurationManager
 

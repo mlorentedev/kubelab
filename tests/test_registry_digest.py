@@ -333,7 +333,20 @@ class TestTheCatalogSecret:
 
         registry.catalog_secret(CATALOG_KEY)
 
+        assert logged.info.called, "the environment path must say which source it used"
+        assert ENV_VAR in str(logged.mock_calls)
         assert PULL_TOKEN not in str(logged.mock_calls)
+
+    def test_the_sops_path_does_not_claim_the_environment(
+        self, sops: MagicMock, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        logged = MagicMock()
+        monkeypatch.setattr(registry, "logger", logged)
+        monkeypatch.setenv(ENV_VAR, "")
+
+        registry.catalog_secret(CATALOG_KEY)
+
+        assert ENV_VAR not in str(logged.mock_calls)
 
     def test_the_credential_does_not_print_its_token(self) -> None:
         assert PULL_TOKEN not in repr(CREDENTIAL) and PULL_TOKEN not in str(CREDENTIAL)
