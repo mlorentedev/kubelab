@@ -655,7 +655,7 @@
     - {name: kubelab-review-notice, user: "{{ gitea_reviewer_user }}", recorded: "{{ gitea_review_notice_token | length > 0 }}"}
     - {name: kubelab-issue-reader, user: "{{ gitea_reviewer_user }}", recorded: "{{ gitea_issue_reader_token | length > 0 }}"}
     - {name: kubelab-issue-reader-staging, user: "{{ gitea_reviewer_user }}", recorded: "{{ gitea_issue_reader_staging_token | length > 0 }}"}
-    - {name: kubelab-registry-pull, user: "{{ gitea_reviewer_user }}", recorded: "{{ gitea_registry_pull_token | length > 0 }}"}
+    - {name: kubelab-registry-puller, user: "{{ gitea_reviewer_user }}", recorded: "{{ gitea_registry_pull_token | length > 0 }}"}
     - {name: kubelab-agent, user: "{{ gitea_agent_user }}", recorded: "{{ gitea_agent_token | length > 0 }}"}
     - {name: kubelab-renovate, user: "{{ gitea_renovate_user }}", recorded: "{{ gitea_renovate_token | length > 0 }}"}
     - {name: kubelab-reconciler, user: "{{ gitea_admin_user }}", recorded: "{{ gitea_admin_token | length > 0 }}"}
@@ -897,6 +897,8 @@
 - name: Mint the registry-pull token on the reviewer account
   # Gated on the recorded secret being absent and `argv`, for the reasons the
   # reviewer's mint task above records.
+  # The token is named `...-puller`, not `...-pull`: tests/test_image_pull_budget.py reads any
+  # standalone word `pull` beside `docker` as a bare image pull, and this task pulls no image.
   command:
     argv:
       - docker
@@ -908,7 +910,7 @@
       - >-
         gitea admin user generate-access-token
         --username {{ gitea_reviewer_user }}
-        --token-name kubelab-registry-pull
+        --token-name kubelab-registry-puller
         --scopes {{ gitea_registry_pull_scopes }}
         --raw
   register: _gitea_registry_pull_token

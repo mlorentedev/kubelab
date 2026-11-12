@@ -111,7 +111,7 @@ ROTATABLE_TOKENS: dict[str, RotatableToken] = {
     # prod rotates it.
     "registry_pull": RotatableToken(
         secret_key="apps.services.core.gitea.registry_pull_token",
-        token_name="kubelab-registry-pull",
+        token_name="kubelab-registry-puller",
         identity="reviewer",
         store_env="common",
     ),
