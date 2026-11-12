@@ -48,6 +48,10 @@ class RotatableToken:
     secret_key: str
     token_name: str
     identity: str
+    #: The env whose SOPS file holds the value, when it is not the one the rotation
+    #: is run against. Every token is minted by the one Gitea (prod's, on the Beelink),
+    #: but a token another env's workload reads is stored in that env's file (#3267).
+    store_env: str | None = None
 
 
 #: The tokens this command can rotate.
@@ -91,6 +95,15 @@ ROTATABLE_TOKENS: dict[str, RotatableToken] = {
         secret_key="apps.services.core.gitea.issue_reader_token",
         token_name="kubelab-issue-reader",
         identity="reviewer",
+    ),
+    # Staging's reader (#3267): a fourth token on the reviewer's account, so staging
+    # exercises Gitea reads before prod does. Stored in staging's SOPS under the key
+    # the API's Secret maps; never a copy of prod's, which would drift on rotation.
+    "issue_reader_staging": RotatableToken(
+        secret_key="apps.services.core.gitea.issue_reader_token",
+        token_name="kubelab-issue-reader-staging",
+        identity="reviewer",
+        store_env="staging",
     ),
     # The agents' authoring account (AUTH-022, #2577): its own account, not a token on
     # the reviewer's, because what it writes carries an author.
@@ -153,6 +166,7 @@ class RotationPlan:
     token_name: str
     secret_key: str
     secret_present: bool
+    store_env: str
 
     @property
     def is_noop(self) -> bool:
@@ -167,7 +181,20 @@ class RotationPlan:
         return not self.secret_present
 
 
-def plan_rotation(label: str, identities: dict[str, str], secret_present: bool) -> RotationPlan:
+def rotation_store_env(label: str, env: str) -> str:
+    """The env whose SOPS file holds `label`'s value: its own `store_env`, else `env`.
+
+    A token stored apart from its Gitea is rotated through the env that reaches that Gitea, so
+    `env == store_env` is refused: staging names no Gitea, and a revoke sent there could fail to
+    find the live token and still clear the key, leaving the next mint refused on its name.
+    """
+    spec = ROTATABLE_TOKENS.get(label)
+    if spec and spec.store_env == env:
+        raise ValueError(f"{label} is stored in {env} but minted by another env's Gitea; rotate it with ENV=prod")
+    return (spec.store_env if spec else None) or env
+
+
+def plan_rotation(label: str, identities: dict[str, str], secret_present: bool, store_env: str) -> RotationPlan:
     """Resolve a registry entry against the identity map and the recorded secret.
 
     Pure: takes the two facts it needs rather than reading SOPS or the forge, so
@@ -187,6 +214,7 @@ def plan_rotation(label: str, identities: dict[str, str], secret_present: bool) 
         token_name=spec.token_name,
         secret_key=spec.secret_key,
         secret_present=secret_present,
+        store_env=store_env,
     )
 
 
@@ -195,7 +223,7 @@ def format_rotation_plan(plan: RotationPlan) -> str:
     lines = [
         f"  account       {plan.username}",
         f"  token name    {plan.token_name}",
-        f"  SOPS key      {plan.secret_key}",
+        f"  SOPS key      {plan.secret_key} ({plan.store_env})",
         f"  recorded now  {'yes' if plan.secret_present else 'no — the mint gate is already open'}",
         "",
         "  would: revoke the token in Gitea, then clear the SOPS key so the",

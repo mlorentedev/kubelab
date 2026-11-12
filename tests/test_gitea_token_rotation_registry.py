@@ -102,19 +102,19 @@ def test_identities_resolve_through_the_map_not_a_literal() -> None:
     """
     identities = {"superadmin": "manu", "machine": "hefesto", "operator": "operator"}
 
-    assert plan_rotation("bot", identities, secret_present=True).username == "hefesto"
-    assert plan_rotation("admin", identities, secret_present=True).username == "manu"
+    assert plan_rotation("bot", identities, secret_present=True, store_env="prod").username == "hefesto"
+    assert plan_rotation("admin", identities, secret_present=True, store_env="prod").username == "manu"
 
 
 def test_an_identity_missing_from_the_map_is_refused_not_guessed() -> None:
     """No fallback to a literal: a half-configured map must stop the rotation."""
     with pytest.raises(KeyError, match="machine"):
-        plan_rotation("bot", {"superadmin": "manu"}, secret_present=True)
+        plan_rotation("bot", {"superadmin": "manu"}, secret_present=True, store_env="prod")
 
 
 def test_an_unknown_token_label_names_the_known_ones() -> None:
     with pytest.raises(KeyError, match="admin, agent, bot"):
-        plan_rotation("nope", {"machine": "hefesto"}, secret_present=True)
+        plan_rotation("nope", {"machine": "hefesto"}, secret_present=True, store_env="prod")
 
 
 def test_an_absent_secret_reports_the_gate_already_open() -> None:
@@ -123,7 +123,7 @@ def test_an_absent_secret_reports_the_gate_already_open() -> None:
     The token may well still be live; only the admin password can settle that.
     The plan says what it knows and no more.
     """
-    plan = plan_rotation("bot", {"machine": "hefesto"}, secret_present=False)
+    plan = plan_rotation("bot", {"machine": "hefesto"}, secret_present=False, store_env="prod")
 
     assert plan.is_noop
     assert "mint gate is already open" in format_rotation_plan(plan)

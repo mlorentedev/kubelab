@@ -88,6 +88,9 @@ infra:
   forge:
     # Staging's console host; the *.staging.kubelab.live wildcard already resolves it.
     console_domain: console.staging.kubelab.live
+    # The `gitea` Service of overlays/staging/gitea.yaml, the same forge prod reads,
+    # with staging's own read token (#3267), so a Gitea read is exercised here first.
+    gitea_url: http://gitea:3000
 
 secret_expiry:
   declared:
