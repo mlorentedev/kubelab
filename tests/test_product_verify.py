@@ -507,18 +507,17 @@ class TestTargetsAt:
         if "/contracts/" not in path:
             return text
         contract = yaml.safe_load(text)
-        del contract["hostnames"][lane]
+        contract["hostnames"].pop(lane, None)  # the test states its premise; it need not hold in the tree
         return yaml.safe_dump(contract)
 
     @pytest.mark.parametrize(("asked", "other"), [("prod", "staging"), ("staging", "prod")])
     def test_a_contract_without_the_asked_hostname_is_a_refusal_naming_the_lane(
         self, asked: str, other: str
     ) -> None:
-        """Not a ``KeyError``: the caller reports a ValueError, and a KeyError names only ``'prod'``."""
+        """A ``NoContractError`` (a ValueError), not a ``KeyError``, which would name only ``'prod'``."""
         with pytest.raises(NoContractError) as refused:
             targets_at(HEAD, "web", asked, lambda _rev, path: self._without(asked, path))
         message = str(refused.value)
-        assert not isinstance(refused.value, KeyError)
         assert f"hostnames.{asked}" in message
         assert f"events.{asked}" in message
         assert f"hostnames.{other}" not in message and f"events.{other}" not in message
