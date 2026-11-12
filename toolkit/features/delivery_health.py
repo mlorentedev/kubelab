@@ -293,7 +293,7 @@ def fetch_runs(repo: str, workflow: str, before: str | None = None) -> list[dict
     if before:
         path += f"&created=%3C{before}"
     try:
-        proc = subprocess.run(["gh", "api", path], capture_output=True, text=True, check=False)
+        proc = subprocess.run(["gh", "api", path], capture_output=True, text=True, encoding="utf-8", check=False)
     except FileNotFoundError as exc:  # pragma: no cover - environment
         raise WorkflowError("gh CLI not found") from exc
     if proc.returncode != 0:

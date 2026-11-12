@@ -776,7 +776,7 @@ def _list_pods(env: str, spec: _Target) -> list[dict[str, Any]] | None:
         "json",
     ]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", check=True)
         pods: list[dict[str, Any]] = json.loads(result.stdout).get("items", [])
     except FileNotFoundError:
         logger.error(f"  Listing n8n pods failed: {_NO_KUBECTL}")
@@ -829,7 +829,7 @@ def _run(cmd: list[str], *, env: str, stdin: str | None = None, label: str | Non
     put them on the terminal through either stream.
     """
     try:
-        result = subprocess.run(cmd, input=stdin, capture_output=True, text=True, check=True)
+        result = subprocess.run(cmd, input=stdin, capture_output=True, text=True, encoding="utf-8", check=True)
         if result.stdout.strip():
             logger.info(f"  {_mask_payload(result.stdout.strip(), stdin)}")
         return True

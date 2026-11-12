@@ -32,7 +32,7 @@ docker system df
 
 ```bash
 # Check specific app/service
-toolkit apps logs api
+toolkit services logs api
 toolkit services logs grafana
 ```
 
@@ -65,7 +65,7 @@ free -h
 
 When encountering any issue, follow this order:
 
-1. Check logs first: `toolkit apps logs <app-name> -f`
+1. Check logs first: `toolkit services logs <app-name> -f`
 2. Validate the generated configuration: `make validate`
 3. Verify configurations: `docker compose config`
 4. Search existing issues: GitHub Issues, discussions
@@ -86,7 +86,7 @@ docker compose version
 env | grep -E "API_|WEB_|TRAEFIK_" | sed 's/PASSWORD=.*/PASSWORD=***/'
 
 # Capture logs
-toolkit apps logs api --no-follow > api-logs.txt
+toolkit services logs api --no-follow > api-logs.txt
 toolkit services logs grafana --no-follow > grafana-logs.txt
 
 # Docker diagnostics

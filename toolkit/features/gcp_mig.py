@@ -81,7 +81,7 @@ def _managed_instances(config: dict[str, Any]) -> list[dict[str, Any]]:
     """
     argv = ["gcloud", "compute", "instance-groups", "managed", "list-instances", *_scope(config), "--format=json"]
     try:
-        out = subprocess.run(argv, check=True, capture_output=True, text=True).stdout
+        out = subprocess.run(argv, check=True, capture_output=True, text=True, encoding="utf-8").stdout
     except FileNotFoundError as exc:
         raise RuntimeError(
             "gcloud is not installed. It is a prerequisite of the hub bootstrap — "
@@ -95,7 +95,7 @@ def _list_instances(config: dict[str, Any]) -> list[str]:
     argv = ["gcloud", "compute", "instance-groups", "managed", "list-instances", *_scope(config), "--format=json"]
     logger.info(" ".join(argv))
     try:
-        out = subprocess.run(argv, check=True, capture_output=True, text=True).stdout
+        out = subprocess.run(argv, check=True, capture_output=True, text=True, encoding="utf-8").stdout
     except FileNotFoundError as exc:
         raise RuntimeError(
             "gcloud is not installed. It is a prerequisite of the hub bootstrap — "

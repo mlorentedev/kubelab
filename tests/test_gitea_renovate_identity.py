@@ -4,15 +4,16 @@ The account follows the agent's shape (AUTH-022): created by the bootstrap scrip
 its token minted once in the container and recorded in SOPS from the controller,
 both gated on the SOPS key being empty. Two differences, both on purpose:
 
-- **Its login is not declared here.** `apps.auth.identities.renovate` is the
-  operator's to name, like every other machine account on the forge. Until it is,
-  every task below skips, so a provision creates no account and mints nothing.
+- **Its login is the operator's to name**, like every other machine account on the
+  forge, and is declared (`apps.auth.identities.renovate`). Removing it makes every
+  task below skip, so a provision creates no account and mints nothing.
 - **Its grant is Renovate's documented one**, wider than the agent's: Renovate reads
   `/user` and the organization's labels and teams, besides writing branches, pull
   requests and the Dependency Dashboard issue.
 
-The run's read-only github.com token is not catalogued here: an expiring token
-needs an expiry checker, which belongs with the run that reads it (AC2).
+The run's github.com token is catalogued below with its expiry checker: it is
+the same token ci-workflows' weekly run holds as `RENOVATE_TOKEN` (owner decision
+2026-11-12), so it expires on that token's date and rotates with it.
 """
 
 from __future__ import annotations
@@ -31,6 +32,7 @@ ROLE = REPO / "infra/ansible/roles/beelink_services"
 PLAYBOOK = REPO / "infra/ansible/playbooks/provision-bee.yml"
 
 RENOVATE_TOKEN_KEY = "apps.services.core.gitea.renovate_token"
+GITHUB_COM_TOKEN_KEY = "apps.services.core.gitea.renovate_github_com_token"
 #: Renovate's Gitea platform docs, for Gitea >= 1.20: repo read/write, user read,
 #: issue read/write, organization read ("to read org labels and teams").
 DOCUMENTED_SCOPES = {"write:repository", "read:user", "write:issue", "read:organization"}
@@ -93,6 +95,29 @@ def test_the_token_is_catalogued_for_prod() -> None:
     assert "gitea-rotate-token TOKEN=renovate" in forge.rotate_note
 
 
+def test_the_github_com_token_is_catalogued_and_its_expiry_is_asked_of_github() -> None:
+    from toolkit.features.secret_expiry import PROVIDER_CHECKS, Expiry, github_pat_expiry, resolve_expiry
+    from toolkit.features.secrets_manager import SecretKind
+
+    spec = _catalogued(GITHUB_COM_TOKEN_KEY)
+    assert spec.kind is SecretKind.EXTERNAL
+    assert spec.envs == ("prod",)
+    assert resolve_expiry(spec) is Expiry.PROVIDER
+    assert PROVIDER_CHECKS[GITHUB_COM_TOKEN_KEY] is github_pat_expiry
+
+
+def test_the_github_com_token_names_its_twin_and_both_rotation_steps() -> None:
+    """One value in two stores: a rotation that touches one leaves the other on a dead token."""
+    spec = _catalogued(GITHUB_COM_TOKEN_KEY)
+    assert "RENOVATE_TOKEN" in spec.description and "ci-workflows" in spec.description
+    for step in (
+        "dotf secrets sync ci --repo mlorentedev/ci-workflows RENOVATE_TOKEN",
+        f"toolkit secrets set {GITHUB_COM_TOKEN_KEY} --env prod",
+        "make provision NODE=bee ENV=prod TAGS=renovate",
+    ):
+        assert step in spec.rotate_note, step
+
+
 # --------------------------------------------------------------------------- the role
 
 
@@ -101,6 +126,19 @@ def test_the_playbook_reads_the_login_the_grant_and_the_secret_from_the_ssot() -
     assert "gitea_config.apps.auth.identities.renovate | default('')" in playbook
     assert "token_scopes.renovate" in playbook
     assert "gitea_secrets.apps.services.core.gitea.renovate_token | default('')" in playbook
+
+
+def test_the_playbook_hands_the_github_com_token_to_the_role() -> None:
+    # Read from the role entry's own vars, not the file's text: a substring
+    # match also passes on a comment, and on a value handed to another role.
+    plays = yaml.safe_load(PLAYBOOK.read_text(encoding="utf-8"))
+    (role_vars,) = [
+        entry["vars"]
+        for play in plays
+        for entry in play.get("roles") or []
+        if isinstance(entry, dict) and str(entry.get("role", "")).endswith("/beelink_services")
+    ]
+    assert role_vars["renovate_github_com_token"] == f"{{{{ gitea_secrets.{GITHUB_COM_TOKEN_KEY} | default('') }}}}"
 
 
 def test_the_bootstrap_creates_the_account_only_once_named() -> None:

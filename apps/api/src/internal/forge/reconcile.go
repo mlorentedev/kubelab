@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 	"sync"
@@ -38,7 +39,8 @@ type Reconciler struct {
 	// Known returns the sources already stored. A cycle that leaves a wildcard with
 	// neither a listing nor a seed asks it again, so a seed the start could not take
 	// is retried (#3247). Nil never asks.
-	Known func(context.Context) ([]Source, error)
+	Known  func(context.Context) ([]Source, error)
+	Events *slog.Logger // nil writes JSON lines to stderr (events.go)
 }
 
 // Once lists the catalog's wildcards and reads every source. Neither a failed
@@ -50,7 +52,7 @@ func (r *Reconciler) Once(ctx context.Context) []Source {
 		log.Printf("forge reconcile: listing: %v", err)
 	}
 	r.seed(ctx)
-	return r.read(ctx, r.Catalog.Current())
+	return r.read(ctx, r.Catalog.Current(), "full")
 }
 
 // seed asks the store for what it already read while a wildcard is unresolved.
@@ -66,36 +68,62 @@ func (r *Reconciler) seed(ctx context.Context) {
 	r.Catalog.Seed(known)
 }
 
-func (r *Reconciler) read(ctx context.Context, sources []Source) []Source {
+func (r *Reconciler) read(ctx context.Context, sources []Source, scope string) []Source {
+	began := time.Now()
 	var failed []Source
 	for _, src := range sources {
-		if err := r.readSource(ctx, src); err != nil {
+		since, err := r.readSource(ctx, src)
+		if err != nil {
 			failed = append(failed, src)
-			log.Printf("forge reconcile: %s: %v", src, err)
 			if mark := r.Model.MarkUnreachable(ctx, src, r.now()); mark != nil {
 				log.Printf("forge reconcile: %s: record unreachable: %v", src, mark)
 			}
 		}
+		r.freshness(src, since, err)
 	}
+	emit(r.Events, slog.LevelInfo, EventReconcileCycle, slog.String("scope", scope),
+		slog.Int("sources", len(sources)), slog.Int("failed", len(failed)),
+		slog.Int64("duration_ms", time.Since(began).Milliseconds()))
 	return failed
 }
 
-func (r *Reconciler) readSource(ctx context.Context, src Source) error {
+// freshness reports a source's as_of after a read attempt. A failed read leaves
+// as_of where it was, so its age keeps growing; a source never read has neither.
+func (r *Reconciler) freshness(src Source, asOf time.Time, err error) {
+	attrs := []slog.Attr{slog.String("source", src.String()), slog.Bool("reachable", err == nil)}
+	if !asOf.IsZero() {
+		attrs = append(attrs, slog.String("as_of", asOf.UTC().Format(time.RFC3339)),
+			slog.Float64("age_seconds", r.now().Sub(asOf).Seconds()))
+	}
+	level := slog.LevelInfo
+	if err != nil {
+		level = slog.LevelWarn
+		attrs = append(attrs, slog.String("error", err.Error()))
+	}
+	emit(r.Events, level, EventSourceFreshness, attrs...)
+}
+
+// readSource returns the source's as_of after the attempt: the read's start when it
+// was saved, the last one otherwise, and zero when there is none or it is unknown.
+func (r *Reconciler) readSource(ctx context.Context, src Source) (time.Time, error) {
 	reader, ok := r.Readers[src.Forge]
 	if !ok {
-		return errors.New("no reader for this forge")
+		return time.Time{}, errors.New("no reader for this forge")
 	}
 	since, err := r.Model.LastRead(ctx, src)
 	if err != nil {
-		return err
+		return time.Time{}, err
 	}
 	// Taken before the read: an item changed during it is read again next cycle.
 	started := r.now()
 	items, err := reader.ListItems(ctx, src, since)
 	if err != nil {
-		return err
+		return since, err
 	}
-	return r.Model.SaveRead(ctx, src, items, started)
+	if err := r.Model.SaveRead(ctx, src, items, started); err != nil {
+		return since, err
+	}
+	return started, nil
 }
 
 // RetryPeriod is how soon a failed cycle runs again. A new pod's first read
@@ -116,7 +144,7 @@ func (r *Reconciler) Run(ctx context.Context, period, retry time.Duration) {
 			if !sleep(ctx, retry) {
 				return
 			}
-			failed = r.read(ctx, failed)
+			failed = r.read(ctx, failed, "retry")
 		}
 		if !sleep(ctx, time.Until(next)) {
 			return

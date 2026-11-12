@@ -285,6 +285,7 @@ def subprocess_terraform(args: list[str], *, env: dict[str, str], capture: bool,
             env=env,
             stdout=subprocess.PIPE if capture else (subprocess.DEVNULL if quiet else None),
             text=True,
+            encoding="utf-8",
             check=False,
         )
     except FileNotFoundError:
@@ -298,7 +299,7 @@ def subprocess_terraform(args: list[str], *, env: dict[str, str], capture: bool,
 def subprocess_aws(args: list[str], *, env: dict[str, str]) -> Result:
     """The aws CLI, for the history snapshot. Its stdout is kept; stderr names a refusal."""
     try:
-        proc = subprocess.run(["aws", *args], env=env, capture_output=True, text=True, check=False)
+        proc = subprocess.run(["aws", *args], env=env, capture_output=True, text=True, encoding="utf-8", check=False)
     except FileNotFoundError:
         raise RunnerError("the aws CLI is not on PATH; install it with `dotf tools sync`.") from None
     return Result(proc.returncode, proc.stdout + proc.stderr)

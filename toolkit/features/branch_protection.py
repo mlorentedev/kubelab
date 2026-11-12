@@ -179,6 +179,7 @@ class GitHubBranchProtectionClient:
             input=json.dumps(payload) if payload is not None else None,
             capture_output=True,
             text=True,
+            encoding="utf-8",
         )
         if result.returncode != 0:
             raise BranchProtectionError(f"gh api {' '.join(args)} failed: {result.stderr.strip()}")
