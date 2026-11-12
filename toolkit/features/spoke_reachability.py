@@ -94,6 +94,7 @@ def _read_cluster_secret(env: str, hub_kubeconfig: Path) -> dict[str, Any] | Non
         ],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
     )
     if proc.returncode != 0:

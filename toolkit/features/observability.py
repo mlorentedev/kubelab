@@ -278,6 +278,7 @@ def read_cluster_secret_key(env: str, secret: str, key: str, namespace: str = "k
         ],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=10,
     )
     if result.returncode != 0 or not result.stdout:

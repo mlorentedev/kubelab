@@ -106,6 +106,7 @@ def policy_check(text: str, image: str | None = None) -> int:
         input=text,
         capture_output=True,
         text=True,
+        encoding="utf-8",
     )
     sys.stdout.write(result.stdout or result.stderr)
     return result.returncode

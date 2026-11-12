@@ -66,7 +66,9 @@ def profile_settings(lan_cidr: str, route: bool, static: bool = False) -> list[s
 
 
 def _read(run: Runner, *fields_and_object: str) -> list[str]:
-    result = run(["nmcli", "-t", "-f", *fields_and_object], capture_output=True, text=True, check=False)
+    result = run(
+        ["nmcli", "-t", "-f", *fields_and_object], capture_output=True, text=True, encoding="utf-8", check=False
+    )
     return [line for line in result.stdout.splitlines() if line]
 
 
