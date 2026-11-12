@@ -20,6 +20,7 @@ The console reads three tables in the API's Postgres tenant
 | `forge_source` | per source: `as_of` (last successful read), reachability | yes |
 | `forge_item` | the open and closed issues and pull requests read | yes |
 | `forge_event` | webhook deliveries, projected or not | no: an unprojected delivery is lost, and the next read covers the change it carried |
+| `console_usage` | one row per operator identity and UTC day the console page was opened (ADR-066 A8) | no: not read model, kept only by the nightly `pg_dumpall` of the VPS backup; never truncate it with the forge tables |
 
 ## Rebuild from the forges
 
@@ -89,7 +90,7 @@ is the procedure; this table only says which ones the console depends on.
 | Key | What it is | Expiry |
 |---|---|---|
 | `apps.services.core.github_app.private_key` (common) | signs the `kubelab-console` App's installation tokens | none (GitHub App keys do not expire) |
-| `apps.services.core.gitea.issue_reader_token` (prod) | reads Gitea issues and pull requests | none (Gitea tokens carry no expiry) |
+| `apps.services.core.gitea.issue_reader_token` (prod, staging) | reads Gitea issues and pull requests; a token per env, `kubelab-issue-reader` and `kubelab-issue-reader-staging` | none (Gitea tokens carry no expiry) |
 | `apps.platform.api.forge_github_webhook_secret` (prod) | GitHub signs deliveries with it | none (random, ours) |
 | `apps.platform.api.forge_gitea_webhook_secret` (prod) | Gitea signs deliveries with it | none (random, ours) |
 
@@ -101,6 +102,16 @@ status, and a 401 there means the API and GitHub disagree.
 Gitea has no webhook to the API yet (the registration is open work on #2570),
 so `forge_gitea_webhook_secret` is held by the API alone and rotates with
 `apply-secrets` only. Once the webhook is declared, add its delivery step here.
+
+Staging reads the same Gitea as prod, with its own token (#3267), so a Gitea
+read is exercised there first. Both tokens are minted by the Beelink's Gitea and
+rotated through it, so the rotation always runs with `ENV=prod`:
+`make gitea-rotate-token TOKEN=issue_reader_staging ENV=prod APPLY=1` revokes
+staging's token and clears the key in `staging.enc.yaml`, then
+`make provision NODE=bee ENV=prod TAGS=gitea` re-mints it and
+`make apply-secrets ENV=staging` delivers it. Staging reaches Gitea through the
+`gitea` Service in `overlays/staging/gitea.yaml`, which has no route: the forge
+keeps one public name.
 
 The installation tokens the API mints from the App key last one hour and are
 renewed by the API; nothing to rotate.

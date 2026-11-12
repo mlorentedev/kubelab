@@ -71,7 +71,7 @@ permissions:
   contents: read
   pull-requests: read
   statuses: write   # the commit status is the product
-  # Download the `pr-number` artifact the reviewer run uploads (#1184). This
+  # Download the `reviewed-pr` artifact the reviewer run uploads (#1184). This
   # is the narrowest scope that reaches `actions/runs/{id}/artifacts`, and it
   # is read-only on purpose: the gate must never be able to start, cancel or
   # re-run a workflow whose output it judges.
@@ -179,7 +179,9 @@ jobs:
             import zipfile
 
             archive = zipfile.ZipFile(sys.argv[1])
-            members = [m for m in archive.namelist() if m.endswith(".txt")]
+            # The shared reviewer (mlorentedev/ci-workflows pr-agent.yml) writes
+            # one file named `pr-number`, without an extension.
+            members = [m for m in archive.namelist() if m == "pr-number"]
             head = archive.open(members[0]).read(32) if members else b""
             sys.stdout.write(head.decode("utf-8", "replace"))
         # A `workflow_run` gets three routes, tried in descending order of how
@@ -187,8 +189,10 @@ jobs:
         #
         #   1. `workflow_run.pull_requests` — populated when the reviewer run was
         #      itself triggered by the PR. Exact, and free.
-        #   2. The `pr-number` artifact that run uploaded (#1184; the sending
-        #      half is #1202). The ONLY route that works on the `/review` path:
+        #   2. The `reviewed-pr` artifact that run uploaded (#1184; the sending
+        #      half is the shared reviewer's, uploaded on comment runs only,
+        #      which is the path that needs it). The ONLY route that works on
+        #      the `/review` path:
         #      a comment has no head ref, so GitHub schedules that run against
         #      the DEFAULT BRANCH — route 1 arrives empty and route 3 is asking
         #      which PRs have master's tip as their head, which is none.
@@ -229,7 +233,7 @@ jobs:
               # job — `set -e` is active, and an unguarded `gh api` would end it
               # here rather than at route 3.
               artifact_id="$(gh api \
-                "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/artifacts?name=pr-number" \
+                "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/artifacts?name=reviewed-pr" \
                 --jq '.artifacts[0].id // ""' 2>/dev/null || true)"
               if [ -n "$artifact_id" ]; then
                 gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}/zip" \
@@ -244,7 +248,7 @@ jobs:
                 # letting any PR fail this gate's job by uploading a letter.
                 case "$candidate" in
                   ''|*[!0-9]*)
-                    echo "artifact 'pr-number' held no usable PR reference; falling through" ;;
+                    echo "artifact 'reviewed-pr' held no usable PR reference; falling through" ;;
                   *)
                     number="$candidate"
                     echo "resolved PR #${number} from the reviewer run's artifact" ;;

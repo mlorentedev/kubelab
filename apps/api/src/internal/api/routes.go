@@ -12,7 +12,7 @@ func SetupRoutes(r *gin.Engine, view *ForgeView) {
 	RegisterHealthCheckRoutes(r)
 
 	// Forge console: served only on its own host, which Authelia guards (CONSOLE-004)
-	console.Register(r, console.Live(view.Model, view.Catalog), console.LiveDomain)
+	console.Register(r, console.Live(view.Model, view.Catalog), console.LiveDomain, view.Model.RecordConsoleDay)
 
 	// API Group
 	api := r.Group("/api")

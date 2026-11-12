@@ -6,7 +6,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: api-migrations-0af59188bc
+  name: api-migrations-d7cf003eec
   namespace: kubelab
   labels:
     app.kubernetes.io/name: api-migrate
@@ -62,15 +62,29 @@ data:
 
     CREATE INDEX forge_event_pending ON forge_event (received_at) WHERE projected_at IS NULL;
 
+  20261112000000_console_usage.sql: |
+    -- The console's usage counter (CONSOLE-004, ADR-066 amendment A8): one row per operator
+    -- identity and UTC day on which the console page was opened. Vikunja retires only after
+    -- the console is opened on 5 of 14 consecutive days, read from here.
+    -- Not part of the read model: no forge can rebuild it, so it is never truncated with the
+    -- forge tables, and the nightly pg_dumpall of this database is what keeps it.
+    CREATE TABLE console_usage (
+        identity   text        NOT NULL,
+        day        date        NOT NULL,
+        first_seen timestamptz NOT NULL,
+        PRIMARY KEY (identity, day)
+    );
+
   atlas.sum: |
-    h1:sZwQdOc/Yp5NjkbnCj4XI7UmXzBXFCtpv5Xk4hjYjOw=
+    h1:nSg5rNoUm6jXSMqZCcyeZBa80Mzli5MgUn4oUmYgRBs=
     20261102000000_forge_read_model.sql h1:vPcaxFZHALwGGJMNHjzj5XrHFyU4Z5wbwn1FFpvksdI=
+    20261112000000_console_usage.sql h1:rTi+cJev6TDu65OL/U5FmGzxmeJkyrxlmPQCKS7ZmMI=
 
 ---
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: api-migrate-0af59188bc
+  name: api-migrate-d7cf003eec
   namespace: kubelab
   labels:
     app.kubernetes.io/name: api-migrate
@@ -96,7 +110,7 @@ spec:
       volumes:
         - name: migrations
           configMap:
-            name: api-migrations-0af59188bc
+            name: api-migrations-d7cf003eec
       containers:
         - name: atlas
           image: arigaio/atlas:1.3.0

@@ -54,7 +54,8 @@
       "login": "github-actions",
       "declined_markers": [],
       "review_markers": [
-        "## PR Reviewer Guide"
+        "## PR Reviewer Guide",
+        "## Incremental PR Reviewer Guide"
       ],
       "why": "PR-Agent (TOOL-021 Part 2) posts as github-actions via GITHUB_TOKEN and publishes through the comments API, not the reviews API — so reviews[] is empty on a PR it genuinely reviewed. Declared ahead of Part 2 landing: the gate must not call this repository's own reviewer unreviewed the day it starts running. The marker is the `review` command's own heading; `## PR Code Suggestions` (the `improve` command) is deliberately NOT here — suggestions are not a review."
     }
@@ -126,5 +127,17 @@
     "tag_pattern": "^sha-[0-9a-f]{7,40}$",
     "merge": true,
     "why": "`merge` is the switch for .github/workflows/deploy-merge.yml (AC6): only the boolean true lets that workflow merge a PR of this class or close an empty one; anything else and it only reports what it would do. It was flipped on in its own PR on 2026-11-03, after deploy-verify.yml (#1478) was green on master and four dry-run cases were judged `merge`, merged by hand and verified on #1619 (issuecomment-6591928848). Rollback is reverting that PR. The class a generated staging deploy PR belongs to (DELIVERY-004, #1619; operator decision 2026-10-20, conditions (a)-(d)). It replaces the file-only `staging deploy (single app)` exempt signature, which exempted ANY change confined to these two files, a resource limit or an image repository included. `values_file` takes the one-leaf rule and `overlay_files` the image-only rule; they are separate keys so that no list order decides which file gets which. Membership is decided by toolkit/features/deploy_shape.py from master's code: exactly these files, both modified; one values leaf, `version_path` with `{app}` an entry of infra/config/products.yaml, moving to a tag matching `tag_pattern`; overlay changes only in `image` leaves from <repo>:<old> to <repo>:<new>; and the tag's commit on the product's default branch. The check publishes the verdict for people to see; review-attestation and the merge job recompute it rather than reading the check, because a PR can publish a check of the same name. Staging only: prod keeps its operator merge and its own signature (#1741). Widening any field here widens what merges without a human, so tests pin every one of them."
+  },
+  "classification": {
+    "prefix": "Class: ",
+    "classes": [
+      "REAL",
+      "THEORETICAL",
+      "SPECULATIVE"
+    ],
+    "reviewers": [
+      "github-actions"
+    ],
+    "why": "A finding's class is read from a whole line equal to prefix + class, never parsed out of prose; a finding with no such line, or two that disagree, is unclassified and goes to a human. .pr_agent.toml asks the reviewer for exactly these lines in extra_instructions, with the paragraph shared by every repository that calls the ci-workflows pr-agent workflow. reviewers names PR-Agent (github-actions) only, because CodeRabbit writes its own severity format. Shape copied from dotfiles (TOOL-017)."
   }
 }

@@ -801,14 +801,17 @@ SECRET_CATALOG: list[SecretSpec] = [
         kind=SecretKind.EXTERNAL,
         services=("gitea", "api"),
         rotate_note=(
-            "`make gitea-rotate-token TOKEN=issue_reader ENV=prod APPLY=1` (revoke, then unset), then "
-            "`make provision NODE=bee ENV=prod TAGS=gitea` to re-mint, then `make apply-secrets ENV=prod` "
-            "so the API's Secret carries the new value. The mint task is gated on this key being "
-            "absent; never mint a second token by hand."
+            "Each env holds its own token (#3267): `kubelab-issue-reader` in prod's file, "
+            "`kubelab-issue-reader-staging` in staging's. "
+            "`make gitea-rotate-token TOKEN=issue_reader ENV=prod APPLY=1` (TOKEN=issue_reader_staging for "
+            "staging's; the env stays prod, the Gitea that minted it) revokes, then unsets the key in the "
+            "file that holds it. Then `make provision NODE=bee ENV=prod TAGS=gitea` to re-mint, then "
+            "`make apply-secrets ENV=<env>` so that env's API Secret carries the new value. The mint tasks "
+            "are gated on this key being absent; never mint a second token by hand."
         ),
         # NEVER, for the reason measured on `bot_token`: Gitea's token API has no expiry field.
         expiry=Expiry.NEVER,
-        envs=("prod",),
+        envs=("prod", "staging"),
     ),
     SecretSpec(
         key_path="apps.services.core.gitea.agent_token",

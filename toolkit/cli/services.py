@@ -964,15 +964,30 @@ def gitea_rotate_token(
     probe/reassert pair in `beelink_services` exists to keep SOPS authoritative.
     """
     from toolkit.features.gitea_client import GiteaBasicAuthClient, GiteaError
-    from toolkit.features.gitea_tokens import format_rotation_plan, plan_rotation
+    from toolkit.features.gitea_tokens import format_rotation_plan, plan_rotation, rotation_store_env
     from toolkit.features.secrets_manager import secrets_manager
 
     merged = ConfigurationManager(env, get_settings().project_root).get_merged_config()
     gitea = merged["apps"]["services"]["core"]["gitea"]
     identities = merged["apps"]["auth"]["identities"]
+    # Gitea is reached through `env`; the value may live in another env's file (#3267).
+    try:
+        store_env = rotation_store_env(token, env)
+    except ValueError as exc:
+        logger.error(str(exc))
+        raise typer.Exit(1) from exc
+    stored = (
+        gitea
+        if store_env == env
+        else ConfigurationManager(store_env, get_settings().project_root).get_merged_config()["apps"]["services"][
+            "core"
+        ]["gitea"]
+    )
 
     try:
-        plan = plan_rotation(token, identities, secret_present=bool(gitea.get(_secret_leaf(token))))
+        plan = plan_rotation(
+            token, identities, secret_present=bool(stored.get(_secret_leaf(token))), store_env=store_env
+        )
     except KeyError as exc:
         logger.error(str(exc).strip("'"))
         raise typer.Exit(1) from exc
@@ -1008,14 +1023,14 @@ def gitea_rotate_token(
 
     if not plan.secret_present:
         logger.info(f"{plan.secret_key} already unset — the mint gate was open")
-    elif secrets_manager.unset_secret(env, plan.secret_key):
+    elif secrets_manager.unset_secret(store_env, plan.secret_key):
         logger.success(f"cleared {plan.secret_key} — the mint gate is open")
     else:
         # The loud half of the asymmetry in `gitea_tokens`: the token is gone and
         # the gate is still shut, so nothing will re-mint. Name the exact remedy
         # rather than leaving it to be reconstructed under pressure.
         logger.error(
-            f"REVOKED BUT NOT CLEARED — run: toolkit secrets unset {plan.secret_key} --env {env}\n"
+            f"REVOKED BUT NOT CLEARED — run: toolkit secrets unset {plan.secret_key} --env {store_env}\n"
             "  until then the mint task stays gated and no replacement is issued."
         )
         raise typer.Exit(1)
