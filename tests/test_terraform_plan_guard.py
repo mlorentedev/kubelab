@@ -149,6 +149,7 @@ def test_only_allow_destroy_1_opens_the_guard(value: str, opens: bool) -> None:
         input=f"show:\n\t@echo '{flag}'\n",
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=True,
     ).stdout.strip()
     assert (out == "--allow-destroy") is opens, out

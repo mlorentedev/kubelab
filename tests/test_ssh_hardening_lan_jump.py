@@ -177,6 +177,7 @@ def test_sshd_itself_allows_the_forward_to_the_declared_nodes_only(tmp_path: Pat
             [sshd, "-T", "-h", str(host_key), "-f", str(config), "-C", f"user={user},host=h,addr=203.0.113.9"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
             check=True,
         ).stdout
         # Ubuntu's OpenSSH 9.x prints the keys lowercased, macOS's 10.5 in their config

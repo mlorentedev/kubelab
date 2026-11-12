@@ -137,7 +137,7 @@ def _probe(tmp_path: pathlib.Path, nodes: list[Node], now: int) -> list[dict]:
         # One per node, as the Secret carries them (BACKUP-057): the probe reads no shared key.
         **{f"RESTIC_PASSWORD_{node.name.upper()}": "not-a-real-value-fixture" for node in nodes},
     }
-    proc = subprocess.run(["sh", str(PROBE)], env=env, capture_output=True, text=True, timeout=60)
+    proc = subprocess.run(["sh", str(PROBE)], env=env, capture_output=True, text=True, encoding="utf-8", timeout=60)
     return [json.loads(line) for line in proc.stdout.splitlines() if line.strip()]
 
 

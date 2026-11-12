@@ -215,6 +215,7 @@ def _make_dry_run(target: str, *args: str) -> subprocess.CompletedProcess[str]:
         ["make", "-n", "--no-print-directory", "-C", str(REPO), target, *args],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=60,
     )
 

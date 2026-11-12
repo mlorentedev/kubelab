@@ -79,7 +79,10 @@ def test_crowdsec_declares_wal(overlay: str) -> None:
     if shutil.which("kubectl") is None:
         pytest.skip("kubectl not on PATH: cannot render the overlay (a skip is CANNOT CHECK, not OK)")
     result = subprocess.run(
-        ["kubectl", "kustomize", str(REPO_ROOT / "infra/k8s/overlays" / overlay)], capture_output=True, text=True
+        ["kubectl", "kustomize", str(REPO_ROOT / "infra/k8s/overlays" / overlay)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
     )
     assert result.returncode == 0, result.stderr
     deployments = [

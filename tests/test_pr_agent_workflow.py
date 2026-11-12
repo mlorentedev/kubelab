@@ -145,6 +145,7 @@ def test_the_queue_is_not_beside_a_cancelling_group() -> None:
     assert "queue" not in workflow["concurrency"]
     assert workflow["concurrency"]["cancel-in-progress"] is True
 
+
 def test_the_reviewer_skips_by_branch_but_the_gate_never_does() -> None:
     """The asymmetry is deliberate and must not be 'made consistent'.
 
@@ -219,6 +220,8 @@ def test_credential_material_is_excluded_from_the_model_call() -> None:
         assert required in globs, (
             f"{required} is not excluded; SOPS ciphertext and private keys would be sent for review"
         )
+
+
 def test_the_gate_does_not_cancel_on_events_that_add_evidence() -> None:
     """A comment, a label or an edit is new evidence about the SAME commit.
     Cancelling there is what put `cancelled` in `gh pr checks`' fail column on a
@@ -283,9 +286,7 @@ def test_a_gate_that_cannot_answer_still_fails_the_job() -> None:
 ARTIFACT_NAME = "reviewed-pr"
 
 
-
 _needs_bash = pytest.mark.skipif(shutil.which("bash") is None, reason="these steps are bash scripts")
-
 
 
 # --- the gate's half of the handoff (#1184) --------------------------------
@@ -443,6 +444,7 @@ def _run_resolve(tmp_path: pathlib.Path, **scenario: str) -> tuple[dict[str, str
         env=env,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=60,
     )
     assert proc.returncode == 0, (
@@ -549,7 +551,9 @@ def test_a_run_that_ties_to_nothing_skips_and_never_guesses(tmp_path: pathlib.Pa
         f"produce exactly `skip=true` — no number, and above all no status."
     )
 
+
 # --- the reviewer's model policy, held in two files ------------------------
+
 
 def _declared_chain() -> list[str]:
     """The NaN chain the caller declares, in order, transport prefix included."""
@@ -567,9 +571,7 @@ def test_every_model_pr_agent_reviews_with_is_admitted_in_the_reviewer_pool() ->
     left the model that actually runs unasserted.
     """
     admitted = {
-        e["pr_agent"]["model"]
-        for e in json.loads(REVIEWER_POOL.read_text(encoding="utf-8"))["pool"]
-        if "pr_agent" in e
+        e["pr_agent"]["model"] for e in json.loads(REVIEWER_POOL.read_text(encoding="utf-8"))["pool"] if "pr_agent" in e
     }
     chain = _declared_chain()
     assert chain[0] == "openai/mimo-v2.6-flash", "mimo leads: its failure is one the chain can move on from (#1205)"
@@ -594,6 +596,7 @@ def test_the_toml_does_not_restate_what_the_shared_job_sets() -> None:
         assert key not in config["config"], f"[config] {key} is set by the shared workflow"
     assert "litellm" not in config, "a [litellm] provider would reach the shared Anthropic steps"
     assert "github_action_config" not in config
+
 
 class _Null:
     """Actions' null: falsy, formats as '', and a property of null is null.
@@ -736,7 +739,6 @@ def _toml() -> dict:
     import tomllib
 
     return tomllib.loads(PR_AGENT_CONFIG.read_text(encoding="utf-8"))
-
 
 
 def test_a_failed_call_is_not_replayed_before_the_next_model_runs() -> None:

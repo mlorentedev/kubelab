@@ -43,7 +43,9 @@ def r2() -> dict[str, Any]:
 
 def _aws(r2: dict[str, Any], *args: str) -> subprocess.CompletedProcess[str]:
     argv = ["aws", "--endpoint-url", r2["endpoint"], "s3api", *args, "--bucket", r2["bucket"]]
-    return subprocess.run(argv, env=r2["env"], capture_output=True, text=True, timeout=60, check=False)
+    return subprocess.run(
+        argv, env=r2["env"], capture_output=True, text=True, encoding="utf-8", timeout=60, check=False
+    )
 
 
 def test_exactly_one_of_many_concurrent_lock_takers_wins(r2: dict[str, Any]) -> None:

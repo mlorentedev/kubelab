@@ -208,6 +208,7 @@ def _toolkit_without_sops(tmp_path: Path, *args: str) -> subprocess.CompletedPro
         env={"PATH": str(Path(sys.executable).parent)},
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=60,
     )
 

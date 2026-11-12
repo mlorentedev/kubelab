@@ -63,6 +63,7 @@ def _kustomize(path: str) -> list[dict]:
         ["kubectl", "kustomize", str(REPO_ROOT / path)],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
         timeout=120,
     )

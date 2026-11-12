@@ -103,7 +103,7 @@ def fleet(tmp_path: pathlib.Path, request):
 
 def _run(fleet) -> tuple[subprocess.CompletedProcess, dict[tuple[str, str], list[str]]]:
     _, out, env, shell = fleet
-    proc = subprocess.run([*shell, str(SIZE)], env=env, capture_output=True, text=True, timeout=60)
+    proc = subprocess.run([*shell, str(SIZE)], env=env, capture_output=True, text=True, encoding="utf-8", timeout=60)
     entries: dict[tuple[str, str], list[str]] = {}
     if out.exists():
         for line in out.read_text(encoding="utf-8").splitlines():

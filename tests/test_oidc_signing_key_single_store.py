@@ -141,7 +141,12 @@ def test_the_guard_reads_every_tracked_text_file_and_no_generated_one() -> None:
     # Against git's own listing, not a sample: every tracked file it skips must be binary.
     tracked = set(
         subprocess.run(
-            ["git", "ls-files", "--", *GUARD_ROOTS], cwd=ROOT, capture_output=True, text=True, check=True
+            ["git", "ls-files", "--", *GUARD_ROOTS],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            check=True,
         ).stdout.split("\n")
     ) - {""}
     # The suffix whitelist this guard used to apply (#2254). Reading past it is the point.
