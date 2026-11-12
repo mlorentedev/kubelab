@@ -1,0 +1,47 @@
+version: 1
+run_id: "autopilot-2026-11-12"
+armed_by: manu
+armed_at: 2026-11-12T06:59:46Z
+expires_at: 2026-11-12T18:59:46Z   # owner asked for 16h; the envelope caps a run at 12h
+objective: >-
+  Move resume's deploy through the kubelab contract: land the agent-merge IDP-053 work
+  and leave every owner-merge slice as a triaged, green, ready PR.
+scope:
+  write_paths:
+    - "toolkit/**"
+    - "tests/**"
+    - "specs/IDP-053-forge-agnostic-product-path/**"
+    - "docs/lessons/**"
+    - "docs/runbooks/cicd.md"
+    - "docs/adr/adr-067-*.md"
+    - "docs/adr/adr-073-*.md"
+    - "infra/k8s/**"
+    - "infra/config/products.yaml"
+    - "infra/ansible/**"
+    - ".github/workflows/promote-prod.yml"     # owner grant 2026-11-12: #3286
+    - ".github/workflows/deploy-shape.yml"     # owner grant 2026-11-12: #3289
+    - ".github/workflows/deploy-merge.yml"     # owner grant 2026-11-12: #3289
+  frozen_paths: [".agent/**", "**/AGENTS.md", ".github/merge-grant.yml", "infra/config/secrets/**", "infra/terraform/**"]
+  max_files: 12
+  max_loc: 300
+allowed_commands: [dotf, gh, git, make, poetry]
+queue:
+  source: bitacora
+  filter: >-
+    kubelab#2612 (IDP-053) slices and follow-ups, kubelab#3286/#3288/#3289/#3251,
+    the ADR-073 D13 record; resume#688/#777
+  max_items: 10
+merge:
+  agent: >-
+    PRs under the standing grant (.github/merge-grant.yml), plus the .github edits
+    for #3286 and #3289 (owner grant 2026-11-12)
+  owner: "S2b, S2c, S3b, S5c, S6b, S7, #3288, anything that mints a token or writes SOPS"
+budget:
+  max_iterations: 12
+  max_minutes_per_iteration: 45
+  max_consecutive_failures: 2
+authority:
+  merge: standing-grant
+  push: true
+  open_pr: true
+  advisor_tier: top
