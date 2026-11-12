@@ -31,19 +31,19 @@ created: "2026-10-21"
 
 ### 1. Read model and adapters
 
-- [ ] [P] [AC1] Contract tests for one read-adapter interface against recorded GitHub and Gitea responses
+- [x] [P] [AC1] Contract tests for one read-adapter interface against recorded GitHub and Gitea responses ✓ 2026-10-22 (#2635)
   - [x] ✓ 2026-10-22 Reader interface, unreachable-source error and the contract runner, with the recorded GitHub fixture (#2635)
   - [x] ✓ 2026-10-22 Gitea fixture (shape recorded from the live forge, values neutralised by hand) run through the same contract
   - [x] ✓ 2026-10-22 Pin the request in the contract: path and query are asserted per forge, mutation-proven (PR-Agent finding on #2635)
   - [x] ✓ 2026-10-22 Forge-neutral contract: expected items and counts are parameters (PR-Agent finding on #2635)
-- [ ] [AC1] Atlas migration in the `infra.postgres` tenant: items, event table, per-source `as_of` and reachability
+- [x] [AC1] Atlas migration in the `infra.postgres` tenant: items, event table, per-source `as_of` and reachability ✓ 2026-11-02 (#2933)
   - [x] ✓ 2026-11-02 Migration (#2933); the API connects as its own `api` tenant (#2932), decided by the operator over ADR-051 D2's owner role
 - [ ] [AC1] Implement the Gitea and GitHub adapters to make the contract tests pass
   - [x] ✓ 2026-10-22 GitHub adapter: pagination, `since`, token only when set and never sent to another host (#2635)
   - [x] ✓ 2026-10-22 Gitea adapter: issues and pull requests are two listings, either failing fails the read
   - [x] ✓ 2026-11-01 A `read:issue` credential for the Gitea reader of its own: `issue_reader_token`, a third token on the reviewer's account (no new account), minted by `beelink_services` provisioning from `token_scopes.issue_reader`, catalogued, rotatable with `make gitea-rotate-token TOKEN=issue_reader`. No expiry is recorded because Gitea's token API has no expiry field (as `bot_token`). The token exists only after `make provision NODE=bee ENV=prod TAGS=gitea` runs
   - [x] ✓ 2026-11-01 [AC4] Deliver `issue_reader_token` to the API: `FORGE_GITEA_TOKEN` in `api-secrets` (optional, since staging has no Gitea token and the API starts without it), read by `config.Forge`, with `tests/test_forge_credentials_delivery.py` pinning that no credential lands in a ConfigMap. No NetworkPolicy is needed: NET-002 is ingress-only and the API is the caller, so egress is not restricted
-  - [ ] [AC4] Measure the grant: the first live read of an issue list with `type=pulls` confirms `read:issue` alone suffices; a 403 widens `token_scopes.issue_reader` deliberately, with `ISSUE_READER_SCOPES`
+  - [ ] [AC4] Measure the grant: the first live read of an issue list with `type=pulls` confirms `read:issue` alone suffices; a 403 widens `token_scopes.issue_reader` deliberately, with `ISSUE_READER_SCOPES`. Not recorded yet: no written result names a `type=pulls` read with this grant, so the parent stays open until one does
   - [x] ✓ 2026-11-01 [AC4] The webhook receiver's host passes Gitea's `ALLOWED_HOST_LIST` without widening it: #2887 pinned Gitea's container to public resolvers (lesson-682), so the receiver needs a name that resolves to a public address. That also means Gitea cannot resolve `*.staging.kubelab.live`, so a Gitea webhook never reaches staging, and AC5's probe must account for it
 - [x] [AC1] Regression test: a source that is down renders unreachable with its last read time, never empty ✓ 2026-11-06
 - [ ] [P] [AC4] Webhook receiver: reject an invalid HMAC, store the event before projecting it
