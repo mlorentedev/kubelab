@@ -27,7 +27,7 @@ curl http://localhost:8080/health
 curl https://api.kubelab.live/health
 
 # View detailed logs
-toolkit apps logs api -f
+toolkit services logs api -f
 
 # Check Go runtime metrics
 curl http://localhost:8080/debug/vars   # If expvar enabled
@@ -40,7 +40,7 @@ docker exec api-container go run ./cmd/healthcheck
 
 - Check logs for panic/fatal errors
 - Verify all required environment variables are set
-- Restart the API container: `toolkit apps restart api`
+- Restart the API container: `toolkit services restart api`
 
 ### Build Failures
 
