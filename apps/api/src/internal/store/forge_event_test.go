@@ -324,3 +324,51 @@ func TestForgeModelListsTheSourcesItHasRead(t *testing.T) {
 		t.Fatalf("got %v, want [%v %v]", got, down, read)
 	}
 }
+
+// A8 reads days of use, so a second visit on the same UTC day must not add a row, and a
+// visit just after midnight UTC must.
+func TestConsoleUsageCountsOneRowPerIdentityAndUTCDay(t *testing.T) {
+	conf := testPostgres(t)
+	ctx := context.Background()
+	conn, err := pgx.Connect(ctx, conf.DSN())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close(ctx)
+	if _, err := conn.Exec(ctx, `DELETE FROM console_usage WHERE identity = 'usage-test'`); err != nil {
+		t.Fatal(err)
+	}
+	denver := time.FixedZone("MST", -7*3600)
+	visits := []struct {
+		at        time.Time
+		wantFirst bool
+	}{
+		{time.Date(2026, 11, 12, 9, 0, 0, 0, time.UTC), true},
+		{time.Date(2026, 11, 12, 23, 59, 0, 0, time.UTC), false},
+		{time.Date(2026, 11, 12, 17, 30, 0, 0, denver), true}, // 00:30 UTC on the 13th
+	}
+	for _, v := range visits {
+		first, err := store.RecordConsoleDay(ctx, conf, "usage-test", v.at)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if first != v.wantFirst {
+			t.Fatalf("RecordConsoleDay(%s) first = %v, want %v", v.at, first, v.wantFirst)
+		}
+	}
+	var days []string
+	rows, err := conn.Query(ctx, `SELECT day::text FROM console_usage WHERE identity = 'usage-test' ORDER BY day`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for rows.Next() {
+		var d string
+		if err := rows.Scan(&d); err != nil {
+			t.Fatal(err)
+		}
+		days = append(days, d)
+	}
+	if len(days) != 2 || days[0] != "2026-11-12" || days[1] != "2026-11-13" {
+		t.Fatalf("days = %v, want [2026-11-12 2026-11-13]", days)
+	}
+}
