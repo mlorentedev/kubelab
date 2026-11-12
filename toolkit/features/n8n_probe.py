@@ -1010,6 +1010,7 @@ def _default_exec(env: str) -> ExecFn:
             input=script,
             capture_output=True,
             text=True,
+            encoding="utf-8",
             timeout=_EXEC_TIMEOUT,
             check=False,
         )

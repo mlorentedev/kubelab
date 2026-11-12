@@ -48,7 +48,7 @@ _NOTHING_COLLECTED = 5
 
 def _dirty(repo: Path) -> str:
     return subprocess.run(
-        ["git", "status", "--porcelain"], cwd=repo, check=True, capture_output=True, text=True
+        ["git", "status", "--porcelain"], cwd=repo, check=True, capture_output=True, text=True, encoding="utf-8"
     ).stdout.strip()
 
 

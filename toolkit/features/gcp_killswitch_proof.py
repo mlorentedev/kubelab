@@ -46,7 +46,7 @@ class ProofResult:
 
 
 def _gcloud(*args: str, check: bool = True) -> str:
-    result = subprocess.run(["gcloud", *args], capture_output=True, text=True)
+    result = subprocess.run(["gcloud", *args], capture_output=True, text=True, encoding="utf-8")
     if check and result.returncode != 0:
         raise KillSwitchProofError(f"gcloud {' '.join(args)} failed: {result.stderr.strip()}")
     return result.stdout.strip()
