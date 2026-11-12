@@ -189,7 +189,9 @@ def test_the_inject_script_takes_the_interface_and_driver_from_the_unit(tmp_path
     for tool in ("systemctl", "sudo"):
         (bin_dir / tool).chmod(0o755)
     env = {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}"}
-    out = subprocess.run(["sh", "-c", h.inject_script()], env=env, capture_output=True, text=True, check=True).stdout
+    out = subprocess.run(
+        ["sh", "-c", h.inject_script()], env=env, capture_output=True, text=True, encoding="utf-8", check=True
+    ).stdout
     facts = h.parse(out)
     assert (facts["interface"], facts["driver"]) == ("kubelab-test-absent0", "brcmfmac")
     assert facts["before"] == "absent unanswered"
@@ -229,7 +231,9 @@ def test_the_inject_script_tries_the_unload_alone_then_with_its_holders(tmp_path
         "EDGE_SYS_NET": str(tmp_path / "net"),
         "EDGE_SYS_MODULE": str(tmp_path / "module"),
     }
-    out = subprocess.run(["sh", "-c", h.inject_script()], env=env, capture_output=True, text=True, check=True).stdout
+    out = subprocess.run(
+        ["sh", "-c", h.inject_script()], env=env, capture_output=True, text=True, encoding="utf-8", check=True
+    ).stdout
     facts = h.parse(out)
     assert facts["before"] == "up ENABLED"
     assert facts["bare-unload"] == "refused modprobe: FATAL: Module brcmfmac is in use."

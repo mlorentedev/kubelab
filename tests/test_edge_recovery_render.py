@@ -35,8 +35,8 @@ from typing import Any
 import pytest
 import yaml
 
-from tests.conftest import system_path
 from tests.ansible_jinja import ansible_env
+from tests.conftest import system_path
 
 REPO = Path(__file__).resolve().parents[1]
 ROLE = REPO / "infra" / "ansible" / "roles" / "gateway"
@@ -216,6 +216,7 @@ def test_the_units_pass_systemd_analyze_verify(tmp_path: Path) -> None:
         ["systemd-analyze", "verify", "--man=no", str(tmp_path / SERVICE), str(tmp_path / TIMER)],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         env={"SYSTEMD_UNIT_PATH": f"{tmp_path}:", "PATH": system_path()},
         check=False,
     )
@@ -296,6 +297,7 @@ class Edge:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            encoding="utf-8",
             env=env,
             start_new_session=True,
         ) as proc:

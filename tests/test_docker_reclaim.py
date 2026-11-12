@@ -371,6 +371,7 @@ def test_make_passes_a_zero_gate_through_to_the_cli() -> None:
         cwd=repo,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=60,
     )
     assert result.returncode == 0, result.stderr
@@ -383,6 +384,7 @@ def test_make_passes_a_zero_gate_through_to_the_cli() -> None:
         cwd=repo,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=60,
     )
     assert unset.returncode == 0, unset.stderr

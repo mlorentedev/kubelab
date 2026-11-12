@@ -341,10 +341,15 @@ def test_the_sync_skips_the_gateways_unreadable_plumbing_in_the_memories(tmp_pat
             ["git", "-C", str(repo), "-c", f"core.excludesFile={ignore}", *args],
             capture_output=True,
             text=True,
+            encoding="utf-8",
             env=env,
         )
         staged = subprocess.run(
-            ["git", "-C", str(repo), "diff", "--cached", "--name-only"], capture_output=True, text=True, env=env
+            ["git", "-C", str(repo), "diff", "--cached", "--name-only"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            env=env,
         ).stdout.split()
     finally:
         for name in ("MEMORY.md.lock", ".mem_abc123"):

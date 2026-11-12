@@ -270,6 +270,7 @@ def _git(root: pathlib.Path, *args: str) -> None:
         check=True,
         capture_output=True,
         text=True,
+        encoding="utf-8",
     )
 
 
@@ -463,6 +464,7 @@ class TestALessonThatHeadHasAndTheTreeDoesNotIsRefused:
             ["git", "-C", str(repo), "ls-files", "docs/lessons/alpha/lesson-2-two.md"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
             check=True,
         ).stdout
         assert staged == "", "fixture is not exercising the case: the index still lists the file"
