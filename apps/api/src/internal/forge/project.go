@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"log/slog"
 	"time"
 )
 
@@ -60,7 +61,10 @@ func ItemFromEvent(e Event) (*Item, error) {
 }
 
 // Projector turns stored deliveries into items.
-type Projector struct{ Log EventLog }
+type Projector struct {
+	Log    EventLog
+	Events *slog.Logger // nil writes JSON lines to stderr (events.go)
+}
 
 // Once projects one batch. A delivery that cannot be read is marked projected and
 // logged: leaving it pending would retry it forever, and the reconcile covers the item.
@@ -72,10 +76,10 @@ func (p *Projector) Once(ctx context.Context) error {
 	for _, e := range events {
 		item, err := ItemFromEvent(e)
 		if err != nil {
-			log.Printf("forge projection: %s delivery %s unreadable: %v", e.Forge, e.DeliveryID, err)
+			webhookFailure(p.Events, e.Forge, e.DeliveryID, "unreadable", err)
 		}
 		if err := p.Log.Project(ctx, e, item); err != nil {
-			log.Printf("forge projection: %s delivery %s: %v", e.Forge, e.DeliveryID, err)
+			webhookFailure(p.Events, e.Forge, e.DeliveryID, "projection", err)
 			// Pending is oldest first, so a delivery the store always refuses would end up
 			// filling every batch. Mark it without its item: the reconcile covers the item,
 			// and if the database is down this fails too and the delivery stays pending.
