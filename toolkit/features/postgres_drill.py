@@ -72,7 +72,7 @@ def _default_run(
             to_file = subprocess.run(argv, stdout=sink, stderr=stderr, env=merged, check=False)
         err = "" if stderr_to_file else to_file.stderr.decode("utf-8", "replace")
         return to_file.returncode, "", err
-    proc = subprocess.run(argv, input=stdin, capture_output=True, text=True, env=merged, check=False)
+    proc = subprocess.run(argv, input=stdin, capture_output=True, text=True, encoding="utf-8", env=merged, check=False)
     return proc.returncode, proc.stdout, proc.stderr
 
 

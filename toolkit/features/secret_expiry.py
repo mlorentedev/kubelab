@@ -165,6 +165,7 @@ def headscale_apikeys(ssh_target: str, container: str = "headscale") -> list[Key
         ],
         capture_output=True,
         text=True,
+        encoding="utf-8",
     )
     if result.returncode != 0:
         raise ExpiryUnavailableError(f"could not ask headscale on {ssh_target}: {result.stderr.strip()}")
@@ -267,6 +268,7 @@ def headscale_preauthkeys(ssh_target: str, container: str = "headscale") -> list
         ],
         capture_output=True,
         text=True,
+        encoding="utf-8",
     )
     if result.returncode != 0:
         raise ExpiryUnavailableError(f"could not ask headscale on {ssh_target}: {result.stderr.strip()}")
@@ -316,6 +318,7 @@ def expire_headscale_preauthkey(ssh_target: str, key_id: str, container: str = "
         ],
         capture_output=True,
         text=True,
+        encoding="utf-8",
     )
     if result.returncode != 0:
         raise ExpiryUnavailableError(f"could not expire pre-auth key {key_id}: {result.stderr.strip()}")

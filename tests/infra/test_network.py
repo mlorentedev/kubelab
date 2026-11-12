@@ -57,6 +57,7 @@ class TestTailscaleMesh:
                     [cli, "ping", "--c", "1", "--timeout", "5s", node.host],
                     capture_output=True,
                     text=True,
+                    encoding="utf-8",
                     timeout=10,
                 )
                 has_pong = "pong" in result.stdout.lower()

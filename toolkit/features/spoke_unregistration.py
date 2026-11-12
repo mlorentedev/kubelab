@@ -52,7 +52,7 @@ class Step:
 
 def _kubectl(argv: list[str]) -> tuple[int, str]:
     proc = subprocess.run(  # noqa: S603 - argv list, no shell
-        argv, capture_output=True, text=True, check=False
+        argv, capture_output=True, text=True, encoding="utf-8", check=False
     )
     return proc.returncode, (proc.stdout or proc.stderr).strip()
 
