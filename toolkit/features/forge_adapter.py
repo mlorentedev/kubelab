@@ -46,6 +46,15 @@ class ForgeError(Exception):
     """
 
 
+class ForgeReadError(ForgeError):
+    """The forge did not answer the read: an error status, not an answer that says no.
+
+    It is a ``ForgeError`` for the callers that refuse either way. The deploy-shape judge
+    tells them apart: an answer that disproves a PR is ``not-mechanical``, a read that
+    failed proves nothing about it and is ``unknown`` (#3288), as on the GitHub path.
+    """
+
+
 @runtime_checkable
 class ForgeAdapter(Protocol):
     """What the product path asks of a product's repository, whichever forge hosts it."""
@@ -152,7 +161,7 @@ class GiteaForge:
         try:
             return call(self._owner, self._repo, *args)
         except GiteaError as e:
-            raise ForgeError(str(e)) from None
+            raise ForgeReadError(str(e)) from None
 
     def resolve_commit(self, short: str) -> str:
         if len(short) < _GITEA_MIN_SHORT:

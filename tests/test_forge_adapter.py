@@ -18,7 +18,7 @@ from typer.testing import CliRunner
 
 from toolkit.cli.product import app
 from toolkit.features import forge_adapter, product_ready, product_registry, promotion
-from toolkit.features.forge_adapter import ForgeAdapter, ForgeError, GiteaForge, GitHubForge, adapter_for
+from toolkit.features.forge_adapter import ForgeAdapter, ForgeError, ForgeReadError, GiteaForge, GitHubForge, adapter_for
 from toolkit.features.gitea_client import ADMIN_METHODS, SCOPE_BY_METHOD, GiteaClient
 from toolkit.features.product_contract import ContractError
 
@@ -298,6 +298,18 @@ def test_gitea_resolve_commit_reports_an_outage_as_one_not_as_an_unknown_commit(
 
     with pytest.raises(ForgeError, match="502"):
         forge.resolve_commit(SHORT)
+
+
+def test_gitea_tells_a_read_that_failed_from_an_answer_that_says_no() -> None:
+    """The judge reads the first as `unknown` and the second as a refusal (#3288), so the type must differ."""
+    down, _ = _gitea({f"{GIT}/{SHORT}": (502, "bad gateway")})
+    absent, _ = _gitea({}, fallback=NO_COMMIT)
+
+    with pytest.raises(ForgeReadError):
+        down.resolve_commit(SHORT)
+    with pytest.raises(ForgeError) as no_such:
+        absent.resolve_commit(SHORT)
+    assert not isinstance(no_such.value, ForgeReadError)
 
 
 def _tag_body(name: str, commit: str, object_id: str) -> tuple[int, str]:
