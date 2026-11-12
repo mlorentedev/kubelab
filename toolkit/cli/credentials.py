@@ -48,6 +48,7 @@ def _decrypt_secrets_file(env: str) -> dict[str, Any]:
         ["sops", "-d", "--output-type", "yaml", str(secrets_file)],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=True,
         env=age_key_env(),  # auto-discover SOPS_AGE_KEY_FILE (toolkit/core/sops.py)
     )

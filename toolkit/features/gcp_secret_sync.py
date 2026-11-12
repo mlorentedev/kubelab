@@ -176,6 +176,7 @@ def collect_spoke_items(config: dict[str, Any]) -> tuple[list[SyncItem], list[Sy
                 ],
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
                 check=False,
             )
             if proc.returncode != 0 or not proc.stdout.strip():

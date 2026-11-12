@@ -220,7 +220,9 @@ def _sops_decrypt(secrets_dir: Path) -> DecryptFn:
         sops_file = secrets_dir / f"{env}.enc.yaml"
         if not sops_file.exists():
             return None
-        result = subprocess.run(["sops", "-d", str(sops_file)], capture_output=True, text=True, env=age_key_env())
+        result = subprocess.run(
+            ["sops", "-d", str(sops_file)], capture_output=True, text=True, encoding="utf-8", env=age_key_env()
+        )
         if result.returncode != 0:
             raise RevokeError(
                 f"{env}.enc.yaml exists but sops could not decrypt it; refusing to read it as holding no key"

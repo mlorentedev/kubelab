@@ -25,6 +25,7 @@ def run(query: str, variables: dict[str, Any] | None = None) -> dict[str, Any]:
             input=body,
             capture_output=True,
             text=True,
+            encoding="utf-8",
             check=False,
         )
     except FileNotFoundError as exc:

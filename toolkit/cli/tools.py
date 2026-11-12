@@ -89,6 +89,7 @@ def install_mkcert() -> None:
             ["mkcert", "-CAROOT"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
         )
         logger.info(f"CA root: {result.stdout.strip()}")
         return
@@ -244,6 +245,7 @@ def certs_status(
             ["mkcert", "-CAROOT"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
         )
         logger.info(f"mkcert CA root: {result.stdout.strip()}")
     else:
