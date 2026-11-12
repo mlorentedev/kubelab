@@ -12,7 +12,7 @@ tags: [kubelab, kubernetes, load-test, k6, traefik, softirq]
 
 **Context**: Staging's warm knee was a line in three of three ramps: `api` `/health` degraded at 2,000/s and `web` `/` at 1,600/s (#3294). Every degraded step held k6's whole `maxVUs` pool (3,200 to 4,000 connections, left by the cold burst), and the node had cores to spare (#3308).
 
-**Problem**: The pool k6 grows to (`max(200, 2 x rate)`) is a test setting, and it travelled with the rate: each step that offered more requests also held more connections. With the pool capped at 1,000 (`MAX_VUS=1000`), `api` was healthy at 3,200/s in all three ramps, at least 1.6 times the figure the uncapped runs reported. `web` moved from 1,400 to 1,600 to 2,000/s, and its limit turned out to be one CPU of the node (`cpu2`, busiest in nearly every 2 s row), 97% busy at 2,000/s, about 60 points of it softirq.
+**Problem**: The pool k6 grows to (`max(200, 2 x rate)`) is a test setting, and it travelled with the rate: each step that offered more requests also held more connections. With the pool capped at 1,000 (`MAX_VUS=1000`), `api` was healthy at 3,200/s in all three ramps, twice the 1,600/s the uncapped runs reported as its last healthy step. `web` moved from 1,400 to 1,600 to 2,000/s, and its limit turned out to be one CPU of the node (`cpu2`, busiest in nearly every 2 s row), 97% busy at 2,000/s, about 60 points of it softirq.
 
 **Solution**: A pool cap (`LT_MAX_VUS`, `make load-test MAX_VUS=...`) holds the connection count fixed across rates, and each timeline row names the busiest CPU with its busy and softirq shares. Run `2026-11-12-6fd47188`, report section "What limits warm capacity".
 
