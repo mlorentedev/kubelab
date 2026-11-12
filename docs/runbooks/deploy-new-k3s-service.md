@@ -15,7 +15,7 @@ created: "2026-03-28"
 ## Prerequisites
 
 - [ ] SOPS access configured (`make secrets-audit` decrypts every env vault and lists missing keys; a vault it cannot decrypt reads as every key missing)
-- [ ] K3s cluster access via kubeconfig (`~/.kube/kubelab-config`)
+- [ ] K3s cluster access via kubeconfig (`~/.kube/kubelab-staging-config`)
 - [ ] DNS wildcard `*.staging.kubelab.live` resolves to K3s ingress (100.64.0.4 via CoreDNS)
 - [ ] Authelia running and healthy on the cluster
 - [ ] Traefik running with CrowdSec bouncer middleware available
@@ -41,14 +41,25 @@ toolkit secrets edit --env staging
 # apps.services.platform.gitea.oidc_client_secret: "..."
 ```
 
-For OIDC services, also add the client secret hash to Authelia's config:
+Register every new key in `SECRET_CATALOG` (`toolkit/features/secrets_manager.py`)
+with the envs that must have it, so `make secrets-audit` reports a missing one.
+
+For OIDC services, the client is declared once and generated (SSOT-017, ADR-040):
+
+1. Add an entry to `apps.services.security.authelia.oidc_clients` in
+   `infra/config/values/common.yaml`. Follow an existing client; every entry
+   declares its own `token_endpoint_auth_method`.
+2. Store the client secret in SOPS as `oidc_client_secret_<id>`, then generate its
+   stored digest with `toolkit secrets hash`.
+3. Render the client files for each environment and commit them:
 
 ```bash
-# Generate argon2 hash of the client secret
-docker run --rm authelia/authelia:latest authelia crypto hash generate argon2 --password '<plaintext-secret>'
-
-# Add to Authelia OIDC clients in the appropriate config
+make sync-oidc-hashes ENV=staging
+make sync-oidc-hashes ENV=prod
 ```
+
+Never add a `clients:` block to `configuration.yml` or edit `oidc-clients.yml` by
+hand: `tests/test_oidc_clients.py` compares the committed files with the SSOT.
 
 If the service needs JWKS and it does not exist yet:
 
@@ -133,6 +144,17 @@ resources:
   - services/<service>.yaml
 ```
 
+A new workload has to be declared in a few more places, and a test fails until it is:
+
+- **Ingress NetworkPolicy** in `infra/k8s/base/governance/networkpolicies.yaml`,
+  naming every in-cluster caller (`tests/test_networkpolicy_coverage.py`, NET-002).
+- **State classification** for a stateful service in `common.yaml`
+  (`tests/test_stateful_service_classification.py`).
+- **Backup ruling** for a prod PVC in `backup.sources.vps` or `backup.excluded.vps`
+  (`tests/test_backup_pvc_coverage.py`).
+- **Write permission** for any new kind in `infra/k8s/argocd/spoke-rbac.yaml`
+  (`tests/test_spoke_rbac_covers_manifests.py`).
+
 ### 4. Add SecretMapping to Toolkit
 
 Edit `toolkit/features/k8s_secrets.py` to add the secret mapping for the new service:
@@ -147,14 +169,15 @@ SecretMapping(
 ),
 ```
 
-This ensures `toolkit infra k8s apply-secrets` creates the K8s Secret from SOPS values.
+This ensures `make apply-secrets ENV=<env>` creates the K8s Secret from SOPS values.
 
 ### 5. Configure Authelia Access Control
 
-Edit the Authelia configuration to add rules for the new service:
+Edit the access rules in `infra/k8s/base/services/authelia-config/configuration.yml`
+(the prod overlay has its own copy under `infra/k8s/overlays/prod/authelia-config/`):
 
 **For OIDC services (Tier 1)**:
-- Add OIDC client definition to Authelia's `identity_providers.oidc.clients[]`
+- The client itself comes from step 1, never from this file
 - Add `bypass` rule in `access_control.rules` (forward-auth not needed, OIDC handles auth)
 
 **For forward-auth services (Tier 2)**:
@@ -245,52 +268,50 @@ ServiceExpectation(
 
 ### 10. Deploy
 
+Validate on staging from your branch before merging:
+
 ```bash
-# Apply K8s manifests
-kubectl apply -k infra/k8s/overlays/staging/
-
-# Apply secrets from SOPS
-toolkit infra k8s apply-secrets --env staging
-
-# If the service has binary assets (logos, dashboards), verify configMapGenerator picked them up:
-kubectl kustomize infra/k8s/overlays/staging/ | kubectl apply -f -
+# Secrets, middleware secrets and the overlay, applied as Argo CD's service account
+make deploy-k8s ENV=staging
 ```
+
+A deploy from a worktree lasts only until the next commit lands on `master`, from
+any PR: Argo CD then reapplies `master` and your change disappears without a word.
+For anything longer than a quick check, point staging at your branch and point it
+back after the merge:
+
+```bash
+make argo-set-revision APP=kubelab-staging REV=<your-branch>
+make argo-set-revision APP=kubelab-staging REV=master
+```
+
+Prod receives the service when the PR merges: Argo CD syncs `master`.
 
 ### 11. Verify
 
 ```bash
 # Check pod is running
-kubectl -n kubelab get pods -l app=<service>
-
-# Check logs for errors
-kubectl -n kubelab logs -l app=<service> --tail=50
+kubectl --kubeconfig ~/.kube/kubelab-staging-config -n kubelab get pods -l app=<service>
 
 # Verify HTTPS access
 curl -I https://<service>.staging.kubelab.live
 
-# Run E2E tests
-pytest tests/e2e/ -k "<service>" -v
-
-# Run full test suite to ensure no regressions
-pytest tests/ -v
+# E2E against staging, then the full local suite
+make test-e2e ENV=staging
+make test
 ```
+
+Read logs from Loki first (`toolkit obs logs`): it keeps history across pod restarts.
 
 ## Rollback
 
-If the deployment fails or causes issues:
+Before merge, point staging back at `master`
+(`make argo-set-revision APP=kubelab-staging REV=master`). Argo CD reapplies `master`.
+After merge, revert the PR. Argo CD prunes the resources it tracks in both
+environments, and prod self-heals to the previous state. A PVC and its data go with
+the revert, so check the backup ruling first.
 
-```bash
-# Remove the service resources
-kubectl delete -f infra/k8s/base/services/<service>.yaml
-
-# Remove the associated secrets
-kubectl -n kubelab delete secret <service>-secrets
-
-# Remove the PVC (WARNING: destroys data)
-kubectl -n kubelab delete pvc <service>-pvc
-```
-
-Then revert the changes in:
+The revert covers:
 - `infra/k8s/base/kustomization.yaml`
 - `toolkit/features/k8s_secrets.py`
 - Authelia access control rules
