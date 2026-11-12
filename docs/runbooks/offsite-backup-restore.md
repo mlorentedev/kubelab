@@ -336,9 +336,13 @@ or open is the health rule's page.
    failed listing is in the `{container="r2-size"}` init container's stream.
 2. The usual cause is the R2 listing failing or timing out for that prefix: the
    token, the bucket, or the uplink. Fix that, then wait for the next probe (6 h);
-   one good probe clears the alert once it is the newest in the 24 h window.
-3. A node missing from `targets.txt` or from the sizes file entirely is also 0:
-   check the node is in `backup.sources` and the watcher's targets.
+   one measured probe anywhere in the 24 h window clears the alert. The reverse
+   holds too: a node measured once at the start of a bad day stays quiet for up
+   to 24 h after its listings began failing.
+3. A node absent from the sizes file is also 0, since its values read as unknown.
+   A node absent from `targets.txt` is different: the probe prints no line for it,
+   so this rule cannot see it at all. Check the node is in `backup.sources` and the
+   watcher's targets.
 
 ## Repository missing or replaced
 
