@@ -268,14 +268,30 @@ case "$1" in
 esac
 """
 
+# `can_root` asks `id -u` BEFORE it consults sudo, so a sudo stub alone cannot
+# decide the privileged path: the runner's own UID does. Anything other than 0
+# is delegated to the real binary, which is only ever asked that one question.
+_ID_REPORTS_UID = """
+case "$1" in
+  -u) echo "REPORTED_UID" ;;
+  *) exec "REALDIR/id" "$@" ;;
+esac
+"""
 
-def _isolated_host(tmp_path: Path, *, root_available: bool, poetry: bool = False) -> tuple[Path, Path]:
+
+def _isolated_host(
+    tmp_path: Path, *, root_available: bool, poetry: bool = False, is_root: bool = False
+) -> tuple[Path, Path]:
     """A PATH holding nothing this script is looking for, plus the stubs it needs
     to observe its own behaviour: no make, and an apt-get that would install one.
 
     `poetry=True` reproduces the state the official installer leaves behind —
     the binary in `~/.local/bin`, which the script prepends to PATH itself — so a
-    test can isolate one missing prerequisite from two."""
+    test can isolate one missing prerequisite from two.
+
+    `is_root=True` answers `id -u` with 0. Combined with `root_available=False` it
+    is the state that matters most and that the suite could not reach before: a
+    real root shell, where sudo is never needed and the sudo stub would fail."""
     stub = tmp_path / "bin"
     stub.mkdir()
     real = tmp_path / "real"
@@ -295,6 +311,7 @@ def _isolated_host(tmp_path: Path, *, root_available: bool, poetry: bool = False
     _stub(stub, "apt-get", _APT_GET_INSTALLS_MAKE.replace("STUBDIR", str(stub)))
     _stub(stub, "curl", "exit 0\n")
     _stub(stub, "sudo", _SUDO_ACCEPTS_DASH_N if root_available else _SUDO_WANTS_A_PASSWORD)
+    _stub(stub, "id", _ID_REPORTS_UID.replace("REPORTED_UID", "0" if is_root else "1000").replace("REALDIR", str(real)))
     return stub, home
 
 
@@ -414,6 +431,23 @@ def test_install_mode_does_not_attempt_apt_without_root(tmp_path: Path):
     assert "root is not available without a password" in combined, combined
     assert "GNU Make 4.3" not in combined, "apt-get ran without root"
     assert "HANDOFF:setup-ansible" not in combined
+
+
+@_needs_bash
+@_posix
+def test_install_path_runs_as_root_without_sudo(tmp_path: Path):
+    """The other privileged path, and the one the suite could not reach before:
+    on a host that really is root, `as_root` runs the command itself and never
+    asks sudo. It is exercised with root_available=False on purpose — that stub
+    fails every `-n`, so a single sudo call would turn this red."""
+    stub, home = _isolated_host(tmp_path, root_available=False, is_root=True)
+
+    result = _run_isolated(stub, home)
+    combined = result.stdout + result.stderr
+
+    assert result.returncode == 0, combined
+    assert "root is not available without a password" not in combined, combined
+    assert "HANDOFF:setup-ansible" in combined, combined
 
 
 def _code_only(path: Path) -> str:

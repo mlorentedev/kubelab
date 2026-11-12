@@ -42,7 +42,7 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 
 Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`. `dotf spec archive` refuses a line left unanswered, a `no` without a reason, and a `yes` whose file does not exist; a `00_meta/` path is looked up in the vault.
 
-- [x] Lesson for the repo's `docs/lessons/`? yes: docs/lessons/toolkit-tooling/lesson-732-a-diagnostic-that-counts-as-a-failure-blocks-the-machine-it-serves.md
+- [x] Lesson for the repo's `docs/lessons/`? yes: docs/lessons/toolkit-tooling/lesson-738-a-diagnostic-that-counts-as-a-failure-blocks-the-machine-it-serves.md
 - [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? no: a defect in one bootstrap script's control flow, and the pattern it produced is captured as a lesson rather than as an architectural choice
 - [x] New pattern candidate for `00_meta/patterns/`? no: the rule ("emit the verdict at a point of no return, never count diagnostics") is stated in the lesson and does not yet recur across projects
 
