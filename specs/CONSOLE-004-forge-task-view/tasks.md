@@ -81,7 +81,8 @@ created: "2026-10-21"
 
 ### 4. Observability
 
-- [ ] [P] [AC6] Structured log events for freshness, webhook failures, reconcile duration and outbox depth, through Vector to Loki
+- [x] [P] [AC6] Structured log events for freshness, webhook failures and reconcile duration, through Vector to Loki ✓ 2026-11-12 (#3342)
+- [ ] [P] [AC6] Outbox depth as a structured event (the pending deliveries the projector has not marked)
 - [ ] [AC6] Read-only Postgres role on a counts-only view, a Grafana datasource, and the dashboard (throughput, queue age, time to first review, time with a red CI, items by status, priority and area)
 - [ ] [AC6] The datasource credential reaches Grafana through a Secret (`secureJsonData`, read from env or file), never the plain `grafana-datasources` ConfigMap, and a change to it restarts Grafana (generated name or explicit restart)
 - [ ] [AC6] Grafana alert for a source not read within the declared bound
