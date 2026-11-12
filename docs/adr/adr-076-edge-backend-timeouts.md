@@ -18,7 +18,7 @@ Traefik 3.6 waits forever for a backend's response headers. `serversTransport.fo
 
 Three measurements decide the values. All were read from prod's slow-request access log (`make edge-slow-routes`, seven days, logged from 1 s):
 
-1. **Few routes ever take long, and none of them took long to send its headers.** Across 13 routers, 6,483 requests took 1 s or more. Excluding Headscale, 17 took more than 10 s and 4 more than 30 s.
+1. **Few routes ever take long, and none of them took long to send its headers.** Across 13 routers, 6,484 requests took 1 s or more. Excluding Headscale, 15 took more than 10 s and 4 more than 30 s.
    - Gitea's three hour-long `GET 200`s and web's 34.6 s request are bodies after early headers, so a header bound does not cut them.
    - Uptime Kuma's three 10 to 13 s requests ended `499`: the client closed first.
 2. **The access log is an upper bound.** `OriginDuration` includes the body copy, so a route under a bound is safe under it. A route over it needs its time to first byte measured before it is named as an exception.
