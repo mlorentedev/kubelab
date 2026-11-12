@@ -2016,6 +2016,14 @@ alerts:
 	$(eval _ENV := $(if $(filter staging prod hub,$(ENV)),$(ENV),prod))
 	@$(TOOLKIT) obs alerts --env $(_ENV)
 
+# Slow requests per route from the K3s edge's access log, to size the bound on a
+# backend's response headers (OPS-065, #3076). Prod by default: it is the traffic
+# the bound will cut. BOUNDS is a space-separated list of candidate seconds.
+.PHONY: edge-slow-routes
+edge-slow-routes: ## Report slow requests per route from the edge access log
+	$(eval _ENV := $(if $(filter staging prod,$(ENV)),$(ENV),prod))
+	@$(TOOLKIT) obs slow-routes --env $(_ENV) $(if $(DAYS),--days $(DAYS)) $(foreach b,$(BOUNDS),--bound $(b))
+
 # Say whether the lab edge's uplink is up, behind a portal, or dead (NET-005 AC5).
 # Reaches the edge over its LAN address, so it answers from the lab switch or the
 # lab Wi-Fi while the tailnet is down with the uplink. make exits 2 for any failure;

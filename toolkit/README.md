@@ -165,6 +165,7 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit obs drill-pvc-unbound` | Prove `obs015-pvc-unbound-failure` fires, and remove the claim afterwards. |
 | `toolkit obs logs` | Query Loki logs with LogQL filtering and traceback deduplication. |
 | `toolkit obs slack` | Read or post messages to Slack incident channels. |
+| `toolkit obs slow-routes` | Slow requests per route from the edge's access log, to size Traefik's backend bound (OPS-065). |
 | `toolkit obs triage` | Execute the 4-step automated SRE triage pipeline. |
 | `toolkit obs watcher-run` | Run a CronJob once now, print its log, and delete the Job. |
 | `toolkit product` | Validate and render kubelab.yaml product contracts, and read the product registry (ADR-067). |
