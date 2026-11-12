@@ -274,14 +274,66 @@ class TestTheCredentialGoesOnlyWhereTheRegistryItselfAsks:
         assert registry.tag_digest("docker.io/ns", "kubelab-web", VERSION) is None
 
 
+ENV_VAR = "GHCR_PULL_TOKEN"  # what CATALOG_KEY flattens to
+
+
+@pytest.fixture
+def sops(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
+    """The secrets catalog, standing in for SOPS; the environment variable the key names starts unset."""
+    monkeypatch.delenv(ENV_VAR, raising=False)
+    manager = MagicMock()
+    manager.get_secret_by_path.return_value = None
+    monkeypatch.setattr("toolkit.features.configuration.ConfigurationManager", lambda env: manager)
+    return manager
+
+
 class TestTheCatalogSecret:
-    def test_it_reads_the_key_through_the_configuration_manager(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        manager = MagicMock()
-        manager.get_secret_by_path.return_value = PULL_TOKEN
-        monkeypatch.setattr("toolkit.features.configuration.ConfigurationManager", lambda env: manager)
+    def test_it_reads_the_key_through_the_configuration_manager(self, sops: MagicMock) -> None:
+        sops.get_secret_by_path.return_value = PULL_TOKEN
 
         assert registry.catalog_secret(CATALOG_KEY) == PULL_TOKEN
-        manager.get_secret_by_path.assert_called_once_with(CATALOG_KEY)
+        sops.get_secret_by_path.assert_called_once_with(CATALOG_KEY)
+
+    @pytest.mark.parametrize(
+        ("key", "variable"),
+        [
+            ("ghcr.pull_token", "GHCR_PULL_TOKEN"),
+            ("gitea.registry_pull_token", "GITEA_REGISTRY_PULL_TOKEN"),
+            ("ghcr.pull-token", "GHCR_PULL_TOKEN"),
+        ],
+    )
+    def test_the_environment_variable_is_the_flattened_key(self, key: str, variable: str) -> None:
+        assert registry.catalog_secret_variable(key) == variable
+
+    def test_the_environment_variable_is_read_before_sops(
+        self, monkeypatch: pytest.MonkeyPatch, sops: MagicMock
+    ) -> None:
+        monkeypatch.setenv(ENV_VAR, PULL_TOKEN)
+
+        assert registry.catalog_secret(CATALOG_KEY) == PULL_TOKEN
+        sops.get_secret_by_path.assert_not_called()
+
+    @pytest.mark.parametrize("value", ["", "  \n"], ids=["empty", "blank"])
+    def test_an_empty_variable_is_unset_and_falls_back_to_sops(
+        self, monkeypatch: pytest.MonkeyPatch, sops: MagicMock, value: str
+    ) -> None:
+        """An Actions secret nobody created reaches the step as an empty string, not as an absent variable."""
+        sops.get_secret_by_path.return_value = PULL_TOKEN
+        monkeypatch.setenv(ENV_VAR, value)
+
+        assert registry.catalog_secret(CATALOG_KEY) == PULL_TOKEN
+
+    def test_neither_source_is_none(self, sops: MagicMock) -> None:
+        assert registry.catalog_secret(CATALOG_KEY) is None
+
+    def test_the_token_never_reaches_a_log_line(self, monkeypatch: pytest.MonkeyPatch, sops: MagicMock) -> None:
+        logged = MagicMock()
+        monkeypatch.setattr(registry, "logger", logged)
+        monkeypatch.setenv(ENV_VAR, PULL_TOKEN)
+
+        registry.catalog_secret(CATALOG_KEY)
+
+        assert PULL_TOKEN not in str(logged.mock_calls)
 
     def test_the_credential_does_not_print_its_token(self) -> None:
         assert PULL_TOKEN not in repr(CREDENTIAL) and PULL_TOKEN not in str(CREDENTIAL)
@@ -368,6 +420,42 @@ class TestTheReleaseProofOnAPrivateRegistry:
         assert "ghcr.io" in e.why and e.fix
         assert "exists" not in e.fix
         http.assert_not_called()
+
+    def test_the_variable_the_key_names_is_the_credential_where_there_is_no_age_key(
+        self, private_registry: Path, monkeypatch: pytest.MonkeyPatch, sops: MagicMock
+    ) -> None:
+        """#3286: a hosted runner has the pull token as an Actions secret in the environment, and no SOPS."""
+        monkeypatch.setenv(ENV_VAR, PULL_TOKEN)
+        http = _Oci(
+            "ghcr.io", "https://ghcr.io/token", {VERSION: DIGEST, f"sha-{SHA[:7]}": DIGEST}, login=(BOT, PULL_TOKEN)
+        )
+
+        assert _prove(private_registry, http, None) == DIGEST
+
+        sops.get_secret_by_path.assert_not_called()
+
+    def test_with_neither_source_the_refusal_names_the_variable_to_set(
+        self, private_registry: Path, sops: MagicMock
+    ) -> None:
+        http = MagicMock()
+
+        with pytest.raises(ContractError) as refused:
+            _prove(private_registry, http, None)
+
+        assert ENV_VAR in refused.value.fix and CATALOG_KEY in refused.value.error
+        http.assert_not_called()
+
+    def test_a_token_from_the_environment_is_in_no_refusal_and_no_log_line(
+        self, private_registry: Path, monkeypatch: pytest.MonkeyPatch, sops: MagicMock, warnings: MagicMock
+    ) -> None:
+        monkeypatch.setenv(ENV_VAR, PULL_TOKEN)
+        http = _Oci("ghcr.io", "https://ghcr.io/token", {VERSION: DIGEST}, login=(BOT, STALE_TOKEN))
+
+        with pytest.raises(ContractError) as refused:
+            _prove(private_registry, http, None)
+
+        e = refused.value
+        assert PULL_TOKEN not in f"{e.error}{e.why}{e.fix}{warnings.mock_calls}"
 
     def test_a_refused_login_names_the_registry_and_the_login_not_a_missing_tag(self, private_registry: Path) -> None:
         http = _Oci("ghcr.io", "https://ghcr.io/token", {VERSION: DIGEST}, login=(BOT, STALE_TOKEN))
