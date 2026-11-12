@@ -1660,7 +1660,7 @@ def k8s_provision_postgres_tenant(
             "-d",
             "kubelab",
         ]
-        res = subprocess.run(cmd, input=sql, text=True, capture_output=True)
+        res = subprocess.run(cmd, input=sql, text=True, encoding="utf-8", capture_output=True)
         if res.returncode != 0:
             # psql echoes a statement it cannot parse, and these statements hold the password.
             detail = res.stderr.replace(password, "***")

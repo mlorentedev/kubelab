@@ -109,7 +109,7 @@ def cluster_holds_token(env: str, token: str, run: Callable[..., Any] = subproce
     command = ["kubectl", "--kubeconfig", str(output_path(env)), "--request-timeout=15s", "-n", "kube-system"]
     command += ["get", "secret", CLUSTER_SECRET, "-o", "jsonpath={.data.api-token}"]
     try:
-        done = run(command, capture_output=True, text=True, check=False)
+        done = run(command, capture_output=True, text=True, encoding="utf-8", check=False)
     except OSError as exc:
         raise ScopeUncheckableError(f"kubectl could not run: {exc}") from exc
     if done.returncode != 0:

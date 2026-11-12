@@ -375,7 +375,7 @@ def _ssh(ssh_target: str | None, command: str, timeout: int = 300) -> str:
         if ssh_target is LOCAL
         else ["ssh", "-o", "ConnectTimeout=10", "-o", "BatchMode=yes", ssh_target, command]
     )
-    result = subprocess.run(argv, capture_output=True, text=True, timeout=timeout)
+    result = subprocess.run(argv, capture_output=True, text=True, encoding="utf-8", timeout=timeout)
     if result.returncode != 0:
         raise DockerUnavailableError(f"{command} failed on {ssh_target or 'localhost'}: {result.stderr.strip()}")
     return result.stdout

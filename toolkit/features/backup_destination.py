@@ -39,7 +39,9 @@ def _default_run(argv: list[str], env: dict[str, str], timeout: int = _TIMEOUT) 
     # along with an R2 pair makes R2 refuse it, and the refusal reads as a
     # wrong credential (TF-007 review).
     merged = {**{k: v for k, v in os.environ.items() if not k.startswith("AWS_")}, **env}
-    proc = subprocess.run(argv, capture_output=True, text=True, timeout=timeout, env=merged, check=False)
+    proc = subprocess.run(
+        argv, capture_output=True, text=True, encoding="utf-8", timeout=timeout, env=merged, check=False
+    )
     return proc.returncode, proc.stdout, proc.stderr
 
 

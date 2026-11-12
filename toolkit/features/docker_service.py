@@ -88,6 +88,7 @@ class DockerService:
                 env=full_env,
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
                 check=False,
             )
 
@@ -163,6 +164,7 @@ class DockerService:
             env=full_env,
             capture_output=True,
             text=True,
+            encoding="utf-8",
             check=False,
         )
 
