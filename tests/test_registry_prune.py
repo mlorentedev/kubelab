@@ -89,8 +89,16 @@ class TestTagDigest:
         monkeypatch.setattr(registry.httpx, "get", MagicMock(side_effect=registry.httpx.ConnectError("down")))
         assert registry.tag_digest("docker.io/ns", "kubelab-web", "1.16.1") is None
 
-    def test_a_registry_other_than_docker_hub_is_none(self) -> None:
-        assert registry.tag_digest("ghcr.io/ns", "kubelab-web", "1.16.1") is None
+    def test_a_registry_other_than_docker_hub_is_read_over_oci_not_through_the_hub_api(self) -> None:
+        # The authenticated read is tests/test_registry_digest.py; here only that the hub API is not asked.
+        seen: list[str] = []
+
+        def http(method: str, url: str, **kwargs: object) -> registry.httpx.Response:
+            seen.append(url)
+            return registry.httpx.Response(404)
+
+        assert registry.tag_digest("ghcr.io/ns", "kubelab-web", "1.16.1", http=http) is None
+        assert seen == ["https://ghcr.io/v2/ns/kubelab-web/manifests/1.16.1"]
 
 
 class TestDockerHubClient:

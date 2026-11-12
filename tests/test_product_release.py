@@ -51,7 +51,7 @@ class _Registry:
         self.answers: dict[str, str | None] = {VERSION: DIGEST, f"sha-{FULL[:7]}": DIGEST}
         self.seen: list[tuple[str, str, str]] = []
 
-    def __call__(self, registry: str, image_name: str, tag: str) -> str | None:
+    def __call__(self, registry: str, image_name: str, tag: str, credential=None, http=None) -> str | None:
         self.seen.append((registry, image_name, tag))
         return self.answers.get(tag)
 
@@ -167,19 +167,27 @@ def test_an_unread_release_tag_names_a_private_repository_as_a_cause(gh, digests
     assert "private" in answer["why"]
 
 
-def test_a_registry_the_proof_cannot_read_is_refused_by_name(
+def test_a_private_registry_without_its_credential_is_refused_by_name(
     gh, digests, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Not 'check that the tag exists': the tag may exist where the proof cannot look (#2627)."""
-    elsewhere = "ghcr.io/acme/web"
-    monkeypatch.setattr(product_release.product_registry, "derived_image", lambda app, registry=None: elsewhere)
+    """Not 'check that the tag exists': the tag may exist where the proof has no login to look (#2627 AC2)."""
+    private = product_release.product_registry.Product(
+        forge="github",
+        repository="mlorentedev/web",
+        receiver="generic",
+        private=True,
+        image_registry="ghcr.io/acme",
+        pull_credential={"username": "deploy-bot", "secret": "ghcr.pull_token"},
+    )
+    monkeypatch.setattr(product_release.product_registry, "product", lambda app, registry=None: private)
+    monkeypatch.setattr(product_release, "catalog_secret", lambda key: None)
 
     code, answer = _fetch(tmp_path / "web.yaml")
 
     assert code == 1
-    assert "ghcr.io/acme" in answer["error"]
+    assert "ghcr.io/acme" in answer["error"] and "ghcr.pull_token" in answer["error"]
     assert "exists" not in answer["fix"]
-    assert digests.seen == [], "an unsupported registry must be refused before any read"
+    assert digests.seen == [], "a private registry with no credential must be refused before any read"
 
 
 def test_a_version_with_no_release_tag_is_refused(gh, digests, tmp_path: pathlib.Path, monkeypatch) -> None:
