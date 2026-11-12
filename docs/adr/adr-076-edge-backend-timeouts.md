@@ -38,6 +38,7 @@ C. **Both.**
 2. **Headscale is an exception from the first deploy, until it is measured.**
    - Go's transport applies `ResponseHeaderTimeout` up to the `101`, so the handshake is probably far inside any bound. But Headscale is the bootstrap dependency of every node, and staging has no route to it, so a wrong guess would cost the VPN with no rehearsal.
    - The exception is lifted when a node re-registers in prod under the default (AC4).
+   - It cannot outlive the work silently: AC4 is an acceptance criterion of OPS-065, so the spec does not archive while the exception stands. Keeping it past that point is a new decision, recorded here.
 3. **`dialTimeout` 5 s, down from 30 s.**
    - Every backend is on the cluster network or the tailnet, so a dial that takes 5 s means the node is off.
    - On-demand routes then show their error page in 5 s instead of 30 s (#2207).
