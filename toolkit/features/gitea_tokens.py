@@ -182,8 +182,15 @@ class RotationPlan:
 
 
 def rotation_store_env(label: str, env: str) -> str:
-    """The env whose SOPS file holds `label`'s value: its own `store_env`, else `env`."""
+    """The env whose SOPS file holds `label`'s value: its own `store_env`, else `env`.
+
+    A token stored apart from its Gitea is rotated through the env that reaches that Gitea, so
+    `env == store_env` is refused: staging names no Gitea, and a revoke sent there could fail to
+    find the live token and still clear the key, leaving the next mint refused on its name.
+    """
     spec = ROTATABLE_TOKENS.get(label)
+    if spec and spec.store_env == env:
+        raise ValueError(f"{label} is stored in {env} but minted by another env's Gitea; rotate it with ENV=prod")
     return (spec.store_env if spec else None) or env
 
 

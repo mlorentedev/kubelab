@@ -971,7 +971,11 @@ def gitea_rotate_token(
     gitea = merged["apps"]["services"]["core"]["gitea"]
     identities = merged["apps"]["auth"]["identities"]
     # Gitea is reached through `env`; the value may live in another env's file (#3267).
-    store_env = rotation_store_env(token, env)
+    try:
+        store_env = rotation_store_env(token, env)
+    except ValueError as exc:
+        logger.error(str(exc))
+        raise typer.Exit(1) from exc
     stored = (
         gitea
         if store_env == env

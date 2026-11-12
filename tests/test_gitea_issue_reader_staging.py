@@ -16,6 +16,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
 import yaml
 
 from toolkit.features.gitea_tokens import ROTATABLE_TOKENS, format_rotation_plan, plan_rotation, rotation_store_env
@@ -52,6 +53,10 @@ class TestRegistry:
         assert rotation_store_env("issue_reader_staging", "prod") == "staging"
         assert rotation_store_env("issue_reader", "prod") == "prod"
         assert rotation_store_env("bot", "prod") == "prod"
+
+    def test_it_is_never_rotated_through_the_env_that_only_stores_it(self) -> None:
+        with pytest.raises(ValueError, match="ENV=prod"):
+            rotation_store_env("issue_reader_staging", "staging")
 
     def test_the_plan_names_the_file_it_would_clear(self) -> None:
         plan = plan_rotation("issue_reader_staging", {"reviewer": "argos"}, secret_present=True, store_env="staging")
