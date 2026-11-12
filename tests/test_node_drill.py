@@ -313,7 +313,9 @@ def test_the_make_target_passes_node_and_env_through_and_refuses_an_empty_node()
     import subprocess
 
     def dry(*args: str) -> subprocess.CompletedProcess:
-        return subprocess.run(["make", "-n", "backup-drill-node", *args], cwd=REPO, capture_output=True, text=True)
+        return subprocess.run(
+            ["make", "-n", "backup-drill-node", *args], cwd=REPO, capture_output=True, text=True, encoding="utf-8"
+        )
 
     ok = dry("NODE=ace2", "ENV=prod")
     assert ok.returncode == 0, ok.stderr
@@ -321,7 +323,9 @@ def test_the_make_target_passes_node_and_env_through_and_refuses_an_empty_node()
     # ENV passes through when it names an env; anything else falls back to prod, as in the sibling drills.
     assert "--env staging" in dry("NODE=ace2", "ENV=staging").stdout
     # Really run, not `-n`: the guard is the recipe's first line and exits before the toolkit starts.
-    refused = subprocess.run(["make", "backup-drill-node", "ENV=prod"], cwd=REPO, capture_output=True, text=True)
+    refused = subprocess.run(
+        ["make", "backup-drill-node", "ENV=prod"], cwd=REPO, capture_output=True, text=True, encoding="utf-8"
+    )
     assert refused.returncode != 0 and "Usage: make backup-drill-node" in refused.stdout + refused.stderr
     assert "drill-node --node" not in refused.stdout
 
