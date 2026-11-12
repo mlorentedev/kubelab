@@ -16,18 +16,21 @@ import re
 from pathlib import Path
 from typing import Any
 
+import pytest
 import typer
 
 from tests.test_runbook_targets_exist import _FENCE, _INLINE, REPO, _runbooks
 from toolkit.main import app
 
 # `toolkit` in command position: at the start of a line (after an optional `$ `
-# prompt), behind `poetry run`, or after a shell separator. Words are read on the
+# prompt), behind `poetry run`, or after a shell separator, each optionally
+# followed by `VAR=value` assignments or `sudo`/`exec`/`time`. Words are read on the
 # same line only. Prose in a code comment ("the toolkit mints ...") is not a call,
 # and a word on the next line is not an argument. Not `tk`: that alias is the
 # operator's shell function, not something the repository installs.
 _TOOLKIT_CALL = re.compile(
     r"(?m)(?:^[ \t]*(?:\$[ \t]+)?|poetry[ \t]+run[ \t]+|&&[ \t]*|;[ \t]*|\|[ \t]*|\$\()"
+    r"(?:(?:[A-Za-z_][A-Za-z0-9_]*=\S*|sudo|exec|time)[ \t]+)*"
     r"toolkit((?:[ \t]+[a-z][a-z0-9-]*)+)"
 )
 
@@ -88,6 +91,24 @@ def _broken() -> set[tuple[str, str]]:
         for call in _calls(doc)
         if _missing(call.split(), root) is not None
     }
+
+
+@pytest.mark.parametrize(
+    ("line", "call"),
+    [
+        ("toolkit services logs api", "services logs api"),
+        ("$ poetry run toolkit config get x", "config get x"),
+        ("ENV=dev toolkit apps logs api", "apps logs api"),
+        ("A=1 B=2 toolkit apps up", "apps up"),
+        ("sudo toolkit edge restart traefik", "edge restart traefik"),
+        ("make x && toolkit apps down", "apps down"),
+        ("# the toolkit mints a key", None),
+        ("see toolkit apps in the old docs", None),
+    ],
+)
+def test_the_scan_finds_toolkit_in_command_position_only(line: str, call: str | None) -> None:
+    found = [m.group(1).strip() for m in _TOOLKIT_CALL.finditer(line)]
+    assert found == ([call] if call else []), found
 
 
 def test_the_scan_reaches_documented_toolkit_commands() -> None:
