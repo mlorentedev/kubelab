@@ -801,3 +801,26 @@ def test_an_unknown_pack_count_is_null_and_never_fails_a_healthy_node(fleet, val
     assert rc == 0 and vps["healthy"] == 1 and summary["healthy"] == 1
     assert vps["packs"] is None
     assert vps["stored_bytes"] == SIZES["vps"]
+
+
+@pytest.mark.parametrize(
+    ("overrides", "measured"),
+    [
+        ({}, 1),
+        ({"node__vps": "null"}, 0),
+        ({"node__vps": "absent"}, 0),
+        ({"packs__vps": "null"}, 0),
+        ({"packs__vps": "absent"}, 0),
+        ({"node__vps": "null", "packs__vps": "null"}, 0),
+    ],
+)
+def test_sizes_measured_is_one_only_when_bytes_and_packs_are_both_known(fleet, overrides, measured) -> None:
+    """BACKUP-083 (#3304): `unwrap` drops a `null`, so the shrink and check-budget rules lose a
+    node's series when either value is missing. This integer is never null, so a rule can see it."""
+    _, _, env = fleet
+    _write_sizes(env, _sizes(**overrides))
+    rc, nodes, _ = _run(env)
+    assert rc == 0, "an unmeasured size never fails a healthy node"
+    assert _node(nodes, "vps")["sizes_measured"] == measured
+    # The other node is measured whatever the first one is.
+    assert _node(nodes, "rpi3")["sizes_measured"] == 1

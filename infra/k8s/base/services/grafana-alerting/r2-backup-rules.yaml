@@ -249,7 +249,8 @@ groups:
       # BACKUP-032: a node's repository lost more than half its size between two
       # probes (operator decision, 2026-10-02). A prune that removed real data, or
       # a source that started capturing an empty directory. The size is never a
-      # health check in the probe, so this judgement lives here.
+      # health check in the probe, so this judgement lives here. A node whose size
+      # stays unmeasured drops out of this rule's result: the rule below sees that.
       - uid: backup032-r2-backup-shrink
         title: A node's R2 backup shrank by more than half
         condition: C
@@ -344,8 +345,8 @@ groups:
         # No pack count from ANY node for a day is no data, and that alerts. One
         # node alone going unmeasured is not: its series drops out of the result
         # while the others keep the rule evaluating (the shrink rule has the same
-        # gap). Its `pack count unknown` line is in the r2-size stream; a
-        # per-node presence check for sizes and packs is #3304.
+        # gap). `backup083-node-sizes-unmeasured` below is the per-node check; the
+        # node's `pack count unknown` line is in the r2-size stream.
         noDataState: Alerting
         execErrState: Alerting
         annotations:
@@ -407,6 +408,82 @@ groups:
                 - evaluator:
                     type: gt
                     params: [1312]
+              datasource:
+                type: __expr__
+                uid: __expr__
+      # BACKUP-083 (#3304): the shrink and check-budget rules unwrap `stored_bytes`
+      # and `packs`, and `unwrap` drops a `null`. A node whose size stays unmeasured
+      # loses its series from both, and `noDataState: Alerting` fires only when EVERY
+      # node is gone, so one node blind for days raised nothing. The probe's
+      # `sizes_measured` is 1 only when both values are known and is never null, so
+      # every node keeps a series here. `max_over_time` over a day: a single failed
+      # listing is not a page, a node unmeasured at every probe for 24 h is. Left on
+      # the default route: in prod it pages. Evaluated against fixture lines from the
+      # real probe by tests/test_r2_backup_freshness_rule.py.
+      - uid: backup083-node-sizes-unmeasured
+        title: A node's backup size or pack count was not measured for a day
+        condition: C
+        for: 10m
+        noDataState: Alerting
+        execErrState: Alerting
+        annotations:
+          summary: >-
+            A node's stored bytes or pack count was not measured at any probe in the last
+            24 hours, so the shrink and check-budget rules are blind for that node. The
+            reason is in the size init container's stream, `{container="r2-size"}`
+            (`size unknown`, `pack count unknown`). Or the watcher reported nothing at all:
+            start with the health rule's runbook.
+          runbook_url: >-
+            https://github.com/mlorentedev/kubelab/blob/master/docs/runbooks/offsite-backup-restore.md#node-sizes-unmeasured
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 86400
+              to: 0
+            datasourceUid: loki
+            model:
+              refId: A
+              datasource:
+                type: loki
+                uid: loki
+              editorMode: code
+              queryType: range
+              # `backup_node`, not `node`: see the freshness rule above (lesson-512).
+              # `sizes_measured` is 0 or 1, never `null`, so no series is dropped.
+              expr: >-
+                max_over_time(
+                  {container="r2-backup-watcher"}
+                    | json backup_node="node", metric="metric", sizes_measured="sizes_measured"
+                    | metric=`r2_backup_node`
+                    | unwrap sizes_measured
+                  [24h]
+                ) by (backup_node)
+          - refId: B
+            relativeTimeRange:
+              from: 86400
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              reducer: last
+              expression: A
+              datasource:
+                type: __expr__
+                uid: __expr__
+          - refId: C
+            relativeTimeRange:
+              from: 86400
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    type: lt
+                    params: [1]
               datasource:
                 type: __expr__
                 uid: __expr__

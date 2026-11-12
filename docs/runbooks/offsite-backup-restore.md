@@ -317,7 +317,28 @@ within weeks, before the check times out (#2920).
 With no data from every node for a day, the reason is in the
 `{container="r2-size"}` stream; a watcher that stopped is
 [R2 backup alert](#r2-backup-alert). A single node with no pack count does not
-fire this rule: look for its `pack count unknown` line in that stream.
+fire this rule, its series just drops out: [Node sizes
+unmeasured](#node-sizes-unmeasured) is the alert for that.
+
+## Node sizes unmeasured
+
+`backup083-node-sizes-unmeasured` fires when a node's `sizes_measured` was 0 at every
+probe for 24 h: its `stored_bytes` or its `packs` was `null` each time. Loki's `unwrap`
+drops a `null`, so for that node [R2 backup shrank](#r2-backup-shrank) and
+[Backup check outgrowing its budget](#backup-check-outgrowing-its-budget) have no
+series and are blind, and they cannot say so: their no-data alert fires only when
+every node is missing. The backup itself is not affected; a node that fails to ship
+or open is the health rule's page.
+
+1. Read both containers for the node: `toolkit obs logs --env prod -q
+   '{container=~"r2-backup-watcher|r2-size"}' --since 24h`. The watcher's `size unknown`
+   (`stored_bytes`) and `pack count unknown` lines name the node, and the reason for the
+   failed listing is in the `{container="r2-size"}` init container's stream.
+2. The usual cause is the R2 listing failing or timing out for that prefix: the
+   token, the bucket, or the uplink. Fix that, then wait for the next probe (6 h);
+   one good probe clears the alert once it is the newest in the 24 h window.
+3. A node missing from `targets.txt` or from the sizes file entirely is also 0:
+   check the node is in `backup.sources` and the watcher's targets.
 
 ## Repository missing or replaced
 
