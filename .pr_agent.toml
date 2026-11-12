@@ -17,32 +17,17 @@
 # `main` before porting; values below that differ are measured against this repo.
 
 [config]
-# `openai/` selects LiteLLM's OpenAI-compatible transport; the endpoint is NaN's,
-# set as OPENAI__API_BASE in the workflow. Nothing here talks to OpenAI.
-#
-# mimo-v2.6-flash leads, deepseek-v4-flash follows. mimo-v2.6-flash replaced
-# mimo-v2.5 on 2026-10-01, when NaN retired the older model: it answers 401
-# "This API key does not have access to the requested model" (run 36800846902,
-# and a direct call from this repo's key). Admitted to harness/reviewer-pool.json
-# on the same bar, see its entry. What follows was measured on mimo-v2.5 and is
-# carried over, not re-run.
-#
-# mimo leads, deepseek follows, and the order was the other way
-# round until #1205 measured why it could not work. deepseek returns a 200 with
-# an empty body — it spends its OUTPUT budget on the reasoning chain and never
-# writes the answer — which raises no exception, so LiteLLM never consults the
-# fallback. With deepseek in front the chain was unreachable: the primary's
-# characteristic failure is precisely the one no fallback can catch.
-#
-# Inverted, the chain works for the first time. mimo's failure mode is
-# saturation (a 429), which DOES raise, so it falls through to deepseek.
-#
-# What is measured, stated narrowly: under the same harness mimo returned a
-# real, correct finding on a planted defect and deepseek returned nothing. That
-# is not a quality ranking — none exists, and harness/reviewer-pool.json says so
-# in its own entry. For a reviewer whose current failure is silence, delivering
-# an answer is the property being selected for.
-model = "openai/mimo-v2.6-flash"
+# The model, its fallbacks and the model capacity are set by the shared workflow
+# (mlorentedev/ci-workflows pr-agent.yml) through environment variables, which sit
+# above this file, so they are not repeated here. The chain it probes is declared
+# in .github/workflows/pr-agent.yml (`declared_model`, `declared_fallback_models`),
+# mimo first for the reason this file recorded until the shared caller (#1205).
+# The shared NaN step does NOT set the timeout, the retries or the prompt budget,
+# so the settings below still govern that path.
+
+# The shared workflow's NaN step sets custom_model_max_tokens but not this cap,
+# whose upstream default (32000) would clip the diff, so it stays here.
+max_model_tokens = 200000
 
 # How long a review takes, and what cuts it off. Measured 2026-10-01 from the
 # raw run logs (`gh run view --log` drops the lines after the diff artifact; the
@@ -59,71 +44,15 @@ model = "openai/mimo-v2.6-flash"
 #   Run 36800846902 (#1909's 720 s): mimo-v2.5 answered 401 at once, and
 #   deepseek then took 2 x 3 x 120 s before "Failed to review PR".
 #
-# Hence: stream (the [litellm] block below), no replay of a timed-out call,
-# and an attempt long enough to finish. A non-timeout error (a 5xx, a dropped
-# stream) is still replayed once on the same model: MODEL_RETRIES is a
-# constant with no setting. So the PR-Agent step carries its own
-# `timeout-minutes`, which cuts that worst case and leaves the next step time
-# to name the failure. `tests/test_pr_agent_workflow.py` holds both bounds.
+# Hence: stream (set by the shared workflow on its NaN step), no replay of a
+# timed-out call, and an attempt long enough to finish. A non-timeout error (a 5xx,
+# a dropped stream) is still replayed once on the same model: MODEL_RETRIES is a
+# constant with no setting. The shared NaN step carries its own `timeout-minutes`
+# (12 at v0.6.0), which cuts that worst case and leaves the next step time to name
+# the failure.
 retry_same_model_on_timeout = false
 num_retries = 0
 ai_timeout = 360
-
-# ONE fallback, and it is not the cheap kind this line used to forbid.
-#
-# The rule that stood here has not changed: no LATENCY-OPTIMISED fallback. If the
-# reviewer fails, the gate reports `declined` and the PR goes red — a LOUD
-# absence — and a flash-tier stand-in would trade that for a quiet rubber stamp.
-# `harness/reviewer-pool.json` holds the same policy for the spec-level review
-# and rejects the flash tiers on quality grounds; two files in one repo holding
-# opposing views on who may review is its own defect.
-#
-# Neither model in this chain crosses that line. Both are reasoning-class by
-# profile — 1M context and a reasoning chain, against qwen3.6 and gemma4's 262K,
-# which is the line that pool actually draws — and both are admitted there.
-# tests/test_pr_agent_workflow.py now enforces that agreement instead of leaving
-# it to whoever edits one file next.
-#
-# What this buys, measured: NaN's concurrency limit is PER MODEL, not per API
-# key. Eight simultaneous requests to deepseek return 5x200 and 3x429 while mimo
-# answers 200 through the same key during that same saturation. So a saturated
-# deepseek — the diagnosed cause of PR-Agent reporting success and publishing
-# nothing (#1107) — becomes a review served by the second model rather than a
-# review that never happened.
-#
-# What it does NOT buy, and the distinction cost a wrong diagnosis on #1202:
-# LiteLLM falls back on an EXCEPTION. A 200 carrying an empty or truncated body
-# is not one, so no fallback fires. Measured on #1202 run 32440498259: the
-# PR-Agent step concluded `success` after 4m15s, its last log line "Generating
-# prediction with openai/deepseek-v4-flash" at 02:38:06 followed by four silent
-# minutes, no RateLimitError, and mimo never attempted. That is the primary
-# spending its output budget on reasoning and never writing an answer — the
-# same shape recorded against deepseek in harness/reviewer-pool.json. It looks
-# identical from outside (green job, no review) and needs a different fix.
-# Tracked in #1205.
-#
-# NOT a licence to drop the inference concurrency group below. That group is
-# what caps this workflow's demand, and removing it without measuring first
-# reinstates the 429s this fallback exists to absorb. See #1203.
-#
-# glm5.3-flash joins as the third member (TOOL-082, ADR-070), with the weight the
-# pool gives it in the CI draw. It needs a low reasoning effort to answer at all,
-# which the workflow sets on the NaN attempt. The workflow's preflight declares
-# this same chain and drops any model that does not answer before PR-Agent runs;
-# a test holds the two lists equal.
-fallback_models = ["openai/deepseek-v4-flash", "openai/glm5.3-flash"]
-
-# `model_weak` is deliberately ABSENT. Upstream sets it to a flash-tier model for
-# descriptions and commit summaries. Two reasons not to carry it: `auto_describe`
-# is off below, so it would have nothing to do; and the model upstream names is
-# the one `harness/reviewer-pool.json` rejects by name here. Importing a
-# documented tension for zero behaviour is the worst of both.
-
-# NaN models are absent from LiteLLM's registry, so the budget must be stated or
-# LiteLLM assumes a small default and silently truncates the diff. deepseek-v4-flash
-# advertises 1M context; 200k is a deliberate floor well inside it.
-custom_model_max_tokens = 200000
-max_model_tokens = 200000
 
 response_language = "en-US"
 
@@ -133,14 +62,9 @@ response_language = "en-US"
 # asserts nothing.
 repo_context_files = ["AGENTS.md", "CLAUDE.md"]
 
-[litellm]
-# Stream every request to NaN, so bytes flow and Cloudflare never sees an idle
-# connection to cut at 125 s (see `ai_timeout` above). Upstream's switch for an
-# OpenAI-compatible endpoint takes BOTH a provider and an api_base substring, and
-# matches the provider only when one is declared, hence `custom_llm_provider`.
-custom_llm_provider = "openai"
-force_streaming_custom_llm_provider = "openai"
-force_streaming_api_base_substrings = ["api.nan.builders"]
+# No [litellm] block. The shared workflow streams every NaN call by environment
+# (LITELLM__FORCE_STREAMING_*), and a provider named here would also reach its
+# Anthropic steps, which set no LITELLM__CUSTOM_LLM_PROVIDER of their own.
 
 [pr_reviewer]
 # Upstream's default is 3, and a review is `complete` only with FEWER findings
@@ -177,6 +101,11 @@ final_update_message = false
 # recommendation is deletion). An instruction ignored 94% of the time is a comment
 # that looks like a control — the exact thing this repo keeps finding.
 extra_instructions = """
+Classify each finding as REAL, THEORETICAL or SPECULATIVE. State the class as
+the first line of its issue_content, alone on that line and spelled exactly
+"Class: REAL", "Class: THEORETICAL" or "Class: SPECULATIVE". The triage reads
+only that line; a finding without it goes to a human unclassified.
+
 This repository already runs ruff, mypy, yamllint, markdownlint, hadolint and
 gitleaks through pre-commit, pytest and a spec-archive gate and a
 review-attestation gate in CI, and GitGuardian secret scanning as a GitHub App.
@@ -210,10 +139,8 @@ Repo-specific things worth checking, because they have each shipped as bugs here
 - **Operations go through the Makefile or the toolkit**, not raw kubectl, sops,
   openssl or ansible.
 
-Classify each finding as REAL, THEORETICAL or SPECULATIVE and say which. A REAL
-finding must name a concrete execution trace, failing input, or demonstrable
-defect — not a stylistic preference. A finding without that gradation cannot be
-actioned.
+A REAL finding must name a concrete execution trace, failing input, or
+demonstrable defect — not a stylistic preference.
 
 Do not flag an import or package as missing when CI compiles and tests pass;
 trust the manifests. Write every finding in English.

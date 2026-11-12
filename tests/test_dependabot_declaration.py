@@ -35,29 +35,23 @@ def _load(path: pathlib.Path) -> dict:
     return yaml.safe_load(path.read_text(encoding="utf-8"))
 
 
-def test_the_reviewer_skips_dependabot_on_the_pull_request_path() -> None:
-    condition = _load(REVIEWER)["jobs"]["review"]["if"]
+def test_the_reviewer_leaves_the_bot_skip_to_the_shared_job() -> None:
+    """The exclusion moved with the reviewer (CI-007, mlorentedev/ci-workflows#33).
 
-    assert f"github.actor != '{_BOT}'" in condition, (
-        "pr-agent would run on Dependabot PRs, where it has no model credential: "
-        "the job fails, and the attestation gate then reports a PR nobody could review as unreviewed"
-    )
-
-
-def test_a_human_can_still_ask_for_a_review_on_a_bot_pr() -> None:
-    """`/review` runs in base-repo context and DOES carry the credential.
-
-    The exclusion belongs to the `pull_request` branch of the condition only. If
-    it ever migrates to the whole expression, a maintainer who explicitly asks
-    for a review on a dependency bump would be silently refused.
+    The shared job's own `if:` skips `github.actor == 'dependabot[bot]'` on the
+    `pull_request` branch only, so a maintainer's `/review` on a dependency bump
+    still runs; it is asserted in ci-workflows, where the condition lives. What
+    this repository can break is the caller: an `if:` here would apply to both
+    branches at once and could refuse that `/review`, and calling anything but
+    the shared job would drop the exclusion altogether.
     """
-    condition = _load(REVIEWER)["jobs"]["review"]["if"]
-    pull_request_branch, _, comment_branch = condition.partition("|| (github.event_name == 'issue_comment'")
+    job = _load(REVIEWER)["jobs"]["review"]
 
-    assert f"github.actor != '{_BOT}'" in pull_request_branch
-    assert f"github.actor != '{_BOT}'" not in comment_branch, (
-        "a human typing /review must not be blocked by the bot exclusion"
+    assert "if" not in job, (
+        "the caller has its own `if:`; the shared job already skips Dependabot on the "
+        "pull_request path, and a caller condition would also gate a human's /review"
     )
+    assert str(job.get("uses", "")).startswith("mlorentedev/ci-workflows/.github/workflows/pr-agent.yml@")
 
 
 def test_the_declaration_workflow_only_ever_runs_for_the_bot() -> None:

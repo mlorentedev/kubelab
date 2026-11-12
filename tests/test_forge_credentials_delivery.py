@@ -64,9 +64,9 @@ class TestSecretsReachTheApi:
             assert "api" in _catalog(key_path).services
 
     def test_they_are_optional_because_the_api_starts_without_them(self) -> None:
-        # Staging holds no Gitea token. A required key would fail `apply-secrets ENV=staging`
-        # for a workload that is meant to run there; `TestPopulateConfigForge` (Go) pins that the
-        # API starts and reports the source unreachable instead.
+        # Each env's Gitea token lands only after the Beelink mints it (#3267), and a required key
+        # would fail `apply-secrets` for a workload meant to run before that; `TestPopulateConfigForge`
+        # (Go) pins that the API starts and reports the source unreachable instead.
         assert "FORGE_GITEA_TOKEN" not in API_SECRETS.keys
         assert "FORGE_GITHUB_PRIVATE_KEY" not in API_SECRETS.keys
 
