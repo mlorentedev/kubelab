@@ -164,6 +164,19 @@
       no_log: true
       tags: [always]
 
+    - name: Decrypt staging's secrets for the staging reader's mint gate (controller-side)
+      # #3267: staging's forge task view reads this Gitea with a token of its own,
+      # recorded in staging's file, so its mint gate is read from there. Nothing
+      # else from this file is used: Gitea itself stays prod's (gitea_identity_env).
+      command: sops -d {{ playbook_dir }}/../../config/secrets/staging.enc.yaml
+      register: sops_staging_reader
+      delegate_to: localhost
+      become: false
+      changed_when: false
+      check_mode: false
+      no_log: true
+      tags: [always]
+
     - name: Merge Gitea secrets (its own env overrides common)
       set_fact:
         gitea_secrets: "{{ (sops_common.stdout | from_yaml) | combine(sops_gitea_env.stdout | from_yaml, recursive=True) }}"
@@ -359,6 +372,10 @@
         # forge task view's API. Minted and gated the same way.
         gitea_issue_reader_scopes: "{{ gitea_config.apps.services.core.gitea.token_scopes.issue_reader }}"
         gitea_issue_reader_token: "{{ gitea_secrets.apps.services.core.gitea.issue_reader_token | default('') }}"
+        # #3267 -- staging's reader: a fourth token on the same account, same grant,
+        # gated on staging's own file, which is where the record task writes it.
+        gitea_issue_reader_staging_scopes: "{{ gitea_config.apps.services.core.gitea.token_scopes.issue_reader_staging }}"
+        gitea_issue_reader_staging_token: "{{ ((sops_staging_reader.stdout | from_yaml).apps.services.core.gitea.issue_reader_token) | default('') }}"
         # AUTH-022 -- the agents' authoring account, a third machine identity
         # (ADR-062 D1 as amended 2026-11-03). Resolved and minted like the reviewer;
         # its write is granted per repository by the reconciler, never by a team.

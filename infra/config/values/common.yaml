@@ -557,8 +557,9 @@ infra:
       app_id: 5573076
       installation_id: 177667607
     # The Gitea root the API reads, as INFRA_FORGE_GITEA_URL. Empty wires no Gitea
-    # reader, so a gitea: source reads as unreachable: staging has no Gitea Service and
-    # no token. Prod sets it to the in-cluster `gitea` Service (overlays/prod/gitea.yaml).
+    # reader, so a gitea: source reads as unreachable. Staging and prod both set it to
+    # their in-cluster `gitea` Service (overlays/<env>/gitea.yaml), each env with its
+    # own read token (#3267).
     gitea_url: ""
     # What the view reads, as `forge:owner/repo` separated by commas. Read by the API as
     # INFRA_FORGE_SOURCES; a source with no credential is reported unreachable, never empty.
@@ -1305,6 +1306,9 @@ apps:
           # organization's read team; `tests/test_gitea_issue_reader_token.py`
           # ties it to `ISSUE_READER_SCOPES`.
           issue_reader: "read:issue"
+          # Staging's reader (#3267): its own token, the same grant, held equal to
+          # the one above by `tests/test_gitea_issue_reader_staging.py`.
+          issue_reader_staging: "read:issue"
           # The agents' authoring account (AUTH-022), pinned by EQUALITY: an agent
           # opens pull requests (`write:repository`, for the branch and the PR) and
           # comments on issues and PRs (`write:issue`), and nothing reads `/user`.

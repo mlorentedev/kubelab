@@ -1,0 +1,52 @@
+# Gitea for staging's forge task view (#3267): a reader, not a twin.
+#
+# The forge itself is prod's singleton on the Beelink (ADR-061, overlays/prod/gitea.yaml),
+# and staging keeps no second instance. Staging's API reads it with a token of its own,
+# so a Gitea read is exercised here before prod. Service + EndpointSlice only: no
+# IngressRoute, because a staging hostname for the singleton would be a second public
+# door to it.
+#
+# The address is the Beelink's tailnet one: Gitea binds `{{ tailscale_ip }}:3000` only
+# (`beelink_services` compose), so the LAN address does not answer. ace1's pods reach
+# it through the node over tailscale0.
+apiVersion: v1
+kind: Service
+metadata:
+  name: gitea
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: gitea
+    app.kubernetes.io/component: core
+    app.kubernetes.io/part-of: kubelab
+    kubelab.live/location: external
+  annotations:
+    kubelab.live/host: beelink
+    kubelab.live/description: "Gitea on the Beelink platform node (100.64.0.3), on-demand; read-only from staging"
+spec:
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000
+      protocol: TCP
+---
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: gitea-external
+  namespace: kubelab
+  labels:
+    kubernetes.io/service-name: gitea
+    app.kubernetes.io/name: gitea
+    app.kubernetes.io/component: core
+    app.kubernetes.io/part-of: kubelab
+addressType: IPv4
+ports:
+  - name: http
+    port: 3000
+    protocol: TCP
+endpoints:
+  # networking.nodes.beelink.tailscale_ip
+  - addresses:
+      - "100.64.0.3"
+    conditions:
+      ready: true
