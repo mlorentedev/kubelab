@@ -99,3 +99,11 @@ def test_the_key_leaves_the_machine_account_before_it_is_registered() -> None:
     assert index("DELETE", "dev_node_gitea_former_user") < index("POST", "dev_node_gitea_user"), (
         "Gitea refuses a key another account holds, so the removal must come first"
     )
+
+
+def test_the_removal_loop_tolerates_a_missing_fingerprint() -> None:
+    """`loop` is templated before `when`, so a `when` guard alone does not protect it."""
+    removal = next(t for t in _gitea_tasks() if _uri(t).get("method") == "DELETE")
+    assert "if _gitea_key_fp.rc == 0 else []" in removal["loop"], (
+        "with no fingerprint, `stdout.split(' ')[1]` raises before `when` is read"
+    )

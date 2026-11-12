@@ -637,9 +637,13 @@
         url_password: "{{ dev_node_gitea_admin_password }}"
         force_basic_auth: true
         status_code: [204]
+      # `loop` is templated BEFORE `when`, so the rc guard has to live in the
+      # expression too: with no fingerprint (a fresh node in --check, where the
+      # keypair is not generated), `stdout.split(' ')[1]` would fail the play.
       loop: >-
-        {{ (_gitea_keys.results[0].json | default([]))
-           | selectattr('fingerprint', 'equalto', _gitea_key_fp.stdout.split(' ')[1]) | list }}
+        {{ ((_gitea_keys.results[0].json | default([]))
+            | selectattr('fingerprint', 'equalto', _gitea_key_fp.stdout.split(' ')[1]) | list)
+           if _gitea_key_fp.rc == 0 else [] }}
       loop_control:
         label: "{{ item.id }}"
       delegate_to: localhost
