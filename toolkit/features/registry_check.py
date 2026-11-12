@@ -58,6 +58,10 @@ class _Session(Protocol):
     def get(self, url: str, **kwargs: Any) -> _Response: ...
 
 
+class NoVerdict(Exception):  # noqa: N818 - a verdict that could not be reached, not an error class
+    """The handshake did not finish, so the token was never tested. The text is ours, never the network's."""
+
+
 @dataclass(frozen=True)
 class CheckResult:
     """The verdict: `ok` is the exit code, `status` the registry's answer (None when there was none)."""
@@ -76,7 +80,9 @@ def manifest_status(session: _Session, host: str, package: str, tag: str, userna
 
     Basic first, which Gitea's registry accepts with an access token as the password. A registry
     that answers 401 with a Bearer challenge is asked for a token at its realm and the pull is
-    repeated once with it; the status of that second request is the answer.
+    repeated once with it; the status of that second request is the answer. A challenge that cannot
+    be answered (a realm on another host, a token endpoint with no token) raises `NoVerdict`: the
+    401 that carried it says nothing about the token, so it must not be returned as a denial.
     """
     url = f"https://{host}/v2/{package}/manifests/{tag}"
     first = session.get(url, auth=(username, token), headers={"Accept": ACCEPT}, timeout=TIMEOUT, allow_redirects=False)
@@ -86,7 +92,9 @@ def manifest_status(session: _Session, host: str, package: str, tag: str, userna
     params = dict(_CHALLENGE_PARAM.findall(challenge))
     realm = params.get("realm", "")
     if urlsplit(realm).hostname != host:
-        return first.status_code  # never send the login to a host the registry did not serve us from
+        # Never send the login to a host the registry did not serve us from, and never read the
+        # 401 that carried the challenge as a denial: the token was not tested.
+        raise NoVerdict("the registry's challenge points at another host, so the token was never tested")
     asked = session.get(
         realm,
         auth=(username, token),
@@ -99,7 +107,7 @@ def manifest_status(session: _Session, host: str, package: str, tag: str, userna
     body = asked.json()
     bearer = body.get("token") or body.get("access_token") if isinstance(body, dict) else None
     if not bearer:
-        raise ValueError("the registry's token endpoint answered 200 with no token")
+        raise NoVerdict("the registry's token endpoint answered 200 with no token")
     second = session.get(
         url,
         headers={"Accept": ACCEPT, "Authorization": f"Bearer {bearer}"},
@@ -113,6 +121,17 @@ def default_package(entry: Product, app: str) -> str:
     """The app's own package: the owner path of its registry plus its image name (the derived image, Q7)."""
     owner = (entry.image_registry or "").split("/", 1)[1:]
     return "/".join([*owner, entry.image_name or app])
+
+
+def refuse_unpullable(entry: Product, app: str) -> CheckResult | None:
+    """A refusal when `app` has no private registry and pull login to check, else None."""
+    if entry.private and entry.pull_credential is not None and entry.image_host is not None:
+        return None
+    return _refused(
+        f"'{app}' has no private registry to pull from",
+        "a pull is proven for a private product, whose entry names the registry and the login that reads it.",
+        "run it for a product with `private: true`, `image_registry` and `pull_credential` in products.yaml.",
+    )
 
 
 def check_pull(
@@ -130,12 +149,10 @@ def check_pull(
     Without `expect_denied` it passes only on 200; with it, only on 401 or 403. Everything else,
     an unreachable registry and an empty or malformed `package` included, fails.
     """
-    if not entry.private or entry.pull_credential is None or entry.image_host is None:
-        return _refused(
-            f"'{app}' has no private registry to pull from",
-            "a pull is proven for a private product, whose entry names the registry and the login that reads it.",
-            "run it for a product with `private: true`, `image_registry` and `pull_credential` in products.yaml.",
-        )
+    unpullable = refuse_unpullable(entry, app)
+    if unpullable is not None:
+        return unpullable
+    assert entry.pull_credential is not None and entry.image_host is not None  # noqa: S101 - narrowed above
     target = default_package(entry, app) if package is None else package
     if not _PACKAGE.fullmatch(target):
         return _refused(
@@ -146,6 +163,8 @@ def check_pull(
     host = entry.image_host
     try:
         status = manifest_status(session, host, target, tag, entry.pull_credential.username, token)
+    except NoVerdict as exc:
+        return CheckResult(False, None, f"{host} gave no verdict on {target}:{tag}: {exc}")
     except (requests.RequestException, ValueError) as exc:
         # The type, never the text: a library's message can carry the request it failed on.
         return CheckResult(

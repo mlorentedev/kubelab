@@ -201,6 +201,22 @@ class TestTheRegistryAuthHandshake:
         assert not result.ok
         assert [url for url, _ in session.calls] == [OWN]
 
+    @pytest.mark.parametrize("expect_denied", [False, True])
+    def test_a_realm_on_another_host_gives_no_verdict_even_when_a_denial_is_expected(
+        self, entry, expect_denied: bool
+    ) -> None:
+        """The 401 that carried the off-host challenge is not a verdict on the token: it was never tested."""
+        hostile = {"WWW-Authenticate": 'Bearer realm="https://evil.example/token",service="x"'}
+        session = Session({OTHER: [Resp(401, hostile)]})
+
+        result = _check(entry, session, package="teledyne/secret", expect_denied=expect_denied)
+
+        assert not result.ok, "an unanswered handshake must not read as a denial"
+        assert result.status is None
+        assert "no verdict" in result.message and "another host" in result.message
+        assert "evil.example" not in result.message
+        assert [url for url, _ in session.calls] == [OTHER]
+
 
 class TestTheTokenNeverLeaks:
     @pytest.mark.parametrize("status", [200, 401, 403, 500])
@@ -293,6 +309,36 @@ class TestTheCommand:
         assert result.exit_code == 1
         assert all(part in result.output for part in ("ERROR:", "WHY:", "FIX:")), result.output
         assert self.session.calls == []
+
+    def test_the_token_reaches_the_pull_unchanged(self, invoke, monkeypatch: pytest.MonkeyPatch) -> None:
+        seen: list[Any] = []
+        real = check_pull
+
+        def spy(*args: Any, **kwargs: Any):
+            seen.append(kwargs["token"])
+            return real(*args, **kwargs)
+
+        monkeypatch.setattr("toolkit.features.registry_check.check_pull", spy)
+
+        assert invoke("--app", "beta").exit_code == 0
+        assert seen == [TOKEN]
+
+    @pytest.mark.parametrize("app", ["web", "api"])
+    def test_a_product_without_a_pull_token_is_refused_before_any_pull_and_never_pulls_as_none(
+        self, invoke, monkeypatch: pytest.MonkeyPatch, app: str
+    ) -> None:
+        """No pull credential means a None token; it must not become the literal password "None"."""
+        seen: list[Any] = []
+        monkeypatch.setattr(
+            "toolkit.features.registry_check.check_pull",
+            lambda *a, **k: seen.append(k["token"]) or pytest.fail("pulled"),
+        )
+
+        result = invoke("--app", app)
+
+        assert result.exit_code == 1
+        assert seen == [] and self.session.calls == []
+        assert "None" not in result.output.replace("NoneType", "")
 
     def test_an_app_the_registry_does_not_know_exits_non_zero(self, invoke) -> None:
         result = invoke("--app", "nope")

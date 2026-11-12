@@ -1199,17 +1199,22 @@ def gitea_registry_check(
     """
     from toolkit.features import product_registry, promotion
     from toolkit.features.product_contract import ContractError
-    from toolkit.features.registry_check import check_pull
+    from toolkit.features.registry_check import check_pull, refuse_unpullable
 
     try:
         entry = product_registry.product(app_name)
     except product_registry.UnknownProductError as exc:
         console.print(f"[red]{escape(str(exc))}[/red]")
         raise typer.Exit(1) from exc
-    secret = entry.pull_credential.secret if entry.pull_credential else ""
-    token = _config_value(_gitea_merged_config(env), secret) if secret else None
+    unpullable = refuse_unpullable(entry, app_name)
+    if unpullable is not None:
+        console.print(escape(unpullable.message))
+        raise typer.Exit(1)
+    assert entry.pull_credential is not None  # noqa: S101 - narrowed by refuse_unpullable
+    secret = entry.pull_credential.secret
+    token = _config_value(_gitea_merged_config(env), secret)
     tag = promotion.read_pinned_version(env, app_name)
-    if entry.private and (not token or not tag):
+    if not isinstance(token, str) or not token or not tag:
         missing = f"{secret} is not recorded for {env}" if not token else f"{app_name} has no version pinned in {env}"
         console.print(
             escape(
@@ -1229,8 +1234,8 @@ def gitea_registry_check(
         app_name,
         package=package,
         expect_denied=expect_denied,
-        tag=str(tag),
-        token=str(token),
+        tag=tag,
+        token=token,
         session=_registry_session(),
     )
     console.print(escape(result.message))
