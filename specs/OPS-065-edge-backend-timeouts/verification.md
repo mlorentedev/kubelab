@@ -17,6 +17,45 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 - [ ] Criterion 2 -> commit `<hash>` / test `<name>`
 - [ ] Criterion 3 -> commit `<hash>` / test `<name>`
 
+## Measurement, prod, 2026-11-12
+
+`make edge-slow-routes` (prod, `BOUNDS` default 10 30 60), read 2026-11-12T07:15Z. The window is the whole of what Loki keeps (168 h): collection started 2026-11-05 06:50Z, so a later reading still covers seven days, not more.
+
+Slow requests per router, last 7d (7 days with lines, the first 24 h ending 2026-11-06T07:14Z).
+Logged from 1 s. Figures are `OriginDuration`, body copy included: an upper bound on the time to response headers.
+
+| Route | Router | Slow requests | p50 s | p99 s | Max s | > 10 s | > 30 s | > 60 s | Statuses |
+|---|---|---|---|---|---|---|---|---|---|
+| headscale | 6dfdda17500288067526 | 5750 | 59.66 | 21748.36 | 423757.79 | 5737 | 5733 | 1652 | 0: 5750 |
+| gitea | 4d0b79276f78ba8cd4d5 | 624 | 1.53 | 11.23 | 6872.69 | 10 | 3 | 3 | 200: 514, 201: 39, 202: 10, 303: 12, 307: 5, 400: 1, 401: 1, 404: 2, 405: 1, 499: 4, 502: 35 |
+| web | 9a007d33a769b7b0fc2d | 37 | 3.21 | 25.55 | 34.63 | 1 | 1 | 0 | 200: 35, 404: 2 |
+| uptime-kuma | cfb966f3460ba95592f2 | 26 | 1.37 | 12.2 | 12.93 | 3 | 0 | 0 | 200: 22, 499: 4 |
+| console | de1e739a7da61fc7a0dc | 2 | 5.04 | 9.96 | 10.06 | 1 | 0 | 0 | 200: 2 |
+| authelia | d2d89e983cbb8e0a6705 | 13 | 1.13 | 8.49 | 8.49 | 0 | 0 | 0 | 200: 10, 401: 3 |
+| pr-agent | b8ca5cc79cfc56def65a | 4 | 4.98 | 4.99 | 4.99 | 0 | 0 | 0 | 200: 1, 499: 3 |
+| vikunja | 99dc812966379464071a | 1 | 3.99 | 3.99 | 3.99 | 0 | 0 | 0 | 200: 1 |
+| web | b84377b32c03221d65ce | 1 | 1.74 | 1.74 | 1.74 | 0 | 0 | 0 | 404: 1 |
+| n8n | 972390681eb4f2395c4b | 14 | 1.17 | 1.36 | 1.37 | 0 | 0 | 0 | 200: 11, 201: 3 |
+| open-webui | d15ae305feb6c0093d95 | 10 | 1.14 | 1.25 | 1.25 | 0 | 0 | 0 | 200: 10 |
+| catch-all | 04e7d26d1992ca8f2146 | 1 | 1.14 | 1.14 | 1.14 | 0 | 0 | 0 | 404: 1 |
+| grafana | 217f6c6a64b1707df579 | 1 | 1.03 | 1.03 | 1.03 | 0 | 0 | 0 | 302: 1 |
+| api | | no sample | | | |  |  |  | |
+| argocd | | no sample | | | |  |  |  | |
+| brand-assets | | no sample | | | |  |  |  | |
+| kubelab-redirect | | no sample | | | |  |  |  | |
+| loki | | no sample | | | |  |  |  | |
+| traefik-dashboard | | no sample | | | |  |  |  | |
+
+Readings, per route past a candidate bound. The access log keeps no path (SEC-021), so a mechanism below is read from the route's backend and the line's status and duration, and is marked as inferred where no direct measurement was taken:
+
+- **headscale.** Every line has status `0`, not `101` (5,750 lines). Each line is an upgraded control connection's whole life, from 1 s to 4.9 days. The log cannot time the handshake's `101`, so AC4 stays open. It needs a direct measurement of the `/ts2021` upgrade, or a node re-registering under the bound in staging, which has no Headscale route.
+- **gitea.** Three `GET 200`s of 37, 98 and 115 minutes (ending 2026-11-06, 11-10 and 11-12). A 200 that lasts an hour is a stream, not a late answer: the headers came early and the body ran for the connection's life. Inferred: Gitea's server-sent events (`/user/events`) for an open tab, or a long git transfer. Seven lines between 10 and 30 s. Its 35 `502`s took 1 to 2 s and were answered through the error-pages service, so they are not a bound question.
+- **web.** One `GET 200` of 34.6 s and one of 9.4 s from a static nginx site: body to a slow client. The headers are not late.
+- **uptime-kuma.** Three `GET 499`s at 10.0 to 12.9 s: the client closed first. Inferred: socket.io long-polling, which holds the response (headers included) until there is data or its ping interval passes. That is the one route measured here whose headers can legitimately be late. It sits behind Authelia, so the direct measurement needs a session.
+- **console.** One `GET 200` at 10.06 s. Behind Authelia; not measured directly.
+
+What this does not show: routes with no slow request (`api`, `argocd`, `brand-assets`, `loki`, `kubelab-redirect`, `traefik-dashboard`) read as "no sample", not as "needs no exception". Prod's traffic is light, so a rare long call may not be in seven days.
+
 ## Test status
 
 - Test suite: `<command> -> <output / coverage %>`
