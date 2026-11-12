@@ -57,3 +57,8 @@ policies:
       - receiver: apprise-log
         object_matchers:
           - ["alertname", "=", "A node's weekly backup check is outgrowing its time budget"]
+      # CONSOLE-004 (#3387): Gitea sources are read from the on-demand Beelink. Log tier,
+      # mirroring prod, where this route keeps a homelab that is off from paging.
+      - receiver: apprise-log
+        object_matchers:
+          - ["alertname", "=", "A Gitea source of the forge console has not been read for 20 minutes"]

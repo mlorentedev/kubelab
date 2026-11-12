@@ -157,6 +157,7 @@ configMapGenerator:
       - services/grafana-alerting/slo-rules.yaml
       - services/grafana-alerting/delivery-rules.yaml
       - services/grafana-alerting/edge-rules.yaml
+      - services/grafana-alerting/forge-rules.yaml
       # Rules that are retired and must be actively DELETED from Grafana's
       # database. Dropping a file from this list does not remove the rule --
       # measured on both clusters, #1583. Whatever leaves this list gets a uid

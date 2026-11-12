@@ -130,8 +130,27 @@ to its text log (#3342). Query them in Grafana's Loki datasource:
 | `forge_webhook_failure` | per refused or unprojected delivery: `forge`, `reason` (`signature`, `sources`, `store`, `unreadable`, `projection`), `delivery`, `status`, `error` | `sum by (reason) (count_over_time({namespace="kubelab", container="api"} \| json \| event="forge_webhook_failure" [1h]))` |
 
 A `signature` failure carries no `delivery`: the caller was not authenticated and
-chose every header. The oldest source, for an alert on staleness:
-`max by (source) (max_over_time({namespace="kubelab", container="api"} | json | event="forge_source_freshness" | unwrap age_seconds [20m]))`.
+chose every header.
+
+## A source is stale
+
+Two Grafana rules (`grafana-alerting/forge-rules.yaml`, #3387) fire when a source
+has not been read successfully for more than 20 minutes, two missed full passes:
+
+- **A GitHub source**: pages in prod. It also fires when the api has written no
+  freshness line for 30 minutes, which means the reconciler stopped or the source
+  declaration did not load.
+- **A Gitea source**: reaches the log tier only. Gitea is read from the Beelink,
+  which is on-demand, so this is expected while the homelab is off.
+
+Find the source and its last error:
+
+`{namespace="kubelab", container="api"} | json | event="forge_source_freshness" | reachable="false"`
+
+Then check the forge itself (an outage, an expired credential, see
+[Rotate the credentials](#rotate-the-credentials)). The rule clears on the first
+successful read. A source never read since the api started writes no
+`age_seconds`, so neither rule sees it; the query above still lists it.
 
 ## Verify
 

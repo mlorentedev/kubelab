@@ -54,3 +54,9 @@ policies:
       - receiver: apprise-log
         object_matchers:
           - ["alertname", "=", "A node's weekly backup check is outgrowing its time budget"]
+      # CONSOLE-004 (#3387): Gitea sources are read from the on-demand Beelink, so a stale
+      # one is expected whenever the homelab is off. Log tier, no `continue`; the GitHub
+      # rule keeps the root's page tier. tests/test_forge_freshness_alert.py derives the title.
+      - receiver: apprise-log
+        object_matchers:
+          - ["alertname", "=", "A Gitea source of the forge console has not been read for 20 minutes"]
