@@ -58,6 +58,7 @@ def test_the_rendered_authelia_reads_no_reset_jwt(overlay: str) -> None:
         ["kubectl", "kustomize", str(ROOT / f"infra/k8s/overlays/{overlay}")],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=True,
     ).stdout
     assert ENV_VAR not in rendered

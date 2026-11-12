@@ -99,7 +99,9 @@ OLD, NEW, NAME = "10.9.9.1", "10.9.9.2", "moved.example.test"
 
 
 def _docker(*args: str, check: bool = True) -> str:
-    return subprocess.run(["docker", *args], capture_output=True, text=True, check=check, timeout=300).stdout.strip()
+    return subprocess.run(
+        ["docker", *args], capture_output=True, text=True, encoding="utf-8", check=check, timeout=300
+    ).stdout.strip()
 
 
 def _corefile(path: Path, address: str) -> None:

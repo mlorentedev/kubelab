@@ -44,6 +44,7 @@ def test_a_play_that_matches_no_host_fails(tmp_path: Path) -> None:
         cwd=ANSIBLE_DIR,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
     )
     assert result.returncode != 0, result.stdout + result.stderr

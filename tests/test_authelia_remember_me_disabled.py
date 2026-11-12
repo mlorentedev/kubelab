@@ -33,7 +33,11 @@ def test_the_emitted_config_disables_remember_me(overlay: str) -> None:
     if shutil.which("kubectl") is None:
         pytest.skip(f"kubectl not on PATH: the {overlay} Authelia config was NOT checked")
     out = subprocess.run(
-        ["kubectl", "kustomize", str(ROOT / "infra/k8s/overlays" / overlay)], capture_output=True, text=True, check=True
+        ["kubectl", "kustomize", str(ROOT / "infra/k8s/overlays" / overlay)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=True,
     ).stdout
     config = next(
         d

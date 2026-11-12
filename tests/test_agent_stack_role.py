@@ -355,6 +355,7 @@ def test_the_break_glass_way_in_is_an_origin_open_webui_accepts() -> None:
         ["kubectl", "kustomize", str(REPO / "infra/k8s/overlays/prod")],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=True,
     ).stdout
     docs = [d for d in yaml.safe_load_all(rendered) if d]

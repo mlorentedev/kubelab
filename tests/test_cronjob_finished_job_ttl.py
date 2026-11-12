@@ -37,6 +37,7 @@ def _cronjobs(overlay: str) -> list[dict]:
         ["kubectl", "kustomize", str(ROOT / f"infra/k8s/overlays/{overlay}")],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=True,
     ).stdout
     return [doc for doc in yaml.safe_load_all(rendered) if doc and doc.get("kind") == "CronJob"]
