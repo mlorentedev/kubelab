@@ -33,6 +33,7 @@ from toolkit.features.registry import (
     BearerCache,
     RegistryCredential,
     catalog_secret,
+    catalog_secret_variable,
     is_docker_hub,
     tag_digest,
 )
@@ -75,7 +76,9 @@ def _credential(
             f"the pull credential for {host} is not available: the catalog key {declared.secret} holds no value here",
             f"'{app}' is private on {host}, so the release proof reads it as {declared.username} with that token; "
             "the catalog decrypts only where the SOPS age key is, so a runner without it cannot read the image.",
-            f"run the promotion where `toolkit secrets` decrypts {declared.secret}, or set it "
+            f"set the environment variable {catalog_secret_variable(declared.secret)} to the token (on a hosted "
+            "runner, an Actions secret of that name exported in the step's env), or run the promotion where "
+            f"`toolkit secrets` decrypts {declared.secret} "
             f"(`toolkit secrets set {declared.secret} --env common --stdin`).",
         )
     return RegistryCredential(declared.username, token)

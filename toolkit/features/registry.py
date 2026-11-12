@@ -76,12 +76,27 @@ class BearerCache:
         self._tokens.pop((host, repository), None)
 
 
-def catalog_secret(key: str) -> str | None:
-    """The value the secrets catalog holds at ``key`` (a product's ``pull_credential.secret``), or ``None``.
+def catalog_secret_variable(key: str) -> str:
+    """The environment variable for catalog ``key``: its flattened form (``ghcr.pull_token`` is ``GHCR_PULL_TOKEN``)."""
+    return re.sub(r"[^A-Za-z0-9]", "_", key).upper()
 
-    The catalog is SOPS, so this resolves only where the age key is: a runner without it
-    gets ``None`` and the caller refuses by name. Tests inject a lookup instead.
+
+def catalog_secret(key: str) -> str | None:
+    """The value for the catalog ``key`` (a product's ``pull_credential.secret``), or ``None``.
+
+    The environment variable the key flattens to wins when it holds a value: a hosted runner has
+    the pull token as an Actions secret and no age key, and the token never needs decrypting there
+    (#3286). An empty variable is unset, since an Actions secret nobody created arrives as ``""``.
+    Otherwise the catalog is SOPS, so this resolves only where the age key is: a runner with
+    neither gets ``None`` and the caller refuses by name. Tests inject a lookup instead.
     """
+    variable = catalog_secret_variable(key)
+    from_env = os.environ.get(variable, "").strip()
+    if from_env:
+        # The source, never the value: a stale exported variable shadows a rotated SOPS entry,
+        # and a 401 alone would not say which one was used.
+        logger.info(f"catalog secret {key}: using {variable} from the environment, not SOPS")
+        return from_env
     from toolkit.features.configuration import ConfigurationManager
 
     return ConfigurationManager("prod").get_secret_by_path(key)
