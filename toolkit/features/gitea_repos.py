@@ -2159,9 +2159,9 @@ def ensure_team(
 
     if grant.can_create_org_repo is False and team.get("can_create_org_repo"):
         raise TeamPermissionError(
-            f"team {org}/{name} can create repositories, and it must not: it is a read team, and "
-            "read access is what contains its member. A member of a team with can_create_org_repo set "
-            "creates repositories it then owns, which is the opposite of what this grant declares."
+            f"team {org}/{name} can create repositories, and it must not: its grant declares no "
+            "repository creation. A member of a team with can_create_org_repo set creates repositories "
+            "it then owns, which is the opposite of what this grant declares (ADR-065 D1)."
         )
     if grant.can_create_org_repo and not team.get("can_create_org_repo"):
         raise TeamPermissionError(
@@ -2178,7 +2178,8 @@ def ensure_team(
             f"team {org}/{name} grants repo.code {units.get('repo.code')!r}, expected "
             f"{grant.permission!r}. For the write team that means it can create repositories but could "
             "not push to them, and the refusal is the same 403 as a missing token scope -- the trap "
-            "AUTH-004 AC5 already recorded once. For the read team it means its member can write."
+            "AUTH-004 AC5 already recorded once. For the read team it means its member can write, and for "
+            "the Renovate team that it cannot push its branches."
         )
 
     # THE SCOPE, WHICH EVERY CHECK ABOVE TAKES FOR GRANTED. A permission is a pair
