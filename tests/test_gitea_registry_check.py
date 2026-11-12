@@ -165,6 +165,9 @@ class TestTheRegistryAuthHandshake:
         assert realm_call["auth"] == ("reviewer", TOKEN), "the realm is asked with the pull login"
         assert realm_call["params"]["scope"] == "repository:personal/beta:pull"
         assert session.calls[2][1]["headers"]["Authorization"] == "Bearer bearer-value"
+        assert all(kwargs["allow_redirects"] is False for _, kwargs in session.calls), (
+            "a redirect on any leg could carry the login or the bearer token to another host"
+        )
 
     def test_a_denial_after_the_handshake_is_the_status_reported(self, entry) -> None:
         session = Session(
