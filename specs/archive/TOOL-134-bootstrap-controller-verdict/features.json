@@ -1,0 +1,37 @@
+[
+  {
+    "id": "TOOL-134-bootstrap-controller-verdict-f1",
+    "behavior": "A machine missing make and Poetry, where both installs succeed, reaches the hand-off: make setup-ansible runs and the script exits 0.",
+    "verification": "poetry run pytest tests/test_bootstrap_controller_script.py -q -k install_path_hands_off_after_installing",
+    "state": "passing",
+    "evidence": "Linux, commit ffa73d39 (git archive of origin/master, run in /tmp/t134-wsl): 1 passed, 18 deselected. Whole file on the same commit: 19 passed. Not observable on Windows: the test is skipped there with 'asserts the POSIX path; Windows stops at the uname guard' (1 skipped, 18 deselected), so the Windows suite is not evidence for f1."
+  },
+  {
+    "id": "TOOL-134-bootstrap-controller-verdict-f2",
+    "behavior": "A prerequisite that fails to install still blocks the hand-off, and the message counts only the unresolved ones.",
+    "verification": "poetry run pytest tests/test_bootstrap_controller_script.py -q -k install_path_still_refuses_when_an_install_fails",
+    "state": "passing",
+    "evidence": "Linux, commit ffa73d39: 1 passed, 18 deselected. The test observes '1 prerequisite(s) above are unresolved; not handing off to make' and a non-zero exit after exactly one failed install, which is the `bad`/`ok` counter defect the spec names. Skipped on Windows for the same POSIX reason as f1."
+  },
+  {
+    "id": "TOOL-134-bootstrap-controller-verdict-f3",
+    "behavior": "--check on a host where sudo requires a password reports that root is unavailable and exits 1, without attempting an install.",
+    "verification": "poetry run pytest tests/test_bootstrap_controller_script.py -q -k check_mode_reports_a_passworded_sudo",
+    "state": "passing",
+    "evidence": "Linux, commit ffa73d39: 1 passed, 18 deselected. The assertion is on the report plus the absence of any apt-get invocation, so a 'silent install' regression would fail it. Skipped on Windows for the same POSIX reason as f1."
+  },
+  {
+    "id": "TOOL-134-bootstrap-controller-verdict-f4",
+    "behavior": "No path in the script can block on a password prompt: as_root never invokes sudo without -n, and on a host that really is root the command runs directly.",
+    "verification": "poetry run pytest tests/test_bootstrap_controller_script.py -q -k \"as_root_never_invokes_sudo_without_dash_n or install_path_runs_as_root_without_sudo\"",
+    "state": "passing",
+    "evidence": "Linux, commit ffa73d39: 2 passed, 17 deselected. Mutation-tested, which is the part that matters because the suite could not reach the root path before this change: flipping the `id` stub in _isolated_host (L314) from '\"0\" if is_root else \"1000\"' to '1000' for both turns test_install_path_runs_as_root_without_sudo red with returncode 1 and '[ERROR] 1 prerequisite(s) above are unresolved'; restoring the line turns it green again (1 passed). Both tests also run on Windows (1 passed, 1 skipped in that pair), because the static half needs no bash."
+  },
+  {
+    "id": "TOOL-134-bootstrap-controller-verdict-f5",
+    "behavior": "apt-get update runs without -qq, so a lock/permission failure is visible.",
+    "verification": "poetry run pytest tests/test_bootstrap_controller_script.py -q -k apt_update_is_not_quiet_quiet",
+    "state": "passing",
+    "evidence": "Commit ffa73d39, both platforms: Linux 1 passed, 18 deselected; Windows 1 passed, 18 deselected. The assertion runs over the script's code lines only (_code_only), so the comment that explains the rejected form does not count as an occurrence."
+  }
+]
