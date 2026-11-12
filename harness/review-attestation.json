@@ -54,7 +54,8 @@
       "login": "github-actions",
       "declined_markers": [],
       "review_markers": [
-        "## PR Reviewer Guide"
+        "## PR Reviewer Guide",
+        "## Incremental PR Reviewer Guide"
       ],
       "why": "PR-Agent (TOOL-021 Part 2) posts as github-actions via GITHUB_TOKEN and publishes through the comments API, not the reviews API — so reviews[] is empty on a PR it genuinely reviewed. Declared ahead of Part 2 landing: the gate must not call this repository's own reviewer unreviewed the day it starts running. The marker is the `review` command's own heading; `## PR Code Suggestions` (the `improve` command) is deliberately NOT here — suggestions are not a review."
     }
