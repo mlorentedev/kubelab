@@ -629,7 +629,8 @@
     not gitea_bot_token or not gitea_admin_token or not act_runner_token
     or (gitea_reviewer_user | length > 0
         and (not gitea_reviewer_token or not gitea_review_notice_token
-             or not gitea_issue_reader_token or not gitea_issue_reader_staging_token))
+             or not gitea_issue_reader_token or not gitea_issue_reader_staging_token
+             or not gitea_registry_pull_token))
     or (gitea_agent_user | length > 0 and not gitea_agent_token)
     or (gitea_renovate_user | length > 0 and not gitea_renovate_token)
   failed_when: not _gitea_record_tool.stat.executable | default(false)
@@ -654,6 +655,7 @@
     - {name: kubelab-review-notice, user: "{{ gitea_reviewer_user }}", recorded: "{{ gitea_review_notice_token | length > 0 }}"}
     - {name: kubelab-issue-reader, user: "{{ gitea_reviewer_user }}", recorded: "{{ gitea_issue_reader_token | length > 0 }}"}
     - {name: kubelab-issue-reader-staging, user: "{{ gitea_reviewer_user }}", recorded: "{{ gitea_issue_reader_staging_token | length > 0 }}"}
+    - {name: kubelab-registry-pull, user: "{{ gitea_reviewer_user }}", recorded: "{{ gitea_registry_pull_token | length > 0 }}"}
     - {name: kubelab-agent, user: "{{ gitea_agent_user }}", recorded: "{{ gitea_agent_token | length > 0 }}"}
     - {name: kubelab-renovate, user: "{{ gitea_renovate_user }}", recorded: "{{ gitea_renovate_token | length > 0 }}"}
     - {name: kubelab-reconciler, user: "{{ gitea_admin_user }}", recorded: "{{ gitea_admin_token | length > 0 }}"}
@@ -880,6 +882,50 @@
   delegate_to: localhost
   become: false
   when: gitea_reviewer_user | length > 0 and not gitea_issue_reader_staging_token
+  changed_when: true
+  no_log: true
+  tags: [gitea]
+
+# --- The cluster's image pull token (IDP-053 S2c) ---------------------------------
+# `read:package` only: the kubelet pulls a private product's image with it, rendered into
+# the `pull-<host-slug>` Secret by `apply-secrets`. Not the reviewer's token: the pull
+# Secret lives behind a different trust boundary than PR-Agent's. Same account
+# (`gitea_reviewer_user`, D2), a distinct token name since Gitea refuses two of one name.
+# Recorded in common's file, because both clusters pull with it; the mint gate reads the
+# merged secrets (`gitea_secrets`), which include common.
+
+- name: Mint the registry-pull token on the reviewer account
+  # Gated on the recorded secret being absent and `argv`, for the reasons the
+  # reviewer's mint task above records.
+  command:
+    argv:
+      - docker
+      - exec
+      - gitea
+      - su
+      - git
+      - -c
+      - >-
+        gitea admin user generate-access-token
+        --username {{ gitea_reviewer_user }}
+        --token-name kubelab-registry-pull
+        --scopes {{ gitea_registry_pull_scopes }}
+        --raw
+  register: _gitea_registry_pull_token
+  when: gitea_reviewer_user | length > 0 and not gitea_registry_pull_token
+  changed_when: _gitea_registry_pull_token.rc == 0
+  no_log: true
+  tags: [gitea]
+
+- name: Record the registry-pull token in SOPS
+  # Controller-side, over STDIN, never argv -- as the reviewer token's record task.
+  # `gitea_registry_pull_env` is common's file, not gitea_identity_env's: both clusters read it there.
+  command: "{{ playbook_dir }}/../../../.venv/bin/toolkit secrets set apps.services.core.gitea.registry_pull_token --env {{ gitea_registry_pull_env }} --stdin"
+  args:
+    stdin: "{{ _gitea_registry_pull_token.stdout }}"
+  delegate_to: localhost
+  become: false
+  when: gitea_reviewer_user | length > 0 and not gitea_registry_pull_token
   changed_when: true
   no_log: true
   tags: [gitea]
