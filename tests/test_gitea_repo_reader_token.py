@@ -70,6 +70,7 @@ def test_the_token_is_catalogued_and_delivered_nowhere_by_the_forge() -> None:
     assert spec is not None, f"{READER_TOKEN_KEY} is not in SECRET_CATALOG, so no audit can report it absent"
     assert spec.kind is SecretKind.EXTERNAL, "Gitea mints it; a locally generated string would authenticate nothing"
     assert spec.expiry is Expiry.NEVER, "Gitea tokens carry no expiry field; see the bot_token entry"
+    assert spec.envs == ("prod",), "a staging entry would make the staging audit demand a key no mint fills"
     assert spec.forge_actions == (), (
         "forge_actions writes Gitea Actions secrets; the receiver runs on GitHub, so the owner sets "
         "GITEA_REPO_READER_TOKEN there by hand, and no Gitea repository may hold a copy"
@@ -87,7 +88,9 @@ def test_the_playbook_reads_the_grant_and_the_secret_from_the_ssot() -> None:
 def test_it_is_minted_once_with_the_declared_grant_on_the_reviewer_account() -> None:
     task = _task(MINT_TASK)
     assert task.get("no_log") is True
-    assert "repo_reader_token" in str(task.get("when") or ""), "an ungated mint issues a new live token every run"
+    assert task.get("when") == "gitea_reviewer_user | length > 0 and not gitea_repo_reader_token", (
+        "an ungated mint issues a new live token every run; an inverted one mints nothing"
+    )
     command = " ".join(task["command"]["argv"])
     assert "--username {{ gitea_reviewer_user }}" in command
     assert f"--token-name {ROTATABLE_TOKENS['repo_reader'].token_name}" in command
@@ -99,7 +102,7 @@ def test_it_is_recorded_over_stdin_under_its_own_key() -> None:
     assert task.get("no_log") is True
     assert f"toolkit secrets set {READER_TOKEN_KEY}" in task["command"]
     assert "--stdin" in task["command"]
-    assert "repo_reader_token" in str(task.get("when") or "")
+    assert task.get("when") == "gitea_reviewer_user | length > 0 and not gitea_repo_reader_token", "the record must run exactly when the mint ran"
 
 
 def test_a_stale_unrecorded_token_is_revoked_so_the_mint_can_reuse_the_name() -> None:
@@ -116,7 +119,7 @@ def test_a_stale_unrecorded_token_is_revoked_so_the_mint_can_reuse_the_name() ->
 def test_the_controller_check_covers_the_new_record_task() -> None:
     """The mint must not run on a controller that cannot write the result down (#2902)."""
     check = _task("Assert the controller can record a minted token")
-    assert "gitea_repo_reader_token" in str(check["when"])
+    assert "not gitea_repo_reader_token" in str(check["when"]), "the check must fire when the reader is unrecorded"
 
 
 def test_a_reader_minted_wider_than_declared_reads_as_drift() -> None:
