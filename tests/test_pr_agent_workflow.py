@@ -582,13 +582,15 @@ def test_every_model_pr_agent_reviews_with_is_admitted_in_the_reviewer_pool() ->
 
 def test_the_toml_does_not_restate_what_the_shared_job_sets() -> None:
     """The shared job sets the model, the fallbacks, the model capacity and the
-    LiteLLM transport by environment, which sits above `.pr_agent.toml`. A value
+    LiteLLM transport by environment, which sits above `.pr_agent.toml`. It does
+    not set the prompt cap `max_model_tokens` on the NaN step, so the toml keeps
+    it (mlorentedev/ci-workflows#88): without it PR-Agent clips at 32000. A value
     restated here is silently overridden on the NaN step, and a `[litellm]`
     provider would also reach the Anthropic steps, which set none of their own:
     #2302's first Sonnet run was refused by the OpenAI transport for exactly that.
     """
     config = _toml()
-    for key in ("model", "fallback_models", "custom_model_max_tokens", "max_model_tokens", "model_weak"):
+    for key in ("model", "fallback_models", "custom_model_max_tokens"):
         assert key not in config["config"], f"[config] {key} is set by the shared workflow"
     assert "litellm" not in config, "a [litellm] provider would reach the shared Anthropic steps"
     assert "github_action_config" not in config
