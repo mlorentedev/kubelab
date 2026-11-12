@@ -113,6 +113,7 @@ def _run(api: str, env: str = "prod", deadline: int = 60) -> tuple[int, list[dic
         },
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=30,
     )
     lines = [json.loads(line) for line in proc.stdout.splitlines() if line.strip()]

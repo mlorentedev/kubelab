@@ -137,7 +137,9 @@ def _estimate(apt: str) -> subprocess.CompletedProcess:
     shell = _tasks()[ESTIMATE]["ansible.builtin.shell"]
     real = "apt-get -qq --print-uris dist-upgrade"
     assert real in shell
-    return subprocess.run(["bash", "-c", shell.replace(real, apt)], capture_output=True, text=True, check=False)
+    return subprocess.run(
+        ["bash", "-c", shell.replace(real, apt)], capture_output=True, text=True, encoding="utf-8", check=False
+    )
 
 
 def test_the_estimate_sums_the_size_apt_prints_for_each_package_it_would_fetch():

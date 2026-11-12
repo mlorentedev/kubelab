@@ -104,6 +104,7 @@ def _recipe(*variables: str) -> str:
         cwd=REPO,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=True,
     )
     return out.stdout

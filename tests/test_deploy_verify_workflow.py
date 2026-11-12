@@ -95,7 +95,7 @@ def test_the_status_step_is_red_only_on_failure_or_error(wf: dict, state: str, r
         "DESCRIPTION": "one or more synchronization tasks are not valid",
         "RUNBOOK": "https://example.invalid/runbook",
     }
-    done = subprocess.run(["bash", "-e", "-c", step["run"]], env=env, capture_output=True, text=True)
+    done = subprocess.run(["bash", "-e", "-c", step["run"]], env=env, capture_output=True, text=True, encoding="utf-8")
     assert (done.returncode != 0) is red, done.stdout + done.stderr
     if red:
         assert "one or more synchronization tasks are not valid" in done.stdout

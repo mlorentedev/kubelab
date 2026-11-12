@@ -43,7 +43,7 @@ def backup() -> dict:
 def rendered_claims() -> set[tuple[str, str]]:
     if shutil.which("kubectl") is None:
         pytest.skip("kubectl not on PATH: cannot render the overlay (a skip is CANNOT CHECK, not OK)")
-    out = subprocess.run(["kubectl", "kustomize", str(PROD_OVERLAY)], capture_output=True, text=True)
+    out = subprocess.run(["kubectl", "kustomize", str(PROD_OVERLAY)], capture_output=True, text=True, encoding="utf-8")
     assert out.returncode == 0, out.stderr
     return {
         (doc["metadata"].get("namespace", ""), doc["metadata"]["name"])

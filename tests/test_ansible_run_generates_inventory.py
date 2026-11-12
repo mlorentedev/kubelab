@@ -270,6 +270,7 @@ def test_bootstrap_and_transport_reach_run_from_every_target_that_offers_them() 
             cwd=_ROOT,
             capture_output=True,
             text=True,
+            encoding="utf-8",
             check=True,
         ).stdout
         run = next(line for line in dry.splitlines() if "infra ansible run" in line)
