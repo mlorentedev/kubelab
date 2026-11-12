@@ -23,7 +23,7 @@ N8N workflows fail to trigger or execute.
 
 ```bash
 # Check N8N logs
-toolkit apps logs n8n | grep error
+toolkit services logs n8n | grep error
 
 # Verify webhook URLs
 curl https://n8n.kubelab.live/webhook-test/

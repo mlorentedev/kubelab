@@ -69,7 +69,7 @@ docker exec traefik cat /letsencrypt/acme.json | jq '.Certificates | length'
 # Force renewal
 rm edge/traefik/data/acme.json
 chmod 600 edge/traefik/data/acme.json
-toolkit edge restart traefik
+toolkit services restart traefik
 ```
 
 ## Token/Secret Problems

@@ -61,7 +61,7 @@ docker exec traefik cat /letsencrypt/acme.json | jq '.Certificates'
 
 # Force certificate renewal
 rm edge/traefik/data/acme.json
-toolkit edge restart traefik
+toolkit services restart traefik
 ```
 
 ### Load Balancing Problems
