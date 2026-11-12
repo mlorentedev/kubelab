@@ -849,6 +849,28 @@ SECRET_CATALOG: list[SecretSpec] = [
         expiry=Expiry.NEVER,
         envs=("prod",),
     ),
+    # The same token ci-workflows' weekly Renovate run holds as its Actions secret
+    # `RENOVATE_TOKEN` (owner decision 2026-11-12, IDP-036 AC3): it has write access
+    # to the owner's GitHub repositories, which the spec's separate read-only token
+    # would not have had. One value in two stores, so the two rotate together.
+    SecretSpec(
+        key_path="apps.services.core.gitea.renovate_github_com_token",
+        description=(
+            "GitHub token of the Gitea Renovate run (GITHUB_COM_TOKEN), which it reads its `github>` preset "
+            "with; the SAME token as ci-workflows' Actions secret `RENOVATE_TOKEN` (IDP-036)"
+        ),
+        kind=SecretKind.EXTERNAL,
+        services=("gitea",),
+        expiry=Expiry.PROVIDER,
+        rotate_note=(
+            "Rotate it in the operator's dotf secrets ci group, then "
+            "`dotf secrets sync ci --repo mlorentedev/ci-workflows RENOVATE_TOKEN`, then "
+            "`toolkit secrets set apps.services.core.gitea.renovate_github_com_token --env prod --stdin`, then "
+            "`make provision NODE=bee ENV=prod TAGS=renovate`. Both copies change together: the weekly "
+            "ci-workflows run and the Beelink's hourly one share this value."
+        ),
+        envs=("prod",),
+    ),
     SecretSpec(
         key_path="apps.services.core.github_app.private_key",
         description=(

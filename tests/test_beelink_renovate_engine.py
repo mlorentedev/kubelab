@@ -55,6 +55,7 @@ def _render_env(engine: dict) -> str:
         ansible_managed="Ansible managed",
         renovate_engine=engine,
         gitea_renovate_token="not-a-token",  # noqa: S106 - the template needs one; only RENOVATE_IMAGE is read here
+        renovate_github_com_token="not-a-token",  # noqa: S106 - likewise
         renovate_config_container_path="/config.yaml",
     )
 

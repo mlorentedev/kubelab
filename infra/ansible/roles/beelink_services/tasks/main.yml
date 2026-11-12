@@ -235,14 +235,11 @@
   tags: [gitea, renovate]
 
 # --- The Renovate run's timer (IDP-036 AC2) ---
-# Gated on `renovate_enabled`: the account declared and its token recorded. Until
-# then the run installs nothing, and a timer an earlier provision left is stopped
-# below, so removing `apps.auth.identities.renovate` stops the run instead of
-# leaving it firing with a stale token.
-#
-# Not here yet: the read-only GITHUB_COM_TOKEN the `github>` preset fetch needs.
-# It is the next change's, and its gate joins `renovate_enabled` with it. Until it
-# lands, that fetch from github.com is unauthenticated and rate-limited.
+# Gated on `renovate_enabled`: the account declared, its token recorded, and the
+# github.com token the `github>` preset fetch needs recorded. Until then the run
+# installs nothing, and a timer an earlier provision left is stopped below, so
+# removing `apps.auth.identities.renovate` (or the github.com token) stops the run
+# instead of leaving it firing with a stale token or an unresolvable preset.
 - name: Install the Renovate run wrapper
   copy:
     src: renovate-run.sh

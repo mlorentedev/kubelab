@@ -229,6 +229,17 @@ def _run_envs() -> tuple[str, tuple[str, ...]]:
     return var.group(1), envs
 
 
+#: Keys the operator records by hand with `toolkit secrets set`, not a role, that a play
+#: already reads. Until the first `set` the key name is in no SOPS file, which this test
+#: cannot tell from a read of the wrong store; the read resolves to '' and the feature
+#: behind it is gated off on exactly that. Each entry is exempt only while it is absent:
+#: `test_a_pending_key_is_deleted_from_the_exemption_once_recorded` fails the day it is
+#: recorded, so the exemption cannot outlive its reason and hide a later wrong-store read.
+PENDING_HAND_RECORDED = {
+    "apps.services.core.gitea.renovate_github_com_token": "IDP-036 AC3: the run stays disabled until it is recorded",
+}
+
+
 def _holds(layers: tuple[str, ...], dotted: str) -> bool:
     """Whether any of the store's files carries the key, read from the committed SOPS files."""
     for name in layers:
@@ -391,6 +402,8 @@ def test_every_read_uses_a_store_that_holds_that_secret(playbook: str, play: dic
     wrong: list[str] = []
     for store, path in checked:
         env_var, merges_common = layers[store]
+        if path in PENDING_HAND_RECORDED:
+            continue
         if written.get(path) == env_var:
             # The role mints this key under the env this store is built from, so
             # absence from the committed files is its first state, not a wrong
@@ -412,3 +425,12 @@ def test_every_read_uses_a_store_that_holds_that_secret(playbook: str, play: dic
         + "\n\nThis does not raise: the read resolves to '' through `default('')`, and the "
         "node is provisioned with an empty credential while the play reports failed=0."
     )
+
+
+@pytest.mark.parametrize("path", sorted(PENDING_HAND_RECORDED))
+def test_a_pending_key_is_deleted_from_the_exemption_once_recorded(path: str) -> None:
+    """The exemption above is for a key in no store yet. Once recorded it is judged
+    like every other read, so delete the entry rather than let it hide a wrong store."""
+    _, envs = _run_envs()
+    held = [name for name in ("common", *envs) if _holds((name,), path)]
+    assert not held, f"`{path}` is now in {held}: remove it from PENDING_HAND_RECORDED"
