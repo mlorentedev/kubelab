@@ -27,7 +27,7 @@ D1 below chose `hefesto` because on 2026-09-01 the identity map had no agent acc
 - The per-node key is registered on the agents' account (`apps.auth.identities.agent`), not on `hefesto`. Its pushes reach a protected default branch only through a pull request, as with `make gitea-git`.
 - Registration runs from the controller through the admin API (`POST /admin/users/{agent}/keys`) with the superadmin at provision time, because `agent_token` has no `write:user`. The private half is still generated on the node and never transits.
 - D2's reasoning (a per-node key rather than a token at rest) is unchanged; only the account changes.
-- The role on master still registers on `hefesto` with `bot_token`. Changing it, and verifying AC1, AC4 and AC6 against the new account, is the remaining implementation work.
+- Implemented and verified against the new account in #3391 (AC1, AC2, AC4). AC6 is pending an owner decision on #1075: agent forwarding is off fleet-wide.
 
 The D1 text that follows is kept as the record of the original reasoning.
 

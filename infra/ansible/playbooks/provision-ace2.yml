@@ -67,7 +67,7 @@
     # environment identity is prod even though it runs on an on-demand homelab
     # box — `provision-bee.yml` encodes the same fact under the same name.
     #
-    # This governs the vault specifically: `apps.services.core.gitea.bot_token`
+    # This governs the vault specifically: `apps.services.core.gitea.admin_password`
     # is registered with `envs=("prod",)`, so `secrets.…` (built from
     # common + staging below) does not contain it. Combined with the
     # `default('')` idiom this playbook already uses, reading the wrong vault
@@ -240,25 +240,30 @@
         # failed play or an empty credential handed to `gh`.
         dev_node_github_token: "{{ secrets.apps.services.automation.dev_node.github_token | default('') }}"
         # --- Gitea, the private forge (ANSIBLE-037) ---------------------------
-        # D1: the node authenticates as the MACHINE identity, never as a human.
-        # `apps.auth.identities` declares exactly three keys and #1075 forbids a
-        # fourth, and a named human's key must not sit at rest on an on-demand
-        # shared node — AUTH-004's R2 measured that `manu` is the forge's sole
-        # admin. Plaintext in common.yaml, so no vault is involved in deciding
-        # WHO; only in delivering the credential.
-        dev_node_gitea_user: "{{ gitea_config.apps.auth.identities.machine }}"
+        # D1 as amended on 2026-11-12 (#1075): the node's key goes on the AGENTS'
+        # account. An agent on ace2 pushes with it, and #2578 moved every agent
+        # git path to that account; on the machine account the push would be
+        # attributed to the provisioning bot, which has team write on every
+        # `personal/` repository. A named human's key must still never sit on
+        # this shared on-demand node. Plaintext in common.yaml, so no vault is
+        # involved in deciding WHO; only in delivering the credential.
+        dev_node_gitea_user: "{{ gitea_config.apps.auth.identities.agent }}"
+        # Where the key lived before the amendment. The role removes it there
+        # first, because Gitea refuses a key another account already holds.
+        dev_node_gitea_former_user: "{{ gitea_config.apps.auth.identities.machine }}"
         dev_node_gitea_ssh_host: "{{ gitea_config.apps.services.core.gitea.ssh_host }}"
         dev_node_gitea_ssh_port: "{{ gitea_config.apps.services.core.gitea.ssh_port }}"
         # Declared host key, so a substituted one is refused rather than adopted
         # (AC3). Public by design — no vault involved.
         dev_node_gitea_ssh_host_key: "{{ gitea_config.apps.services.core.gitea.ssh_host_key }}"
         dev_node_gitea_api_url: "https://{{ gitea_config.apps.services.core.gitea.domain }}/api/v1"
-        # D2: the bot's API token is used ONLY on the controller, to register
-        # this node's public key. It is never delivered to the node — what lives
-        # on ace2 is a per-node keypair whose blast radius is repositories,
-        # not the token's `write:user`. `gitea_secrets`, not `secrets`: see
+        # The agents' token has no `write:user`, so the superadmin registers the
+        # key through the admin API. Used ONLY on the controller and never
+        # delivered to the node: what lives on ace2 is a per-node keypair whose
+        # blast radius is repositories. `gitea_secrets`, not `secrets`: see
         # `gitea_identity_env` above for why that distinction is load-bearing.
-        dev_node_gitea_bot_token: "{{ gitea_secrets.apps.services.core.gitea.bot_token | default('') }}"
+        dev_node_gitea_admin_user: "{{ gitea_config.apps.auth.identities.superadmin }}"
+        dev_node_gitea_admin_password: "{{ gitea_secrets.apps.services.core.gitea.admin_password | default('') }}"
 
     # The fleet's failure-notification path, and the fleet webhook secret it
     # reads. Applied BEFORE every role whose units name its templates
