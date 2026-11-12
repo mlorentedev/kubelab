@@ -25,6 +25,10 @@ spec:
         app.kubernetes.io/name: {{ app.name }}
         app.kubernetes.io/part-of: kubelab
     spec:
+{% if app.image_pull_secret %}
+      imagePullSecrets:
+        - name: {{ app.image_pull_secret }}
+{% endif %}
       containers:
         - name: {{ app.name }}
           image: {{ app.image }}

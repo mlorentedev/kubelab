@@ -223,3 +223,111 @@ class TestApplySecretsDeliversIt:
             ks.apply_secrets("prod", Path("."), dry_run=False)
 
         run.assert_not_called()
+
+
+class TestTheDeploymentCarriesThePullSecret:
+    """IDP-053 AC3 (S2b): the Deployment names the Secret `apply-secrets` renders, and only for a private product.
+
+    Rendered through the real generator context and the real template, so what is asserted is what
+    `sync all` writes, not the shape of a context dict.
+    """
+
+    REGISTRY = """\
+products:
+  web:
+    repository: mlorentedev/web
+    forge: github
+    receiver: generic
+    image_name: kubelab-web
+    events: {staging: web-image-published, prod: web-release-published}
+  beta:
+    repository: personal/beta
+    forge: gitea
+    receiver: generic
+    image_registry: gitea.kubelab.live/personal
+    private: true
+    pull_credential: {username: reviewer, secret: ghcr.pull_token}
+    events: {staging: beta-image-published}
+  gamma:
+    repository: personal/gamma
+    forge: gitea
+    receiver: generic
+    image_registry: gitea.kubelab.live/personal
+    events: {staging: gamma-image-published}
+"""
+
+    @staticmethod
+    def _values(*apps: str) -> dict[str, str]:
+        values = {"REGISTRY": "docker.io/mlorentedev"}
+        for app in apps:
+            prefix = f"APPS_PLATFORM_{app.upper()}"
+            values |= {
+                f"{prefix}_IMAGE_NAME": app,
+                f"{prefix}_DOMAIN": f"{app}.staging.example.test",
+                f"{prefix}_DEFAULT_PORT": "8080",
+                f"{prefix}_VERSION": "sha-0123456789ab",
+            }
+        return values
+
+    def _deployments(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, dict]:
+        from unittest.mock import MagicMock
+
+        from toolkit.core.templating import create_renderer
+        from toolkit.features import generator_k8s
+        from toolkit.features.generator_k8s import K8sGenerator
+
+        path = tmp_path / "products.yaml"
+        path.write_text(self.REGISTRY, encoding="utf-8")
+        monkeypatch.setattr(product_registry, "registry_path", lambda: path)
+        manager = MagicMock()
+        manager.return_value.get_env_vars.return_value = self._values("web", "beta", "gamma")
+        monkeypatch.setattr(generator_k8s, "ConfigurationManager", manager)
+        monkeypatch.setattr(K8sGenerator, "_build_migrations", lambda self, env_vars: {})
+        generator = K8sGenerator()
+        out = tmp_path / "deployments.yaml"
+        assert create_renderer(generator.project_root / "infra/k8s/templates").render_template(
+            "deployments.yaml.j2", out, generator._build_context("staging")
+        )
+        return {d["metadata"]["name"]: d for d in yaml.safe_load_all(out.read_text(encoding="utf-8")) if d}
+
+    def test_a_private_product_pulls_with_the_secret_apply_secrets_renders(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        beta = self._deployments(tmp_path, monkeypatch)["beta"]
+
+        assert beta["spec"]["template"]["spec"]["imagePullSecrets"] == [{"name": pull_secret_name(HOST)}]
+        assert pull_secret_name(HOST) == "pull-gitea-kubelab-live"
+
+    def test_the_name_is_the_one_the_secret_mapping_creates(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Deployment and Secret derive the name separately; a drift between them is a pod that never starts."""
+        deployments = self._deployments(tmp_path, monkeypatch)
+        (mapping,) = pull_secret_mappings(product_registry.load_registry(tmp_path / "products.yaml"))
+
+        assert deployments["beta"]["spec"]["template"]["spec"]["imagePullSecrets"] == [{"name": mapping.name}]
+
+    @pytest.mark.parametrize("app", ["web", "gamma"], ids=["platform-registry", "non-private-forge-registry"])
+    def test_a_product_that_is_not_private_gets_no_pull_secret(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, app: str
+    ) -> None:
+        """A registry host alone does not make an image private: only the entry's `private` does."""
+        assert "imagePullSecrets" not in self._deployments(tmp_path, monkeypatch)[app]["spec"]["template"]["spec"]
+
+    @pytest.mark.parametrize("env", ["staging", "prod"])
+    def test_every_committed_deployment_is_byte_identical(self, env: str, tmp_path: Path) -> None:
+        """The committed registry has no private entry, so the rendered bytes must not move.
+
+        Compared with the file committed before this change, not with a second render of the new
+        template: `make validate-sync` would pass on a template that changed both.
+        """
+        from toolkit.core.templating import create_renderer
+        from toolkit.features.generator_k8s import K8sGenerator
+
+        generator = K8sGenerator()
+        out = tmp_path / "deployments.yaml"
+        assert create_renderer(generator.project_root / "infra/k8s/templates").render_template(
+            "deployments.yaml.j2", out, generator._build_context(env)
+        )
+        committed = generator.project_root / f"infra/k8s/overlays/{env}/generated/deployments.yaml"
+
+        assert out.read_bytes() == committed.read_bytes()
+        assert b"imagePullSecrets" not in committed.read_bytes()
