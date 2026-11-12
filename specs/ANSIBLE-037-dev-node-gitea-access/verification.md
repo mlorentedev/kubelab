@@ -78,7 +78,7 @@ git@beelink.kubelab.internal: Permission denied (publickey).
 
 ### Not yet settled
 
-Nothing. R1, R2 and R3 are closed; `proposal.md`'s "Risks / open questions" holds no unresolved item blocking Part 1. R4 was a scheduling risk (both on-demand nodes powered), satisfied for these runs.
+AC6 (2026-11-12): agent forwarding is off fleet-wide, so D1's human half cannot work as written; owner decision on #1075. Before that, nothing: R1, R2 and R3 are closed; `proposal.md`'s "Risks / open questions" holds no unresolved item blocking Part 1. R4 was a scheduling risk (both on-demand nodes powered), satisfied for these runs.
 
 ## Evidence
 

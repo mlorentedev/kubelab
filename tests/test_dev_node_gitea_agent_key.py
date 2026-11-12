@@ -69,9 +69,7 @@ def test_registration_uses_the_superadmin_and_never_the_bot_token() -> None:
         "the bot token no longer registers anything on ace2, so the play must not resolve it"
     )
     assert node_vars.get("dev_node_gitea_admin_user", "").endswith("apps.auth.identities.superadmin }}")
-    assert "gitea_secrets.apps.services.core.gitea.admin_password" in node_vars.get(
-        "dev_node_gitea_admin_password", ""
-    )
+    assert "gitea_secrets.apps.services.core.gitea.admin_password" in node_vars.get("dev_node_gitea_admin_password", "")
     assert "dev_node_gitea_bot_token" not in ROLE_TASKS.read_text(encoding="utf-8")
 
 
@@ -83,7 +81,9 @@ def test_every_forge_api_call_runs_on_the_controller_as_the_superadmin() -> None
         assert task.get("delegate_to") == "localhost", f"{task['name']}: the superadmin must stay off the node"
         assert task.get("no_log") is True, f"{task['name']}: carries the superadmin password"
         assert uri.get("force_basic_auth") is True, f"{task['name']}"
-        assert "/user/keys" not in uri["url"], f"{task['name']}: `/user/keys` acts on the caller, not the node's account"
+        assert "/user/keys" not in uri["url"], (
+            f"{task['name']}: `/user/keys` acts on the caller, not the node's account"
+        )
 
 
 def test_the_key_leaves_the_machine_account_before_it_is_registered() -> None:
