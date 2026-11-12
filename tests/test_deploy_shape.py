@@ -502,7 +502,8 @@ class FakeGitea:
         self.ahead = ahead
         old_short = current_version("web").split("-", 1)[1]
         self.commits = commits if commits is not None else {SHORT: FULL, old_short: old_full("web")}
-        #: A read that fails, by what it reads: "get_repo", or "pin" for the commit the PR moved off.
+        #: A read that fails, by what it reads: "get_repo", "pin" for the commit the PR moved off,
+        #: "new-commit" for the tag the PR moves to, or "compare" for any ahead/behind read.
         self.fail: dict[str, Exception] = {}
 
     def get_repo(self, owner: str, name: str) -> dict[str, str]:
@@ -513,9 +514,13 @@ class FakeGitea:
     def get_commit(self, owner: str, name: str, ref: str) -> str | None:
         if "pin" in self.fail and ref == current_version("web").split("-", 1)[1]:
             raise self.fail["pin"]
+        if "new-commit" in self.fail and ref == SHORT:
+            raise self.fail["new-commit"]
         return self.commits.get(ref)
 
     def compare_ahead(self, owner: str, name: str, base: str, head: str) -> int:
+        if "compare" in self.fail:
+            raise self.fail["compare"]
         return self.ahead[(base, head)]
 
 
@@ -577,8 +582,22 @@ class TestEvaluateGitea:
             ("pin", GiteaError("Gitea API GET /repos/personal/web/git/commits/abc -> 502: Bad Gateway", 502)),
             ("pin", requests.ConnectionError("connection refused")),
             ("pin", requests.Timeout("read timed out")),
+            # Every other read the proof makes: the new tag's commit and the ahead/behind comparisons.
+            ("new-commit", GiteaError("Gitea API GET /repos/personal/web/git/commits/def -> 502: Bad Gateway", 502)),
+            ("compare", GiteaError("Gitea API GET /repos/personal/web/compare/a...b -> 502: Bad Gateway", 502)),
+            ("compare", requests.Timeout("read timed out")),
         ],
-        ids=["502", "connection-error", "timeout", "pin-502", "pin-connection-error", "pin-timeout"],
+        ids=[
+            "502",
+            "connection-error",
+            "timeout",
+            "pin-502",
+            "pin-connection-error",
+            "pin-timeout",
+            "new-commit-502",
+            "compare-502",
+            "compare-timeout",
+        ],
     )
     def test_a_gitea_that_cannot_be_read_is_unknown_however_it_fails(
         self, decl, gitea_products, reads: str, failure: Exception
