@@ -109,6 +109,7 @@ class WikiGenerator(BaseGenerator):
                 check=True,
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
             )
 
             logger.success(MESSAGES.SUCCESS_WIKI_BUILT)

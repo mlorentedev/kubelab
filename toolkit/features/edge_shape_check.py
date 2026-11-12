@@ -228,6 +228,7 @@ def _run(command: list[str], script: str) -> tuple[int, str]:
             check=False,
             stdout=subprocess.PIPE,
             text=True,
+            encoding="utf-8",
             errors="replace",
             timeout=SESSION_TIMEOUT_S,
         )

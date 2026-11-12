@@ -212,6 +212,7 @@ def run_measure(networking: dict[str, Any], when: str, seconds: int = SECONDS) -
             check=False,
             stdout=subprocess.PIPE,
             text=True,
+            encoding="utf-8",
             errors="replace",
             timeout=budget,
         )

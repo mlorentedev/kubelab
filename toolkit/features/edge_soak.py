@@ -198,6 +198,7 @@ def run_soak(networking: dict[str, Any]) -> tuple[int, list[str]]:
             check=False,
             stdout=subprocess.PIPE,
             text=True,
+            encoding="utf-8",
             errors="replace",
             timeout=SESSION_TIMEOUT_S,
         )
