@@ -184,11 +184,11 @@ dig +trace kubelab.live
 # For local development, add to /etc/hosts
 echo "127.0.0.1 api.localhost web.localhost" | sudo tee -a /etc/hosts
 
-# For staging (KubeLab), ensure WireGuard is connected
-sudo wg show
+# Staging names are VPN-only: check the tailnet is up
+tailscale status
 
-# Restart CoreDNS if DNS gateway issues
-toolkit edge restart dns-gateway
+# Staging DNS is CoreDNS + Pi-hole on the RPi4, deployed by Ansible
+make deploy TARGET=dns ENV=prod
 
 # Flush local DNS cache
 sudo systemd-resolve --flush-caches   # Ubuntu/Debian
@@ -312,9 +312,6 @@ mtr api.kubelab.live
 ```bash
 # Increase Traefik timeouts (edge/traefik/templates/middlewares.template.yml)
 # Adjust forwardedHeaders.trustedIPs timeout settings
-
-# For Nginx caching issues
-toolkit edge restart nginx
 
 # Check backend health
 toolkit services logs api --no-follow | grep "slow query"
