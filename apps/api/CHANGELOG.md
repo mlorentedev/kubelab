@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.9.0](https://github.com/mlorentedev/kubelab/compare/api-v1.8.0...api-v1.9.0) (2026-11-12)
+
+
+### Features
+
+* **api:** write the forge read model's freshness, cycle and webhook failures as JSON events ([#3358](https://github.com/mlorentedev/kubelab/issues/3358)) ([2ed0d10](https://github.com/mlorentedev/kubelab/commit/2ed0d10c6206e80368e312af34206429e73c8702))
+
 ## [1.8.0](https://github.com/mlorentedev/kubelab/compare/api-v1.7.2...api-v1.8.0) (2026-11-12)
 
 
