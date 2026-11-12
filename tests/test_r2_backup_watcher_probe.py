@@ -127,6 +127,8 @@ ADDRESSES = {"rpi3": "192.0.2.6", "vps": "192.0.2.2"}
 # their sum: it holds objects outside any node prefix, and R2 bills those too.
 SIZES = {"rpi3": 123_456_789, "vps": 2_345_678_901}
 BUCKET_BYTES = sum(SIZES.values()) + 1_000_000
+# The objects under each repository's `data/` (BACKUP-081).
+PACKS = {"rpi3": 364, "vps": 961}
 
 
 def _node_passwords(**by_node: str) -> dict[str, str]:
@@ -136,7 +138,11 @@ def _node_passwords(**by_node: str) -> dict[str, str]:
 
 def _sizes(**overrides: str) -> str:
     """The sizes file, one `<kind> <name> <bytes|null> <seconds>` per line."""
-    entries = {("bucket", "kubelab-backups"): str(BUCKET_BYTES), **{("node", n): str(b) for n, b in SIZES.items()}}
+    entries = {
+        ("bucket", "kubelab-backups"): str(BUCKET_BYTES),
+        **{("node", n): str(b) for n, b in SIZES.items()},
+        **{("packs", n): str(c) for n, c in PACKS.items()},
+    }
     for key, value in overrides.items():
         kind, name = key.split("__")
         entries[(kind, name)] = value
@@ -774,3 +780,24 @@ def test_an_always_on_node_the_probe_cannot_reach_fails_the_fleet(fleet, failure
     assert "probe cannot reach an always-on node" in vps["reason"]
     assert _node(nodes, "rpi3")["healthy"] == 1
     assert summary["healthy"] == 0 and summary["unhealthy"] == 1 and rc != 0
+
+
+def test_each_node_reports_the_packs_its_weekly_check_reads_from(fleet) -> None:
+    """BACKUP-081 (#3084): the check budget rule divides these by the role's read-data groups."""
+    _, _, env = fleet
+    rc, nodes, _ = _run(env)
+    assert rc == 0
+    assert _node(nodes, "rpi3")["packs"] == PACKS["rpi3"]
+    assert _node(nodes, "vps")["packs"] == PACKS["vps"]
+
+
+@pytest.mark.parametrize("value", ["null", "absent"])
+def test_an_unknown_pack_count_is_null_and_never_fails_a_healthy_node(fleet, value) -> None:
+    """A count says when to raise t, never whether the backup restores: no health verdict rides on it."""
+    _, _, env = fleet
+    _write_sizes(env, _sizes(packs__vps=value))
+    rc, nodes, (summary,) = _run(env)
+    vps = _node(nodes, "vps")
+    assert rc == 0 and vps["healthy"] == 1 and summary["healthy"] == 1
+    assert vps["packs"] is None
+    assert vps["stored_bytes"] == SIZES["vps"]

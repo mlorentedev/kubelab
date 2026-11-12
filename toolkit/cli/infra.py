@@ -25,6 +25,7 @@ from toolkit.features.argo_manager import (
 )
 from toolkit.features.k8s_kubeconfig import output_path
 from toolkit.features.k8s_render import BootstrapEntry, render_and_apply
+from toolkit.features.product_guards import staging_zones
 from toolkit.features.validation import (
     confirm_dangerous_operation,
     validate_environment_config,
@@ -358,6 +359,16 @@ def load_test_run(
     accept_encoding: Annotated[
         str | None, typer.Option("--accept-encoding", help="gzip or identity; unset, k6 sends gzip")
     ] = None,
+    sample_seconds: Annotated[
+        int, typer.Option("--sample-seconds", help="Seconds between timeline samples in each step; 0 turns it off")
+    ] = 2,
+    warmup_seconds: Annotated[
+        int,
+        typer.Option(
+            "--warmup-seconds",
+            help="Seconds each step runs before its verdict reads; reported as the cold burst. 0 turns it off",
+        ),
+    ] = 30,  # load_test.WARMUP_SECONDS, which a test holds this to
     output: Annotated[str, typer.Option("--output", help="Results directory")] = "docs/load-test",
 ) -> None:
     """Measure staging: a baseline under the limiter, then ramps to the first degraded step.
@@ -365,11 +376,10 @@ def load_test_run(
     Takes no URL. Writes <date>-<commit>[-N].json and .md, and always removes the route
     it applies. Exits 0 with results, 1 when refused or when a step could not run.
     """
-    import json
     import subprocess
     from datetime import datetime, timezone
 
-    from toolkit.features.load_test import LoadTestRefused, build_targets, render, resolve_nodes, run
+    from toolkit.features.load_test import LoadTestRefused, build_targets, dumps_result, render, resolve_nodes, run
 
     try:
         lab, staging, prod = _load_test_lab(env)
@@ -388,7 +398,7 @@ def load_test_run(
 
         def save(result: dict[str, Any]) -> None:
             result = {**result, "date": now.strftime("%Y-%m-%dT%H:%MZ"), "commit": commit}
-            base.with_suffix(".json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+            base.with_suffix(".json").write_text(dumps_result(result), encoding="utf-8")
             base.with_suffix(".md").write_text(render(result), encoding="utf-8")
 
         image = staging["load_test"]["image"]
@@ -404,6 +414,8 @@ def load_test_run(
                 checkpoint=save,
                 min_rate=min_rate,
                 accept_encoding=accept_encoding,
+                sample_seconds=sample_seconds,
+                warmup=warmup_seconds,
             )
         )
     except (LoadTestRefused, subprocess.SubprocessError, OSError) as e:
@@ -1475,6 +1487,11 @@ def _load_cluster_bootstrap() -> list[BootstrapEntry]:
     return [BootstrapEntry.from_dict(entry) for entry in config.get("cluster_bootstrap", [])]
 
 
+def _staging_zones() -> list[str]:
+    """``networking.staging_zones`` (common.yaml): the list the hairpin's staging blocks render from."""
+    return staging_zones(settings.project_root / "infra" / "config" / "values")
+
+
 def _apply_cluster_bootstrap(kubeconfig: str, *, dry_run: bool) -> bool:
     """Render + (validate or apply) every cluster_bootstrap entry, in declared order.
 
@@ -1482,10 +1499,13 @@ def _apply_cluster_bootstrap(kubeconfig: str, *, dry_run: bool) -> bool:
     the first hard failure (an `optional` entry whose render target is unreachable is a
     logged skip, not a failure — see render_and_apply).
     """
+    zones = _staging_zones()
     for entry in _load_cluster_bootstrap():
         verb = "Validating" if dry_run else "Applying"
         logger.info(f"{verb} cluster_bootstrap '{entry.name}' (ns: {entry.namespace})...")
-        if not render_and_apply(entry, kubeconfig=kubeconfig, project_root=settings.project_root, dry_run=dry_run):
+        if not render_and_apply(
+            entry, kubeconfig=kubeconfig, project_root=settings.project_root, dry_run=dry_run, staging_zones=zones
+        ):
             logger.error(f"cluster_bootstrap {'dry-run' if dry_run else 'apply'} failed: {entry.name}")
             return False
     return True

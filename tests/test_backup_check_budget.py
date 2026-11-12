@@ -60,3 +60,60 @@ def test_the_check_reads_a_subset_of_packs():
     # 1 meant a full read every week: right at 6-17 packs (2026-09-30), timed out
     # at 364-961 (2026-11-01). Measured 2026-11-04, see the defaults comment.
     assert int(DEFAULTS["node_backup_check_read_data_groups"]) >= 16
+
+
+# BACKUP-081 (#3084): nothing watched the pack count, so the first sign that 1/t no
+# longer fit was the check timing out again. The watcher reports each node's packs,
+# and a rule fires before one check's share outgrows its budget. Its threshold is
+# t x what one check can read, computed here from the role's own values, so the
+# rule and `node_backup_check_read_data_groups` cannot drift apart.
+#
+# Measured on rpi4, the slowest node and the largest repository, 2026-11-04 on the
+# hotel uplink (defaults comment, #2920): a ~100s ship, a 107s plain check, and 1/8
+# of ~800 packs (~100) read in 383s, 3.8 s/pack. A later run read 50 packs in 57s;
+# the slow figure is the one a budget has to survive. Re-measure after the
+# 2026-11-18 site move.
+SHIP_SECONDS = 100
+PLAIN_CHECK_SECONDS = 107
+SECONDS_PER_PACK = 3.8
+MARGIN = 0.8
+RULES = REPO / "infra/k8s/base/services/grafana-alerting/r2-backup-rules.yaml"
+CHECK_BUDGET_UID = "backup081-check-budget"
+
+
+def _packs_per_check() -> int:
+    return int(MARGIN * (_ship_timeout() - SHIP_SECONDS - PLAIN_CHECK_SECONDS) / SECONDS_PER_PACK)
+
+
+def _check_budget_rule() -> dict:
+    groups = yaml.safe_load(RULES.read_text(encoding="utf-8"))["groups"]
+    rules = [r for g in groups for r in g["rules"] if r["uid"] == CHECK_BUDGET_UID]
+    assert len(rules) == 1, f"no single rule {CHECK_BUDGET_UID}"
+    return rules[0]
+
+
+def test_the_check_budget_rule_fires_at_t_times_what_one_check_can_read():
+    rule = _check_budget_rule()
+    threshold = next(d for d in rule["data"] if d["refId"] == rule["condition"])
+    (condition,) = threshold["model"]["conditions"]
+    t = int(DEFAULTS["node_backup_check_read_data_groups"])
+    assert condition["evaluator"] == {"type": "gt", "params": [t * _packs_per_check()]}, (
+        f"the threshold must be t ({t}) x {_packs_per_check()} packs per check; "
+        "change it with node_backup_check_read_data_groups, never alone"
+    )
+
+
+def test_the_check_budget_rule_reads_each_nodes_packs():
+    expr = next(d for d in _check_budget_rule()["data"] if d["refId"] == "A")["model"]["expr"]
+    assert "metric=`r2_backup_node`" in expr and "unwrap packs" in expr
+    # lesson-512: a plain `| json` lets Vector's `node` label fold every backup node into one series.
+    assert 'backup_node="node"' in expr and "by (backup_node)" in expr
+
+
+def test_the_check_budget_alert_reaches_the_log_tier_in_both_environments():
+    """A warning to act on within weeks, not an interruption: never the page tier."""
+    from tests.test_forge_review_failed_route import _policy, _receivers
+
+    title = _check_budget_rule()["title"]
+    for env in ("staging", "prod"):
+        assert _receivers(_policy(env), {"alertname": title}) == ["apprise-log"], env

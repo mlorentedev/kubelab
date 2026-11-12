@@ -29,6 +29,9 @@ cd "$ROOT"
 
 FAILED=0
 CHECK_ONLY=0
+# Cached answer to "is root available without a password?" — empty means unasked.
+# Only the apt install needs it, and asking twice would mean two sudo probes.
+ROOT_OK=""
 
 ok()   { printf '  [ok]   %s\n' "$*"; }
 bad()  { printf '  [FAIL] %s\n' "$*"; FAILED=$((FAILED + 1)); }
@@ -70,8 +73,31 @@ case "$(uname -s)" in
     exit 1 ;;
 esac
 
+# `sudo` reads its password from /dev/tty, not from stdin, so an unqualified call
+# does not fail when the script is not attached to a foreground terminal — it
+# waits, with no output, indefinitely (measured: PID alive at 123 s, no message).
+# A bootstrap script may therefore never prompt: it asks whether root is already
+# available, and if not it names the command that would make it so. `-n` turns
+# the block into an answer.
+can_root() {
+  if [ "$(id -u)" -eq 0 ]; then
+    return 0
+  fi
+  if [ -z "$ROOT_OK" ]; then
+    if sudo -n true 2>/dev/null; then ROOT_OK=1; else ROOT_OK=0; fi
+  fi
+  [ "$ROOT_OK" -eq 1 ]
+}
+
+require_root() {
+  can_root && return 0
+  bad "root is not available without a password"
+  note "run 'sudo -v' first, then re-run this script"
+  return 1
+}
+
 as_root() {
-  if [ "$(id -u)" -eq 0 ]; then "$@"; else sudo "$@"; fi
+  if [ "$(id -u)" -eq 0 ]; then "$@"; else sudo -n "$@"; fi
 }
 
 # Poetry's installer drops the binary in ~/.local/bin, which is on PATH in most
@@ -130,26 +156,51 @@ else
   # any target runs, `make help` included, so the failure looks like a broken
   # Makefile rather than a wrong make.
   if command -v make >/dev/null 2>&1; then
-    bad "make is $(first_line make --version) — not GNU make"
+    note "make is $(first_line make --version) — not GNU make"
     note "BusyBox aborts on Makefile:178 ('expected separator') before any target runs"
   else
-    bad "make is not installed"
+    note "make is not installed"
   fi
 
+  # Absence is a diagnosis here, not a verdict. This script exists for a machine
+  # that does not yet have make, so counting the absence as a failure made the
+  # hand-off unreachable on exactly the machine it was written for: the install
+  # succeeded, `ok` did not undo the count, and the script exited 1 having done
+  # its job. Only --check, which makes no attempt, and a failed attempt below
+  # are verdicts.
   if [ "$CHECK_ONLY" -eq 1 ]; then
-    note "would install: make"
-  elif command -v apt-get >/dev/null 2>&1; then
-    note "installing make via apt-get"
-    as_root apt-get update -qq
+    bad "GNU make is missing"
+    # Whether root is available is not a second thing wrong with this machine: it
+    # is what the install would need, and --check installs nothing. Counting it
+    # too answered `2 check(s) failed` to a host with one problem, and the count
+    # is what the operator triages against.
+    if can_root; then
+      note "would install: make"
+    else
+      note "root is not available without a password"
+      note "run 'sudo -v' first, then re-run this script"
+    fi
+  elif ! command -v apt-get >/dev/null 2>&1; then
+    bad "no apt-get on this host; install GNU make with the system package manager"
+    note "the doctor still works without make: poetry run toolkit infra ansible doctor"
+  elif ! require_root; then
+    note "not attempting the install"
+  else
+    if command -v make >/dev/null 2>&1; then
+      note "replacing it via apt-get"
+    else
+      note "installing make via apt-get"
+    fi
+    # Not -qq: `apt-get update -qq` was measured returning 0 while printing
+    # "Could not open lock file … Permission denied", so the quiet flag hid the
+    # one failure this script must not hide.
+    as_root apt-get update
     as_root env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends make
     if have_gnu_make; then
       ok "$(first_line make --version)"
     else
       bad "make is still not GNU make after install"
     fi
-  else
-    bad "no apt-get on this host; install GNU make with the system package manager"
-    note "the doctor still works without make: poetry run toolkit infra ansible doctor"
   fi
 fi
 
@@ -164,13 +215,16 @@ if command -v poetry >/dev/null 2>&1 && [ "$(poetry_version)" = "$POETRY_VERSION
   ok "poetry ${POETRY_VERSION} ($(command -v poetry))"
 else
   if command -v poetry >/dev/null 2>&1; then
-    bad "poetry $(poetry_version) is installed, this repo pins ${POETRY_VERSION}"
+    note "poetry $(poetry_version) is installed; this repo pins ${POETRY_VERSION}"
     note "lock-version 2.1 needs Poetry >= 2.1; the pin keeps seat and runner identical"
   else
-    bad "poetry is not installed"
+    note "poetry is not installed"
   fi
 
+  # Same asymmetry as make: the installer writes to ~/.local/bin, so no root is
+  # involved and nothing here can block on a password.
   if [ "$CHECK_ONLY" -eq 1 ]; then
+    bad "Poetry ${POETRY_VERSION} is missing"
     note "would install: poetry ${POETRY_VERSION}"
   elif ! command -v curl >/dev/null 2>&1; then
     bad "curl is required to fetch the Poetry installer"

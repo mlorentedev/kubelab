@@ -250,3 +250,53 @@ func TestReconcileReadsAnOwnersListedRepositories(t *testing.T) {
 		t.Fatalf("a failed listing stopped the reads: %v", model.saved)
 	}
 }
+
+// The start-up seed can find the store unreachable (#3247). The reconcile asks
+// again on its next cycle while a wildcard has neither a listing nor a seed, so a
+// forge that cannot be listed still serves what was read before.
+func TestReconcileSeedsAWildcardTheStartCouldNotSeed(t *testing.T) {
+	lister := &fakeLister{err: errors.New("down")}
+	model := newModel()
+	var asked int
+	known := []forge.Source{{Forge: "github", Owner: "o", Repo: "kept"}}
+	r := forge.Reconciler{
+		Readers: map[string]forge.Reader{"github": &fakeReader{}},
+		Catalog: &forge.Catalog{Declared: []forge.Source{{Forge: "github", Owner: "o", Repo: forge.EveryRepo}},
+			Listers: map[string]forge.Lister{"github": lister}},
+		Model: model,
+		Known: func(context.Context) ([]forge.Source, error) {
+			asked++
+			if asked == 1 {
+				return nil, errors.New("connection refused")
+			}
+			return known, nil
+		},
+	}
+	r.Once(context.Background())
+	if _, ok := model.saved["github:o/kept"]; ok {
+		t.Fatalf("read a source nothing had listed or seeded")
+	}
+	r.Once(context.Background())
+	if _, ok := model.saved["github:o/kept"]; !ok {
+		t.Fatalf("the second cycle did not seed from the store: %v", model.saved)
+	}
+	r.Once(context.Background())
+	if asked != 2 {
+		t.Fatalf("asked the store %d times; a seeded wildcard must not ask again", asked)
+	}
+}
+
+func TestReconcileDoesNotAskTheStoreOnceListed(t *testing.T) {
+	lister := &fakeLister{repos: map[string][]string{"o": {"a"}}}
+	r := forge.Reconciler{
+		Readers: map[string]forge.Reader{"github": &fakeReader{}},
+		Catalog: &forge.Catalog{Declared: []forge.Source{{Forge: "github", Owner: "o", Repo: forge.EveryRepo}},
+			Listers: map[string]forge.Lister{"github": lister}},
+		Model: newModel(),
+		Known: func(context.Context) ([]forge.Source, error) {
+			t.Fatal("asked the store although the listing succeeded")
+			return nil, nil
+		},
+	}
+	r.Once(context.Background())
+}

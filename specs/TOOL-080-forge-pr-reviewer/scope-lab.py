@@ -344,7 +344,7 @@ def start_agent(token: str, webhook_secret: str, nan_key: str) -> None:
         "-e",
         "OPENAI__API_BASE=https://api.nan.builders/v1",
         "-e",
-        "CONFIG__MODEL=openai/mimo-v2.5",
+        "CONFIG__MODEL=openai/mimo-v2.6-flash",
         "-e",
         'CONFIG__FALLBACK_MODELS=["openai/deepseek-v4-flash"]',
         "-e",

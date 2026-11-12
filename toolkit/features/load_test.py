@@ -24,19 +24,37 @@ import json
 import re
 import secrets
 import shlex
+import shutil
 import subprocess
+import tempfile
+from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+from toolkit.features import load_test_timeline as tl
 
 # Finer between 800 and 2000: the first run went from healthy at 800 to Traefik
 # OOMKilled at 1600, a cliff too wide to read.
 STEPS = (50, 100, 200, 400, 800, 1000, 1200, 1400, 1600, 2000, 3200, 6400)
 BASELINE_RATE = 25  # below the limiter's 30/s, so it needs no route at all
 STEP_SECONDS = 60
+# Each step opens with this much load on the same virtual users before the verdict starts
+# reading (#3294). Run d46f3fbb: a healthy step settled 4 to 6 s into the step, and every
+# degraded one recovered between t = 16 and 32 s of the sampler, which starts about 2 s
+# before k6. 30 s covers that range and leaves no margin, so the report checks the warm
+# rows of the timeline are flat instead of assuming it.
+WARMUP_SECONDS = 30
 SETTLE_SECONDS = 15
 TOP_AFTER_SECONDS = 45  # metrics-server averages over about 15 s
+# The sampler outlives the step by this much: k6's container starts a few seconds after
+# the sampler, so the rise and fall of the edge's rate mark where k6 ran (#3102).
+TIMELINE_TAIL_SECONDS = 10
+TIMELINE_READ_TIMEOUT = 8
+# The step's ssh masters outlive the sampling by this much, and are closed explicitly anyway.
+MUX_MARGIN_SECONDS = 60
 
 # Declared before the first run, so the knee cannot be chosen after seeing the data.
 MAX_ERROR_RATE = 0.01
@@ -150,6 +168,7 @@ def k6_env(
     seconds: int,
     bypass: str | None,
     accept_encoding: str | None = None,
+    warmup: int = 0,
 ) -> dict[str, str]:
     env = {
         "LT_HOST": target.host,
@@ -157,6 +176,7 @@ def k6_env(
         "LT_ADDRESS": address,
         "LT_RATE": str(rate),
         "LT_SECONDS": str(seconds),
+        "LT_WARMUP": str(warmup),
     }
     if bypass is not None:
         env |= {"LT_BYPASS_HEADER": BYPASS_HEADER, "LT_BYPASS_VALUE": bypass}
@@ -172,37 +192,88 @@ def k6_command(image: str, env: dict[str, str]) -> str:
     return f"docker run --rm -i --network host {flags} {shlex.quote(image)} run --quiet --no-usage-report -"
 
 
-def parse_summary(stdout: str) -> dict[str, Any]:
-    """The figures of one step, from the metrics k6 printed. Latencies in ms."""
+_ROW = re.compile(r'"\\u0000(\d+)\\u0000"')
+
+
+def dumps_result(result: dict[str, Any]) -> str:
+    """The run as JSON, one line per timeline row.
+
+    A sampled run holds about 50 rows a step. Written one value per line,
+    a 30-step run passed the repository's 1 MB file limit; a row per line
+    keeps it under that and still diffs row by row.
+    """
+    rows: list[str] = []
+
+    def mark(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {
+                k: [park(r) for r in v] if k == "timeline" and isinstance(v, list) else mark(v)
+                for k, v in value.items()
+            }
+        if isinstance(value, list):
+            return [mark(v) for v in value]
+        return value
+
+    def park(row: Any) -> str:
+        rows.append(json.dumps(row))
+        return f"\x00{len(rows) - 1}\x00"
+
+    text = json.dumps(mark(result), indent=1)
+    return _ROW.sub(lambda m: rows[int(m.group(1))], text) + "\n"
+
+
+def parse_summary(stdout: str, warmup: int = 0, seconds: int = 0) -> dict[str, Any]:
+    """The figures of one step, from the metrics k6 printed. Latencies in ms.
+
+    With a warm-up, the step's figures are those of its `warm` phase and the warm-up's
+    are kept under `cold` (#3294). What k6 does not tag per request (429s, VUs, dropped
+    iterations) stays step-wide, so a 429 in either phase still marks the route absent.
+    """
     metrics = json.loads(stdout.strip().splitlines()[-1])
-    duration = metrics["http_req_duration"]["values"]
 
     def value(metric: str, key: str) -> float:
         return float(metrics.get(metric, {}).get("values", {}).get(key, 0))
 
-    return {
-        "requests": value("http_reqs", "count"),
-        "achieved_rps": value("http_reqs", "rate"),
-        "error_rate": value("http_req_failed", "rate"),
+    def figures(tag: str, span: int) -> dict[str, Any]:
+        def named(metric: str) -> str:
+            return f"{metric}{{phase:{tag}}}" if tag else metric
+
+        count = value(named("http_reqs"), "count")
+        return {
+            "requests": count,
+            # k6's own rate of a submetric is over the whole test, so the phase's comes from its length.
+            "achieved_rps": round(count / span, 1) if tag else value("http_reqs", "rate"),
+            "error_rate": value(named("http_req_failed"), "rate"),
+            **{name: value(named("http_req_duration"), key) for name, key in _DURATION},
+            "phases": {
+                phase: {name: value(named(f"http_req_{phase}"), key) for name, key in _PHASE_STATS} for phase in PHASES
+            },
+        }
+
+    primary = "warm" if warmup > 0 else ""
+    required = "http_req_duration{phase:warm}" if primary else "http_req_duration"
+    if required not in metrics:
+        raise KeyError(required)  # a summary without the step's own figures is unreadable, not zero
+    step = {
+        **figures(primary, seconds),
         "status_429": value("status_429", "count"),
         "dropped": value("dropped_iterations", "count"),
         "vus_peak": value("vus", "max"),
-        "avg_ms": duration["avg"],
-        "p50_ms": duration["med"],
-        "p90_ms": duration["p(90)"],
-        "p95_ms": duration["p(95)"],
-        "p99_ms": duration["p(99)"],
-        "max_ms": duration["max"],
-        "phases": {
-            phase: {
-                "p50_ms": value(f"http_req_{phase}", "med"),
-                "p95_ms": value(f"http_req_{phase}", "p(95)"),
-                "p99_ms": value(f"http_req_{phase}", "p(99)"),
-                "max_ms": value(f"http_req_{phase}", "max"),
-            }
-            for phase in PHASES
-        },
     }
+    if primary:
+        step["cold"] = figures("cold", warmup)
+    return step
+
+
+_DURATION = (
+    ("avg_ms", "avg"),
+    ("p50_ms", "med"),
+    ("p90_ms", "p(90)"),
+    ("p95_ms", "p(95)"),
+    ("p99_ms", "p(99)"),
+    ("max_ms", "max"),
+)
+_PHASE_STATS = (("p50_ms", "med"), ("p95_ms", "p(95)"), ("p99_ms", "p(99)"), ("max_ms", "max"))
 
 
 def classify(step: dict[str, Any], rate: int, bypass: bool = True) -> list[str]:
@@ -225,6 +296,18 @@ def classify(step: dict[str, Any], rate: int, bypass: bool = True) -> list[str]:
     return reasons
 
 
+def cold_reasons(step: dict[str, Any], rate: int, bypass: bool = True) -> list[str]:
+    """The same limits applied to the step's warm-up, with what is step-wide left as it is."""
+    return classify({**step, **step["cold"]}, rate, bypass)
+
+
+def cold_knee(steps: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """The knee of the cold bursts: how much connection setup ace1 absorbs at once (#3294)."""
+    if not steps or any("cold_reasons" not in s for s in steps):
+        return None
+    return knee([{**s, "reasons": s["cold_reasons"]} for s in steps])
+
+
 def knee(steps: list[dict[str, Any]]) -> dict[str, Any]:
     """The last healthy rate, the first that was not, and whether that reads as a bound.
 
@@ -233,8 +316,10 @@ def knee(steps: list[dict[str, Any]]) -> dict[str, Any]:
     the limiter measured nothing at all, and neither did one a rollout cut short,
     nor one whose generator saturated on the first step, before any healthy step
     gave a figure to bound, nor a ramp with no steps: `measured` is then false and no figure stands beside it."""
-    healthy = [s["rate"] for s in steps if not s["reasons"]]
     bad = next((s for s in steps if s["reasons"]), None)
+    # Only steps below the first failure: a ramp stops there, but the cold burst's steps go on with
+    # the warm verdict, and a burst that passes above its first failure does not move the knee (#3294).
+    healthy = [s["rate"] for s in steps[: steps.index(bad) if bad else len(steps)] if not s["reasons"]]
     reasons = set(bad["reasons"]) if bad else set()
     measured = bool(steps) and not ({"limiter", "rollout"} & reasons or ("generator" in reasons and not healthy))
     last = healthy[-1] if healthy and measured else None
@@ -252,7 +337,8 @@ def knee(steps: list[dict[str, Any]]) -> dict[str, Any]:
 
 def cpu_percent(before: str, after: str) -> float:
     """Busy share of the node between two `cpu` lines of /proc/stat."""
-    first, second = ([int(x) for x in line.split()[1:]] for line in (before, after))
+    # user..steal only: guest and guest_nice are already counted in user and nice.
+    first, second = ([int(x) for x in line.split()[1:9]] for line in (before, after))
     delta = [b - a for a, b in zip(first, second, strict=True)]
     total, idle = sum(delta), delta[3] + delta[4]
     return round(100 * (total - idle) / total, 1) if total else 0.0
@@ -275,12 +361,46 @@ class Lab:
         self.root, self.kubeconfig, self.operator_as = root, kubeconfig, operator_as
         self.target_node, self.generator = target_node, generator
 
-    def ssh(self, node: str, command: str, stdin: str | None = None, timeout: int = 60) -> str:
+    def ssh(
+        self, node: str, command: str, stdin: str | None = None, timeout: int = 60, options: tuple[str, ...] = ()
+    ) -> str:
         done = subprocess.run(
-            ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", node, command],
+            ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", *options, node, command],
             input=stdin, capture_output=True, text=True, encoding="utf-8", timeout=timeout, check=True,
         )  # fmt: skip
         return done.stdout
+
+    @contextmanager
+    def multiplexed(self, nodes: tuple[str, ...], seconds: int) -> Iterator[tuple[str, ...]]:
+        """One ssh connection per node for a step's timeline, so a sample costs a session, not a handshake.
+
+        A handshake per sample cost ace1 0.1 to 0.2 cores at rest, on the node under test (#3295).
+        The masters live in a directory of their own, never the operator's ~/.ssh, and are closed
+        when the step ends, failed or not. A master that does not open leaves the readers on direct
+        connections: with `ControlMaster=no`, ssh connects directly when the socket is missing or stale
+        (checked against ace1, both cases exit 0).
+        """
+        control = tempfile.mkdtemp(prefix="lt-", dir="/tmp")  # a unix socket path caps near 104 bytes on macOS
+        path = ("-o", f"ControlPath={control}/%C")
+        try:
+            for node in nodes:
+                self._ssh_control(node, *path, "-o", "ControlMaster=yes", "-o", f"ControlPersist={seconds}", "-fN")
+            yield (*path, "-o", "ControlMaster=no")
+        finally:
+            for node in nodes:
+                self._ssh_control(node, *path, "-O", "exit")
+            shutil.rmtree(control, ignore_errors=True)
+
+    @staticmethod
+    def _ssh_control(node: str, *args: str) -> None:
+        try:
+            subprocess.run(
+                ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", *args, node],
+                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                timeout=15, check=False,
+            )  # fmt: skip
+        except (subprocess.SubprocessError, OSError):
+            pass  # best effort both ways: a missing master costs a handshake per read, not the step
 
     def kubectl(self, *args: str, impersonate: bool = False, stdin: str | None = None) -> str:
         cmd = ["kubectl", "--kubeconfig", self.kubeconfig, *args]
@@ -342,6 +462,26 @@ class Lab:
         out = self.ssh(node, "grep MemAvailable /proc/meminfo")
         return int(out.split()[1]) // 1024
 
+    def timeline_readers(self, workload: str, ssh_options: tuple[str, ...] = ()) -> tl.Readers:
+        """Resolve the pods once per step; each sample is then one GET and two ssh reads."""
+        edge = self.pod(EDGE_WORKLOAD, EDGE_NAMESPACE)
+        ports = [p for c in edge["spec"]["containers"] for p in c.get("ports", []) if p.get("name") == "metrics"]
+        if not ports:
+            raise LoadTestRefused(f"{EDGE_WORKLOAD} declares no port named metrics")
+        path = f"/api/v1/namespaces/{EDGE_NAMESPACE}/pods/{edge['metadata']['name']}:{ports[0]['containerPort']}"
+        command = tl.node_command(edge["metadata"]["uid"], self.pod(workload)["metadata"]["uid"])
+        return tl.Readers(
+            edge=lambda: tl.parse_edge(
+                self.kubectl("get", "--raw", f"{path}/proxy/metrics", f"--request-timeout={TIMELINE_READ_TIMEOUT}s")
+            ),
+            node=lambda: tl.parse_node(
+                self.ssh(self.target_node, command, timeout=TIMELINE_READ_TIMEOUT, options=ssh_options)
+            ),
+            generator=lambda: tl.parse_cpu_line(
+                self.ssh(self.generator, "head -1 /proc/stat", timeout=TIMELINE_READ_TIMEOUT, options=ssh_options)
+            ),
+        )
+
     def top(self, workload: str) -> dict[str, str]:
         out = self.kubectl("top", "pod", "-A", "--no-headers", "-l", f"app.kubernetes.io/name in ({workload},traefik)")
         return {row[1].rsplit("-", 2)[0]: f"{row[2]} {row[3]}" for row in (line.split() for line in out.splitlines())}
@@ -357,22 +497,42 @@ def run_step(
     seconds: int,
     bypass: str | None,
     accept_encoding: str | None = None,
+    sample_seconds: int = 0,
+    warmup: int = 0,
 ) -> dict[str, Any]:
     """One step with the node's figures around it. The generator's CPU decides its validity.
 
     `bypass` is the run's header value, or None for a step under the limiter.
+    `sample_seconds` above zero adds the step's timeline, one row per interval.
     """
-    env = k6_env(target, address, rate, seconds, bypass, accept_encoding)
+    env = k6_env(target, address, rate, seconds, bypass, accept_encoding, warmup)
+    lasts = warmup + seconds
     before = {n: lab.cpu_line(n) for n in (lab.target_node, lab.generator)}
     stat_before = lab.cpu_stat(target.workload)
     pod_before = lab.pod(target.workload)["metadata"]["uid"]
     edge_before = lab.edge_state()
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        k6 = pool.submit(lab.ssh, lab.generator, k6_command(image, env), script, seconds + 120)
-        mid = pool.submit(_sample_mid_step, lab, target.workload, min(TOP_AFTER_SECONDS, seconds))
-        stdout = k6.result()
-        top, memory = mid.result()
-    step: dict[str, Any] = {"rate": rate, "target": target.name, **parse_summary(stdout)}
+    with ExitStack() as stack:
+        readers = None
+        if sample_seconds > 0:
+            sampled = lasts + TIMELINE_TAIL_SECONDS
+            nodes = (lab.target_node, lab.generator)
+            options = stack.enter_context(lab.multiplexed(nodes, sampled + MUX_MARGIN_SECONDS))
+            readers = lab.timeline_readers(target.workload, options)
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            timeline = (
+                pool.submit(tl.sample_timeline, readers, sampled, sample_seconds) if readers is not None else None
+            )
+            k6 = pool.submit(lab.ssh, lab.generator, k6_command(image, env), script, lasts + 120)
+            # In the warm window: with a warm-up, `pods_top` describes the state the verdict reads.
+            mid = pool.submit(_sample_mid_step, lab, target.workload, warmup + min(TOP_AFTER_SECONDS, seconds))
+            stdout = k6.result()
+            top, memory = mid.result()
+            sampled_rows = timeline.result() if timeline is not None else None
+    step: dict[str, Any] = {"rate": rate, "target": target.name, **parse_summary(stdout, warmup, seconds)}
+    if warmup > 0:
+        step["warmup_seconds"] = warmup
+    if sampled_rows is not None:
+        step["timeline"] = sampled_rows
     step["node_cpu"] = cpu_percent(before[lab.target_node], lab.cpu_line(lab.target_node))
     step["generator_cpu"] = cpu_percent(before[lab.generator], lab.cpu_line(lab.generator))
     step["node_mem_available_mb"] = memory
@@ -381,6 +541,8 @@ def run_step(
     step["edge_restarts"] = edge_restarts_between(edge_before, lab.edge_state())
     step["pod_replaced"] = lab.pod(target.workload)["metadata"]["uid"] != pod_before
     step["reasons"] = classify(step, rate, bypass is not None)
+    if "cold" in step:
+        step["cold_reasons"] = cold_reasons(step, rate, bypass is not None)
     return step
 
 
@@ -477,6 +639,8 @@ def run(
     checkpoint: Any = lambda _result: None,
     min_rate: int = 0,
     accept_encoding: str | None = None,
+    sample_seconds: int = 0,
+    warmup: int = 0,
 ) -> dict[str, Any]:
     """Baseline under the limiter, then `repeats` ramps past it. Always removes the route.
 
@@ -490,7 +654,15 @@ def run(
         refuse_unknown_encoding(accept_encoding)
     lab.assert_cluster()
     script = (lab.root / SCRIPT).read_text(encoding="utf-8")
-    facts = {**_runtime_facts(lab, image), "accept_encoding": accept_encoding or "gzip (k6 default)"}
+    if sample_seconds < 0:
+        raise LoadTestRefused("sample seconds must be 0 (off) or positive")
+    if warmup < 0:
+        raise LoadTestRefused("warm-up seconds must be 0 (off) or positive")
+    facts = {
+        **_runtime_facts(lab, image),
+        "accept_encoding": accept_encoding or "gzip (k6 default)",
+        "sample_seconds": sample_seconds,
+    }
     steps = select_steps(min_rate, max_rate)
     restarts = {t.workload: lab.restarts(t.workload) for t in targets}
     edge_at_start = lab.edge_state()
@@ -506,7 +678,19 @@ def run(
 
     stable_edge()
     baselines = [
-        run_step(lab, image, script, t, address, BASELINE_RATE, seconds, bypass=None, accept_encoding=accept_encoding)
+        run_step(
+            lab,
+            image,
+            script,
+            t,
+            address,
+            BASELINE_RATE,
+            seconds,
+            bypass=None,
+            accept_encoding=accept_encoding,
+            sample_seconds=sample_seconds,
+            warmup=warmup,
+        )  # fmt: skip
         for t in targets
     ]
     ramps: list[dict[str, Any]] = []
@@ -518,6 +702,7 @@ def run(
             "min_achieved_ratio": MIN_ACHIEVED,
             "max_generator_cpu": MAX_GENERATOR_CPU,
             "step_seconds": seconds,
+            "warmup_seconds": warmup,
             "settle_seconds": SETTLE_SECONDS,
         },
         "baseline": baselines,
@@ -534,11 +719,15 @@ def run(
                 def one(rate: int, target: Target = target) -> dict[str, Any]:
                     return run_step(
                         lab, image, script, target, address, rate, seconds,
-                        bypass=bypass, accept_encoding=accept_encoding,
+                        bypass=bypass, accept_encoding=accept_encoding, sample_seconds=sample_seconds, warmup=warmup,
                     )  # fmt: skip
 
                 done = ramp(one, steps, lambda: time.sleep(SETTLE_SECONDS))
-                ramps.append({"target": target.name, "repeat": repeat, "steps": done, "knee": knee(done)})
+                entry = {"target": target.name, "repeat": repeat, "steps": done, "knee": knee(done)}
+                cold = cold_knee(done)
+                if cold is not None:
+                    entry["cold_knee"] = cold
+                ramps.append(entry)
                 checkpoint({**result, "incomplete": True})
                 stable_edge()
     finally:
@@ -584,12 +773,36 @@ def render(result: dict[str, Any]) -> str:
         timed = [s for s in steps if "phases" in s]  # runs before #3102 have none
         return ["", "Where the time went, ms:", "", phase_head, *map(phase_row, timed)] if timed else []
 
+    cold_head = (
+        "| rate/s | cold achieved/s | cold requests | cold p95 ms | cold p99 ms | cold errors | cold verdict |\n"
+        + "|"
+        + "---|" * 7
+    )
+
+    def cold_row(s: dict[str, Any]) -> str:
+        c = s["cold"]
+        cells = [
+            s["rate"], f"{c['achieved_rps']:.1f}", int(c["requests"]), f"{c['p95_ms']:.2f}", f"{c['p99_ms']:.2f}",
+            f"{c['error_rate']:.2%}", ",".join(s["cold_reasons"]) or "healthy",
+        ]  # fmt: skip
+        return "| " + " | ".join(str(x) for x in cells) + " |"
+
+    def cold_table(steps: list[dict[str, Any]]) -> list[str]:
+        burst = [s for s in steps if "cold" in s]  # runs before #3294 have none
+        if not burst:
+            return []
+        return ["", "The warm-up, read as a cold connection burst:", "", cold_head, *map(cold_row, burst)]
+
     meta = {k: result[k] for k in ("date", "commit", "facts", "criteria", "restarts_during_run") if k in result}
     lines = ["**Incomplete: this run stopped before its last ramp.**", ""] if result.get("incomplete") else []
     lines += ["```json", json.dumps(meta, indent=2), "```", "", "## Baseline under the limiter", "", head]
     lines += [row(s) for s in result["baseline"]]
     for r in result["ramps"]:
-        lines += ["", f"## {r['target']}, ramp {r['repeat']}", "", f"Knee: `{json.dumps(r['knee'])}`", "", head]
+        lines += ["", f"## {r['target']}, ramp {r['repeat']}", "", f"Knee: `{json.dumps(r['knee'])}`"]
+        if "cold_knee" in r:
+            lines += ["", f"Cold knee: `{json.dumps(r['cold_knee'])}`"]
+        lines += ["", head]
         lines += [row(s) for s in r["steps"]]
         lines += phase_table(r["steps"])
+        lines += cold_table(r["steps"])
     return "\n".join(lines) + "\n"

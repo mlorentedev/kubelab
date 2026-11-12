@@ -195,7 +195,7 @@ make watcher-run NAME=r2-backup-watcher ENV=prod
 ```
 
 The mint verifies the new token by consequence before storing it. The token must
-list every backup bucket and be refused on `kubelab-vikunja-staging`. Only then does
+list every backup bucket and be refused on `kubelab-tfstate` (`terraform.state.bucket`). Only then does
 the mint revoke the old token. A `"healthy":1` line per node and a fleet
 `"healthy":1` mean the cluster has it. The token can be re-minted, so it has no
 Bitwarden escrow: losing it loses no data.
@@ -293,6 +293,31 @@ the ones that still hold the data.
 It resolves by itself once the earlier probe leaves its 9 h window, so read it
 when it fires. With no data at all (no node reported a size), the watcher
 stopped: see [R2 backup alert](#r2-backup-alert).
+
+## Backup check outgrowing its budget
+
+`backup081-check-budget` (log tier, never a page) fires when a node's `packs`, the
+objects under its repository's `data/`, pass `t x 82`, where `t` is
+`node_backup_check_read_data_groups` (16, so 1312 packs). The weekly `restic check`
+reads 1/t of the packs inside the ship's 600s, and 82 is what one check reads with
+20% to spare at the slowest rate measured (3.8 s/pack on rpi4, 2026-11-04). Act
+within weeks, before the check times out (#2920).
+
+1. Measure the node: `make backup-node NODE=<node> ENV=prod INTEGRITY=1`, and note
+   the check's duration and the packs it read.
+2. Raise `node_backup_check_read_data_groups` in the role defaults to the smallest
+   value that fits, record the measurement in its comment, and update the rate in
+   `tests/test_backup_check_budget.py` if it moved. The rule's threshold must
+   change with it; that test fails until it does.
+3. Deploy the role to the nodes before the alert's new threshold reaches prod:
+   `make backup ENV=prod`. `make backup-node` runs the unit already installed, so
+   until the role is deployed the node still reads 1/t of the old `t`. Repeat
+   step 1 to confirm the new value.
+
+With no data from every node for a day, the reason is in the
+`{container="r2-size"}` stream; a watcher that stopped is
+[R2 backup alert](#r2-backup-alert). A single node with no pack count does not
+fire this rule: look for its `pack count unknown` line in that stream.
 
 ## Repository missing or replaced
 

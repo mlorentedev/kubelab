@@ -6,7 +6,10 @@
 # fail with "no such host". This is standard K8s split-horizon DNS.
 #
 # Solution: forward staging zones to RPi4 CoreDNS (100.64.0.10) which is
-# already the authoritative resolver for staging domains.
+# already the authoritative resolver for staging domains. The `STAGING_ZONE_BLOCKS`
+# line below stands for one forward block per entry of `networking.staging_zones`
+# (common.yaml): a product's staging zone is declared once, there (IDP-053 D8,
+# k8s_render.render_staging_zones). Apply this file only through the toolkit.
 #
 # Prod zones (kubelab.live, mlorente.dev) are rewritten to Traefik's ClusterIP.
 # `answer auto` is required, not cosmetic: without it the A record comes back
@@ -27,12 +30,7 @@ metadata:
   namespace: kube-system
 data:
   kubelab-hairpin.server: |
-    staging.kubelab.live:53 {
-      forward . RESOLVE_RPI4_TAILSCALE_IP
-    }
-    staging.mlorente.dev:53 {
-      forward . RESOLVE_RPI4_TAILSCALE_IP
-    }
+    STAGING_ZONE_BLOCKS
     kubelab.live:53 {
       rewrite name regex (.*)\.kubelab\.live traefik.kube-system.svc.cluster.local answer auto
       forward . 10.43.0.10

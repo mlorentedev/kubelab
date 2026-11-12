@@ -48,3 +48,9 @@ policies:
         object_matchers:
           - ["alertname", "=", "Forge reviewer failed to review a pull request"]
         repeat_interval: 24h
+      # BACKUP-081 (#3084): a backup check that will outgrow its budget in weeks is
+      # worth reading, not an interruption. No `continue`: the log tier instead of the
+      # page, matched by the rule's title (tests/test_backup_check_budget.py derives it).
+      - receiver: apprise-log
+        object_matchers:
+          - ["alertname", "=", "A node's weekly backup check is outgrowing its time budget"]

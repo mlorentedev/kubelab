@@ -77,11 +77,11 @@ Acceptance: `make validate-sync ENV=staging && make validate-sync ENV=prod` and
 Depends on S1a. Owner merges because it changes the secret delivery path (D13).
 Files: `toolkit/features/k8s_secrets.py`, tests.
 
-- [ ] [AC3] Failing test: `SecretMapping` accepts a `secret_type`; a private entry yields `pull-<host-slug>` of type `kubernetes.io/dockerconfigjson` whose `.dockerconfigjson` decodes to `{"auths": {"<host>": {"username", "password", "auth"}}}`
-- [ ] [AC3] `_render_secret_manifest` takes the type (default stays `Opaque`); build the dockerconfigjson from the catalogued token, as a rendered literal (D6)
-- [ ] [AC3] Failing test: the token never appears in an argv, a log line or `--dry-run` output (the manifest is redacted the way the existing Secret dry-run is)
-- [ ] [AC3] Failing test: `web`'s rendered secrets are unchanged; a registry with no private entry adds no Secret
-- [ ] [AC3] Generate the mapping from the registry (no hand-written list entry per product)
+- [x] [AC3] Failing test: `SecretMapping` accepts a `secret_type`; a private entry yields `pull-<host-slug>` of type `kubernetes.io/dockerconfigjson` whose `.dockerconfigjson` decodes to `{"auths": {"<host>": {"username", "password", "auth"}}}`
+- [x] [AC3] `_render_secret_manifest` takes the type (default stays `Opaque`); build the dockerconfigjson from the catalogued token, as a rendered literal (D6)
+- [x] [AC3] Failing test: the token never appears in an argv, a log line or `--dry-run` output (the manifest is redacted the way the existing Secret dry-run is)
+- [x] [AC3] Failing test: `web`'s rendered secrets are unchanged; a registry with no private entry adds no Secret
+- [x] [AC3] Generate the mapping from the registry (no hand-written list entry per product)
 
 Acceptance: `.venv/bin/python -m pytest -q tests/test_image_pull_secret.py tests/test_k8s_secrets_apply.py tests/test_k8s_secrets_delivery.py` (the first is new)
 
@@ -135,12 +135,12 @@ Depends on S3a (both touch `product_render.py`'s hostname checks). Implements D8
 prod rewrite blocks stay hand-written until a product declares prod),
 `docs/adr/adr-067-product-contract-and-agent-access.md` (amendment), tests.
 
-- [ ] [P] [AC13] Failing tests in `tests/test_product_staging_hostname.py` (new): `web` passes; staging-only `staging.imagesensortool.com` passes with its zone in `networking.staging_zones`; the same name with the zone missing is refused, naming the line to add; `beta.imagesensortool.com` is refused; `<label>.staging.kubelab.live` passes; a product declaring `hostnames.prod: x.dev` with `hostnames.staging: staging.y.dev` is refused even when both zones are listed
-- [ ] [AC13] Implement the check at render time (the contract model cannot read `common.yaml`, so the contract schema does not change)
-- [ ] [P] [AC13] Failing tests in `tests/test_coredns_hairpin_zones.py` (new): the rendered staging blocks equal today's two blocks byte for byte; a third zone in a fixture `staging_zones` yields a third `forward` block; a zone that is not a lowercase FQDN is refused
-- [ ] [AC13] Implement the templated block; `tests/test_coredns_hairpin_answer.py` stays green
-- [ ] [AC13] ADR-067 amendment: the D8 convention, the wildcard exception, `web` already conforming, and the note that ADR-073 D8 replaces it with the domain registry on acceptance
-- [ ] Ticket, not code: derive the ACME token's zones (`kubelab-acme-dns`, #2459) from `zones.json` in Terraform, so a new domain needs no Cloudflare UI step (proposal risk 7)
+- [x] [P] [AC13] Failing tests in `tests/test_product_staging_hostname.py` (new): `web` passes; staging-only `staging.imagesensortool.com` passes with its zone in `networking.staging_zones`; the same name with the zone missing is refused, naming the line to add; `beta.imagesensortool.com` is refused; `<label>.staging.kubelab.live` passes; a product declaring `hostnames.prod: x.dev` with `hostnames.staging: staging.y.dev` is refused even when both zones are listed
+- [x] [AC13] Implement the check at render time (the contract model cannot read `common.yaml`, so the contract schema does not change)
+- [x] [P] [AC13] Failing tests in `tests/test_coredns_hairpin_zones.py` (new): the rendered staging blocks equal today's two blocks byte for byte; a third zone in a fixture `staging_zones` yields a third `forward` block; a zone that is not a lowercase FQDN is refused
+- [x] [AC13] Implement the templated block; `tests/test_coredns_hairpin_answer.py` stays green
+- [x] [AC13] ADR-067 amendment: the D8 convention, the wildcard exception, `web` already conforming, and the note that ADR-073 D8 replaces it with the domain registry on acceptance
+- [x] Ticket, not code: derive the ACME token's zones (`kubelab-acme-dns`, #2459) from `zones.json` in Terraform, so a new domain needs no Cloudflare UI step (proposal risk 7): filed as #3276
 
 Acceptance: `.venv/bin/python -m pytest -q tests/test_product_staging_hostname.py tests/test_coredns_hairpin_zones.py tests/test_coredns_hairpin_answer.py`, each new boundary test mutation-checked.
 
@@ -242,16 +242,16 @@ Acceptance: `.venv/bin/python -m pytest -q tests/test_product_image_receiver_wor
 Depends on S5b and S1b. Closes #2627 AC1 and AC2. Files: `toolkit/features/product_release.py`,
 `toolkit/features/registry.py`, tests.
 
-- [ ] [AC11] Failing tests in `tests/test_registry_digest.py` (new): authenticated manifest digest read for GHCR and for the Gitea registry; unsupported or private registry without a credential is refused with ERROR / WHY / FIX naming the registry
-- [ ] [AC11] Implement `tag_digest` for non-`docker.io` hosts using the catalogued pull credential (D3's authenticated half)
-- [ ] [AC11] Failing test then implement: `release-contract` reads the contract through the adapter for any forge; a 7-hex and a 10-hex `sha-` tag are both proven, so a check fixed at 7 fails (#2627 AC1)
+- [x] [AC11] Failing tests in `tests/test_registry_digest.py` (new): authenticated manifest digest read for GHCR and for the Gitea registry; unsupported or private registry without a credential is refused with ERROR / WHY / FIX naming the registry
+- [x] [AC11] Implement `tag_digest` for non-`docker.io` hosts using the catalogued pull credential (D3's authenticated half)
+- [x] [AC11] Failing test then implement: `release-contract` reads the contract through the adapter for any forge; a 7-hex and a 10-hex `sha-` tag are both proven, so a check fixed at 7 fails (#2627 AC1)
 
 Acceptance: `.venv/bin/python -m pytest -q tests/test_product_release.py tests/test_registry_digest.py`
 
 ### S9. `deploy_shape` provenance through the adapter (owner merges, after #3063, ~80 LOC)
 
-- [ ] [AC12] Failing test: a Gitea product's deploy PR is `mechanical` when provenance proves against Gitea, and `not-mechanical` with an ERROR / WHY / FIX when it does not
-- [ ] [AC12] Replace `_provenance`'s `gh api` calls and the `forge == "github"` branch with the adapter; remove the allow-list entry in `test_no_forge_names_outside_adapter.py`
+- [x] [AC12] Failing test: a Gitea product's deploy PR is `mechanical` when provenance proves against Gitea, and `not-mechanical` with an ERROR / WHY / FIX when it does not
+- [x] [AC12] Replace `_provenance`'s `gh api` calls and the `forge == "github"` branch with the adapter; remove the allow-list entry in `test_no_forge_names_outside_adapter.py`
 
 Acceptance: `.venv/bin/python -m pytest -q tests/test_deploy_shape.py tests/test_deploy_shape_widening.py tests/test_no_forge_names_outside_adapter.py`
 

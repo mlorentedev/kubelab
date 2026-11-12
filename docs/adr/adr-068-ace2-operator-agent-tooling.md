@@ -164,7 +164,7 @@ So:
 
 1. **The operator checks in the NaN console whether a member can mint a second key.** If yes, `hermes-kubelab` gets its own key, registered in kubelab's SOPS `SECRET_CATALOG`, and the problem ends there.
 2. If not, the shared key is used with routing discipline:
-   - cron and delegation jobs on unmetered models (`qwen3.6`, `gemma4`);
+   - cron and delegation jobs on models that spend no credits (`qwen3.6`, `gemma4`);
    - low concurrency;
    - OpenRouter as the fallback on 429.
 
@@ -179,7 +179,7 @@ So:
 | Line | Rate × quantity |
 |---|---|
 | ace2 electricity, now powered for longer stretches | accepted by the operator on 2026-09-30; draw not measured |
-| Inference | the operator's current NaN plan; the tier is to be confirmed in the console (the vault records Free/Base limits). Crons on unmetered models; chat draws from per-model monthly quotas |
+| Inference | the operator's current NaN plan; the tier is to be confirmed in the console (the vault records Free/Base limits). Crons on models that spend no credits; chat draws from the account's one credit pool (per-model monthly quotas ended 2026-11) |
 | R2 storage for the new backup sources | within the 10 GB free allowance (ADR-049) |
 | New hosts or plans | none |
 

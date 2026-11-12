@@ -329,3 +329,84 @@ groups:
               datasource:
                 type: __expr__
                 uid: __expr__
+      # BACKUP-081 (#3084): the weekly check reads 1/t of a node's packs
+      # (node_backup_check_read_data_groups, t = 16) inside the ship's 600s. Nothing
+      # else watches the pack count, so without this the first sign that 1/t no
+      # longer fits is the check timing out (#2920). One check can read about 82
+      # packs: 80% of (600s - ~100s ship - 107s plain check) / 3.8 s/pack, measured
+      # on rpi4 on 2026-11-04. The threshold is t x 82. tests/test_backup_check_budget.py
+      # recomputes it from the role's defaults and the ship unit, so a change to t
+      # without this goes red. Prod routes it to the log tier (overlay policies).
+      - uid: backup081-check-budget
+        title: A node's weekly backup check is outgrowing its time budget
+        condition: C
+        for: 10m
+        # No pack count from ANY node for a day is no data, and that alerts. One
+        # node alone going unmeasured is not: its series drops out of the result
+        # while the others keep the rule evaluating (the shrink rule has the same
+        # gap). Its `pack count unknown` line is in the r2-size stream; a
+        # per-node presence check for sizes and packs is #3304.
+        noDataState: Alerting
+        execErrState: Alerting
+        annotations:
+          summary: >-
+            A node's repository holds more packs than its weekly `restic check` can read at
+            1/t inside the ship's 600s budget, with 20% to spare. Raise
+            `node_backup_check_read_data_groups` before the check times out, and re-measure
+            with `make backup-node NODE=<node> ENV=prod INTEGRITY=1`. Or the watcher reported no
+            pack count for a day: the reason is in the init container's stream,
+            `{container="r2-size"}`.
+          runbook_url: >-
+            https://github.com/mlorentedev/kubelab/blob/master/docs/runbooks/offsite-backup-restore.md#backup-check-outgrowing-its-budget
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 86400
+              to: 0
+            datasourceUid: loki
+            model:
+              refId: A
+              datasource:
+                type: loki
+                uid: loki
+              editorMode: code
+              queryType: range
+              # `backup_node`, not `node`: see the freshness rule above (lesson-512).
+              # A `null` count is dropped by `unwrap`.
+              expr: >-
+                last_over_time(
+                  {container="r2-backup-watcher"}
+                    | json backup_node="node", metric="metric", packs="packs"
+                    | metric=`r2_backup_node`
+                    | unwrap packs
+                  [24h]
+                ) by (backup_node)
+          - refId: B
+            relativeTimeRange:
+              from: 86400
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              reducer: last
+              expression: A
+              datasource:
+                type: __expr__
+                uid: __expr__
+          - refId: C
+            relativeTimeRange:
+              from: 86400
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [1312]
+              datasource:
+                type: __expr__
+                uid: __expr__
