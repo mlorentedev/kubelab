@@ -220,7 +220,13 @@ def _run(
     }
     (tmp_path / "runner-temp").mkdir(exist_ok=True)
     proc = subprocess.run(  # noqa: S603
-        ["bash", "-e", "-c", step["run"]], cwd=work, env=env, capture_output=True, text=True, timeout=60
+        ["bash", "-e", "-c", step["run"]],
+        cwd=work,
+        env=env,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=60,
     )
     outputs = dict(line.split("=", 1) for line in output.read_text(encoding="utf-8").splitlines() if "=" in line)
     return proc.returncode, outputs, proc.stdout + proc.stderr, calls.read_text(encoding="utf-8").splitlines()

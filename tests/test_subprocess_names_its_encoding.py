@@ -6,8 +6,9 @@ here (#2865). The right codec is the child's, so each call decides: `encoding="u
 for git, gh, kubectl, sops and the like, and an explicit `encoding=None` for a native
 Windows tool that really does print in the locale's code page.
 
-The migration runs in slices, so the count of calls that have not decided may only go
-down. Lower `UNDECIDED_CEILING` when a slice lands, and delete it at zero.
+`encoding=None` is the explicit locale marker: it reads as a decision, where a missing
+keyword reads as none. Every call under `toolkit/` and `tests/` has decided, and the
+test below refuses a new one that has not.
 """
 
 from __future__ import annotations
@@ -21,7 +22,6 @@ REPO = Path(__file__).resolve().parents[1]
 ROOTS = ("toolkit", "tests")
 SPAWNERS = {"run", "Popen", "check_output"}
 TEXT_FLAGS = {"text", "universal_newlines"}
-UNDECIDED_CEILING = 25
 
 
 def _undecided(tree: ast.AST) -> list[int]:
@@ -66,22 +66,9 @@ def test_the_detector_tells_a_decided_call_from_an_undecided_one(source: str, fl
     assert len(_undecided(ast.parse(source))) == flagged
 
 
-def test_undecided_calls_only_ever_go_down() -> None:
+def test_every_text_mode_call_names_its_encoding() -> None:
     found = _all_undecided()
-    assert len(found) <= UNDECIDED_CEILING, (
-        f"{len(found)} text-mode subprocess calls name no encoding, ceiling {UNDECIDED_CEILING}. "
-        'Add encoding="utf-8", or encoding=None for a tool that prints the locale code page:\n' + "\n".join(found)
-    )
-
-
-def test_toolkit_has_no_undecided_call() -> None:
-    """`toolkit/` reached zero, so it holds at zero rather than sharing the ceiling.
-
-    The ceiling counts both roots together: a new undecided call in the toolkit would
-    pass while `tests/` still had headroom to spare.
-    """
-    found = [call for call in _all_undecided() if call.startswith("toolkit/")]
     assert not found, (
-        'text-mode subprocess calls under toolkit/ must name an encoding: add encoding="utf-8", '
+        'text-mode subprocess calls must name an encoding: add encoding="utf-8", '
         "or encoding=None for a tool that prints the locale code page:\n" + "\n".join(found)
     )
