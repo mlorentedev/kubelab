@@ -496,3 +496,33 @@ class TestTargetsAt:
     def test_an_unregistered_product_is_refused(self) -> None:
         with pytest.raises(NoContractError, match="blog"):
             targets_at(HEAD, "blog", "staging", self._show_worktree([]))
+
+    @staticmethod
+    def _without(lane: str, path: str) -> str:
+        """Web's tree, except that its snapshots declare no ``lane`` hostname (#3250)."""
+        import yaml
+        from pathlib import Path
+
+        text = Path(path).read_text(encoding="utf-8")
+        if "/contracts/" not in path:
+            return text
+        contract = yaml.safe_load(text)
+        contract["hostnames"].pop(lane, None)  # the test states its premise; it need not hold in the tree
+        return yaml.safe_dump(contract)
+
+    @pytest.mark.parametrize(("asked", "other"), [("prod", "staging"), ("staging", "prod")])
+    def test_a_contract_without_the_asked_hostname_is_a_refusal_naming_the_lane(
+        self, asked: str, other: str
+    ) -> None:
+        """A ``NoContractError`` (a ValueError), not a ``KeyError``, which would name only ``'prod'``."""
+        with pytest.raises(NoContractError) as refused:
+            targets_at(HEAD, "web", asked, lambda _rev, path: self._without(asked, path))
+        message = str(refused.value)
+        assert f"hostnames.{asked}" in message
+        assert f"events.{asked}" in message
+        assert f"hostnames.{other}" not in message and f"events.{other}" not in message
+        assert all(part in message for part in ("ERROR:", "WHY:", "FIX:"))
+
+    def test_the_lane_the_contract_does_declare_still_resolves(self) -> None:
+        _, url = targets_at(HEAD, "web", "staging", lambda _rev, path: self._without("prod", path))
+        assert url == "https://staging.mlorente.dev/version.json"

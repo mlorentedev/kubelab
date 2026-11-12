@@ -184,7 +184,7 @@ VERSION_PATH = "/version.json"
 
 
 class NoContractError(ValueError):
-    """The app is unregistered or in-tree: nothing declares its hostname or image."""
+    """Nothing declares the app's hostname or image: it is unregistered or in-tree, or its contract has no such lane."""
 
 
 def targets_at(rev: str, app: str, env: str, show: Callable[[str, str], str] = git_show) -> tuple[str, str]:
@@ -204,7 +204,16 @@ def targets_at(rev: str, app: str, env: str, show: Callable[[str, str], str] = g
     from toolkit.features.product_render import snapshot_path
 
     contract = yaml.safe_load(show(rev, str(snapshot_path(app, env).relative_to(PROJECT_ROOT))))
-    host = contract["hostnames"][env]
+    host = contract["hostnames"].get(env)
+    if host is None:
+        # hostnames.prod is optional before a product has a prod lane (#3250).
+        raise NoContractError(
+            f"ERROR: '{app}' declares no hostnames.{env} at {rev[:7]}\n"
+            f"WHY: its contract snapshot for {env} has no such key, so nothing says where it is served on {env} "
+            f"(a product gets one with its {env} lane, together with events.{env} in {REGISTRY_RELPATH})\n"
+            f"FIX: verify an environment the product has a lane on, or declare hostnames.{env} in its contract "
+            f"and events.{env} in the registry"
+        )
     image_name = contract["image"].rsplit("/", 1)[1]
     tag = pinned_tag(show(rev, f"infra/k8s/overlays/{env}/generated/deployments.yaml"), image_name)
     return tag, f"https://{host}{VERSION_PATH}"
