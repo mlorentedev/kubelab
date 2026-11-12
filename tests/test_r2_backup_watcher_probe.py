@@ -245,7 +245,7 @@ def fleet(tmp_path: pathlib.Path, request):
 
 def _run(env: dict[str, str]) -> tuple[int, list[dict], list[dict]]:
     shell = env.get("PROBE_SHELL", "sh").split()
-    proc = subprocess.run([*shell, str(PROBE)], env=env, capture_output=True, text=True, timeout=60)
+    proc = subprocess.run([*shell, str(PROBE)], env=env, capture_output=True, text=True, encoding="utf-8", timeout=60)
     records = [json.loads(line) for line in proc.stdout.splitlines() if line.strip()]
     nodes = [r for r in records if r["metric"] == "r2_backup_node"]
     fleet_lines = [r for r in records if r["metric"] == "r2_backup_health"]
@@ -573,7 +573,7 @@ def test_without_a_sizes_file_every_size_is_null_and_named(fleet) -> None:
     _, _, env = fleet
     pathlib.Path(env["WATCHER_SIZES"]).unlink()
     shell = env.get("PROBE_SHELL", "sh").split()
-    proc = subprocess.run([*shell, str(PROBE)], env=env, capture_output=True, text=True, timeout=60)
+    proc = subprocess.run([*shell, str(PROBE)], env=env, capture_output=True, text=True, encoding="utf-8", timeout=60)
     records = [json.loads(line) for line in proc.stdout.splitlines() if line.strip()]
     assert proc.returncode == 0
     assert all(r["stored_bytes"] is None for r in records)
@@ -585,7 +585,7 @@ def test_each_node_logs_how_long_its_listing_took(fleet) -> None:
     """AC3's evidence: the duration no longer grows with the snapshot count."""
     _, _, env = fleet
     shell = env.get("PROBE_SHELL", "sh").split()
-    proc = subprocess.run([*shell, str(PROBE)], env=env, capture_output=True, text=True, timeout=60)
+    proc = subprocess.run([*shell, str(PROBE)], env=env, capture_output=True, text=True, encoding="utf-8", timeout=60)
     assert "r2-backup-watcher: vps: size listing took 3s\n" in proc.stderr
     assert "r2-backup-watcher: fleet: bucket kubelab-backups listing took 3s\n" in proc.stderr
 
@@ -598,7 +598,7 @@ def test_each_restic_call_logs_how_long_it_took(fleet) -> None:
     """
     _, _, env = fleet
     shell = env.get("PROBE_SHELL", "sh").split()
-    proc = subprocess.run([*shell, str(PROBE)], env=env, capture_output=True, text=True, timeout=60)
+    proc = subprocess.run([*shell, str(PROBE)], env=env, capture_output=True, text=True, encoding="utf-8", timeout=60)
     # A format, not `0s`: the fakes are real processes, and one that straddles
     # a second boundary logs `1s` with nothing wrong.
     for call in ("snapshots", "ls", "cat"):
@@ -609,7 +609,7 @@ def test_a_timed_out_call_says_so_in_the_log_and_the_reason(fleet) -> None:
     fake, _, env = fleet
     (fake / "kubelab-vps.hang").write_text("", encoding="utf-8")
     shell = env.get("PROBE_SHELL", "sh").split()
-    proc = subprocess.run([*shell, str(PROBE)], env=env, capture_output=True, text=True, timeout=60)
+    proc = subprocess.run([*shell, str(PROBE)], env=env, capture_output=True, text=True, encoding="utf-8", timeout=60)
     nodes = [json.loads(line) for line in proc.stdout.splitlines() if '"r2_backup_node"' in line]
     assert "r2-backup-watcher: vps: restic snapshots timed out after 2s\n" in proc.stderr, proc.stderr
     assert _node(nodes, "vps")["reason"] == "unreadable: timed out after 2s"
@@ -631,7 +631,9 @@ def test_a_probe_that_stops_early_reports_no_fleet_size(fleet) -> None:
     # The shell runs its TERM trap once the foreground restic returns, which
     # RESTIC_TIMEOUT bounds: the same order a pod's activeDeadlineSeconds sees.
     env = {**env, "RESTIC_TIMEOUT": "4"}
-    proc = subprocess.Popen([*env["PROBE_SHELL"].split(), str(PROBE)], env=env, stdout=subprocess.PIPE, text=True)
+    proc = subprocess.Popen(
+        [*env["PROBE_SHELL"].split(), str(PROBE)], env=env, stdout=subprocess.PIPE, text=True, encoding="utf-8"
+    )
     time.sleep(1)
     proc.terminate()
     out, _ = proc.communicate(timeout=20)

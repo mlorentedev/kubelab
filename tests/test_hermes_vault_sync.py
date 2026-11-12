@@ -38,7 +38,9 @@ def _render(name: str, **overrides: object) -> str:
 
 
 def _git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True, check=False, env=_git_env())
+    return subprocess.run(
+        ["git", "-C", str(repo), *args], capture_output=True, text=True, encoding="utf-8", check=False, env=_git_env()
+    )
 
 
 def _git_env() -> dict[str, str]:
@@ -142,7 +144,9 @@ class Vault:
             "PATH": f"{self.bin}:{os.environ['PATH']}",
             "VAULT_SYNC_ROOTLESS_STATE": str(self.state),
         }
-        return subprocess.run([str(self.script)], capture_output=True, text=True, check=False, env=env)
+        return subprocess.run(
+            [str(self.script)], capture_output=True, text=True, encoding="utf-8", check=False, env=env
+        )
 
     def other_commit(self, message: str) -> str:
         _git(self.other, "add", "-A")
@@ -363,10 +367,10 @@ def test_the_credential_helper_answers_get_from_systemds_credential(tmp_path: Pa
     creds.mkdir()
     (creds / "vault-token").write_text("token-sentinel\n", encoding="utf-8")
     env = {**os.environ, "CREDENTIALS_DIRECTORY": str(creds)}
-    get = subprocess.run([str(helper), "get"], capture_output=True, text=True, env=env, check=True)
+    get = subprocess.run([str(helper), "get"], capture_output=True, text=True, encoding="utf-8", env=env, check=True)
     assert get.stdout == "username=x-access-token\npassword=token-sentinel\n"
     for op in ("store", "erase"):
-        out = subprocess.run([str(helper), op], capture_output=True, text=True, env=env, check=True)
+        out = subprocess.run([str(helper), op], capture_output=True, text=True, encoding="utf-8", env=env, check=True)
         assert out.stdout == ""
 
 

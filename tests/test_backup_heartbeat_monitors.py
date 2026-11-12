@@ -214,6 +214,7 @@ def test_a_failed_heartbeat_never_fails_the_ship(tmp_path: pathlib.Path, curl_ex
         env={**os.environ, "PATH": f"{bindir}{os.pathsep}{os.environ['PATH']}"},
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=60,
     )
     assert proc.returncode == 0, (
@@ -247,6 +248,7 @@ def test_the_token_never_reaches_curls_argv(tmp_path: pathlib.Path) -> None:
         env={**os.environ, "PATH": f"{bindir}{os.pathsep}{os.environ['PATH']}"},
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=60,
         check=True,
     )
@@ -280,6 +282,7 @@ def test_an_implausible_token_is_refused_rather_than_posted(tmp_path: pathlib.Pa
         env={**os.environ, "PATH": f"{bindir}{os.pathsep}{os.environ['PATH']}"},
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=60,
     )
     assert proc.returncode == 0, "a bad token must skip the heartbeat, not fail the ship"

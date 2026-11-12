@@ -21,7 +21,7 @@ REPO = Path(__file__).resolve().parents[1]
 ROOTS = ("toolkit", "tests")
 SPAWNERS = {"run", "Popen", "check_output"}
 TEXT_FLAGS = {"text", "universal_newlines"}
-UNDECIDED_CEILING = 224
+UNDECIDED_CEILING = 184
 
 
 def _undecided(tree: ast.AST) -> list[int]:

@@ -115,13 +115,23 @@ class Node:
 
     def run(self, *args: str, unit: str = UNIT) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            ["bash", str(self.script), *args, unit], capture_output=True, text=True, env=self._env(), timeout=60
+            ["bash", str(self.script), *args, unit],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            env=self._env(),
+            timeout=60,
         )
 
     def flush(self) -> subprocess.CompletedProcess[str]:
         """The spool unit's run: deliver what n8n refused before."""
         return subprocess.run(
-            ["bash", str(self.script), "--flush"], capture_output=True, text=True, env=self._env(), timeout=60
+            ["bash", str(self.script), "--flush"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            env=self._env(),
+            timeout=60,
         )
 
     def start(self, *args: str, unit: str = UNIT) -> subprocess.Popen[str]:
@@ -131,6 +141,7 @@ class Node:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            encoding="utf-8",
             env=self._env(),
         )
 
