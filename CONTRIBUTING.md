@@ -293,8 +293,8 @@ poetry run toolkit config generate traefik --env dev
 poetry run toolkit secrets show
 poetry run toolkit secrets audit
 
-# Deployment
-poetry run toolkit deployment deploy --env staging
+# Deployment: pin an image tag, then let Argo CD sync it (docs/runbooks/gitops-delivery-promotion.md)
+poetry run toolkit deployment promote --env staging --app api --version sha-<short>
 ```
 
 ## Questions?
