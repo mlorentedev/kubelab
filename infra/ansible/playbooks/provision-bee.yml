@@ -409,6 +409,10 @@
         # gated on staging's own file, which is where the record task writes it.
         gitea_issue_reader_staging_scopes: "{{ gitea_config.apps.services.core.gitea.token_scopes.issue_reader_staging }}"
         gitea_issue_reader_staging_token: "{{ gitea_staging_reader_secrets.apps.services.core.gitea.issue_reader_token | default('') }}"
+        # IDP-053 S5c -- a fifth token on the reviewer's account, read:repository only,
+        # for the product path's forge adapter. Minted and gated the same way.
+        gitea_repo_reader_scopes: "{{ gitea_config.apps.services.core.gitea.token_scopes.repo_reader }}"
+        gitea_repo_reader_token: "{{ gitea_secrets.apps.services.core.gitea.repo_reader_token | default('') }}"
         # AUTH-022 -- the agents' authoring account, a third machine identity
         # (ADR-062 D1 as amended 2026-11-03). Resolved and minted like the reviewer;
         # its write is granted per repository by the reconciler, never by a team.

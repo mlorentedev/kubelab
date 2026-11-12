@@ -105,6 +105,14 @@ ROTATABLE_TOKENS: dict[str, RotatableToken] = {
         identity="reviewer",
         store_env="staging",
     ),
+    # The product path's repository reader (IDP-053 S5c, D2): a fifth token on the
+    # reviewer's account, `read:repository` only, for `GiteaForge`. The receiver reads
+    # it from a GitHub Actions secret the owner sets by hand from SOPS.
+    "repo_reader": RotatableToken(
+        secret_key="apps.services.core.gitea.repo_reader_token",
+        token_name="kubelab-repo-reader",
+        identity="reviewer",
+    ),
     # The agents' authoring account (AUTH-022, #2577): its own account, not a token on
     # the reviewer's, because what it writes carries an author.
     "agent": RotatableToken(
@@ -141,6 +149,13 @@ REVIEW_NOTICE_SCOPES: frozenset[str] = frozenset({"write:issue"})
 #: requests with `type=pulls`, so no repository scope is asked for. Not yet measured
 #: against a live Gitea; the first read is, and a 403 widens this deliberately.
 ISSUE_READER_SCOPES: frozenset[str] = frozenset({"read:issue"})
+
+#: What the product path's repository reader must hold -- exactly (IDP-053 S5c, AC8). A
+#: decision (owner, D2): `GiteaForge` resolves a commit, compares two refs, and reads a
+#: file and a tag, all repository content, and it never writes. The scope the reviewer's
+#: token already holds for the same reads is the measurement (lesson-733); the write half of
+#: that token (`write:issue`) is what this one exists to leave out.
+REPO_READER_SCOPES: frozenset[str] = frozenset({"read:repository"})
 
 #: What the agents' authoring token must hold -- exactly. A decision (owner, 2026-10-20
 #: on #2296): issue and repository write, so an agent can push a branch, open a pull

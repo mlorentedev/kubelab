@@ -814,6 +814,31 @@ SECRET_CATALOG: list[SecretSpec] = [
         envs=("prod", "staging"),
     ),
     SecretSpec(
+        key_path="apps.services.core.gitea.repo_reader_token",
+        description=(
+            "Read-only Gitea API token on the reviewer's account (apps.auth.identities.reviewer); "
+            "read:repository, used by the product path's forge adapter to resolve and prove a Gitea "
+            "product's commits (IDP-053 S5c)"
+        ),
+        # EXTERNAL for the reason `bot_token` gives: only Gitea honours what it mints.
+        kind=SecretKind.EXTERNAL,
+        services=("gitea",),
+        # NO `forge_actions`: that field writes Gitea Actions secrets, and this token must reach Gitea
+        # repositories only. Its consumer is the receiver and the deploy-shape judge, which run on
+        # GitHub, so the owner sets `GITEA_REPO_READER_TOKEN` on `mlorentedev/kubelab` by hand.
+        rotate_note=(
+            "`make gitea-rotate-token TOKEN=repo_reader ENV=prod APPLY=1` (revoke, then unset), then "
+            "`make provision NODE=bee ENV=prod TAGS=gitea` to re-mint, then set the `mlorentedev/kubelab` "
+            "GitHub Actions secret `GITEA_REPO_READER_TOKEN` to the new value by hand "
+            "(`gh secret set GITEA_REPO_READER_TOKEN -R mlorentedev/kubelab`, value from SOPS over stdin): "
+            "nothing delivers it. The mint task is gated on this key being absent; never mint a second "
+            "token by hand."
+        ),
+        # NEVER, for the reason measured on `bot_token`: Gitea's token API has no expiry field.
+        expiry=Expiry.NEVER,
+        envs=("prod",),
+    ),
+    SecretSpec(
         key_path="apps.services.core.gitea.agent_token",
         description=(
             "Gitea API token of the agents' authoring account (apps.auth.identities.agent); "
