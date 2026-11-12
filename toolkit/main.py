@@ -12,6 +12,7 @@ from toolkit.cli import (
     backup,
     board,
     config,
+    console,
     credentials,
     dashboard,
     deployment,
@@ -131,6 +132,7 @@ app.add_typer(auth.app, name="auth")
 app.add_typer(backup.app, name="backup")
 app.add_typer(board.app, name="board")
 app.add_typer(config.app, name="config")
+app.add_typer(console.app, name="console")
 app.add_typer(credentials.app, name="credentials")
 app.add_typer(dashboard.app, name="dashboard")
 app.add_typer(deployment.app, name="deployment")

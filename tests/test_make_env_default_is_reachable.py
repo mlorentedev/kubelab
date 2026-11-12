@@ -156,6 +156,8 @@ ENV_TARGETS: dict[str, tuple[str, str]] = {
     "restore-window": ("--env", "prod"),
     # Added with the target (BACKUP-057): the node keys live in prod SOPS only.
     "backup-mint-node-tokens": ("--env", "prod"),
+    # Added with the target (#3341): the A8 gate is read from prod's counter.
+    "console-usage": ("--env", "prod"),
     # Already correct before #1644. Included as a regression net: "correct and
     # untested" is exactly the state the eight above were in.
     "maintain": ("-e", "staging"),

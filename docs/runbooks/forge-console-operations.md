@@ -22,6 +22,8 @@ The console reads three tables in the API's Postgres tenant
 | `forge_event` | webhook deliveries, projected or not | no: an unprojected delivery is lost, and the next read covers the change it carried |
 | `console_usage` | one row per operator identity and UTC day the console page was opened (ADR-066 A8) | no: not read model, kept only by the nightly `pg_dumpall` of the VPS backup; never truncate it with the forge tables |
 
+Read the A8 gate with `make console-usage ENV=prod`: for each identity, the best window of 14 consecutive UTC days, how many of them have a row, and whether 5 of 14 holds. It fails, rather than reporting no use, when the table cannot be read.
+
 ## Rebuild from the forges
 
 The read model is a cache. A source with no `forge_source` row reads as never

@@ -1906,6 +1906,12 @@ backup-escrow-check:
 backup-drill-postgres:
 	@$(TOOLKIT) backup drill-postgres --env $(or $(filter staging prod,$(ENV)),prod)
 
+# ADR-066 A8 (#3341): how many days the console was opened in the best 14-day window,
+# read from `console_usage` in a READ ONLY transaction. Prints identities and dates only.
+.PHONY: console-usage
+console-usage: ## Report the A8 console usage gate (ENV=prod by default)
+	@$(TOOLKIT) console usage --env $(or $(filter staging prod,$(ENV)),prod)
+
 # Restore the newest Headscale capture from R2 into a scratch container with no
 # network and check the database, the server keys and every node against live
 # (BACKUP-067). Needs docker, SSH to the VPS and `sudo -n` there to hash the
