@@ -187,9 +187,7 @@ def rotation_store_env(label: str, env: str) -> str:
     return (spec.store_env if spec else None) or env
 
 
-def plan_rotation(
-    label: str, identities: dict[str, str], secret_present: bool, store_env: str = "prod"
-) -> RotationPlan:
+def plan_rotation(label: str, identities: dict[str, str], secret_present: bool, store_env: str) -> RotationPlan:
     """Resolve a registry entry against the identity map and the recorded secret.
 
     Pure: takes the two facts it needs rather than reading SOPS or the forge, so

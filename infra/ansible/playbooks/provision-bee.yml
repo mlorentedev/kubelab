@@ -91,6 +91,10 @@
     # serving the prod name. Once a service stops belonging to its node's
     # environment, every per-environment resolution is suspect, not just the vault.
     gitea_identity_env: prod
+    # #3267: staging's forge task view reads this Gitea with a token of its own,
+    # recorded in staging's file. The env the role writes that token under and the
+    # store its mint gate reads, so both follow one variable.
+    gitea_staging_reader_env: staging
 
   pre_tasks:
     - name: Load base config (SSOT)
@@ -168,7 +172,7 @@
       # #3267: staging's forge task view reads this Gitea with a token of its own,
       # recorded in staging's file, so its mint gate is read from there. Nothing
       # else from this file is used: Gitea itself stays prod's (gitea_identity_env).
-      command: sops -d {{ playbook_dir }}/../../config/secrets/staging.enc.yaml
+      command: sops -d {{ playbook_dir }}/../../config/secrets/{{ gitea_staging_reader_env }}.enc.yaml
       register: sops_staging_reader
       delegate_to: localhost
       become: false
@@ -180,6 +184,12 @@
     - name: Merge Gitea secrets (its own env overrides common)
       set_fact:
         gitea_secrets: "{{ (sops_common.stdout | from_yaml) | combine(sops_gitea_env.stdout | from_yaml, recursive=True) }}"
+      no_log: true
+      tags: [always]
+
+    - name: Merge the staging reader's secrets (staging overrides common)
+      set_fact:
+        gitea_staging_reader_secrets: "{{ (sops_common.stdout | from_yaml) | combine(sops_staging_reader.stdout | from_yaml, recursive=True) }}"
       no_log: true
       tags: [always]
 
@@ -375,7 +385,7 @@
         # #3267 -- staging's reader: a fourth token on the same account, same grant,
         # gated on staging's own file, which is where the record task writes it.
         gitea_issue_reader_staging_scopes: "{{ gitea_config.apps.services.core.gitea.token_scopes.issue_reader_staging }}"
-        gitea_issue_reader_staging_token: "{{ ((sops_staging_reader.stdout | from_yaml).apps.services.core.gitea.issue_reader_token) | default('') }}"
+        gitea_issue_reader_staging_token: "{{ gitea_staging_reader_secrets.apps.services.core.gitea.issue_reader_token | default('') }}"
         # AUTH-022 -- the agents' authoring account, a third machine identity
         # (ADR-062 D1 as amended 2026-11-03). Resolved and minted like the reviewer;
         # its write is granted per repository by the reconciler, never by a team.

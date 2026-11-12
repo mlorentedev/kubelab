@@ -789,7 +789,7 @@
 
 - name: Record staging's issue-reader token in staging's SOPS
   # Staging's file, not gitea_identity_env's: staging's API Secret reads it there.
-  command: "{{ playbook_dir }}/../../../.venv/bin/toolkit secrets set apps.services.core.gitea.issue_reader_token --env staging --stdin"
+  command: "{{ playbook_dir }}/../../../.venv/bin/toolkit secrets set apps.services.core.gitea.issue_reader_token --env {{ gitea_staging_reader_env }} --stdin"
   args:
     stdin: "{{ _gitea_issue_reader_staging_token.stdout }}"
   delegate_to: localhost

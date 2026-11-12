@@ -60,21 +60,53 @@ class TestRegistry:
         assert "staging" in format_rotation_plan(plan)
 
 
-class TestMint:
-    def test_the_playbook_reads_the_gate_from_staging_sops(self) -> None:
-        playbook = PLAYBOOK.read_text(encoding="utf-8")
+def _task(tasks: str, name: str) -> str:
+    """The text of one role task, from its `- name:` line to the next task's."""
+    begin = tasks.index(f"- name: {name}")
+    following = tasks.find("\n- name:", begin + 1)
+    return tasks[begin : following if following != -1 else len(tasks)]
 
-        assert "config/secrets/staging.enc.yaml" in playbook, "the gate must read the file the token is stored in"
-        assert re.search(r"gitea_issue_reader_staging_token:.*issue_reader_token", playbook)
+
+def _play_vars_and_tasks() -> tuple[dict, list[dict]]:
+    play = next(p for p in yaml.safe_load(PLAYBOOK.read_text(encoding="utf-8")) if p.get("pre_tasks"))
+    tasks = (play.get("pre_tasks") or []) + (play.get("tasks") or [])
+    variables = dict(play.get("vars") or {})
+    for item in tasks + [r for r in play.get("roles") or [] if isinstance(r, dict)]:
+        variables.update(item.get("vars") or {})
+    return variables, tasks
+
+
+class TestMint:
+    def test_the_gate_reads_the_store_built_from_staging_sops(self) -> None:
+        """The gate var reads the store built from staging's SOPS file, never prod's merged store."""
+        variables, tasks = _play_vars_and_tasks()
+        assert variables["gitea_staging_reader_env"] == "staging"
+
+        decrypt = next(t for t in tasks if "{{ gitea_staging_reader_env }}.enc.yaml" in str(t.get("command")))
+        register = decrypt["register"]
+        store = next(
+            key
+            for t in tasks
+            for key, value in (t.get("set_fact") or {}).items()
+            if f"{register}.stdout" in str(value)
+        )
+        gate = variables["gitea_issue_reader_staging_token"]
+        assert gate.replace(" ", "").startswith("{{" + store + "." + READER_KEY), (
+            f"the gate must read {store}, the store built from staging's file; it reads {gate}"
+        )
 
     def test_the_mint_is_gated_and_recorded_in_staging(self) -> None:
         tasks = TASKS.read_text(encoding="utf-8")
+        mint = _task(tasks, "Mint staging's issue-reader token on the reviewer account")
+        record = _task(tasks, "Record staging's issue-reader token in staging's SOPS")
 
-        assert "--token-name kubelab-issue-reader-staging" in tasks
-        record = re.search(rf"toolkit secrets set {re.escape(READER_KEY)} --env staging --stdin", tasks)
-        assert record, "the staging token must be written to staging's SOPS, not prod's"
-        mint = tasks[tasks.index("--token-name kubelab-issue-reader-staging") :]
-        assert "not gitea_issue_reader_staging_token" in mint.split("- name:")[1], "an ungated mint issues a new token every run"
+        assert "--token-name kubelab-issue-reader-staging" in mint
+        assert "--scopes {{ gitea_issue_reader_staging_scopes }}" in mint
+        assert re.search(r"when:.*not gitea_issue_reader_staging_token", mint), "an ungated mint issues a new token every run"
+        assert f"toolkit secrets set {READER_KEY} --env {{{{ gitea_staging_reader_env }}}} --stdin" in record, (
+            "the staging token must be written to staging's SOPS, not gitea_identity_env's"
+        )
+        assert re.search(r"when:.*not gitea_issue_reader_staging_token", record)
 
     def test_the_revoke_recovery_covers_it(self) -> None:
         tasks = TASKS.read_text(encoding="utf-8")
