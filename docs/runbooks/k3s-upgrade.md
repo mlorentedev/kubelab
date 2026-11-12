@@ -327,7 +327,7 @@ Last-resort recovery if a node is unrecoverable:
 - [operations](operations.md) — master deploy flows; aws1 recreate sequence
 - [rollback-k3s-to-compose](rollback-k3s-to-compose.md) — prod fallback to Compose
 - [runbook-disaster-recovery](runbook-disaster-recovery.md) — full rebuild
-- [pre-prod-verification](pre-prod-verification.md) — pre-change validation
+- [gitops-delivery-promotion](gitops-delivery-promotion.md) — validate in staging before prod
 - BACKUP-012 (#464) — automated datastore snapshots (pending)
 - OPS-010 (#701) — pre-upgrade API-deprecation gate (pending)
 - OPS-011 (#722) — empirical validation of this runbook in staging (sets `last_tested`)
