@@ -4,15 +4,15 @@ The account follows the agent's shape (AUTH-022): created by the bootstrap scrip
 its token minted once in the container and recorded in SOPS from the controller,
 both gated on the SOPS key being empty. Two differences, both on purpose:
 
-- **Its login is not declared here.** `apps.auth.identities.renovate` is the
-  operator's to name, like every other machine account on the forge. Until it is,
-  every task below skips, so a provision creates no account and mints nothing.
+- **Its login is the operator's to name**, like every other machine account on the
+  forge, and is declared (`apps.auth.identities.renovate`). Removing it makes every
+  task below skip, so a provision creates no account and mints nothing.
 - **Its grant is Renovate's documented one**, wider than the agent's: Renovate reads
   `/user` and the organization's labels and teams, besides writing branches, pull
   requests and the Dependency Dashboard issue.
 
 The run's read-only github.com token is not catalogued here: an expiring token
-needs an expiry checker, which belongs with the run that reads it (AC2).
+needs an expiry checker, which belongs with the change that wires it into the run.
 """
 
 from __future__ import annotations

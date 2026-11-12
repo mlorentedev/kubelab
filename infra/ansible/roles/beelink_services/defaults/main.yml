@@ -11,3 +11,22 @@ glances_port: 61208
 # The name the GitHub runner registers under. One value for the compose file and
 # the registration check, so the check can never look for a name nothing uses (#3080).
 runner_name: kubelab-bee
+
+# --- Renovate for Gitea (IDP-036 AC2) ---
+# The hourly run is enabled only once the account exists AND its token is recorded:
+# the token is minted by a running Gitea and recorded in SOPS during the provision
+# that creates the account, so that provision installs nothing and the next one
+# installs the timer. Both play variables have no default here on purpose: a play
+# that forgot them fails on the undefined variable rather than quietly running
+# nothing. A forge with no `apps.auth.identities.renovate` is disabled, and a timer
+# an earlier provision left behind is stopped.
+renovate_enabled: "{{ gitea_renovate_user | length > 0 and gitea_renovate_token | length > 0 }}"
+# The engine's cap. Its peak is unmeasured: it is read on the first run
+# (`docker stats kubelab-renovate`; the unit's cgroup holds only the docker client,
+# so systemd's own memory figures do not see the engine) and recorded on #1384,
+# and this value is then set from it. 1g is a starting bound
+# that protects the forge sharing this 8 GB node, not a measurement.
+renovate_memory_limit: 1g
+# Where the global config is mounted in the engine's container, and so the value
+# of RENOVATE_CONFIG_FILE. The container path never touches the host.
+renovate_config_container_path: /opt/renovate/config.yaml

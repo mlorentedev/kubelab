@@ -652,7 +652,8 @@ def _imports(path: Path) -> list[dict]:
         (
             "beelink_services",
             "{{ [gitea_image] + ([runner_image] if runner_enabled | bool else [])"
-            " + ([act_runner_image] if act_runner_enabled | bool else []) }}",
+            " + ([act_runner_image] if act_runner_enabled | bool else [])"
+            " + ([renovate_engine.image ~ ':' ~ renovate_engine.version] if renovate_enabled | bool else []) }}",
         ),
     ],
 )

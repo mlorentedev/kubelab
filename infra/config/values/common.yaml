@@ -1056,9 +1056,13 @@ apps:
       # organization team: its write reaches only the repositories that name it
       # under `writers:` in `gitea.organizations`, as a collaborator.
       agent: dedalo
-      # The Gitea Renovate run's account (IDP-036 AC6) goes here as `renovate:
-      # <login>`, named by the operator. Until it is declared the role creates no
-      # account and mints no token: every task for it is gated on the login.
+      # The Gitea Renovate run's machine account (IDP-036 AC6): it opens the
+      # dependency branches, pull requests and Dependency Dashboard issues, with
+      # the scopes in toolkit/features/gitea_tokens.py RENOVATE_SCOPES and its
+      # repository access from the organization team the reconciler grants it.
+      # Removing the key stops the run: the role then creates no account, mints no
+      # token and disables the timer, because every task is gated on the login.
+      renovate: proteo
 
   # SSOT-014c: operator contact email. Single declaration site.
   # The toolkit config loader (configuration.py:get_merged_config) auto-fills
