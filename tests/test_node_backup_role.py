@@ -371,7 +371,9 @@ def _capture(tmp_path: Path, source: dict[str, object], shims: dict[str, str] | 
     )
     env = {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}"}
     # A bound, so a capture that loops fails the test instead of hanging the suite.
-    result = subprocess.run(["bash", str(script)], env=env, capture_output=True, text=True, check=False, timeout=60)
+    result = subprocess.run(
+        ["bash", str(script)], env=env, capture_output=True, text=True, encoding="utf-8", check=False, timeout=60
+    )
     assert result.returncode == 0, result.stderr
     assert (staging / ".capture-complete").exists()
     return staging / "svc"
@@ -1389,6 +1391,7 @@ def test_every_rendered_unit_passes_systemd_analyze_verify(tmp_path):
         ["systemd-analyze", "verify", "--man=no", *targets],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         env={"SYSTEMD_UNIT_PATH": f"{tmp_path}:", "PATH": "/usr/bin:/bin"},
     )
     assert proc.returncode == 0, proc.stderr

@@ -203,7 +203,9 @@ esac
             "GITEA_BOT_USER": BOT,
             "GITEA_BOT_EMAIL": f"{BOT}@example.test",
         }
-        return subprocess.run(["sh", str(SCRIPT)], env=env, capture_output=True, text=True, timeout=60)
+        return subprocess.run(
+            ["sh", str(SCRIPT)], env=env, capture_output=True, text=True, encoding="utf-8", timeout=60
+        )
 
     return type("H", (), {"build": staticmethod(build), "run": staticmethod(run), "calls": calls})
 
@@ -288,6 +290,7 @@ def test_the_bot_section_is_skipped_when_no_machine_identity_is_declared(bot_har
         },
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=60,
     )
     assert result.returncode == 0, result.stderr

@@ -56,7 +56,10 @@ class TestBuildExtraRoutesProbe:
     def test_probe_missing_an_expectation_is_refused(self) -> None:
         """A probe that expects nothing would pass on any answer, nginx's included."""
         broken = {k: v for k, v in PROBE.items() if k != "expect_content_type"}
-        env = {**WEB_ENV, "APPS_PLATFORM_WEB_EXTRA_ROUTES": [{"path_prefix": "/api", "service": "api", "probe": broken}]}
+        env = {
+            **WEB_ENV,
+            "APPS_PLATFORM_WEB_EXTRA_ROUTES": [{"path_prefix": "/api", "service": "api", "probe": broken}],
+        }
 
         with pytest.raises(ValueError, match="expect_content_type"):
             K8sGenerator()._build_extra_routes(env, "web")
@@ -87,6 +90,7 @@ def _render(overlay: str) -> list[dict[str, Any]]:
         check=True,
         capture_output=True,
         text=True,
+        encoding="utf-8",
     ).stdout
     return [d for d in yaml.safe_load_all(out) if d]
 
@@ -152,16 +156,22 @@ def _run_script(tmp_path: pathlib.Path, answer: str) -> tuple[int, str, str]:
     (container,) = job["spec"]["template"]["spec"]["containers"]
     assert container["command"][:2] == ["/bin/sh", "-c"]
     stub = tmp_path / "curl"
-    stub.write_text(f'#!/bin/sh\nprintf \'%s\\n\' "$@" > "{tmp_path}/args"\nprintf \'%s\' \'{answer}\'\n', encoding="utf-8")
+    stub.write_text(
+        f"#!/bin/sh\nprintf '%s\\n' \"$@\" > \"{tmp_path}/args\"\nprintf '%s' '{answer}'\n", encoding="utf-8"
+    )
     stub.chmod(stub.stat().st_mode | stat.S_IEXEC)
     env = {**_env(job), "PATH": f"{tmp_path}:/usr/bin:/bin"}
-    proc = subprocess.run(["/bin/sh", "-c", container["command"][2]], env=env, capture_output=True, text=True)
+    proc = subprocess.run(
+        ["/bin/sh", "-c", container["command"][2]], env=env, capture_output=True, text=True, encoding="utf-8"
+    )
     args = (tmp_path / "args").read_text(encoding="utf-8") if (tmp_path / "args").exists() else ""
     return proc.returncode, proc.stdout + proc.stderr, args
 
 
 class TestProbeScript:
-    @pytest.mark.parametrize("answer", ["400 text/plain; charset=utf-8", "400 text/plain;charset=utf-8", "400 text/plain"])
+    @pytest.mark.parametrize(
+        "answer", ["400 text/plain; charset=utf-8", "400 text/plain;charset=utf-8", "400 text/plain"]
+    )
     def test_api_answer_passes(self, tmp_path: pathlib.Path, answer: str) -> None:
         code, out, _ = _run_script(tmp_path, answer)
 
