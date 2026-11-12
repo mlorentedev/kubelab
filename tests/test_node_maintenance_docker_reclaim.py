@@ -150,6 +150,7 @@ def _run_docker_section(tmp_path: Path, group_names: list[str], reclaim_rc: int)
         env={**os.environ, "PATH": f"{tmp_path}{os.pathsep}{os.environ['PATH']}"},
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=30,
     )
     assert result.returncode == 0, result.stdout + result.stderr
@@ -341,6 +342,7 @@ def test_the_shipped_module_reclaims_residue_and_spares_every_declared_volume(tm
         },
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=60,
     )
     assert result.returncode == 0, result.stderr
@@ -363,6 +365,7 @@ def test_the_shipped_module_fails_loudly_without_a_declaration(tmp_path: Path) -
         [sys.executable, str(MODULE), "--declaration", str(tmp_path / "missing.json")],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=60,
     )
     assert result.returncode != 0
@@ -393,6 +396,7 @@ def test_the_run_exits_non_zero_on_disk_pressure_or_a_failed_step(
         env={**os.environ, "PATH": f"{tmp_path}{os.pathsep}{os.environ['PATH']}", "FAILURES": failures},
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=30,
     )
     assert result.returncode == expected, result.stdout + result.stderr

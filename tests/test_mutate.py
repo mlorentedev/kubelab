@@ -22,7 +22,7 @@ ORIGINAL = "def guard(x):\n    return x > 0\n"
 
 
 def _git(repo: Path, *args: str) -> str:
-    return subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True, text=True).stdout
+    return subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True, text=True, encoding="utf-8").stdout
 
 
 def _statuses(repo: Path, *codes: int) -> tuple[Callable[[], int], list[str]]:
@@ -160,8 +160,8 @@ def test_a_marker_in_the_target_selects_a_test_the_default_markers_deselect(tmp_
     infra.write_text("import pytest\n\n\n@pytest.mark.infra\ndef test_live():\n    pass\n", encoding="utf-8")
     argv = [sys.executable, "-m", "pytest", "-c", str(root / "pyproject.toml"), "-q", "--no-cov"]
     argv += ["-p", "no:cacheprovider", "--collect-only", str(infra)]
-    deselected = subprocess.run(argv, cwd=root, capture_output=True, text=True)
-    selected = subprocess.run([*argv, "-m", "infra"], cwd=root, capture_output=True, text=True)
+    deselected = subprocess.run(argv, cwd=root, capture_output=True, text=True, encoding="utf-8")
+    selected = subprocess.run([*argv, "-m", "infra"], cwd=root, capture_output=True, text=True, encoding="utf-8")
     assert deselected.returncode == 5, deselected.stdout[-300:]
     assert selected.returncode == 0, selected.stdout[-300:]
 
@@ -361,7 +361,7 @@ def _recipe(*variables: str) -> str:
     env = {k: v for k, v in os.environ.items() if k not in outer}
     repo = Path(__file__).resolve().parent.parent
     args = ["make", "-n", "-C", str(repo), "mutate", "FILE=f.py", "FROM=a", "TEST=t.py", *variables]
-    return subprocess.run(args, capture_output=True, text=True, check=True, env=env).stdout
+    return subprocess.run(args, capture_output=True, text=True, encoding="utf-8", check=True, env=env).stdout
 
 
 def test_an_empty_replacement_reaches_the_command_as_a_deletion(tmp_path: Path) -> None:
