@@ -1,4 +1,4 @@
-"""`registry.tag_exists` on a registry that is not Docker Hub (IDP-053 D3).
+"""`registry.tag_exists`, tri-state on Docker Hub and on any other registry (IDP-053 D3, #3272).
 
 Tri-state, with a real transport: an anonymous OCI ``HEAD /v2/<name>/manifests/<tag>``
 answers ``True`` (200) or ``False`` (404); a private registry (401/403), any other
