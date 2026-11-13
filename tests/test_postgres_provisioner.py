@@ -29,9 +29,9 @@ def test_build_provision_sql_escapes_single_quotes_in_password():
 
 # CONSOLE-004 AC6: Grafana's read-only role on the forge statistics view.
 
-FORGE_STATS_SQL = build_reader_sql(
-    username="forge_stats", password="fixture_pw", database="api", views=("forge_stats",)
-)
+# A placeholder, not a credential: the tests read the script, and no database sees it.
+PLACEHOLDER = "placeholder-not-a-secret"
+FORGE_STATS_SQL = build_reader_sql(username="forge_stats", password=PLACEHOLDER, database="api", views=("forge_stats",))
 
 
 def _grants(sql: str) -> list[str]:
