@@ -27,7 +27,8 @@ D1 below chose `hefesto` because on 2026-09-01 the identity map had no agent acc
 - The per-node key is registered on the agents' account (`apps.auth.identities.agent`), not on `hefesto`. Its pushes reach a protected default branch only through a pull request, as with `make gitea-git`.
 - Registration runs from the controller through the admin API (`POST /admin/users/{agent}/keys`) with the superadmin at provision time, because `agent_token` has no `write:user`. The private half is still generated on the node and never transits.
 - D2's reasoning (a per-node key rather than a token at rest) is unchanged; only the account changes.
-- Implemented and verified against the new account in #3391 (AC1, AC2, AC4). AC6 is pending an owner decision on #1075: agent forwarding is off fleet-wide.
+- Implemented and verified against the new account in #3391 (AC1, AC2, AC4).
+- **The human half (2026-11-12, owner decision on #1075):** agent forwarding is excluded. `ssh_hardening` sets `AllowAgentForwarding no` on every node by fleet policy, and the role's `IdentitiesOnly yes` for the forge host would keep a forwarded key from being offered anyway. The operator works on ace2 through the agents' account, or pushes from their own workstation, where their key already is. No key of theirs is written to the node, which is the property D1 wanted; only the route to it changed. AC6 is withdrawn, and the human half is deliberately outside this spec's measurement: pushing from the workstation is the operator's existing path and needs no state on ace2, so there is nothing here to provision or prove.
 
 The D1 text that follows is kept as the record of the original reasoning.
 
@@ -49,7 +50,7 @@ Instead the role registers a **per-node SSH key** on `hefesto`'s account (`title
 
 ## Out of scope
 
-- **Provisioning any human identity on ace2.** Agent forwarding covers it; see D1.
+- **Provisioning any human identity on ace2.** The operator pushes from their own workstation, or works on ace2 through the agents' account; see the D1 amendment. (Originally "agent forwarding covers it", which fleet policy rules out.)
 - **Getting repositories into Gitea** — that is TOOL-035 (#1076), and it is what makes this spec's verification possible, not part of it.
 - **CI on the forge.** Gitea Actions is #504 / TOOL-035 AC6-AC7. "Develop" here means clone, push and PRs.
 - **Agent task-pull (`tk task sync`).** This spec provisions the credential an agent would use; it does not implement the agent's task loop.
@@ -66,12 +67,12 @@ Every one of these is settled by observing a live instance, never by reading a t
 
 ## Acceptance criteria
 
-- [ ] **AC1** — a fresh `make provision NODE=ace2 ENV=staging` leaves ace2 able to clone and push to a Gitea repository with no manual step, demonstrated by a transcript; a second run reports `changed=0`.
-- [ ] **AC2** — the credential resolves from `apps.auth.identities`, not hardcoded in the role, and anything secret about it is registered in `SECRET_CATALOG` with `envs` checked against the ANSIBLE-033 failure mode.
-- [ ] **AC3** — the Gitea host key is pinned by the role; a first connection produces no interactive prompt, demonstrated on a node whose `known_hosts` was cleared.
-- [ ] **AC4** — removing the node's key from Gitea makes the access fail, and re-provisioning restores it. Both halves captured; a credential that works proves only half the claim (AUTH-004 AC5's finding).
-- [ ] **AC5** — R1 is answered by a live probe and the chosen transport recorded in `verification.md` with its transcript, before the role is written.
-- [ ] **AC6** — the operator's own interactive access from ace2 is demonstrated to work through agent forwarding with no key of theirs on the node, confirming D1's claim rather than asserting it.
+- [x] **AC1** ✓ 2026-11-12 (verification.md, Evidence) — a fresh `make provision NODE=ace2 ENV=staging` leaves ace2 able to clone and push to a Gitea repository with no manual step, demonstrated by a transcript; a second run reports `changed=0`.
+- [x] **AC2** ✓ 2026-11-12 (verification.md, Evidence) — the credential resolves from `apps.auth.identities`, not hardcoded in the role, and anything secret about it is registered in `SECRET_CATALOG` with `envs` checked against the ANSIBLE-033 failure mode.
+- [ ] **AC3** (partial 2026-11-12: the role pins the key and a strict, prompt-free connection from ace2 succeeds; the cleared-`known_hosts` run is not yet recorded) — the Gitea host key is pinned by the role; a first connection produces no interactive prompt, demonstrated on a node whose `known_hosts` was cleared.
+- [x] **AC4** ✓ 2026-11-12 (verification.md, Evidence) — removing the node's key from Gitea makes the access fail, and re-provisioning restores it. Both halves captured; a credential that works proves only half the claim (AUTH-004 AC5's finding).
+- [x] **AC5** ✓ 2026-09-02 (verification.md, R1) — R1 is answered by a live probe and the chosen transport recorded in `verification.md` with its transcript, before the role is written.
+- [~] **AC6 — withdrawn 2026-11-12 (owner decision on #1075):** agent forwarding is off fleet-wide; see the D1 amendment. Original text: the operator's own interactive access from ace2 is demonstrated to work through agent forwarding with no key of theirs on the node, confirming D1's claim rather than asserting it.
 
 ## References
 

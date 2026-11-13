@@ -4,6 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 740 | [An acceptance criterion is only testable if fleet policy allows the mechanism it names](lesson-740-an-acceptance-criterion-is-only-testable-if-fleet-policy-allows-its-mechanism.md) | 2026-11-12 |
 | 617 | [A closed epic is not a built substrate, and an ADR's "next" list is not a ticket](lesson-617-a-closed-epic-is-not-a-built-substrate.md) | 2026-10-22 |
 | 578 | [A client test checks its requests against the server's own swagger, because a fake certifies whatever it is asked](lesson-578-a-client-test-checks-its-requests-against-the-servers-own-swagger-not-a-fake.md) | 2026-10-16 |
 | 561 | [A retired service lives on in every doc that names its host, and a pasted config copy rots twice](lesson-561-a-retired-service-lives-on-in-every-doc-that-names-its-host.md) | 2026-10-11 |

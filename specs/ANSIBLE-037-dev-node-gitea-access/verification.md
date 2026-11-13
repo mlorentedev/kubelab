@@ -78,7 +78,7 @@ git@beelink.kubelab.internal: Permission denied (publickey).
 
 ### Not yet settled
 
-AC6 (2026-11-12): agent forwarding is off fleet-wide, so D1's human half cannot work as written; owner decision on #1075. Before that, nothing: R1, R2 and R3 are closed; `proposal.md`'s "Risks / open questions" holds no unresolved item blocking Part 1. R4 was a scheduling risk (both on-demand nodes powered), satisfied for these runs.
+No open risk among R1–R4. One criterion is not fully evidenced: AC3's cleared-`known_hosts` demonstration (see Evidence). AC6 was withdrawn on 2026-11-12 by owner decision on #1075 (agent forwarding is off fleet-wide; see the D1 amendment). This section covers risks only: whether every acceptance criterion in `proposal.md` is met is decided by the independent review before archive, not here. On risks: R1, R2 and R3 are closed; `proposal.md`'s "Risks / open questions" holds no unresolved item blocking Part 1. R4 was a scheduling risk (both on-demand nodes powered), satisfied for these runs.
 
 ## Evidence
 
@@ -89,7 +89,8 @@ Measured 2026-11-12 against the agents' account (D1 as amended, #1075), from the
 - **AC1, push**: from ace2, a clone of `personal/resume`, an empty commit pushed as `probe/ace2-agent-key` (`* [new branch]`), then deleted (`- [deleted]`). The first attempt was refused by that repository's commitizen hook on the probe commit message, before any push.
 - **AC2**: `tests/test_dev_node_gitea_agent_key.py` and `tests/test_dev_node_gitea_identity.py` (the identity resolves from `apps.auth.identities.agent`, and the credential from the forge's own vault).
 - **AC4**: `ac4_revocation_probe.sh`, now on the admin API as the superadmin. Baseline greets `dedalo`; `DELETE /admin/users/dedalo/keys/5 -> 204`; the retry with no wait fails closed; re-provisioning (`changed=1`) restores access as `dedalo`. `PASS — both halves demonstrated`.
-- **AC6: not met, and not reachable as designed.** `ssh -A ace2` gives an empty `SSH_AUTH_SOCK`: `ssh_hardening` keeps `AllowAgentForwarding no` on every node, by fleet policy. Separately, the role's `IdentitiesOnly yes` for the forge host would keep a forwarded key from being offered. D1's "the human half needs no provisioning" therefore does not hold. Recorded on #1075 as an owner decision; nothing was changed to work around it.
+- **AC3, partial**: on ace2, `ssh-keygen -F '[<ssh_host>]:<ssh_port>'` finds the role's pinned entry, and `ssh -T -o BatchMode=yes -o StrictHostKeyChecking=yes` to the forge answers `Hi there, dedalo!` with no prompt. Still missing: the same run on a node whose `known_hosts` was cleared. Clearing it by hand is a manual change, so it needs a probe script like AC4's that clears the entry, re-provisions and checks again.
+- **AC6: not met, and not reachable as designed.** `ssh -A ace2` gives an empty `SSH_AUTH_SOCK`: `ssh_hardening` keeps `AllowAgentForwarding no` on every node, by fleet policy. Separately, the role's `IdentitiesOnly yes` for the forge host would keep a forwarded key from being offered. D1's "the human half needs no provisioning" therefore does not hold. Recorded on #1075 as an owner decision; nothing was changed to work around it. **Withdrawn 2026-11-12:** the owner kept the fleet policy, and the D1 amendment now names the operator's workstation as the human half.
 
 ## Test status
 
