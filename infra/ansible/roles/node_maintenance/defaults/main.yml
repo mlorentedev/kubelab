@@ -140,4 +140,14 @@ maintenance_backup_declaration: >-
 # by design); tests/test_node_maintenance_docker_reclaim.py keeps them equal.
 # The alarm runs at the timer's cadence. A continuous signal is OBS-027 (#1727)
 # step 3.
+# Prune by disk pressure instead of by calendar (#3079). Above 0, the daily cleanup
+# removes every unused image and all build cache only when the filesystem holding
+# Docker is at or above this percent; below it, only dangling ones. 0 keeps the
+# full daily prune. Set it under maintenance_disk_alert_percent, so space is freed
+# before the alarm. Derived from the group, like maintenance_docker_reclaim, so the
+# timer, `make maintain` and the provision agree: the platform node runs CI, and its
+# image store and build cache are the runners' warm start (105 GB root, 42 % used
+# on 2026-11-13). Every other node keeps the full daily prune.
+maintenance_docker_prune_above_percent: "{{ 70 if 'platform_nodes' in group_names else 0 }}"
+
 maintenance_disk_alert_percent: "{{ 92 if 'hub' in group_names else 80 }}"

@@ -4,6 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 743 | [Prune Docker by disk pressure, not by calendar, and `until` filters on the build date](lesson-743-prune-by-disk-pressure-not-by-calendar-and-until-reads-the-build-date.md) | 2026-11-13 |
 | 718 | [`docker rm -f` exits 0 for a container that does not exist, so its exit code cannot say whether anything changed](lesson-718-docker-rm-f-exits-0-for-a-container-that-does-not-exist.md) | 2026-11-06 |
 | 702 | [A container port key must reach the server, not only its client](lesson-702-a-container-port-key-must-reach-the-server-not-only-its-client.md) | 2026-11-02 |
 | 692 | [Open WebUI's Pyodide runs get 60 seconds, including the package download](lesson-692-open-webuis-pyodide-runs-get-60-seconds-including-the-package-download.md) | 2026-11-01 |
