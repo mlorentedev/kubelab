@@ -161,7 +161,12 @@ setup-python:
 
 .PHONY: setup-poetry
 setup-poetry:
-	@python3 -m pip install --upgrade poetry >/dev/null 2>&1
+	@# Never pip-install Poetry into python3: on a host whose python3 belongs to a
+	@# version manager it shadowed the isolated copy, and the copy it left had no
+	@# xattr, so every new worktree's first init failed (#3399).
+	@command -v $(POETRY) >/dev/null 2>&1 || { \
+		echo "Poetry not found. Install it in its own environment: uv tool install poetry (or pipx install poetry)" >&2; \
+		exit 1; }
 	@$(POETRY) config virtualenvs.create true
 	@$(POETRY) config virtualenvs.in-project true
 
