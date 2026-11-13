@@ -140,6 +140,28 @@ updates:
           - "minor"
           - "patch"
 
+  # ---- Container image: apps/console (in this repo) ----
+  # The same reason as apps/api above: the Node build image and the nginx runtime reach EOL,
+  # and a missed base-image bump is how a Trivy HIGH/CRITICAL failure arrives.
+  - package-ecosystem: "docker"
+    directory: "/apps/console"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "docker"
+    commit-message:
+      prefix: "fix"
+      include: "scope"
+    groups:
+      console-docker-minor-patch:
+        applies-to: version-updates
+        update-types:
+          - "minor"
+          - "patch"
+
   # ============================================================
   # Security-only -- Go module deps (security suffices; avoid churn)
   # (open-pull-requests-limit: 0 -> no version PRs; security still flows)
@@ -155,3 +177,15 @@ updates:
     labels:
       - "dependencies"
       - "api"
+
+  # ---- Console npm packages ----
+  # Security-only, like the Go modules: version bumps are churn, and the lockfile is what
+  # the image installs from (`npm ci`).
+  - package-ecosystem: "npm"
+    directory: "/apps/console"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 0
+    labels:
+      - "dependencies"
