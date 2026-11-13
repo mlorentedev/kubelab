@@ -13,7 +13,7 @@ owner: manu
 
 Map every acceptance criterion from `proposal.md` to concrete proof (commit hash, test name, or observed behavior).
 
-- [x] AC1 (default bound, edge's page): #3446 (`0eb9c828`). Measured in staging on 2026-11-13, after `make provision NODE=ace1 ENV=staging TAGS=k3s` (dry run `changed=1`, apply `changed=1`, re-run `changed=0`). Traefik's args carry `responseHeaderTimeout=60s` and `dialTimeout=5s`. `curl https://stuck-backend.staging.kubelab.live/` returned `504` after 61.29 s, and the body is byte-identical to `edge/errors/html/errors/504.html` (sha1 `8ff8d946…` for both).
+- [x] AC1 (default bound, edge's page): #3446 (`0eb9c828`). Measured in staging on 2026-11-13 against master, not a worktree deploy: the staging Application tracked `master` and was `Synced Healthy` at `0eb9c828`, and the provision ran from a master checkout at `bde7c201`. Measured after `make provision NODE=ace1 ENV=staging TAGS=k3s` (dry run `changed=1`, apply `changed=1`, re-run `changed=0`). Traefik's args carry `responseHeaderTimeout=60s` and `dialTimeout=5s`. `curl https://stuck-backend.staging.kubelab.live/` returned `504` after 61.29 s, and the body is byte-identical to `edge/errors/html/errors/504.html` (sha1 `8ff8d946…` for both).
 - [x] AC2 (an exception keeps its longer bound): same run, `curl --max-time 90 …/exception` was still open when the client gave up at 90.01 s (`000`). The `stuck-backend-exception` ServersTransport is in the cluster.
 - [x] AC3 (coverage test): `tests/test_edge_backend_timeouts.py`. `make mutate` turned it red three ways: an undeclared transport reference (2 failed), Headscale's `dialTimeout` 30s (1 failed), and the default argument removed from the template.
 - [ ] AC4 (Headscale): prod sync of #3446 kept `vpn.kubelab.live` answering (`/key` 200 in 0.49 s, Argo CD `Synced Healthy` at `0eb9c828`). Pending, and the owner's: the VPS provision that brings the default to prod, a node re-registering, and lifting the exception.
@@ -61,7 +61,7 @@ What this does not show: routes with no slow request (`api`, `argocd`, `brand-as
 ## Test status
 
 - Test suite: `make test` -> 10268 passed, 95 skipped (head of #3446 before its last merge of master)
-- Staging: `make test-e2e ENV=staging` -> 68 passed, 23 skipped (2026-11-13, after the provision)
+- Staging: `make test-e2e ENV=staging` -> 68 passed, 23 skipped (2026-11-13, after the provision). This shows no regression only: no e2e expectation covers the timeout yet (the open AC1/AC2 e2e task), so AC1 and AC2 rest on the direct measurements above
 - No regressions in existing test suite: yes. One intermittent unrelated failure seen once and filed as #3445
 
 ## Decisions made during implementation
