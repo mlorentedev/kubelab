@@ -1,0 +1,154 @@
+# Stuck-backend fixture (OPS-065, ADR-076): a backend that accepts a connection and
+# never answers, so the edge's bound on waiting for response headers can be shown in
+# staging before prod.
+#
+# busybox `nc` hands each connection to `cat >/dev/null`, which reads the request and
+# writes nothing. It ends when the client closes, so neither the kubelet's TCP probe
+# nor Traefik's cut leaves a process behind.
+#
+# Two rules on one host, both with `error-pages`:
+#   - the host itself runs under the edge's default bound, and must get the edge's 504
+#     page once the bound passes (AC1);
+#   - `/exception` is the route the exceptions declaration names, and must stay open
+#     past the default (AC2). Headscale is prod's only exception and has no staging
+#     route, so this is the one an exception can be shown through.
+#
+# Staging only: the overlay is VPN-only and the route is rate-limited like any other.
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stuck-backend
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: stuck-backend
+    app.kubernetes.io/component: test-fixture
+    app.kubernetes.io/part-of: kubelab
+spec:
+  replicas: 1
+  # It never answers a request, so there is nothing to drain during a rollout
+  # (DELIVERY-012's preStop would only delay it).
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: stuck-backend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: stuck-backend
+        app.kubernetes.io/component: test-fixture
+        app.kubernetes.io/part-of: kubelab
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+      containers:
+        - name: stuck-backend
+          image: busybox:1.36
+          command: ["nc", "-lk", "-p", "8080", "-e", "sh", "-c", "cat >/dev/null"]
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          readinessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 30
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 5m
+              memory: 8Mi
+            limits:
+              memory: 32Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: stuck-backend
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: stuck-backend
+    app.kubernetes.io/component: test-fixture
+    app.kubernetes.io/part-of: kubelab
+spec:
+  selector:
+    app.kubernetes.io/name: stuck-backend
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: stuck-backend-ingress
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: stuck-backend
+    app.kubernetes.io/part-of: kubelab
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: stuck-backend
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+      ports:
+        - protocol: TCP
+          port: 8080
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: stuck-backend
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: stuck-backend
+    app.kubernetes.io/component: test-fixture
+    app.kubernetes.io/part-of: kubelab
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`stuck-backend.staging.kubelab.live`) && PathPrefix(`/exception`)
+      kind: Rule
+      priority: 100
+      services:
+        - name: stuck-backend
+          port: 8080
+      middlewares:
+        - name: secure-headers
+        - name: rate-limit
+        - name: error-pages
+    - match: Host(`stuck-backend.staging.kubelab.live`)
+      kind: Rule
+      services:
+        - name: stuck-backend
+          port: 8080
+      middlewares:
+        - name: secure-headers
+        - name: rate-limit
+        - name: error-pages
+  tls:
+    certResolver: letsencrypt

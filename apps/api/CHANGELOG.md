@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.10.0](https://github.com/mlorentedev/kubelab/compare/api-v1.9.0...api-v1.10.0) (2026-11-13)
+
+
+### Features
+
+* **api:** write the forge projection backlog as a structured event ([#3412](https://github.com/mlorentedev/kubelab/issues/3412)) ([e1ac4bc](https://github.com/mlorentedev/kubelab/commit/e1ac4bc5d5982e99625a94bc9a244ae65591d120))
+
 ## [1.9.0](https://github.com/mlorentedev/kubelab/compare/api-v1.8.0...api-v1.9.0) (2026-11-12)
 
 
