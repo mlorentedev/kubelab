@@ -245,6 +245,7 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit tools deploy-shape` | Judge whether a PR is a mechanical staging deploy (DELIVERY-004, #1619). |
 | `toolkit tools lessons-index` | Order each category's lesson rows newest first (by date, then by number within a date, #1912), after refusing a corpus a rewrite would hide. |
 | `toolkit tools mutate` | Run the test unmutated, apply one replacement, run it again, restore the file. |
+| `toolkit tools renovate-dry-run` | Run the pinned Renovate engine over the working tree, extract only. |
 | `toolkit tools review-attestation` | Report whether a PR was actually reviewed, and refuse it if not. |
 | `toolkit tools spec-gate` | Refuse a PR that closes a spec's issue without archiving the spec. |
 | `toolkit tools tests-p50` | Median time `Tests` keeps a pull request waiting, split into suite and runner wait. |
