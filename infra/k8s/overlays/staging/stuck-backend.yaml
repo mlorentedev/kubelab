@@ -26,6 +26,10 @@ metadata:
     app.kubernetes.io/part-of: kubelab
 spec:
   replicas: 1
+  # It never answers a request, so there is nothing to drain during a rollout
+  # (DELIVERY-012's preStop would only delay it).
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app.kubernetes.io/name: stuck-backend
