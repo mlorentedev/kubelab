@@ -115,7 +115,9 @@ def test_the_revoke_skips_a_recorded_token() -> None:
         ("", "False", False),
         ("", "True", False),
     ]:
-        assert bool(gate(item={"user": user, "recorded": recorded})) is revoke, (
+        held = ["kubelab-reviewer"]  # what the probe found: the gate below is about the SOPS key
+        item = {"name": "kubelab-reviewer", "user": user, "recorded": recorded}
+        assert bool(gate(item=item, _gitea_unrecorded_held=held)) is revoke, (
             f"user={user!r} recorded={recorded}: the gate answers {not revoke}, "
             + ("revoking a live credential" if recorded == "True" or not user else "leaving the orphan in place")
         )
@@ -144,3 +146,77 @@ def test_the_preflight_runs_whenever_a_record_would() -> None:
     for task in _records():
         var = re.search(r"\bnot (\w+_token)\b", str(task["when"])).group(1)
         assert f"not {var}" in when, f"{task['name']} can run while the preflight is skipped"
+
+
+# --------------------------------------------------------------------------- #3428
+# "Absent from SOPS" was read from the controller's working copy. A provision from
+# another checkout, which had minted and recorded a token there and not merged it,
+# was then revoked by the next provision from this one: two green runs, one dead
+# credential. Revoking is irreversible, so an unrecorded token that Gitea holds now
+# stops the play unless the operator says the value is lost.
+
+PROBE = "Look for an unrecorded token Gitea already holds"
+HELD = "Name the unrecorded tokens Gitea already holds"
+REFUSE = "Refuse to revoke a token another checkout may have recorded"
+OVERRIDE = "gitea_revoke_unrecorded_tokens"
+
+
+def _env() -> jinja2.Environment:
+    env = jinja2.Environment()
+    env.filters["bool"] = lambda v: str(v).strip().lower() in {"true", "yes", "1", "on"}
+    return env
+
+
+def _gate(task: dict):
+    when = task.get("when")
+    return _env().compile_expression(" and ".join(f"({c})" for c in (when if isinstance(when, list) else [when])))
+
+
+def test_the_probe_reads_the_same_accounts_as_the_revoke_before_it() -> None:
+    probe = _tasks()[_index(PROBE)]
+    position, revoke = _revoke()
+    assert _index(PROBE) < _index(HELD) < _index(REFUSE) < position
+    assert probe["uri"]["method"] == "GET"
+    assert probe["uri"]["url"].endswith("/api/v1/users/{{ item.user }}/tokens?limit=50")
+    assert probe["loop"] == revoke["loop"] and probe["when"] == revoke["when"][0]
+    assert probe["check_mode"] is False  # a read: the dry run reports the refusal too
+    assert probe["no_log"] is True  # the listing carries each token's last eight characters
+
+
+def _held(results: list[dict]) -> list[str]:
+    expression = _tasks()[_index(HELD)]["set_fact"]["_gitea_unrecorded_held"]
+    rendered = _env().from_string(expression).render(_gitea_unrecorded_probe={"results": results})
+    return yaml.safe_load(rendered)
+
+
+def test_only_a_name_gitea_lists_counts_as_held() -> None:
+    results = [
+        {"item": {"name": "kubelab-repo-reader"}, "json": [{"name": "kubelab-repo-reader"}, {"name": "x"}]},
+        {"item": {"name": "kubelab-agent"}, "json": [{"name": "other"}]},
+        {"item": {"name": "kubelab-renovate"}, "skipped": True},
+    ]
+    assert _held(results) == ["kubelab-repo-reader"]
+    assert _held([]) == []
+
+
+def test_a_held_unrecorded_token_stops_the_play_unless_the_operator_says_it_is_lost() -> None:
+    gate = _gate(_tasks()[_index(REFUSE)])
+    assert gate(_gitea_unrecorded_held=["kubelab-repo-reader"], **{OVERRIDE: False})
+    assert not gate(_gitea_unrecorded_held=["kubelab-repo-reader"], **{OVERRIDE: True})
+    assert not gate(_gitea_unrecorded_held=[], **{OVERRIDE: False})
+    msg = _tasks()[_index(REFUSE)]["fail"]["msg"]
+    for part in ("ERROR", "WHY", "FIX", OVERRIDE):
+        assert part in msg
+
+
+def test_the_override_is_off_by_default() -> None:
+    defaults = yaml.safe_load((TASKS.parent.parent / "defaults/main.yml").read_text(encoding="utf-8"))
+    assert defaults[OVERRIDE] is False
+
+
+def test_the_revoke_touches_only_what_the_probe_found_held() -> None:
+    _, task = _revoke()
+    gate = _gate(task)
+    item = {"name": "kubelab-repo-reader", "user": "kubelab-reviewer", "recorded": "False"}
+    assert gate(item=item, _gitea_unrecorded_held=["kubelab-repo-reader"])
+    assert not gate(item=item, _gitea_unrecorded_held=[])

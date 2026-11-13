@@ -664,20 +664,21 @@
   failed_when: not _gitea_record_tool.stat.executable | default(false)
   tags: [gitea]
 
-- name: Revoke a named token that Gitea holds and SOPS does not
-  # The recovery half: a token whose key is empty in SOPS has no consumer, because
-  # nobody holds its value, so revoking it is safe, and it lets the mint below reuse
-  # the name. Gated per token on the SOPS key, so a recorded token is never touched.
-  # 204 revoked, 404 none to revoke. Basic Auth as the admin, the only form Gitea
-  # accepts on token endpoints, which is why the password is reasserted above.
+- name: Look for an unrecorded token Gitea already holds
+  # "Absent from SOPS" is read from THIS checkout. Another checkout may have minted
+  # the token and recorded it there, unmerged: on 2026-11-13 a second provision
+  # revoked such a token and both runs ended green (#3428). So the role first asks
+  # Gitea which unrecorded names it holds. A read, so it runs under --check too.
+  # `no_log`: the listing carries each token's last eight characters.
   uri:
-    url: "http://{{ tailscale_ip }}:{{ gitea_http_port }}/api/v1/users/{{ item.user }}/tokens/{{ item.name }}"
-    method: DELETE
+    url: "http://{{ tailscale_ip }}:{{ gitea_http_port }}/api/v1/users/{{ item.user }}/tokens?limit=50"
+    method: GET
     url_username: "{{ gitea_admin_user }}"
     url_password: "{{ gitea_admin_password }}"
     force_basic_auth: true
-    status_code: [204, 404]
-  loop:
+    return_content: true
+    status_code: [200]
+  loop: &gitea_named_tokens
     - {name: kubelab-provisioning, user: "{{ gitea_bot_user }}", recorded: "{{ gitea_bot_token | length > 0 }}"}
     - {name: kubelab-reviewer, user: "{{ gitea_reviewer_user }}", recorded: "{{ gitea_reviewer_token | length > 0 }}"}
     - {name: kubelab-review-notice, user: "{{ gitea_reviewer_user }}", recorded: "{{ gitea_review_notice_token | length > 0 }}"}
@@ -691,6 +692,51 @@
   loop_control:
     label: "{{ item.name }}"
   when: item.user | length > 0 and not item.recorded | bool
+  register: _gitea_unrecorded_probe
+  check_mode: false
+  no_log: true
+  tags: [gitea]
+
+- name: Name the unrecorded tokens Gitea already holds
+  set_fact:
+    _gitea_unrecorded_held: >-
+      {% set held = [] %}{% for r in _gitea_unrecorded_probe.results | default([])
+      if r.json is defined and r.item.name in (r.json | map(attribute='name') | list) %}{% if held.append(r.item.name) %}{% endif %}{% endfor %}{{ held }}
+  tags: [gitea]
+
+- name: Refuse to revoke a token another checkout may have recorded
+  # Revoking is irreversible and the evidence for it is local. Stop and ask; the
+  # #2902 recovery (a value truly lost after a failed record) is one flag away.
+  fail:
+    msg: >-
+      ERROR: Gitea holds {{ _gitea_unrecorded_held | join(', ') }}, and this checkout's SOPS records none of them.
+      WHY: another checkout may have minted and recorded them without merging yet, and revoking here kills the
+      credential it holds (#3428).
+      FIX: merge the checkout that recorded them and run again from up to date master; if the value is truly
+      lost (a record that failed after its mint), rerun with EXTRA='gitea_revoke_unrecorded_tokens=true'.
+  when: _gitea_unrecorded_held | length > 0 and not (gitea_revoke_unrecorded_tokens | bool)
+  tags: [gitea]
+
+- name: Revoke a named token that Gitea holds and SOPS does not
+  # The recovery half (#2902): a token whose value was lost after its mint blocks
+  # the mint below from reusing the name. Runs only on a name the probe found held
+  # and, past the refusal above, only when the operator said the value is lost.
+  # Gated per token on the SOPS key, so a recorded token is never touched.
+  # 204 revoked, 404 none to revoke. Basic Auth as the admin, the only form Gitea
+  # accepts on token endpoints, which is why the password is reasserted above.
+  uri:
+    url: "http://{{ tailscale_ip }}:{{ gitea_http_port }}/api/v1/users/{{ item.user }}/tokens/{{ item.name }}"
+    method: DELETE
+    url_username: "{{ gitea_admin_user }}"
+    url_password: "{{ gitea_admin_password }}"
+    force_basic_auth: true
+    status_code: [204, 404]
+  loop: *gitea_named_tokens
+  loop_control:
+    label: "{{ item.name }}"
+  when:
+    - item.user | length > 0 and not item.recorded | bool
+    - item.name in _gitea_unrecorded_held
   register: _gitea_stale_tokens
   changed_when: _gitea_stale_tokens.status == 204
   no_log: true
