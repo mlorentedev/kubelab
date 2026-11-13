@@ -185,3 +185,15 @@ def test_the_ansible_twin_decides_like_the_script(threshold: int, probe: dict, e
         .render(maintenance_docker_prune_above_percent=threshold, _docker_fs_percent=probe)
     )
     assert rendered.strip() == str(expected)
+
+
+# The decision reaches the commands as the text the set_fact rendered.
+@pytest.mark.parametrize(("prune_all", "flag"), [("True", " -a"), ("False", "")])
+def test_the_ansible_twin_passes_the_decision_to_both_prunes(prune_all: str, flag: str) -> None:
+    by_name = {t.get("name"): t for t in yaml.safe_load(_tasks()) if isinstance(t, dict)}
+    env = jinja2.Environment()
+    # Ansible's `bool` filter, reduced to the spellings a rendered boolean takes.
+    env.filters["bool"] = lambda v: v if isinstance(v, bool) else str(v).strip().lower() in ("true", "yes", "on", "1")
+    for name, verb in (("Prune unused Docker images", "image"), ("Prune Docker build cache", "builder")):
+        argv = env.from_string(by_name[name]["command"]).render(_docker_prune_all=prune_all)
+        assert argv == f"docker {verb} prune -f{flag}", name
