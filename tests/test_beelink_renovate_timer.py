@@ -503,3 +503,57 @@ def test_the_pulled_image_is_the_image_the_env_file_hands_the_unit() -> None:
 def test_the_pull_also_runs_under_the_renovate_tag() -> None:
     """`--tags renovate` installs the timer; without the pull it would fail on every tick."""
     assert "renovate" in _tasks()[0]["tags"]
+
+
+# --------------------------------------------------------------------------- the engine survives the daily prune (#3403)
+
+MAINTENANCE = REPO / "infra/ansible/roles/node_maintenance"
+HOLDER = "Hold the Renovate engine image against the daily image prune"
+HOLDER_GONE = "Remove the Renovate engine holder when the run is not enabled"
+
+
+def _prune_exempt_labels() -> set[str]:
+    """The label keys the maintenance container prune spares, in both of its copies."""
+    texts = (
+        (MAINTENANCE / "templates/kubelab-maintenance.sh.j2").read_text(encoding="utf-8"),
+        (MAINTENANCE / "tasks/main.yml").read_text(encoding="utf-8"),
+    )
+    found = [set(re.findall(r'docker container prune[^\n]*--filter "label!=([^"=]+)"', text)) for text in texts]
+    assert all(found), "the container prune no longer spares a label: the holder below holds nothing"
+    return set.intersection(*found)
+
+
+def test_a_created_never_started_container_holds_the_engine_the_unit_runs() -> None:
+    # `docker image prune -a` keeps an image any container references, stopped or
+    # not. The run is `--rm`, so between ticks nothing referenced the engine and the
+    # daily maintenance deleted it; every later tick then failed on `--pull never`.
+    task = _task(HOLDER)
+    holder = task["community.docker.docker_container"]
+    assert holder["state"] == "present"  # created, never started
+    assert holder["pull"] == "never"  # `false` still fetches a missing image, unbounded
+    assert holder["image"] == "{{ renovate_engine.image }}:{{ renovate_engine.version }}"
+    env_image = _env_file()["RENOVATE_IMAGE"]
+    rendered = ansible_env(".").from_string(holder["image"]).render(**_context())
+    assert rendered == env_image, "an engine bump must move the held image and the run's image together"
+    assert "renovate_enabled | bool" in str(task["when"])
+    assert {"gitea", "renovate"} <= set(task["tags"])
+
+
+def test_the_holder_carries_the_label_the_container_prune_spares() -> None:
+    labels = _task(HOLDER)["community.docker.docker_container"]["labels"]
+    assert _prune_exempt_labels() & set(labels), "the container prune would remove the holder, and the image prune its image"
+
+
+def test_the_holder_name_is_not_the_runs_name() -> None:
+    # The wrapper `docker rm -f`s the run's name before each run.
+    name = _task(HOLDER)["community.docker.docker_container"]["name"]
+    run_names = [v.partition("=")[2] for v in _unit("kubelab-renovate.service.j2")["Service"]["Environment"] if v.startswith("KUBELAB_RENOVATE_NAME=")]
+    assert run_names and name not in run_names
+
+
+def test_a_disabled_run_releases_the_engine() -> None:
+    task = _task(HOLDER_GONE)
+    holder = task["community.docker.docker_container"]
+    assert holder["name"] == _task(HOLDER)["community.docker.docker_container"]["name"]
+    assert holder["state"] == "absent"
+    assert "not (renovate_enabled | bool)" in str(task["when"])

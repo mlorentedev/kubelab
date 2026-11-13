@@ -287,6 +287,34 @@
   ignore_errors: "{{ ansible_check_mode }}"
   tags: [gitea, renovate]
 
+# The run is `--rm`, so between ticks no container references the engine, and the
+# daily maintenance's `docker image prune -a` deleted it; every later tick then
+# failed on `--pull never` (#3403). A container that is created and never started
+# holds it: the image prune keeps any image a container references, and the
+# container prune spares this one by the compose label, as it spares the stacks'
+# stopped containers (#2703). Its image is the run's, so an engine bump recreates
+# it and releases the old version. `pull: never`: the bounded pull above fetched
+# it, and this must never become a second, unbounded one (`false` still fetches a
+# missing image).
+- name: Hold the Renovate engine image against the daily image prune
+  community.docker.docker_container:
+    name: kubelab-renovate-engine-holder
+    image: "{{ renovate_engine.image }}:{{ renovate_engine.version }}"
+    state: present
+    pull: never
+    labels:
+      com.docker.compose.project: kubelab-renovate
+  when: renovate_enabled | bool
+  tags: [gitea, renovate]
+
+- name: Remove the Renovate engine holder when the run is not enabled
+  community.docker.docker_container:
+    name: kubelab-renovate-engine-holder
+    state: absent
+    pull: never
+  when: not (renovate_enabled | bool)
+  tags: [gitea, renovate]
+
 # `systemd` fails on a unit it cannot find, so the stop is gated on the file: a
 # node that never had the timer is not an error, and one that did is stopped and
 # disabled. The files stay where they are; with the timer off nothing reads them.
