@@ -37,6 +37,14 @@ k3s_traefik_liveness_failure_threshold: 6
 # Access log keeps only requests slower than this (OPS-065): enough to see which
 # routes take long, near zero volume otherwise.
 k3s_traefik_access_log_min_duration: 1s
+# How long Traefik waits for a backend (ADR-076). Traefik's default is to wait
+# forever for response headers, so a backend that accepts and never answers holds
+# every request sent to it. 60 s: no route measured in prod over seven days took
+# longer to send its headers. 5 s to dial: every backend is on the cluster network or
+# the tailnet, so a slower dial means the node is off. A route that needs longer
+# declares an exception in `edge.backend_timeouts.exceptions` (common.yaml).
+k3s_traefik_response_header_timeout: 60s
+k3s_traefik_dial_timeout: 5s
 k3s_traefik_http_port: 80
 k3s_traefik_https_port: 443
 
