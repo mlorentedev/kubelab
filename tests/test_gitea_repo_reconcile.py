@@ -24,6 +24,7 @@ the acceptance criterion, and it is asserted here rather than left to review.
 from __future__ import annotations
 
 import dataclasses
+import re
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -1579,7 +1580,7 @@ def test_the_declared_webhooks_list_puts_n8n_first_and_pinned_to_prod() -> None:
     """`gitea.webhooks` generalises the singular block to a list; n8n's position in
     it is a declared property (Manu, 2026-09-24: "n8n stays first"), not dict order.
     """
-    assert len(DECLARED_WEBHOOKS) == 2
+    assert len(DECLARED_WEBHOOKS) == 3
     assert DECLARED_WEBHOOKS[0].spec.url == DECLARED_WEBHOOK.url
     assert DECLARED_WEBHOOKS[0].event_comparison == "floor"
 
@@ -1617,6 +1618,54 @@ def test_the_pr_agent_webhook_secret_is_catalogued_like_n8n_s() -> None:
         "generated here, like n8n's forge_webhook_secret -- Gitea signs with it, nobody issues it"
     )
     assert spec.envs == ("prod",), "the PR-Agent server is prod-only (proposal, Out of scope: Staging)"
+
+
+def _console_hook():
+    return next(h for h in DECLARED_WEBHOOKS if h.spec.url.endswith("/api/forge/webhooks/gitea"))
+
+
+def test_the_console_hook_targets_the_prod_api_receiver() -> None:
+    """CONSOLE-004 (#3420): the forge console's receiver, `POST /api/forge/webhooks/:forge`.
+
+    Declared whole like n8n's, for the same reason: the forge is a singleton, so a
+    per-environment derivation would point the real forge at staging. This pin is
+    what keeps the duplicate equal to the api's prod domain.
+    """
+    prod = yaml.safe_load((REPO_ROOT / "infra/config/values/prod.yaml").read_text(encoding="utf-8"))
+    domain = prod["apps"]["platform"]["api"]["domain"]
+    hook = _console_hook()
+
+    assert hook.spec.url == f"https://{domain}/api/forge/webhooks/gitea"
+    assert hook.spec.active is True
+    assert hook.spec.content_type == "json", "the receiver verifies the HMAC over the raw JSON body"
+    assert hook.spec.type == "gitea", "the receiver reads Gitea's payload dialect and X-Gitea-* headers"
+
+
+def test_the_console_hook_carries_every_event_the_projector_reads() -> None:
+    """A FLOOR read from the projector itself, not a copy of the declaration.
+
+    `ItemFromEvent` projects the event types it switches on and marks every other
+    delivery projected without reading it, so a type missing here is an item the
+    console only learns about on the next ten-minute reconcile.
+    """
+    source = (REPO_ROOT / "apps/api/src/internal/forge/project.go").read_text(encoding="utf-8")
+    body = source.split("func ItemFromEvent", 1)[1].split("\n}\n", 1)[0]
+    projected = set(re.findall(r'case "([a-z_]+)":', body))
+
+    assert projected, "no event types found in ItemFromEvent; the parse no longer matches the code"
+    assert projected <= set(_console_hook().spec.events)
+    assert _console_hook().event_comparison == "floor", "Gitea expands both families into sub-events"
+
+
+def test_the_console_hook_signs_with_the_receiver_s_secret() -> None:
+    """The key the api reads (`FORGE_GITEA_WEBHOOK_SECRET`, k8s_secrets.py), and its own."""
+    from toolkit.features.secrets_manager import SECRET_CATALOG
+
+    hook = _console_hook()
+    assert hook.secret_key == "apps.platform.api.forge_gitea_webhook_secret"
+    assert any(s.key_path == hook.secret_key for s in SECRET_CATALOG)
+    others = {h.secret_key for h in DECLARED_WEBHOOKS if h is not hook}
+    assert hook.secret_key not in others
 
 
 def test_the_singular_block_still_loads_through_the_plural_loader() -> None:
