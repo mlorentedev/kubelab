@@ -82,7 +82,7 @@ created: "2026-10-21"
 ### 4. Observability
 
 - [x] [P] [AC6] Structured log events for freshness, webhook failures and reconcile duration, through Vector to Loki ✓ 2026-11-12 (#3342)
-- [ ] [P] [AC6] Outbox depth as a structured event (the pending deliveries the projector has not marked)
+- [x] [P] [AC6] Projection backlog as a structured event (`forge_projection_backlog`: the deliveries the projector has not marked; not the AC2 outbox, which is the outbound write queue) ✓ 2026-11-13 (#3410)
 - [ ] [AC6] Read-only Postgres role on a counts-only view, a Grafana datasource, and the dashboard (throughput, queue age, time to first review, time with a red CI, items by status, priority and area)
 - [ ] [AC6] The datasource credential reaches Grafana through a Secret (`secureJsonData`, read from env or file), never the plain `grafana-datasources` ConfigMap, and a change to it restarts Grafana (generated name or explicit restart)
 - [x] [AC6] Grafana alert for a source not read within the declared bound ✓ 2026-11-12 (#3387): GitHub sources page, Gitea sources (on-demand Beelink) reach the log tier; a source never read since the api started writes no `age_seconds` and is not seen

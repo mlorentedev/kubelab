@@ -128,6 +128,7 @@ to its text log (#3342). Query them in Grafana's Loki datasource:
 | `forge_source_freshness` | per source, after each read attempt: `source`, `reachable`, `as_of`, `age_seconds` (no `as_of` for a source never read), `error` | `{namespace="kubelab", container="api"} \| json \| event="forge_source_freshness" \| reachable="false"` |
 | `forge_reconcile_cycle` | per pass: `scope` (`full`, or `retry` for the failed sources alone), `sources`, `failed`, `duration_ms` | `{namespace="kubelab", container="api"} \| json \| event="forge_reconcile_cycle" \| line_format "{{.scope}} {{.duration_ms}}ms {{.failed}}/{{.sources}}"` |
 | `forge_webhook_failure` | per refused or unprojected delivery: `forge`, `reason` (`signature`, `sources`, `store`, `unreadable`, `projection`), `delivery`, `status`, `error` | `sum by (reason) (count_over_time({namespace="kubelab", container="api"} \| json \| event="forge_webhook_failure" [1h]))` |
+| `forge_projection_backlog` | at most once a minute, an empty queue included: `depth` (deliveries stored and not yet projected), `oldest_age_seconds` (0 when empty). No line for over a minute means the projector stopped | `max(last_over_time({namespace="kubelab", container="api"} \| json \| event="forge_projection_backlog" \| unwrap depth [5m]))` |
 
 A `signature` failure carries no `delivery`: the caller was not authenticated and
 chose every header.

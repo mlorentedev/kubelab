@@ -164,3 +164,61 @@ func TestProjectorWritesAFailureEventPerDeliveryItCouldNotProject(t *testing.T) 
 		t.Fatalf("reasons = %v", reasons)
 	}
 }
+
+func TestProjectorWritesTheBacklogIncludingZeroAtMostOncePerPeriod(t *testing.T) {
+	var ev events
+	now := time.Date(2026, 11, 13, 1, 0, 0, 0, time.UTC)
+	l := &fakeLog{projected: map[string]*forge.Item{}, depth: 3, oldest: now.Add(-90 * time.Second)}
+	p := forge.Projector{Log: l, Events: ev.logger(), Now: func() time.Time { return now }}
+
+	for _, step := range []time.Duration{0, forge.ProjectPeriod, forge.BacklogPeriod - forge.ProjectPeriod} {
+		now = now.Add(step)
+		if err := p.Once(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got := ev.named(t, forge.EventProjectionBacklog)
+	if len(got) != 2 || l.backlogs != 2 {
+		t.Fatalf("lines = %v, backlog reads = %d: want one per %s", got, l.backlogs, forge.BacklogPeriod)
+	}
+	if got[0]["depth"] != float64(3) || got[0]["oldest_age_seconds"] != float64(90) {
+		t.Fatalf("first line = %v", got[0])
+	}
+
+	// An empty queue still writes a line, so silence can only mean a stopped projector.
+	l.depth, l.oldest = 0, time.Time{}
+	now = now.Add(forge.BacklogPeriod)
+	if err := p.Once(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	got = ev.named(t, forge.EventProjectionBacklog)
+	if last := got[len(got)-1]; last["depth"] != float64(0) || last["oldest_age_seconds"] != float64(0) {
+		t.Fatalf("empty queue line = %v", last)
+	}
+}
+
+func TestProjectorStillProjectsWhenTheBacklogCannotBeCounted(t *testing.T) {
+	var ev events
+	l := &fakeLog{projected: map[string]*forge.Item{}, backlogErr: errors.New("count failed"), pending: []forge.Event{
+		{Forge: "gitea", DeliveryID: "ok", Type: "issues", Payload: []byte(issuePayload)},
+	}}
+	now := time.Date(2026, 11, 13, 1, 0, 0, 0, time.UTC)
+	p := forge.Projector{Log: l, Events: ev.logger(), Now: func() time.Time { return now }}
+	if err := p.Once(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if l.projected["ok"] == nil {
+		t.Fatal("delivery not projected")
+	}
+	if got := ev.named(t, forge.EventProjectionBacklog); len(got) != 0 {
+		t.Fatalf("a failed count wrote %v", got)
+	}
+	// A count that keeps failing is retried once per period, not on every run.
+	now = now.Add(forge.ProjectPeriod)
+	if err := p.Once(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if l.backlogs != 1 {
+		t.Fatalf("backlog reads = %d within one period, want 1", l.backlogs)
+	}
+}

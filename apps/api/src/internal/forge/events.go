@@ -15,6 +15,9 @@ const (
 	EventReconcileCycle = "forge_reconcile_cycle"
 	// EventWebhookFailure is a delivery refused or not projected, with its reason.
 	EventWebhookFailure = "forge_webhook_failure"
+	// EventProjectionBacklog is the deliveries stored and not yet projected: how many,
+	// and the age of the oldest. Not the outbox: that is the outbound write queue (AC2).
+	EventProjectionBacklog = "forge_projection_backlog"
 )
 
 // defaultEvents writes one JSON object per line to stderr, where the API's text log
