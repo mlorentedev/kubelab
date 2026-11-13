@@ -36,7 +36,7 @@ owner: manu
 - [ ] [AC1] [AC2] e2e expectations: the default route answers the edge's 504 near the bound, `/exception` is still open past it
 - [x] Spoke RBAC writes `serverstransports` (#3422), then `make register-spoke ENV=staging` and `ENV=prod`; `can-i create serverstransports.traefik.io` answers `yes` in both ✓ 2026-11-12 (lesson-743)
 - [x] [AC1] Set the default in the `k3s_server` HelmChartConfig ✓ 2026-11-12
-- [ ] [AC1] [AC2] Staging: provision, the fixture is cut, an exception holds, `make test-e2e ENV=staging`
+- [x] [AC1] [AC2] Staging: provision, the fixture is cut, an exception holds, `make test-e2e ENV=staging` ✓ 2026-11-13 (verification.md)
 - [ ] [AC4] Prod (owner): dry run, apply, VPN check (re-register a node, MagicDNS), `make test-e2e ENV=prod`
 - [ ] [AC4] Lift the Headscale exception, deploy, and re-register a node under the default
 
