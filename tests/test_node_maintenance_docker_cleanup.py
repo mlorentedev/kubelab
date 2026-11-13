@@ -86,6 +86,10 @@ def _gate_block(threshold: int) -> str:
     return text[text.index(BEGIN) : text.index(END)]
 
 
+# Not Docker's default root, so the gate cannot pass by measuring its fallback path.
+DOCKER_ROOT = "/srv/docker-root"
+
+
 def _run_gate(tmp_path: pathlib.Path, threshold: int, df_percent: str, df_rc: int = 0) -> list[str]:
     """Run the rendered gate against stub `docker` and `df`; return docker's argv lines."""
     import subprocess
@@ -94,9 +98,15 @@ def _run_gate(tmp_path: pathlib.Path, threshold: int, df_percent: str, df_rc: in
     bin_dir.mkdir()
     log = tmp_path / "docker.log"
     (bin_dir / "docker").write_text(
-        f'#!/bin/sh\nif [ "$1" = info ]; then echo /var/lib/docker; exit 0; fi\necho "$*" >> {log}\n', encoding="utf-8"
+        f'#!/bin/sh\nif [ "$1" = info ]; then echo {DOCKER_ROOT}; exit 0; fi\necho "$*" >> {log}\n', encoding="utf-8"
     )
-    (bin_dir / "df").write_text(f'#!/bin/sh\necho "Use%"\necho " {df_percent}%"\nexit {df_rc}\n', encoding="utf-8")
+    # Any other filesystem reads full, so measuring the wrong one prunes everything
+    # and the below-threshold case goes red.
+    (bin_dir / "df").write_text(
+        f'#!/bin/sh\necho "Use%"\nfor a; do last="$a"; done\n'
+        f'if [ "$last" = {DOCKER_ROOT} ]; then echo " {df_percent}%"; else echo " 99%"; fi\nexit {df_rc}\n',
+        encoding="utf-8",
+    )
     for stub in bin_dir.iterdir():
         stub.chmod(0o755)
     script = tmp_path / "gate.sh"
@@ -152,3 +162,26 @@ def test_the_platform_node_prunes_by_pressure_below_its_disk_alert() -> None:
 def test_a_df_that_fails_prunes_everything_and_does_not_stop_the_run(tmp_path: pathlib.Path) -> None:
     # Under pipefail a failing `df` would otherwise end the whole maintenance run.
     assert _run_gate(tmp_path, 70, "", df_rc=1) == ["image prune -f -a", "builder prune -f -a"]
+
+
+@pytest.mark.parametrize(
+    ("threshold", "probe", "expected"),
+    [
+        (0, {"skipped": True}, True),
+        (70, {"stdout": ""}, True),
+        (70, {"stdout": "69"}, False),
+        (70, {"stdout": "70"}, True),
+        (70, {"stdout": "85"}, True),
+    ],
+)
+def test_the_ansible_twin_decides_like_the_script(threshold: int, probe: dict, expected: bool) -> None:
+    tasks = yaml.safe_load(_tasks())
+    decide = next(
+        t for t in tasks if isinstance(t, dict) and t.get("name") == "Decide whether the prune takes everything unused"
+    )
+    rendered = (
+        jinja2.Environment()
+        .from_string(decide["set_fact"]["_docker_prune_all"])
+        .render(maintenance_docker_prune_above_percent=threshold, _docker_fs_percent=probe)
+    )
+    assert rendered.strip() == str(expected)

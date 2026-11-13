@@ -1,5 +1,5 @@
 ---
-id: lesson-743-prune-by-disk-pressure-not-by-calendar-and-until-reads-the-build-date
+id: lesson-744-prune-by-disk-pressure-not-by-calendar-and-until-reads-the-build-date
 type: lesson
 status: active
 created: "2026-11-13"
