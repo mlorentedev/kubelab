@@ -137,6 +137,7 @@ spec:
       services:
         - name: stuck-backend
           port: 8080
+          serversTransport: stuck-backend-exception
       middlewares:
         - name: secure-headers
         - name: rate-limit
@@ -152,3 +153,19 @@ spec:
         - name: error-pages
   tls:
     certResolver: letsencrypt
+---
+# The exception's transport (`edge.backend_timeouts.exceptions`): no header bound, and
+# the edge's dial bound restated, since a ServersTransport does not inherit it.
+apiVersion: traefik.io/v1alpha1
+kind: ServersTransport
+metadata:
+  name: stuck-backend-exception
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: stuck-backend
+    app.kubernetes.io/component: test-fixture
+    app.kubernetes.io/part-of: kubelab
+spec:
+  forwardingTimeouts:
+    responseHeaderTimeout: 0s
+    dialTimeout: 5s

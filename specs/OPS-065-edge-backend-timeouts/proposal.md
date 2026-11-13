@@ -41,7 +41,7 @@ Traefik waits forever for a backend's response headers: `serversTransport.forwar
 - **Headscale (`vpn.kubelab.live`, prod only) is likely outside this bound, to verify:** its clients open the control protocol with an HTTP Upgrade (`/ts2021`), and Go's `Transport.ResponseHeaderTimeout` covers the wait until the `101`, after which Traefik copies the hijacked connection with no response timeout. Headscale is the bootstrap dependency for every node and its overlay is prod-only, so this is verified from its access-log lines (status 101, long `Duration`) and by re-registering a node after the prod deploy, not assumed. Its real exposure is to idle and client-side timeouts, which this spec does not change.
 - **Routes that can answer their headers late:** those that do work before answering, such as n8n webhooks, Gitea operations, Grafana queries, the Argo CD API and Authelia. Argo CD's watch streams, Uptime Kuma's socket.io and Grafana Live send headers early and then stream, so the access log will show them long and the direct measurement will clear or list them.
 - **The values are pending data.** The default and each exception come from the access log #3106 adds, collected in prod for at least seven days, plus the direct measurements above. Prod traffic is light, so a short window under-samples the rare long calls the bound would cut.
-- **Mechanism:** the default is static config (`--serversTransport.forwardingTimeouts.*`), cluster-wide; an exception is a `ServersTransport` CRD referenced from the route's service. The generator that writes IngressRoutes must emit the reference, so the declaration stays the single source.
+- **Mechanism:** the default is static config (`--serversTransport.forwardingTimeouts.*`), cluster-wide; an exception is a `ServersTransport` CRD referenced from the route's service. The declaration (`edge.backend_timeouts.exceptions`) stays the single source: both routes that use an exception are hand-written overlay manifests, so `tests/test_edge_backend_timeouts.py` holds each reference and `ServersTransport` to it, as `edge.errors.coverage.exceptions` does for error pages (amended 2026-11-12).
 - **Duration and count bound different things:** a timeout cuts a hang; `inFlightReq` caps how many requests a host may hold. #3057 declined `inFlightReq` for a CPU ceiling, which is a different question. The ADR weighs both on this failure mode instead of carrying that verdict over.
 
 ## Acceptance criteria
@@ -49,8 +49,8 @@ Traefik waits forever for a backend's response headers: `serversTransport.forwar
 - [ ] A test backend in staging that accepts connections and never answers is cut at the declared default bound, and the client gets the edge's error page within the bound plus a margin.
 - [ ] A route declared as an exception keeps its longer bound, shown by the same backend through that route.
 - [ ] `tests/` fails on a route with neither the default nor a declared exception, and on an exception that matches no route.
-- [ ] Headscale's handshake is shown to finish its headers (`101`) within the bound, from its access-log lines, and the VPN keeps working after the prod deploy (a node re-registers, MagicDNS resolves).
-- [ ] An ADR records the default, the exceptions with their measurements, `dialTimeout` and `idleConnTimeout`, and the duration-versus-count decision.
+- [ ] Headscale ships as a declared exception (ADR-076 D2), the VPN keeps working after the prod deploy (a node re-registers, MagicDNS resolves), and the exception is then lifted and a node re-registers under the default. Amended 2026-11-12: the access log cannot time the `101` (upgraded connections are logged with status `0` and their whole life), so the handshake is shown by a re-registration, not read from the log.
+- [x] An ADR records the default, the exceptions with their measurements, `dialTimeout` and `idleConnTimeout`, and the duration-versus-count decision.
 
 ## References
 
