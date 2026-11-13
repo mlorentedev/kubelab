@@ -658,7 +658,7 @@
     or (gitea_reviewer_user | length > 0
         and (not gitea_reviewer_token or not gitea_review_notice_token
              or not gitea_issue_reader_token or not gitea_issue_reader_staging_token
-             or not gitea_registry_pull_token))
+             or not gitea_repo_reader_token or not gitea_registry_pull_token))
     or (gitea_agent_user | length > 0 and not gitea_agent_token)
     or (gitea_renovate_user | length > 0 and not gitea_renovate_token)
   failed_when: not _gitea_record_tool.stat.executable | default(false)
@@ -684,6 +684,7 @@
     - {name: kubelab-issue-reader, user: "{{ gitea_reviewer_user }}", recorded: "{{ gitea_issue_reader_token | length > 0 }}"}
     - {name: kubelab-issue-reader-staging, user: "{{ gitea_reviewer_user }}", recorded: "{{ gitea_issue_reader_staging_token | length > 0 }}"}
     - {name: kubelab-registry-puller, user: "{{ gitea_reviewer_user }}", recorded: "{{ gitea_registry_pull_token | length > 0 }}"}
+    - {name: kubelab-repo-reader, user: "{{ gitea_reviewer_user }}", recorded: "{{ gitea_repo_reader_token | length > 0 }}"}
     - {name: kubelab-agent, user: "{{ gitea_agent_user }}", recorded: "{{ gitea_agent_token | length > 0 }}"}
     - {name: kubelab-renovate, user: "{{ gitea_renovate_user }}", recorded: "{{ gitea_renovate_token | length > 0 }}"}
     - {name: kubelab-reconciler, user: "{{ gitea_admin_user }}", recorded: "{{ gitea_admin_token | length > 0 }}"}
@@ -956,6 +957,47 @@
   delegate_to: localhost
   become: false
   when: gitea_reviewer_user | length > 0 and not gitea_registry_pull_token
+  changed_when: true
+  no_log: true
+  tags: [gitea]
+
+# --- Product path's repository reader (IDP-053 S5c) ------------------------------
+# `read:repository` only, for the forge adapter that proves a Gitea product's commits.
+# Not the reviewer's token: the receiver runs on GitHub, a different trust boundary
+# than PR-Agent's, and a leaked copy must not be able to write. Same account
+# (`gitea_reviewer_user`, D2), a distinct token name since Gitea refuses two of one name.
+
+- name: Mint the repo-reader token on the reviewer account
+  # Gated on the recorded secret being absent and `argv`, for the reasons the
+  # reviewer's mint task above records.
+  command:
+    argv:
+      - docker
+      - exec
+      - gitea
+      - su
+      - git
+      - -c
+      - >-
+        gitea admin user generate-access-token
+        --username {{ gitea_reviewer_user }}
+        --token-name kubelab-repo-reader
+        --scopes {{ gitea_repo_reader_scopes }}
+        --raw
+  register: _gitea_repo_reader_token
+  when: gitea_reviewer_user | length > 0 and not gitea_repo_reader_token
+  changed_when: _gitea_repo_reader_token.rc == 0
+  no_log: true
+  tags: [gitea]
+
+- name: Record the repo-reader token in SOPS
+  # Controller-side, over STDIN, never argv -- as the reviewer token's record task.
+  command: "{{ playbook_dir }}/../../../.venv/bin/toolkit secrets set apps.services.core.gitea.repo_reader_token --env {{ gitea_identity_env }} --stdin"
+  args:
+    stdin: "{{ _gitea_repo_reader_token.stdout }}"
+  delegate_to: localhost
+  become: false
+  when: gitea_reviewer_user | length > 0 and not gitea_repo_reader_token
   changed_when: true
   no_log: true
   tags: [gitea]

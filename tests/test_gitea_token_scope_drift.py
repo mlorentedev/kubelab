@@ -159,6 +159,7 @@ DECLARED = {
     "issue_reader": "read:issue",
     "issue_reader_staging": "read:issue",
     "registry_pull": "read:package",
+    "repo_reader": "read:repository",
     "agent": "write:issue,write:repository",
     "renovate": "read:organization,read:user,write:issue,write:repository",
 }
@@ -192,6 +193,7 @@ def _all_converged() -> dict[tuple[str, str], FakeResponse]:
                             4,
                         ),
                         _token(ROTATABLE_TOKENS["registry_pull"].token_name, DECLARED["registry_pull"].split(","), 5),
+                        _token(ROTATABLE_TOKENS["repo_reader"].token_name, DECLARED["repo_reader"].split(","), 6),
                     ],
                 ),
             ),
