@@ -513,14 +513,23 @@ HOLDER_GONE = "Remove the Renovate engine holder when the run is not enabled"
 
 
 def _prune_exempt_labels() -> set[str]:
-    """The label keys the maintenance container prune spares, in both of its copies."""
+    """The label keys EVERY maintenance container prune spares, in both of its copies.
+
+    Every invocation counts: one unfiltered prune takes the holder whatever the
+    others spare. Read per command, so a filter on a continuation line still counts.
+    """
     texts = (
         (MAINTENANCE / "templates/kubelab-maintenance.sh.j2").read_text(encoding="utf-8"),
         (MAINTENANCE / "tasks/main.yml").read_text(encoding="utf-8"),
     )
-    found = [set(re.findall(r'docker container prune[^\n]*--filter "label!=([^"=]+)"', text)) for text in texts]
-    assert all(found), "the container prune no longer spares a label: the holder below holds nothing"
-    return set.intersection(*found)
+    spared: list[set[str]] = []
+    for text in texts:
+        joined = re.sub(r"\\\n\s*", " ", text)  # shell continuations
+        commands = [line for line in joined.splitlines() if re.search(r"\bdocker\s+container\s+prune\b", line)]
+        commands = [line for line in commands if not line.lstrip().startswith("#")]
+        assert commands, "no container prune found: the parse no longer reads the maintenance"
+        spared += [set(re.findall(r"--filter\s+[\"']?label!=([^\"'=\s]+)", line)) for line in commands]
+    return set.intersection(*spared)
 
 
 def test_a_created_never_started_container_holds_the_engine_the_unit_runs() -> None:
@@ -568,6 +577,14 @@ def test_the_holder_is_not_in_the_forge_stacks_compose_project() -> None:
 
 
 def test_the_docker_reclaim_never_selects_the_holder() -> None:
-    from toolkit.features.docker_reclaim import BUILDER_PREFIX
+    # Run the reclaim's own planner on an old, stopped holder, rather than
+    # comparing a name to its prefix: whatever the selection becomes, this asks it.
+    from datetime import datetime, timedelta, timezone
 
-    assert not _task(HOLDER)["community.docker.docker_container"]["name"].startswith(BUILDER_PREFIX)
+    from toolkit.features.docker_reclaim import Container, plan_reclaim
+
+    now = datetime(2026, 11, 12, tzinfo=timezone.utc)
+    name = _task(HOLDER)["community.docker.docker_container"]["name"]
+    holder = Container(name=name, created=now - timedelta(days=365), running=False, volumes=())
+    plan = plan_reclaim([holder], [], now, 0, protected=frozenset({"unrelated"}))
+    assert holder not in plan.containers
