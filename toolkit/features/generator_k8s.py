@@ -249,7 +249,13 @@ class K8sGenerator(BaseGenerator):
                 logger.debug(f"Skipping {component}: missing image_name, domain, or port")
                 continue
 
-            version = self._find_var(env_vars, component, "VERSION") or "latest"
+            # No pin in this env means the app is not deployed there. The old fallback to `latest`
+            # put a registered app on a mutable tag in every overlay, prod included, where Argo CD
+            # deploys it the moment the registering PR merges (#3456, ADR-046 defect #1).
+            version = self._find_var(env_vars, component, "VERSION")
+            if not version:
+                logger.warning(f"Skipping {component} in {env}: apps.platform.{component}.version is not set")
+                continue
             health_path, readiness_path = self._health_paths(env_vars, component)
             enable_auth_val = self._find_var(env_vars, component, "ENABLE_AUTH")
             enable_auth = bool(enable_auth_val and enable_auth_val.lower() in ("true", "1", "yes"))
