@@ -17,7 +17,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/mlorentedev/kubelab/apps/api/internal/forge"
-	"github.com/mlorentedev/kubelab/apps/api/pkg/config"
 )
 
 // The console has its own host, which Authelia guards whole (CONSOLE-004 AC3).
@@ -122,15 +121,6 @@ func Live(model QueueReader, catalog *forge.Catalog) Deps {
 	}
 }
 
-// LiveDomain is the console's declared host, empty when none is.
-func LiveDomain() string {
-	conf, err := config.GetConfig()
-	if err != nil {
-		return ""
-	}
-	return conf.Forge.ConsoleDomain
-}
-
 // Usage records that `identity` opened the console at `at`, and reports whether it was
 // that identity's first visit of the day (ADR-066 A8). Nil records nothing.
 type Usage func(ctx context.Context, identity string, at time.Time) (bool, error)
@@ -147,6 +137,7 @@ func Register(r *gin.Engine, deps Deps, domain func() string, usage Usage) {
 		c.Data(http.StatusOK, "text/html; charset=utf-8", consolePage)
 	})
 	g.GET("/queue", func(c *gin.Context) { queueHandler(c, deps) })
+	registerWrites(g)
 	// The bare host opens the page until apps/console serves `/` (ADR-074 D5). A 302,
 	// not a 301: browsers keep a 301 indefinitely, and `/` will become the frontend's.
 	r.GET("/", onlyHost(domain), func(c *gin.Context) { c.Redirect(http.StatusFound, "/console/") })

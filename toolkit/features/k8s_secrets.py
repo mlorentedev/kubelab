@@ -161,6 +161,8 @@ SECRET_DEFINITIONS: list[SecretMapping] = [
             # Optional: the receiver answers 401 to every delivery without them.
             "FORGE_GITHUB_WEBHOOK_SECRET": "APPS_PLATFORM_API_FORGE_GITHUB_WEBHOOK_SECRET",
             "FORGE_GITEA_WEBHOOK_SECRET": "APPS_PLATFORM_API_FORGE_GITEA_WEBHOOK_SECRET",
+            # Optional: without it the create write accepts nobody (CONSOLE-004 AC3).
+            "FORGE_CREATE_TOKEN": "APPS_PLATFORM_API_FORGE_CREATE_TOKEN",
         },
     ),
     SecretMapping(
