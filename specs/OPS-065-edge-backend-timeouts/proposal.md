@@ -49,8 +49,8 @@ Traefik waits forever for a backend's response headers: `serversTransport.forwar
 - [ ] A test backend in staging that accepts connections and never answers is cut at the declared default bound, and the client gets the edge's error page within the bound plus a margin.
 - [ ] A route declared as an exception keeps its longer bound, shown by the same backend through that route.
 - [ ] `tests/` fails on a route with neither the default nor a declared exception, and on an exception that matches no route.
-- [ ] Headscale's handshake is shown to finish its headers (`101`) within the bound, from its access-log lines, and the VPN keeps working after the prod deploy (a node re-registers, MagicDNS resolves).
-- [ ] An ADR records the default, the exceptions with their measurements, `dialTimeout` and `idleConnTimeout`, and the duration-versus-count decision.
+- [ ] Headscale ships as a declared exception (ADR-076 D2), the VPN keeps working after the prod deploy (a node re-registers, MagicDNS resolves), and the exception is then lifted and a node re-registers under the default. Amended 2026-11-12: the access log cannot time the `101` (upgraded connections are logged with status `0` and their whole life), so the handshake is shown by a re-registration, not read from the log.
+- [x] An ADR records the default, the exceptions with their measurements, `dialTimeout` and `idleConnTimeout`, and the duration-versus-count decision.
 
 ## References
 

@@ -26,16 +26,19 @@ owner: manu
 > Draft order. The values, and so every task after "Measure", wait for the data.
 
 - [x] Collect: #3106 merged and applied in prod (`make provision NODE=vps ENV=prod TAGS=k3s`, dry run first)
-- [ ] [AC4] Read Headscale's access-log lines in prod: the `101` and the long upgraded connection. Blocks choosing the default: if the handshake's headers are not bounded by the `101`, Headscale gets an exception first
+- [x] ~~[AC4] Read Headscale's access-log lines in prod~~ superseded 2026-11-12: the log records upgraded connections with status `0` and their whole life, not the `101`. Headscale ships as an exception instead (ADR-076 D2) and AC4 is amended
 - [x] Measure: after seven or more days, the slow-request distribution per router from Loki, through a toolkit command, not by hand. It reports each router's request count beside the distribution, so a router with no slow requests reads as "no sample", not as "needs no exception" ✓ 2026-11-12 (`make edge-slow-routes`; figures in verification.md)
-- [ ] For each route with requests longer than the candidate bound: measure its time to first header directly, and list it only if its headers are late. The default is sized from these time-to-first-header figures, never from the access-log durations, which include the body
-- [ ] [AC5] ADR: default, exceptions with their measurements, `dialTimeout`, `idleConnTimeout`, duration versus count
-- [ ] [AC3] Write the failing coverage test: every route has the default or a declared exception, and every exception matches a route
-- [ ] [AC2] [AC3] Declare the exceptions in `common.yaml`; the generator emits the `ServersTransport` and the reference
-- [ ] [AC1] Write the stuck-backend fixture for staging and the test that it is cut at the bound
-- [ ] [AC1] Set the default in the `k3s_server` HelmChartConfig
+- [x] For each route with requests longer than the candidate bound: measure its time to first header directly, and list it only if its headers are late. The default is sized from these time-to-first-header figures, never from the access-log durations, which include the body ✓ 2026-11-12 (none listed; ADR-076 Context 1)
+- [x] [AC5] ADR: default, exceptions with their measurements, `dialTimeout`, `idleConnTimeout`, duration versus count ✓ 2026-11-12 (ADR-076, #3366)
+- [x] [AC3] Write the failing coverage test: every route has the default or a declared exception, and every exception matches a route ✓ 2026-11-12 (`tests/test_edge_backend_timeouts.py`)
+- [x] [AC2] [AC3] Declare the exceptions in `common.yaml` (`edge.backend_timeouts.exceptions`) ✓ 2026-11-12. Both routes that use one are hand-written overlay manifests, not generated, so the test holds each `ServersTransport` and its reference to the declaration instead of a generator emitting them
+- [x] [AC1] Write the stuck-backend fixture for staging ✓ 2026-11-12 (#3415)
+- [ ] [AC1] [AC2] e2e expectations: the default route answers the edge's 504 near the bound, `/exception` is still open past it
+- [x] Spoke RBAC writes `serverstransports` (#3422), then `make register-spoke ENV=staging` and `ENV=prod`; `can-i create serverstransports.traefik.io` answers `yes` in both ✓ 2026-11-12 (lesson-743)
+- [x] [AC1] Set the default in the `k3s_server` HelmChartConfig ✓ 2026-11-12
 - [ ] [AC1] [AC2] Staging: provision, the fixture is cut, an exception holds, `make test-e2e ENV=staging`
-- [ ] [AC4] Prod: dry run, apply, VPN check (re-register a node, MagicDNS), `make test-e2e ENV=prod`
+- [ ] [AC4] Prod (owner): dry run, apply, VPN check (re-register a node, MagicDNS), `make test-e2e ENV=prod`
+- [ ] [AC4] Lift the Headscale exception, deploy, and re-register a node under the default
 
 ## Closing
 
