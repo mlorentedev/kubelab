@@ -178,6 +178,15 @@ refusal. Run this after any `token_scopes` edit, and before trusting a 403 from 
 
 The check reports and stops. It never rotates, because a rotation opens the outage window above.
 
+## A provision stops on "Gitea holds ..., and this checkout's SOPS records none of them"
+
+The role found a named token in Gitea whose key this checkout's SOPS lacks. It no longer revokes such a token by default (#3428, lesson-742): another checkout may have minted it and recorded it there without merging.
+
+1. Look for an uncommitted SOPS change elsewhere: `git -C <checkout> status --short -- infra/config/secrets` in each worktree, and on other machines. If one holds the key, merge it and run the provision again from up-to-date master.
+2. Only if the value is truly lost (a record that failed after its mint, lesson-684), let the role revoke and re-mint:
+   `make provision NODE=bee ENV=prod TAGS=gitea EXTRA='gitea_revoke_unrecorded_tokens=true'`.
+   Then deliver the new value to every consumer its `rotate_note` in `SECRET_CATALOG` names.
+
 ## Verification
 
 ```
