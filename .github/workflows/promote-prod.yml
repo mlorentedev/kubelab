@@ -167,8 +167,8 @@ jobs:
           # private product's proof makes. The toolkit's `catalog_secret` reads this variable
           # before SOPS, so no age key reaches this runner. Only this step holds it; it is never
           # named in a `run:`. NOTE: that registry is reachable only over the tailnet and this job
-          # runs hosted, so a Gitea-registry product still cannot be promoted from here until a
-          # runner that reaches it is chosen (#2064); a public docker.io product needs no token.
+          # runs hosted, so a Gitea-registry product still cannot be promoted from here until the
+          # job joins the tailnet (#3447); a public docker.io product needs no token.
           APPS_SERVICES_CORE_GITEA_REGISTRY_PULL_TOKEN: ${{ secrets.APPS_SERVICES_CORE_GITEA_REGISTRY_PULL_TOKEN }}
           TOOLKIT: poetry run toolkit
         run: |
