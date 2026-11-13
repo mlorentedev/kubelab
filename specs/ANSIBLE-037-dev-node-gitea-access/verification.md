@@ -78,7 +78,7 @@ git@beelink.kubelab.internal: Permission denied (publickey).
 
 ### Not yet settled
 
-Nothing. AC6 was withdrawn on 2026-11-12 by owner decision on #1075 (agent forwarding is off fleet-wide; see the D1 amendment). Before that: R1, R2 and R3 are closed; `proposal.md`'s "Risks / open questions" holds no unresolved item blocking Part 1. R4 was a scheduling risk (both on-demand nodes powered), satisfied for these runs.
+No open risk. AC6 was withdrawn on 2026-11-12 by owner decision on #1075 (agent forwarding is off fleet-wide; see the D1 amendment). This section covers risks only: whether every acceptance criterion in `proposal.md` is met is decided by the independent review before archive, not here. On risks: R1, R2 and R3 are closed; `proposal.md`'s "Risks / open questions" holds no unresolved item blocking Part 1. R4 was a scheduling risk (both on-demand nodes powered), satisfied for these runs.
 
 ## Evidence
 
