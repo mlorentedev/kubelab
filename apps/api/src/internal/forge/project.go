@@ -87,12 +87,14 @@ func (p *Projector) backlog(ctx context.Context) {
 	if !p.lastBacklog.IsZero() && now.Sub(p.lastBacklog) < BacklogPeriod {
 		return
 	}
+	// Before the count, so a count that keeps failing is retried, and logged, once per
+	// period too, not on every run.
+	p.lastBacklog = now
 	depth, oldest, err := p.Log.Backlog(ctx)
 	if err != nil {
 		log.Printf("forge projection backlog: %v", err)
 		return
 	}
-	p.lastBacklog = now
 	age := 0.0
 	if !oldest.IsZero() {
 		age = now.Sub(oldest).Seconds()

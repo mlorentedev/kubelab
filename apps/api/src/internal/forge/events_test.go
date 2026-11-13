@@ -202,7 +202,8 @@ func TestProjectorStillProjectsWhenTheBacklogCannotBeCounted(t *testing.T) {
 	l := &fakeLog{projected: map[string]*forge.Item{}, backlogErr: errors.New("count failed"), pending: []forge.Event{
 		{Forge: "gitea", DeliveryID: "ok", Type: "issues", Payload: []byte(issuePayload)},
 	}}
-	p := forge.Projector{Log: l, Events: ev.logger()}
+	now := time.Date(2026, 11, 13, 1, 0, 0, 0, time.UTC)
+	p := forge.Projector{Log: l, Events: ev.logger(), Now: func() time.Time { return now }}
 	if err := p.Once(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -211,5 +212,13 @@ func TestProjectorStillProjectsWhenTheBacklogCannotBeCounted(t *testing.T) {
 	}
 	if got := ev.named(t, forge.EventProjectionBacklog); len(got) != 0 {
 		t.Fatalf("a failed count wrote %v", got)
+	}
+	// A count that keeps failing is retried once per period, not on every run.
+	now = now.Add(forge.ProjectPeriod)
+	if err := p.Once(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if l.backlogs != 1 {
+		t.Fatalf("backlog reads = %d within one period, want 1", l.backlogs)
 	}
 }
