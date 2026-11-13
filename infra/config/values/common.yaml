@@ -1319,6 +1319,12 @@ apps:
           # both clusters pull with it; `tests/test_gitea_registry_pull_token.py` ties
           # it to `REGISTRY_PULL_SCOPES`.
           registry_pull: "read:package"
+          # What the product path's forge adapter reads a Gitea product's repository
+          # with (IDP-053 S5c, D2), pinned by EQUALITY: commits, compare, raw files and
+          # tags are repository content and it never writes. A fifth token on the
+          # reviewer's account; `tests/test_gitea_repo_reader_token.py` ties it to
+          # `REPO_READER_SCOPES`.
+          repo_reader: "read:repository"
           # The agents' authoring account (AUTH-022), pinned by EQUALITY: an agent
           # opens pull requests (`write:repository`, for the branch and the PR) and
           # comments on issues and PRs (`write:issue`), and nothing reads `/user`.

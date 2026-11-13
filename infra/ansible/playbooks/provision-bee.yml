@@ -437,6 +437,10 @@
         # mint gate is read from that file's own store, where the record task writes.
         gitea_registry_pull_scopes: "{{ gitea_config.apps.services.core.gitea.token_scopes.registry_pull }}"
         gitea_registry_pull_token: "{{ gitea_registry_pull_secrets.apps.services.core.gitea.registry_pull_token | default('') }}"
+        # IDP-053 S5c -- a fifth token on the reviewer's account, read:repository only,
+        # for the product path's forge adapter. Minted and gated the same way.
+        gitea_repo_reader_scopes: "{{ gitea_config.apps.services.core.gitea.token_scopes.repo_reader }}"
+        gitea_repo_reader_token: "{{ gitea_secrets.apps.services.core.gitea.repo_reader_token | default('') }}"
         # AUTH-022 -- the agents' authoring account, a third machine identity
         # (ADR-062 D1 as amended 2026-11-03). Resolved and minted like the reviewer;
         # its write is granted per repository by the reconciler, never by a team.

@@ -119,6 +119,7 @@ rules:
     resources:
       - ingressroutes
       - middlewares
+      - serverstransports
       - tlsoptions
       - traefikservices
     verbs: ["create", "update", "patch", "delete"]
