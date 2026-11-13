@@ -1598,7 +1598,7 @@ def test_the_declared_webhooks_list_also_carries_the_pr_agent_hook() -> None:
 
 
 def test_each_declared_hook_names_its_own_secret_key() -> None:
-    """AC6: two SOPS keys, one per hook, never a shared default."""
+    """AC6: one SOPS key per hook, never a shared default (the console's is checked below)."""
     assert DECLARED_WEBHOOKS[0].secret_key == "apps.services.automation.n8n.forge_webhook_secret"
     assert DECLARED_WEBHOOKS[1].secret_key == "apps.services.automation.pr_agent.webhook_secret"
     assert DECLARED_WEBHOOKS[0].secret_key != DECLARED_WEBHOOKS[1].secret_key
@@ -1650,7 +1650,9 @@ def test_the_console_hook_carries_every_event_the_projector_reads() -> None:
     """
     source = (REPO_ROOT / "apps/api/src/internal/forge/project.go").read_text(encoding="utf-8")
     body = source.split("func ItemFromEvent", 1)[1].split("\n}\n", 1)[0]
-    projected = set(re.findall(r'case "([a-z_]+)":', body))
+    # Every quoted string in every case label, so a grouped `case "a", "b":` counts both.
+    labels = re.findall(r"case ([^:]+):", body)
+    projected = {name for label in labels for name in re.findall(r'"([a-z_]+)"', label)}
 
     assert projected, "no event types found in ItemFromEvent; the parse no longer matches the code"
     assert projected <= set(_console_hook().spec.events)
