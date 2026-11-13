@@ -13,9 +13,16 @@ const ProjectPeriod = 10 * time.Second
 
 const projectBatch = 50
 
+// BacklogPeriod bounds how often the projector writes its backlog line. It runs each
+// ProjectPeriod, and a line per run would outnumber everything else the API writes.
+const BacklogPeriod = time.Minute
+
 // EventLog is the projector's view of the store.
 type EventLog interface {
 	Pending(ctx context.Context, limit int) ([]Event, error)
+	// Backlog counts every delivery not yet projected and returns the oldest one's
+	// receipt time, zero when there is none. Pending is a batch and cannot count.
+	Backlog(ctx context.Context) (depth int, oldest time.Time, err error)
 	// Project writes the item, when there is one, and marks the delivery projected
 	// in one transaction, so a crash between the two cannot project it twice.
 	Project(ctx context.Context, e Event, item *Item) error
@@ -63,7 +70,37 @@ func ItemFromEvent(e Event) (*Item, error) {
 // Projector turns stored deliveries into items.
 type Projector struct {
 	Log    EventLog
-	Events *slog.Logger // nil writes JSON lines to stderr (events.go)
+	Events *slog.Logger     // nil writes JSON lines to stderr (events.go)
+	Now    func() time.Time // nil is time.Now
+
+	lastBacklog time.Time
+}
+
+// backlog writes the backlog line at most once per BacklogPeriod, an empty one included:
+// a line that only appeared with a backlog would make an idle queue and a stopped
+// projector look the same. A count that fails is logged and costs no projection.
+func (p *Projector) backlog(ctx context.Context) {
+	now := time.Now()
+	if p.Now != nil {
+		now = p.Now()
+	}
+	if !p.lastBacklog.IsZero() && now.Sub(p.lastBacklog) < BacklogPeriod {
+		return
+	}
+	// Before the count, so a count that keeps failing is retried, and logged, once per
+	// period too, not on every run.
+	p.lastBacklog = now
+	depth, oldest, err := p.Log.Backlog(ctx)
+	if err != nil {
+		log.Printf("forge projection backlog: %v", err)
+		return
+	}
+	age := 0.0
+	if !oldest.IsZero() {
+		age = now.Sub(oldest).Seconds()
+	}
+	emit(p.Events, slog.LevelInfo, EventProjectionBacklog,
+		slog.Int("depth", depth), slog.Float64("oldest_age_seconds", age))
 }
 
 // Once projects one batch. A delivery that cannot be read is marked projected and
@@ -88,6 +125,8 @@ func (p *Projector) Once(ctx context.Context) error {
 			}
 		}
 	}
+	// After the batch, so the line reports what this run left behind.
+	p.backlog(ctx)
 	return nil
 }
 
