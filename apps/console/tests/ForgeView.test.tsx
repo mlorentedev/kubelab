@@ -135,4 +135,27 @@ describe('ForgeView', () => {
     expect(screen.getByText('Two')).toBeTruthy();
     expect(screen.queryByText('Fresh')).toBeNull();
   });
+
+  it('reads one page at a time: a refresh landing during an append does not start a second read', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let release!: (r: Response) => void;
+    const f = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, type: 'basic', json: async () => page({ items: [item({ number: 1, title: 'One' })], total: 2, next: 'cur1' }) })
+      .mockReturnValueOnce(new Promise<Response>((r) => (release = r)));
+    vi.stubGlobal('fetch', f);
+    render(<ForgeView />);
+    await screen.findByText('One');
+    fireEvent.click(screen.getByRole('button', { name: 'Load more' }));
+    expect(f).toHaveBeenCalledTimes(2);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(REFRESH_MS);
+    });
+    expect(f).toHaveBeenCalledTimes(2);
+    await act(async () => {
+      release({ ok: true, status: 200, type: 'basic', json: async () => page({ items: [item({ number: 2, title: 'Two' })], total: 2, next: null }) } as unknown as Response);
+    });
+    await screen.findByText('Two');
+    expect(screen.getByText('One')).toBeTruthy();
+  });
 });
