@@ -505,7 +505,7 @@ def test_the_pull_also_runs_under_the_renovate_tag() -> None:
     assert "renovate" in _tasks()[0]["tags"]
 
 
-# --------------------------------------------------------------------------- the engine survives the daily prune (#3403)
+# --------------------------------------------------------------------------- the engine survives the prune (#3403)
 
 MAINTENANCE = REPO / "infra/ansible/roles/node_maintenance"
 HOLDER = "Hold the Renovate engine image against the daily image prune"
@@ -541,13 +541,14 @@ def test_a_created_never_started_container_holds_the_engine_the_unit_runs() -> N
 
 def test_the_holder_carries_the_label_the_container_prune_spares() -> None:
     labels = _task(HOLDER)["community.docker.docker_container"]["labels"]
-    assert _prune_exempt_labels() & set(labels), "the container prune would remove the holder, and the image prune its image"
+    assert _prune_exempt_labels() & set(labels), "the container prune would take the holder, the image prune its image"
 
 
 def test_the_holder_name_is_not_the_runs_name() -> None:
     # The wrapper `docker rm -f`s the run's name before each run.
     name = _task(HOLDER)["community.docker.docker_container"]["name"]
-    run_names = [v.partition("=")[2] for v in _unit("kubelab-renovate.service.j2")["Service"]["Environment"] if v.startswith("KUBELAB_RENOVATE_NAME=")]
+    environment = _unit("kubelab-renovate.service.j2")["Service"]["Environment"]
+    run_names = [v.partition("=")[2] for v in environment if v.startswith("KUBELAB_RENOVATE_NAME=")]
     assert run_names and name not in run_names
 
 
