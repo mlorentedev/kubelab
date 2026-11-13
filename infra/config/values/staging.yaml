@@ -52,7 +52,7 @@ apps:
       enable_blog: false
       enable_homelabs: false
       enable_contact: false
-      version: sha-d4a1683
+      version: sha-794d885
 
   # Third-party services
   services:
