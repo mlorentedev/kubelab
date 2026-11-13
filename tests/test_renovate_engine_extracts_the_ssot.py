@@ -5,11 +5,14 @@ a copy can match where Renovate does not: a pattern ending in `$` passed there
 while Renovate extracted nothing and reported success (lesson-691). This runs the
 pinned engine with `--platform=local --dry-run=extract` and compares its report
 with the dependencies read straight from the YAML, with no regex involved. A
-manager that stops matching, a file pattern that stops selecting its file, or a
-datasource Renovate refuses all show up here as a missing dependency.
+manager that stops matching, or a file pattern that stops selecting its file,
+shows up here as a missing dependency.
 
-Only what is declared is asserted. A dependency the engine finds beyond these is
-not a failure here.
+Extraction only: whether a datasource resolves is a lookup, which needs network
+and a token, and is not asserted here (without a token the GitHub-sourced deps
+come back with `skipReason: github-token-required`, by design). Only what is
+declared is asserted. A dependency the engine finds beyond these is not a
+failure here.
 """
 
 from __future__ import annotations
@@ -41,7 +44,7 @@ def _images(node: object) -> list[str]:
     found: list[str] = []
     if isinstance(node, dict):
         for key, value in node.items():
-            if key.endswith("image") and isinstance(value, str) and ":" in value:
+            if key.endswith("image") and isinstance(value, str):
                 found.append(value)
             found += _images(value)
     elif isinstance(node, list):
@@ -57,6 +60,8 @@ def _declared() -> dict[tuple[str, str, str, str], str]:
     ignored = set(json.loads((REPO / "renovate.json").read_text(encoding="utf-8")).get("ignoreDeps", []))
     want: dict[tuple[str, str, str, str], str] = {}
     for image in _images(common):
+        if ":" not in image.rsplit("/", 1)[-1]:
+            continue  # test_every_declared_image_carries_a_tag reports it
         name, tag = image.rsplit(":", 1)
         if name not in ignored:
             want[("regex", COMMON, name, tag)] = "an image in common.yaml"
@@ -98,6 +103,13 @@ def engine_report() -> Iterator[Path]:
             yield dry.run_extract(REPO, Path(out), image)
         except subprocess.TimeoutExpired as e:
             pytest.fail(f"the Renovate engine did not finish: {e}")
+
+
+def test_every_declared_image_carries_a_tag() -> None:
+    """An untagged image would drop out of the derivation below, and out of Renovate."""
+    common = _load(COMMON)
+    untagged = [image for image in _images(common) if ":" not in image.rsplit("/", 1)[-1]]
+    assert not untagged, f"images in {COMMON} with no tag, which nothing pins or updates: {untagged}"
 
 
 def test_the_declared_set_is_not_empty() -> None:

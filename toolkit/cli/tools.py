@@ -266,10 +266,16 @@ def renovate_dry_run() -> None:
     """
     import tempfile
 
+    import httpx
+
     from toolkit.features import renovate_dry_run as dry
 
     repo = Path.cwd()
-    image = dry.engine_image(repo / "infra" / "config" / "values" / "common.yaml")
+    try:
+        image = dry.engine_image(repo / "infra" / "config" / "values" / "common.yaml")
+    except httpx.HTTPError as e:
+        logger.error(f"cannot read the engine pin from ci-workflows: {e}")
+        raise typer.Exit(1) from e
     logger.info(f"engine: {image}")
     base = Path.home() / ".cache" / "kubelab-renovate"
     base.mkdir(parents=True, exist_ok=True)
