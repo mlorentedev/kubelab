@@ -185,7 +185,7 @@ def _pull(images: list[str], failing: str = "") -> subprocess.CompletedProcess:
     and fails for the image named `failing`."""
     shell = ansible_env(".").from_string(_tasks()["Pull"]["ansible.builtin.shell"]).render(image_pull_images=images)
     docker = f'docker() {{ echo "$*"; [ "$2" != {failing!r} ]; }}; '
-    return subprocess.run(["sh", "-c", docker + shell], capture_output=True, text=True, check=False)
+    return subprocess.run(["sh", "-c", docker + shell], capture_output=True, text=True, encoding="utf-8", check=False)
 
 
 def test_the_pull_fetches_each_listed_image_by_name_and_stops_at_a_failure():
@@ -427,32 +427,115 @@ def _command_text(task: dict) -> str:
     return text
 
 
-def _runs(task: dict) -> set[str]:
-    """The images a task fetches by running them: `docker run` unless `--pull never`,
-    and a buildx docker-container builder it bootstraps (BuildKit's image)."""
-    held = _JINJA.findall(_command_text(task))
+def _run_images(text: str) -> tuple[set[str], set[str]]:
+    """The images `docker run`/`create` in a command text names, as (fetched, held back):
+    a run fetches unless `--pull never`. A buildx docker-container builder it bootstraps
+    fetches BuildKit's image."""
+    held = _JINJA.findall(text)
     index = iter(range(len(held)))
-    text = _JINJA.sub(lambda _: f"\0{next(index)}\0", _command_text(task))  # a Jinja expression is one word
-    images = set()
+    text = _JINJA.sub(lambda _: f"\0{next(index)}\0", text)  # a Jinja expression is one word
+    fetched, never = set(), set()
     for args in _RUNS.findall(text):
         words = iter(args.split())
+        pulls = True
         for word in words:
             if word == "--pull":  # read its value once, as the `=` form carries it
                 word = f"--pull={next(words, '')}"
             if word == "--pull=never":
+                pulls = False
+            elif not word.startswith("-"):
+                (fetched if pulls else never).add(word)
                 break
-            if not word.startswith("-"):
-                images.add(word)
-                break
-            if word not in _FLAGS and "=" not in word:
+            elif word not in _FLAGS and "=" not in word:
                 next(words, None)
         else:
-            images.add(f"no image read in: {args.strip()}")
+            fetched.add(f"no image read in: {args.strip()}")
     for args in _BOOTSTRAPS.findall(text):
         # `--driver-opt` takes a comma-separated key=value list, so `image=` need not come first.
         image = re.search(r"--driver-opt[= ](?:[^\s,]*,)*image=([^\s,]+)", args)
-        images.add(image.group(1) if image else "moby/buildkit")
-    return {re.sub(r"\0(\d+)\0", lambda m: held[int(m.group(1))], image) for image in images}
+        fetched.add(image.group(1) if image else "moby/buildkit")
+
+    def restore(images: set[str]) -> set[str]:
+        return {re.sub(r"\0(\d+)\0", lambda m: held[int(m.group(1))], image) for image in images}
+
+    return restore(fetched), restore(never)
+
+
+def _runs(task: dict) -> set[str]:
+    """The images a task fetches by running them."""
+    return _run_images(_command_text(task))[0]
+
+
+class UnresolvedImage(ValueError):
+    """A `docker run` in a role's file whose image the guard cannot read back to a value."""
+
+
+_SHELL_VARIABLE = re.compile(r"^\$(?:(\w+)|\{(\w+)\})$")
+
+
+def _artifact_text(path: Path) -> str:
+    """A file as the shell or systemd reads it: no comment lines, a continued line joined."""
+    lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    return re.sub(r"\\\n\s*", " ", "\n".join(line for line in lines if not line.lstrip().startswith("#")))
+
+
+def _resolve(image: str, name: str, texts: dict[str, str]) -> str:
+    """A shell variable's value: the one line, in any file of the role, that sets it, whether
+    an env file (`NAME=v`), a unit (`Environment=NAME=v`) or the script itself."""
+    match = _SHELL_VARIABLE.match(image.strip("'\""))
+    if not match:
+        raise UnresolvedImage(f"{name}: cannot read the image from {image!r}")
+    variable = match.group(1) or match.group(2)
+    setting = re.compile(rf"^\s*(?:Environment=|export\s+)?[\"']?{variable}=(.*?)[\"']?\s*$", re.M)
+    values = {m.group(1).strip("'\"") for text in texts.values() for m in setting.finditer(text)}
+    if len(values) != 1:
+        raise UnresolvedImage(
+            f"{name}: ${variable} is set {'to ' + str(sorted(values)) if values else 'nowhere'} in the role"
+        )
+    return values.pop()
+
+
+def _artifact_runs(role: str, roles: Path = ROLES) -> list[tuple[str, str, bool]]:
+    """Each image a role's `files/` and `templates/` run, as (source, image, held back by
+    `--pull never`). A shell variable is read back to the value that sets it, and one that
+    cannot be raises: a skipped reference is a run the guard cannot see."""
+    texts = {
+        str(path.relative_to(roles / role)): _artifact_text(path)
+        for folder in ("files", "templates")
+        for path in sorted((roles / role / folder).rglob("*"))
+        if path.is_file()
+    }
+    found = []
+    for src, text in texts.items():
+        for held_back, images in zip((False, True), _run_images(text), strict=True):
+            for image in sorted(images):
+                found.append((src, image if "$" not in image else _resolve(image, src, texts), held_back))
+    return found
+
+
+def _listed_images() -> dict[str, str]:
+    """What each role's calls of the include pull, as one text."""
+    listed: dict[str, str] = {}
+    for role, args in _include_calls():
+        listed[role] = listed.get(role, "") + " " + str(args["image_pull_images"])
+    return listed
+
+
+def _is_listed(image: str, listed: str) -> bool:
+    """Whether the include's list names an image the way a role's file writes it: a Jinja
+    value `{{ a }}:{{ b }}` is the list's `a ~ ':' ~ b`, and a name matches whole."""
+    parts, pos, needle = [], 0, image
+    if _JINJA.search(image):
+        for m in _JINJA.finditer(image):
+            if not m.group().startswith("{{"):
+                raise UnresolvedImage(f"cannot match {image!r} against the include's list")
+            parts += [repr(image[pos : m.start()])] if image[pos : m.start()] else []
+            parts.append(m.group()[2:-2].strip())
+            pos = m.end()
+        parts += [repr(image[pos:])] if image[pos:] else []
+        needle = " ~ ".join(parts)
+    text = " ".join(listed.replace('"', "'").split())
+    return bool(re.search(rf"(?<![\w.]){re.escape(needle)}(?![\w.])", text))
 
 
 def test_no_role_on_a_node_behind_the_edge_runs_an_image_it_did_not_pull():
@@ -464,6 +547,8 @@ def test_no_role_on_a_node_behind_the_edge_runs_an_image_it_did_not_pull():
         for task in _task_list(yaml.safe_load(path.read_text(encoding="utf-8")))
         for image in _runs(task)
     }
+    # What a role installs runs images as well: a script, or a unit's ExecStart.
+    found |= {(role, image) for role in behind for _, image, never in _artifact_runs(role) if not never}
     assert found == set(UNSIZED_RUNS), "pull a new image through the include before it runs, or list it with its reason"
 
 
@@ -523,6 +608,88 @@ def test_the_run_guard_reads_the_image_however_the_command_is_written():
     assert _runs({"command": "docker run --some-new-flag a:1"}) == {"no image read in: --some-new-flag a:1"}
     assert _runs({"command": "docker buildx create --name multiarch --driver docker-container --use"}) == set()
     assert _runs({"command": "docker ps --filter name=run"}) == set()
+
+
+def _write(root: Path, files: dict[str, str]) -> Path:
+    for name, text in files.items():
+        (root / name).parent.mkdir(parents=True, exist_ok=True)
+        (root / name).write_text(text, encoding="utf-8")
+    return root
+
+
+def test_the_artifact_guard_reads_a_script_and_a_unit_the_role_installs(tmp_path):
+    """A `docker run` outside a task is still a run: the image is read from the file, and a
+    shell variable is followed back to the one line that sets it (the env file, a unit's
+    Environment=, or the script itself)."""
+    roles = _write(
+        tmp_path,
+        {
+            "r/files/run.sh": "#!/bin/sh\n# docker run --rm commented:1\n"
+            'exec docker run --rm \\\n  --pull never \\\n  "$ENGINE"\n',
+            "r/templates/engine.env.j2": "ENGINE={{ eng.image }}:{{ eng.version }}\nOTHER=x\n",
+            "r/templates/a.service.j2": "ExecStart=/usr/bin/docker run --rm ${PROBE} sh\nEnvironment=PROBE=busybox:1\n",
+            "r/templates/b.service.j2": "ExecStart=/usr/bin/docker run --pull=missing {{ img }}\n",
+            "r/templates/c.sh.j2": "IMG='local:2'\ndocker create $IMG\n",
+        },
+    )
+    assert sorted(_artifact_runs("r", roles)) == [
+        ("files/run.sh", "{{ eng.image }}:{{ eng.version }}", True),
+        ("templates/a.service.j2", "busybox:1", False),
+        ("templates/b.service.j2", "{{ img }}", False),
+        ("templates/c.sh.j2", "local:2", False),
+    ]
+
+
+def test_an_image_the_artifact_guard_cannot_resolve_fails_loudly(tmp_path):
+    """Skipping a reference it cannot read is the failure this guard exists to remove."""
+    for n, text in enumerate(
+        [
+            'docker run --rm "$MISSING"\n',  # set nowhere in the role
+            "A=x:1\nA=y:2\ndocker run --rm $A\n",  # set to two different values
+            'docker run --rm "${IMG:-busybox}"\n',  # a default is not a value the role declares
+            "docker run --rm $(cat /etc/image)\n",  # a command substitution
+        ]
+    ):
+        roles = _write(tmp_path / str(n), {"r/files/x.sh": text})
+        with pytest.raises(UnresolvedImage, match="files/x.sh"):
+            _artifact_runs("r", roles)
+
+
+def test_a_role_without_files_or_templates_runs_nothing_from_them(tmp_path):
+    assert _artifact_runs("r", _write(tmp_path, {"r/tasks/main.yml": "[]"})) == []
+
+
+def test_an_image_is_pulled_when_the_include_lists_it_however_the_list_is_written():
+    listed = "{{ [a_image] + ([eng.image ~ ':' ~ eng.version] if on | bool else []) }}"
+    assert _is_listed("{{ eng.image }}:{{ eng.version }}", listed)
+    assert _is_listed("{{ a_image }}", listed)
+    assert _is_listed("{{ a_image }}", '["{{ a_image }}"]')
+    assert not _is_listed("{{ eng.image }}:{{ eng.version }}", "{{ [a_image] }}")
+    assert not _is_listed("{{ image }}", "{{ [a_image, my_image] }}"), "a whole name, not a part of one"
+    assert _is_listed("busybox:1", "['busybox:1']")
+    assert not _is_listed("busybox:1", "['busybox:2']")
+
+
+def test_no_artifact_of_a_role_behind_the_edge_runs_an_image_it_did_not_pull():
+    """The unit and script a role installs run images too, and a task scan cannot see them.
+    An artifact that fetches by running is ledgered like a task; one that runs `--pull never`
+    needs the include to have pulled that image, or the run fails on a node that never did."""
+    behind = _roles_behind_the_edge()
+    runs = [(role, *run) for role in sorted(behind) for run in _artifact_runs(role)]  # (role, src, image, never)
+    renovate = (
+        "beelink_services",
+        "files/renovate-run.sh",
+        "{{ renovate_engine.image }}:{{ renovate_engine.version }}",
+        True,
+    )
+    assert renovate in runs, "the guard lost the artifact it was written for"
+    listed = _listed_images()
+    unpulled = [
+        f"{role}: {src} runs {image} with --pull never, and no call of the include pulls it"
+        for role, src, image, never in runs
+        if never and not _is_listed(image, listed.get(role, ""))
+    ]
+    assert not unpulled, unpulled
 
 
 def _include_calls() -> list[tuple[str, dict]]:

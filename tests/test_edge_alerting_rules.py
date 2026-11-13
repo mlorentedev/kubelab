@@ -152,7 +152,7 @@ def _probe(tmp_path: pathlib.Path, down: set[str]) -> list[dict]:
         "REACH_TIMEOUT": "1",
         "NC": str(bin_dir / "nc"),
     }
-    proc = subprocess.run(["sh", str(PROBE)], env=env, capture_output=True, text=True, timeout=30)
+    proc = subprocess.run(["sh", str(PROBE)], env=env, capture_output=True, text=True, encoding="utf-8", timeout=30)
     assert proc.returncode == 0, proc.stderr
     return [json.loads(line) for line in proc.stdout.splitlines() if line.strip()]
 

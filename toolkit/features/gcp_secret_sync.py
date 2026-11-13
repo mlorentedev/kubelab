@@ -104,6 +104,7 @@ def _gcloud(args: list[str], project_id: str, stdin_data: str | None = None) -> 
             input=stdin_data,
             capture_output=True,
             text=True,
+            encoding="utf-8",
             check=False,
         )
     except FileNotFoundError as exc:
@@ -176,6 +177,7 @@ def collect_spoke_items(config: dict[str, Any]) -> tuple[list[SyncItem], list[Sy
                 ],
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
                 check=False,
             )
             if proc.returncode != 0 or not proc.stdout.strip():

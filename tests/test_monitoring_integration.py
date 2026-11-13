@@ -133,6 +133,7 @@ def _start_kuma_container(name: str, command: tuple[str, ...] = ()) -> str:
             ["docker", "inspect", "--format", "{{.State.Health.Status}}", name],
             capture_output=True,
             text=True,
+            encoding="utf-8",
         )
         if probe.stdout.strip() == "healthy":
             _wait_until_socket_reachable(url)

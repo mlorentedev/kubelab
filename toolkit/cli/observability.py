@@ -227,6 +227,42 @@ def _grafana_client(env: str) -> Generator[GrafanaAlertClient, None, None]:
         yield GrafanaAlertClient(base_url=f"http://127.0.0.1:{port}", token=token)
 
 
+@app.command("slow-routes")
+def slow_routes_cmd(
+    env: Annotated[str, typer.Option("--env", "-e", help="Cluster whose edge log to read (staging|prod)")] = "prod",
+    days: Annotated[int, typer.Option("--days", help="Window in days; Loki keeps 7")] = 7,
+    bound: Annotated[
+        Optional[list[int]], typer.Option("--bound", help="Candidate bound in seconds; repeat for several")
+    ] = None,
+) -> None:
+    """Slow requests per route from the edge's access log, to size Traefik's backend bound (OPS-065)."""
+    import time
+
+    from toolkit.config.settings import settings
+    from toolkit.features import edge_slow_routes as esr
+    from toolkit.features.break_glass import render as render_overlay
+
+    bounds = sorted(bound or [10, 30, 60])
+    window = f"{days}d"
+    floor = esr.logged_from_ns(settings.project_root)
+    routes = esr.ingressroutes(render_overlay(env, settings.project_root))
+    now = time.time_ns()
+    day_ns = 86_400 * 10**9
+    try:
+        with _loki_client(env) as client:
+            results = {k: client.query_instant(q, now) for k, q in esr.queries(window, bounds, floor).items()}
+            per_day = []
+            for back in range(days - 1, -1, -1):
+                at = now - back * day_ns
+                series = client.query_instant(esr.day_query(), at)
+                stamp = time.strftime("%Y-%m-%dT%H:%MZ", time.gmtime(at / 1e9))
+                per_day.append((stamp, int(float(series[0]["value"][1])) if series else 0))
+    except LogsUnavailableError as exc:
+        typer.echo(f"✗ Could not ask Loki: {exc}", err=True)
+        raise typer.Exit(1) from exc
+    typer.echo(esr.render(esr.summarize(results, routes, bounds), window, bounds, floor, per_day), nl=False)
+
+
 @app.command("alerts")
 def alerts_cmd(
     env: Annotated[

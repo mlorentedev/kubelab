@@ -21,7 +21,11 @@ ACE2 = COMMON["networking"]["nodes"]["ace2"]
 
 def _prod() -> list[dict]:
     out = subprocess.run(
-        ["kubectl", "kustomize", str(REPO / "infra/k8s/overlays/prod")], check=True, capture_output=True, text=True
+        ["kubectl", "kustomize", str(REPO / "infra/k8s/overlays/prod")],
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
     ).stdout
     return [d for d in yaml.safe_load_all(out) if d]
 

@@ -411,7 +411,9 @@ def _run_read(containers: list[dict[str, Any]], tmp_path: Path) -> tuple[int, st
     stub.write_text(DOCKER_STUB, encoding="utf-8")
     stub.chmod(0o755)
     env = {**os.environ, "PATH": f"{tmp_path}:{os.environ['PATH']}", "STUB_CONTAINERS": json.dumps(containers)}
-    result = subprocess.run(["/bin/sh", "-c", command], capture_output=True, text=True, env=env, check=False)
+    result = subprocess.run(
+        ["/bin/sh", "-c", command], capture_output=True, text=True, encoding="utf-8", env=env, check=False
+    )
     return result.returncode, result.stdout
 
 

@@ -42,6 +42,10 @@ EXEMPT = {
     "backup032-r2-backup-shrink": (
         "a 9h window compares consecutive 6h probes; watcher silence pages through obs015-r2-backup-health"
     ),
+    "console004-github-source-stale": (
+        "a Deployment emitter, not a CronJob: the api reads every source each 10 minutes, so the "
+        "30m window holds three full passes (tests/test_forge_freshness_alert.py, #3387)"
+    ),
 }
 
 _UNIT_MINUTES = {"s": 1 / 60, "m": 1.0, "h": 60.0, "d": 1440.0}

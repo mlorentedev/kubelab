@@ -89,6 +89,7 @@ def _run(tmp_path: Path, module: str, extra: dict) -> subprocess.CompletedProces
         cwd=ANSIBLE_DIR,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
     )
 

@@ -85,6 +85,7 @@ def _kustomize(path: str) -> list[dict]:
         ["kubectl", "kustomize", str(REPO_ROOT / path)],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
         timeout=120,
     )
@@ -128,8 +129,12 @@ def _without_tier(policy: dict) -> dict:
     in the comparison.
     """
     from tests.test_backup_check_budget import _check_budget_rule
+    from tests.test_forge_freshness_alert import GITEA_UID, _rule
 
-    pinned = {_check_budget_rule()["title"]: "apprise-log"}  # BACKUP-081: never a page
+    pinned = {
+        _check_budget_rule()["title"]: "apprise-log",  # BACKUP-081: never a page
+        _rule(GITEA_UID)["title"]: "apprise-log",  # #3387: the on-demand Beelink must not page
+    }
     tier = policy["receiver"]
 
     def _strip(route: dict) -> dict:

@@ -77,7 +77,7 @@ def _commands() -> dict[tuple[str, ...], list[tuple[str, str]]]:
 
 def _collect(args: tuple[str, ...]) -> tuple[int, str]:
     command = [sys.executable, "-m", "pytest", "--collect-only", "-qq", "--no-cov", "-p", "no:cacheprovider", *args]
-    run = subprocess.run(command, cwd=REPO, capture_output=True, text=True, check=False)
+    run = subprocess.run(command, cwd=REPO, capture_output=True, text=True, encoding="utf-8", check=False)
     return run.returncode, run.stdout + run.stderr
 
 

@@ -36,6 +36,7 @@ def _kustomize(env: str) -> list[dict]:
         ["kubectl", "kustomize", str(REPO / "infra/k8s/overlays" / env)],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
         timeout=120,
     )

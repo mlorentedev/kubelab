@@ -175,8 +175,17 @@ def _node_row(a: dict[str, Any], b: dict[str, Any]) -> dict[str, Any]:
         "softirq_cores": round(softirq / elapsed * ncpu, 2),
         "conntrack": b["conntrack"],
     }
-    per_cpu = [_busy(a["cpus"][n], b["cpus"][n]) for n in b["cpus"] if n != "cpu" and n in a["cpus"]]
-    row["max_cpu_busy_pct"] = round(max((100 * u / e for e, u, _ in per_cpu if e > 0), default=0.0), 1)
+    per_cpu = {n: _busy(a["cpus"][n], b["cpus"][n]) for n in b["cpus"] if n != "cpu" and n in a["cpus"]}
+    shares = {n: (100 * u / e, 100 * s / e) for n, (e, u, s) in per_cpu.items() if e > 0}
+    if shares:
+        # The busiest CPU's own softirq tells a network queue on one core from work spread
+        # across the node, which the node-wide softirq cannot (#3308).
+        name = max(shares, key=lambda n: shares[n][0])
+        row["max_cpu"] = name
+        row["max_cpu_busy_pct"] = round(shares[name][0], 1)
+        row["max_cpu_softirq_pct"] = round(shares[name][1], 1)
+    else:
+        row["max_cpu_busy_pct"] = 0.0
     # The cgroups divide by the wall time the kernel counted between the two reads, not by the
     # sampler's stamps: those are taken before an ssh read that a saturated node answers 3 to 8 s
     # late, by varying amounts, which put 5.56 cores of Traefik on a 4-core node (#3295).

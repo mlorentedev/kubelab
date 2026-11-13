@@ -50,8 +50,6 @@ help:
 	@echo "  make secrets-audit      Audit secrets across all environments"
 	@echo "  make acme-token-scope   Ask Cloudflare what the ACME DNS-01 token may do (read-only)"
 	@echo "  make dev-full-reset     Full teardown + rebuild + restart"
-	@echo "  make dev-app APP=x      Start Astro app dev server (site)"
-	@echo "  make build-app APP=x    Build Astro app (static output)"
 	@echo ""
 	@echo "Infrastructure (Ansible):"
 	@echo "  make provision NODE=x ENV=y  Provision a node (NODE=ace1|ace2|aws1|bee|rpi3|rpi4|jetson|vps, ENV=staging|prod|hub) [TAGS=tag1,tag2] [EXTRA='k=v']"
@@ -163,7 +161,12 @@ setup-python:
 
 .PHONY: setup-poetry
 setup-poetry:
-	@python3 -m pip install --upgrade poetry >/dev/null 2>&1
+	@# Never pip-install Poetry into python3: on a host whose python3 belongs to a
+	@# version manager it shadowed the isolated copy, and the copy it left had no
+	@# xattr, so every new worktree's first init failed (#3399).
+	@command -v $(POETRY) >/dev/null 2>&1 || { \
+		echo "Poetry not found. Install it in its own environment: uv tool install poetry (or pipx install poetry)" >&2; \
+		exit 1; }
 	@$(POETRY) config virtualenvs.create true
 	@$(POETRY) config virtualenvs.in-project true
 
@@ -1906,6 +1909,12 @@ backup-escrow-check:
 backup-drill-postgres:
 	@$(TOOLKIT) backup drill-postgres --env $(or $(filter staging prod,$(ENV)),prod)
 
+# ADR-066 A8 (#3341): how many days the console was opened in the best 14-day window,
+# read from `console_usage` in a READ ONLY transaction. Prints identities and dates only.
+.PHONY: console-usage
+console-usage: ## Report the A8 console usage gate (ENV=prod by default)
+	@$(TOOLKIT) console usage --env $(or $(filter staging prod,$(ENV)),prod)
+
 # Restore the newest Headscale capture from R2 into a scratch container with no
 # network and check the database, the server keys and every node against live
 # (BACKUP-067). Needs docker, SSH to the VPS and `sudo -n` there to hash the
@@ -2016,6 +2025,14 @@ alerts:
 	$(eval _ENV := $(if $(filter staging prod hub,$(ENV)),$(ENV),prod))
 	@$(TOOLKIT) obs alerts --env $(_ENV)
 
+# Slow requests per route from the K3s edge's access log, to size the bound on a
+# backend's response headers (OPS-065, #3076). Prod by default: it is the traffic
+# the bound will cut. BOUNDS is a space-separated list of candidate seconds.
+.PHONY: edge-slow-routes
+edge-slow-routes: ## Report slow requests per route from the edge access log
+	$(eval _ENV := $(if $(filter staging prod,$(ENV)),$(ENV),prod))
+	@$(TOOLKIT) obs slow-routes --env $(_ENV) $(if $(DAYS),--days $(DAYS)) $(foreach b,$(BOUNDS),--bound $(b))
+
 # Say whether the lab edge's uplink is up, behind a portal, or dead (NET-005 AC5).
 # Reaches the edge over its LAN address, so it answers from the lab switch or the
 # lab Wi-Fi while the tailnet is down with the uplink. make exits 2 for any failure;
@@ -2042,8 +2059,8 @@ edge-soak: ## Read the edge's uplink soak: 48 h of this boot with no adapter res
 # rate limiter (OPS-054). Staging only: the toolkit refuses any other ENV.
 # docs/runbooks/load-test.md
 .PHONY: load-test load-test-clear
-load-test: ## Measure staging's capacity with k6 on ace2 (ENV=staging) [REPEATS=3 SECONDS=60 MAX_RATE=6400 MIN_RATE=0 ACCEPT_ENCODING= SAMPLE_SECONDS=2 WARMUP_SECONDS=30]
-	@$(TOOLKIT) infra load-test run --env $(ENV) $(if $(REPEATS),--repeats $(REPEATS)) $(if $(SECONDS),--seconds $(SECONDS)) $(if $(MAX_RATE),--max-rate $(MAX_RATE)) $(if $(MIN_RATE),--min-rate $(MIN_RATE)) $(if $(ACCEPT_ENCODING),--accept-encoding $(ACCEPT_ENCODING)) $(if $(SAMPLE_SECONDS),--sample-seconds $(SAMPLE_SECONDS)) $(if $(WARMUP_SECONDS),--warmup-seconds $(WARMUP_SECONDS))
+load-test: ## Measure staging's capacity with k6 on ace2 (ENV=staging) [REPEATS=3 SECONDS=60 MAX_RATE=6400 MIN_RATE=0 ACCEPT_ENCODING= SAMPLE_SECONDS=2 WARMUP_SECONDS=30 MAX_VUS=]
+	@$(TOOLKIT) infra load-test run --env $(ENV) $(if $(REPEATS),--repeats $(REPEATS)) $(if $(SECONDS),--seconds $(SECONDS)) $(if $(MAX_RATE),--max-rate $(MAX_RATE)) $(if $(MIN_RATE),--min-rate $(MIN_RATE)) $(if $(ACCEPT_ENCODING),--accept-encoding $(ACCEPT_ENCODING)) $(if $(SAMPLE_SECONDS),--sample-seconds $(SAMPLE_SECONDS)) $(if $(WARMUP_SECONDS),--warmup-seconds $(WARMUP_SECONDS)) $(if $(MAX_VUS),--max-vus $(MAX_VUS))
 
 load-test-clear: ## Remove the limiter-bypass route a dead load test left in staging (ENV=staging)
 	@$(TOOLKIT) infra load-test clear --env $(ENV)

@@ -814,6 +814,30 @@ SECRET_CATALOG: list[SecretSpec] = [
         envs=("prod", "staging"),
     ),
     SecretSpec(
+        key_path="apps.services.core.gitea.registry_pull_token",
+        description=(
+            "Read-only Gitea API token on the reviewer's account (apps.auth.identities.reviewer); "
+            "read:package, rendered into the image pull Secret a private product's Deployment names "
+            "(IDP-053 S2c)"
+        ),
+        # EXTERNAL for the reason `bot_token` gives: only Gitea honours what it mints.
+        kind=SecretKind.EXTERNAL,
+        services=("gitea", "image_pull"),
+        # NO `forge_actions`: that field writes Gitea Actions secrets, and the cluster reads this
+        # value (through `apply-secrets`), CI never does.
+        rotate_note=(
+            "Stored in common.enc.yaml, because both clusters pull with it; `envs` is the audit dimension. "
+            "`make gitea-rotate-token TOKEN=registry_pull ENV=prod APPLY=1` (the env stays prod, the Gitea "
+            "that minted it) revokes, then clears the key in common's file. Then `make provision NODE=bee "
+            "ENV=prod TAGS=gitea` to re-mint, then `make apply-secrets ENV=staging` and `ENV=prod` so each "
+            "cluster's `pull-<host-slug>` Secret carries the new value. The mint task is gated on this key "
+            "being absent; never mint a second token by hand."
+        ),
+        # NEVER, for the reason measured on `bot_token`: Gitea's token API has no expiry field.
+        expiry=Expiry.NEVER,
+        envs=("staging", "prod"),
+    ),
+    SecretSpec(
         key_path="apps.services.core.gitea.repo_reader_token",
         description=(
             "Read-only Gitea API token on the reviewer's account (apps.auth.identities.reviewer); "

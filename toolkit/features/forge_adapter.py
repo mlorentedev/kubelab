@@ -46,6 +46,15 @@ class ForgeError(Exception):
     """
 
 
+class ForgeReadError(ForgeError):
+    """The forge did not answer the read: an error status, not an answer that says no.
+
+    It is a ``ForgeError`` for the callers that refuse either way. The deploy-shape judge
+    tells them apart: an answer that disproves a PR is ``not-mechanical``, a read that
+    failed proves nothing about it and is ``unknown`` (#3288), as on the GitHub path.
+    """
+
+
 @runtime_checkable
 class ForgeAdapter(Protocol):
     """What the product path asks of a product's repository, whichever forge hosts it."""
@@ -76,7 +85,7 @@ class ForgeAdapter(Protocol):
 
 def run_gh(*args: str) -> subprocess.CompletedProcess[str]:
     try:
-        return subprocess.run(["gh", *args], capture_output=True, text=True, check=False)  # noqa: S603, S607
+        return subprocess.run(["gh", *args], capture_output=True, text=True, encoding="utf-8", check=False)  # noqa: S603, S607
     except FileNotFoundError:
         raise ContractError(
             "the gh CLI is not installed", "the product's repository is read through it", "install gh and log in"
@@ -152,7 +161,7 @@ class GiteaForge:
         try:
             return call(self._owner, self._repo, *args)
         except GiteaError as e:
-            raise ForgeError(str(e)) from None
+            raise ForgeReadError(str(e)) from None
 
     def resolve_commit(self, short: str) -> str:
         if len(short) < _GITEA_MIN_SHORT:

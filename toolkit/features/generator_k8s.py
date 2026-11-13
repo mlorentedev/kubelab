@@ -8,7 +8,7 @@ from toolkit.core.logging import logger
 from toolkit.core.templating import create_renderer
 from toolkit.features.configuration import ConfigurationManager
 from toolkit.features.generator_base import BaseGenerator
-from toolkit.features.k8s_secrets import SECRET_DEFINITIONS
+from toolkit.features.k8s_secrets import SECRET_DEFINITIONS, pull_secret_name
 from toolkit.features.product_registry import platform_apps, product
 
 
@@ -255,9 +255,13 @@ class K8sGenerator(BaseGenerator):
             enable_auth = bool(enable_auth_val and enable_auth_val.lower() in ("true", "1", "yes"))
 
             # The registry is the product's own (IDP-053 D4); only an entry that names none uses the platform's.
-            registry = product(component).image_registry or default_registry
+            entry = product(component)
+            registry = entry.image_registry or default_registry
             image = f"{registry}/{image_name}:{version}"
             image_pull_policy = self._resolve_pull_policy(version)
+            # Only a private entry names the Secret `apply-secrets` renders for its registry host (D6,
+            # `pull_secret_mappings`); a registry host alone does not make an image private.
+            image_pull_secret = pull_secret_name(entry.image_host) if entry.private and entry.image_host else None
 
             # ConfigMap env vars (non-secret, non-metadata)
             app_env_vars = self._extract_app_env_vars(env_vars, component)
@@ -277,6 +281,7 @@ class K8sGenerator(BaseGenerator):
                     "name": component,
                     "image": image,
                     "image_pull_policy": image_pull_policy,
+                    "image_pull_secret": image_pull_secret,
                     "port": int(port),
                     "domain": domain,
                     "health_path": health_path,

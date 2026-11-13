@@ -48,13 +48,13 @@ Stream = Callable[..., int]
 
 
 def _git(argv: list[str], *, env: Optional[dict[str, str]] = None) -> tuple[int, str, str]:
-    proc = subprocess.run(argv, capture_output=True, text=True, check=False)
+    proc = subprocess.run(argv, capture_output=True, text=True, encoding="utf-8", check=False)
     return proc.returncode, proc.stdout, proc.stderr
 
 
 def _stream(argv: list[str], *, stdin: str) -> int:
     """Run with `stdin` as input and the output straight to this terminal, as a local drill prints it."""
-    return subprocess.run(argv, input=stdin, text=True, check=False).returncode
+    return subprocess.run(argv, input=stdin, text=True, encoding="utf-8", check=False).returncode
 
 
 def module_for(drill: str) -> Any:

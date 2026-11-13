@@ -467,6 +467,7 @@ def test_only_rotate_1_rotates(rotate: str, expected: bool) -> None:
         ["make", "-n", "-C", str(REPO), "backup-mint-node-tokens", "ENV=prod", f"ROTATE={rotate}"],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=True,
     ).stdout
     line = next(ln for ln in out.splitlines() if "mint-node-tokens" in ln)
@@ -481,6 +482,7 @@ def test_only_watcher_1_limits_the_mint_to_the_watcher(watcher: str, expected: b
         ["make", "-n", "-C", str(REPO), "backup-mint-node-tokens", "ENV=prod", f"WATCHER={watcher}"],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=True,
     ).stdout
     line = next(ln for ln in out.splitlines() if "mint-node-tokens" in ln)

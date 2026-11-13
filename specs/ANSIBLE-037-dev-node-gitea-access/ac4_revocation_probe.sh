@@ -14,7 +14,10 @@
 # does NOT sleep between the DELETE and the retry. If that ever changes, the
 # fix is an explicit wait here, not a longer one everywhere.
 #
-# CREDENTIAL HANDLING: the bot token reaches curl through `--config` on stdin,
+# Since the D1 amendment (2026-11-12, #1075) the key is on the agents' account
+# and the superadmin manages it through the admin API, as the role does.
+#
+# CREDENTIAL HANDLING: the superadmin password reaches curl through `--config` on stdin,
 # never `-H` (which is world-readable in ps) and never a file. Never echoed.
 # `set -x` must NOT be added.
 #
@@ -29,7 +32,11 @@ KEY_TITLE="${KEY_TITLE:-kubelab-${ACE2}-dev-node}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 api() {
-  printf 'header = "Authorization: token %s"\n' "${TOKEN}" | curl -s --config - "$@"
+  printf 'user = "%s:%s"\n' "${ADMIN_USER}" "${ADMIN_PASSWORD}" | curl -s --config - "$@"
+}
+
+identity() {
+  (cd "${REPO_ROOT}" && python3 -c "import sys, yaml; print(yaml.safe_load(open('infra/config/values/common.yaml'))['apps']['auth']['identities'][sys.argv[1]])" "$1")
 }
 
 # The node's own key, used from the node. The banner is the verdict: a
@@ -43,10 +50,12 @@ echo "=== AC4 revocation drill — $(date -u +%FT%TZ) ==="
 echo "node: ${ACE2}   key title: ${KEY_TITLE}"
 echo
 
-TOKEN="$(cd "${REPO_ROOT}" && poetry run toolkit secrets show \
-  apps.services.core.gitea.bot_token --env prod 2>/dev/null)"
-if [ -z "${TOKEN}" ]; then
-  echo "FATAL: the bot token is unreadable in prod SOPS."
+AGENT="$(identity agent)"
+ADMIN_USER="$(identity superadmin)"
+ADMIN_PASSWORD="$(cd "${REPO_ROOT}" && poetry run toolkit secrets show \
+  apps.services.core.gitea.admin_password --env prod 2>/dev/null)"
+if [ -z "${ADMIN_PASSWORD}" ]; then
+  echo "FATAL: the superadmin password is unreadable in prod SOPS."
   exit 1
 fi
 
@@ -54,13 +63,13 @@ echo "--- [1/5] baseline: the node's access works ---"
 before="$(node_access)"
 echo "${before}"
 case "${before}" in
-  *"successfully authenticated"*) echo "OK — provisioned access is live" ;;
+  *"Hi there, ${AGENT}!"*) echo "OK — provisioned access is live, as ${AGENT}" ;;
   *) echo "FAIL — no working access to revoke; provision the node first."; exit 1 ;;
 esac
 
 echo
 echo "--- [2/5] find this node's key by title ---"
-KEY_ID="$(api "${GITEA_API}/user/keys" | python3 -c '
+KEY_ID="$(api "${GITEA_API}/users/${AGENT}/keys" | python3 -c '
 import json, sys
 title = sys.argv[1]
 try:
@@ -71,15 +80,15 @@ for k in keys if isinstance(keys, list) else []:
     if k.get("title") == title:
         print(k["id"]); break' "${KEY_TITLE}")"
 if [ -z "${KEY_ID}" ]; then
-  echo "FAIL — no key titled '${KEY_TITLE}' on the machine account."
+  echo "FAIL — no key titled '${KEY_TITLE}' on ${AGENT}'s account."
   exit 1
 fi
 echo "key id=${KEY_ID}"
 
 echo
 echo "--- [3/5] revoke it, and retry with no wait (R3: effective in <1s) ---"
-api -o /dev/null -w "DELETE /user/keys/${KEY_ID} -> %{http_code}\n" \
-  -X DELETE "${GITEA_API}/user/keys/${KEY_ID}"
+api -o /dev/null -w "DELETE /admin/users/${AGENT}/keys/${KEY_ID} -> %{http_code}\n" \
+  -X DELETE "${GITEA_API}/admin/users/${AGENT}/keys/${KEY_ID}"
 after_revoke="$(node_access)"
 echo "${after_revoke}"
 case "${after_revoke}" in
@@ -91,7 +100,7 @@ echo
 echo "--- [4/5] re-provision to restore it ---"
 # The role re-registers because its idempotence key is the KEY MATERIAL: the
 # node's keypair still exists, the account no longer lists it, so the POST runs.
-(cd "${REPO_ROOT}" && make provision NODE="${ACE2}" ENV=staging TAGS=dev_node) \
+(cd "${REPO_ROOT}" && make provision NODE="${ACE2}" ENV=staging TAGS=gitea) \
   | tail -5
 
 echo
@@ -99,6 +108,6 @@ echo "--- [5/5] access is restored ---"
 restored="$(node_access)"
 echo "${restored}"
 case "${restored}" in
-  *"successfully authenticated"*) echo "PASS — both halves demonstrated" ;;
+  *"Hi there, ${AGENT}!"*) echo "PASS — both halves demonstrated" ;;
   *) echo "FAIL — re-provisioning did not restore access."; exit 1 ;;
 esac

@@ -24,6 +24,7 @@ def run(
             env=env,
             capture_output=capture_output,
             text=True,
+            encoding="utf-8",
             check=check,
         )
 
@@ -50,7 +51,7 @@ def run_list(
 
     try:
         if stream_output:
-            result = subprocess.run(command, cwd=cwd, env=env, text=True, check=check)
+            result = subprocess.run(command, cwd=cwd, env=env, text=True, encoding="utf-8", check=check)
             return subprocess.CompletedProcess(command, result.returncode if result else 0, "", "")
         else:
             result = subprocess.run(
@@ -59,6 +60,7 @@ def run_list(
                 env=env,
                 capture_output=capture_output,
                 text=True,
+                encoding="utf-8",
                 check=check,
             )
 

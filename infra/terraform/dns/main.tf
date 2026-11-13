@@ -43,12 +43,15 @@ locals {
 
   # Node-name -> Tailscale IP, consumed by services.json's optional "target"
   # field. Mirrors networking.nodes.<name>.tailscale_ip in
-  # infra/config/values/common.yaml — add an entry here only when a service
-  # record actually targets that node (tailnet IPs are not stable across
-  # re-enrollment, e.g. aws1 moved .4 -> .7, so this map is the one place
-  # that needs updating, not services.json itself).
+  # infra/config/values/common.yaml, and networking.vps.tailscale_ip for the
+  # `vps` key (the VPS is not under `nodes`). Add an entry here only when a
+  # service record actually targets that node (tailnet IPs are not stable
+  # across re-enrollment, e.g. aws1 moved .4 -> .7, so this map is the one
+  # place that needs updating, not services.json itself);
+  # tests/test_dns_node_tailscale_ips.py fails when it drifts from common.yaml.
   node_tailscale_ips = {
     ace1 = "100.64.0.11"
+    vps  = "100.64.0.2"
   }
 
   # A service's record content: its target node's Tailscale IP if "target"

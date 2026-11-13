@@ -263,7 +263,11 @@ def test_the_prefs_leave_the_node_as_three_fields_and_no_key() -> None:
         "ControlURL": "https://vpn.example",
     }
     result = subprocess.run(
-        [sys.executable, "-I", "-c", _prefs_filter()], input=json.dumps(prefs), capture_output=True, text=True
+        [sys.executable, "-I", "-c", _prefs_filter()],
+        input=json.dumps(prefs),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
     )
     assert result.returncode == 0, result.stderr
     assert json.loads(result.stdout) == {

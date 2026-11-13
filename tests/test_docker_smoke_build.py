@@ -26,8 +26,8 @@ from typing import Any
 import pytest
 import yaml
 
-from tests.conftest import system_path
 from tests.ansible_jinja import ansible_env, task_runs
+from tests.conftest import system_path
 
 REPO = Path(__file__).resolve().parents[1]
 ROLE = REPO / "infra/ansible/roles/docker"
@@ -109,6 +109,7 @@ def _run(tmp_path: Path, behaviour: str, script: str) -> subprocess.CompletedPro
         stdin=subprocess.DEVNULL,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=30,
         check=False,
     )
@@ -135,7 +136,9 @@ def test_the_build_holds_its_session_past_the_healthcheck_lines(tmp_path: Path) 
     dockerfile = (tmp_path / "Dockerfile").read_text(encoding="utf-8")
     assert dockerfile.startswith(f"FROM {DEFAULTS['docker_smoke_build_image']}\n"), dockerfile
     sleep = re.search(r"^RUN sleep (\d+)$", dockerfile, re.M)
-    assert sleep and SESSION_HEALTHCHECK_SECONDS < int(sleep[1]) < DEFAULTS["docker_smoke_build_timeout_seconds"], dockerfile
+    assert sleep and SESSION_HEALTHCHECK_SECONDS < int(sleep[1]) < DEFAULTS["docker_smoke_build_timeout_seconds"], (
+        dockerfile
+    )
     args = (tmp_path / "args").read_text(encoding="utf-8").split()
     # A cached step would finish at once and never hold a session open.
     assert "--no-cache" in args

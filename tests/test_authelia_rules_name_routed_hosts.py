@@ -32,6 +32,7 @@ def _routed_hosts(env: str) -> set[str]:
         ["kubectl", "kustomize", str(PROJECT_ROOT / "infra/k8s/overlays" / env)],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=True,
     ).stdout
     return set(re.findall(r"Host\(`([^`]+)`\)", out))

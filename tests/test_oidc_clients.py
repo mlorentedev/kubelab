@@ -229,7 +229,11 @@ def _kustomize(root: Path, env: str) -> list[dict[str, Any]]:
     if shutil.which("kubectl") is None:
         pytest.skip("kubectl not on PATH: the rendered Authelia config was NOT checked")
     out = subprocess.run(
-        ["kubectl", "kustomize", str(root / "infra/k8s/overlays" / env)], capture_output=True, text=True, check=True
+        ["kubectl", "kustomize", str(root / "infra/k8s/overlays" / env)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=True,
     ).stdout
     return [doc for doc in yaml.safe_load_all(out) if doc]
 

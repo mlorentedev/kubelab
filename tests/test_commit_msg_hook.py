@@ -33,7 +33,7 @@ HOOK = REPO_ROOT / ".github" / "hooks" / "validate-commit-msg.sh"
 
 
 def _git(repo: pathlib.Path, *args: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True, timeout=30)
+    return subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True, encoding="utf-8", timeout=30)
 
 
 @pytest.fixture

@@ -155,7 +155,7 @@ def run_loki() -> Iterator[Loki]:
             # Future slots keep every window inside the ingester's range.
             "-validation.create-grace-period=8760h",
         ],
-        capture_output=True, text=True,
+        capture_output=True, text=True, encoding="utf-8",
     )  # fmt: skip
     if started.returncode != 0:
         # No container exists yet. Exit 125 is Docker's own failure (a pull refused or
@@ -164,7 +164,9 @@ def run_loki() -> Iterator[Loki]:
     container = started.stdout.strip()
     try:
         port = (
-            subprocess.run(["docker", "port", container, "3100/tcp"], capture_output=True, text=True, check=True)
+            subprocess.run(
+                ["docker", "port", container, "3100/tcp"], capture_output=True, text=True, encoding="utf-8", check=True
+            )
             .stdout.split(":")[-1]
             .strip()
         )
@@ -178,7 +180,9 @@ def run_loki() -> Iterator[Loki]:
             except (urllib.error.URLError, ConnectionError, OSError):
                 pass
             if time.monotonic() > deadline:
-                logs = subprocess.run(["docker", "logs", container], capture_output=True, text=True).stderr[-800:]
+                logs = subprocess.run(
+                    ["docker", "logs", container], capture_output=True, text=True, encoding="utf-8", errors="replace"
+                ).stderr[-800:]
                 pytest.fail(f"Loki did not become ready in 90 s: {logs}")
             time.sleep(1)
         yield Loki(url)

@@ -130,7 +130,7 @@ def coredns(docker_mount_dir: Path) -> Iterator[int]:
             "-v", f"{docker_mount_dir}:/etc/coredns:ro",
             image, "-conf", "/etc/coredns/Corefile",
         ],
-        check=True, capture_output=True, text=True, timeout=180,
+        check=True, capture_output=True, text=True, encoding="utf-8", timeout=180,
     )  # fmt: skip
     try:
         published = subprocess.run(
@@ -144,7 +144,9 @@ def coredns(docker_mount_dir: Path) -> Iterator[int]:
                 break
             except OSError:
                 if time.monotonic() > deadline:
-                    logs = subprocess.run(["docker", "logs", name], capture_output=True, text=True).stdout
+                    logs = subprocess.run(
+                        ["docker", "logs", name], capture_output=True, text=True, encoding="utf-8", errors="replace"
+                    ).stdout
                     pytest.fail(f"CoreDNS never answered on {port}:\n{logs}")
                 time.sleep(0.5)
         yield port

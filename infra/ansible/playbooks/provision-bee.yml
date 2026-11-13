@@ -95,6 +95,10 @@
     # recorded in staging's file. The env the role writes that token under and the
     # store its mint gate reads, so both follow one variable.
     gitea_staging_reader_env: staging
+    # IDP-053 S2c: the cluster's image pull token is read by both clusters, so it is
+    # recorded in common's file. The env the role writes it under and the store its
+    # mint gate reads, so both follow one variable (as `gitea_staging_reader_env`).
+    gitea_registry_pull_env: common
 
   pre_tasks:
     - name: Load base config (SSOT)
@@ -181,9 +185,28 @@
       no_log: true
       tags: [always]
 
+    - name: Decrypt the store of the cluster's image pull token (controller-side)
+      # IDP-053 S2c: common's file, where `gitea_registry_pull_env` says the token is recorded,
+      # so its mint gate is read from the store its record task writes to. Nothing else
+      # from this store is used.
+      command: sops -d {{ playbook_dir }}/../../config/secrets/{{ gitea_registry_pull_env }}.enc.yaml
+      register: sops_registry_pull
+      delegate_to: localhost
+      become: false
+      changed_when: false
+      check_mode: false
+      no_log: true
+      tags: [always]
+
     - name: Merge Gitea secrets (its own env overrides common)
       set_fact:
         gitea_secrets: "{{ (sops_common.stdout | from_yaml) | combine(sops_gitea_env.stdout | from_yaml, recursive=True) }}"
+      no_log: true
+      tags: [always]
+
+    - name: Load the image pull token's store
+      set_fact:
+        gitea_registry_pull_secrets: "{{ sops_registry_pull.stdout | from_yaml }}"
       no_log: true
       tags: [always]
 
@@ -409,6 +432,11 @@
         # gated on staging's own file, which is where the record task writes it.
         gitea_issue_reader_staging_scopes: "{{ gitea_config.apps.services.core.gitea.token_scopes.issue_reader_staging }}"
         gitea_issue_reader_staging_token: "{{ gitea_staging_reader_secrets.apps.services.core.gitea.issue_reader_token | default('') }}"
+        # IDP-053 S2c -- the cluster's image pull token on the reviewer's account,
+        # read:package only. Stored in common's file (both clusters pull with it), so its
+        # mint gate is read from that file's own store, where the record task writes.
+        gitea_registry_pull_scopes: "{{ gitea_config.apps.services.core.gitea.token_scopes.registry_pull }}"
+        gitea_registry_pull_token: "{{ gitea_registry_pull_secrets.apps.services.core.gitea.registry_pull_token | default('') }}"
         # IDP-053 S5c -- a fifth token on the reviewer's account, read:repository only,
         # for the product path's forge adapter. Minted and gated the same way.
         gitea_repo_reader_scopes: "{{ gitea_config.apps.services.core.gitea.token_scopes.repo_reader }}"

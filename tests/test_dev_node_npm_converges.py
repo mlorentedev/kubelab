@@ -100,14 +100,17 @@ def test_the_forge_key_is_looked_up_by_fingerprint() -> None:
     reads '\\2' as chr(2). No key ever matched, so every pass after the first
     POSTed the key again and failed on Gitea's 422 (ace2, 2026-10-01).
     """
-    lookup = _task_named("Look up this node's key on the machine account")
-    assert "/users/{{ dev_node_gitea_user }}/keys?fingerprint=" in lookup["ansible.builtin.uri"]["url"], (
+    lookup = _task_named("Look up this node's key on each account it may be on")
+    assert "/users/{{ item }}/keys?fingerprint=" in lookup["ansible.builtin.uri"]["url"], (
         "a fingerprint query on /user/keys is not restricted to an owner, so another account's copy would match"
     )
-    register = _task_named("Register this node's public key on the machine account")
+    assert lookup["loop"] == ["{{ dev_node_gitea_former_user }}", "{{ dev_node_gitea_user }}"], (
+        "the register step reads results[1] as the agents' account; the loop order is load-bearing"
+    )
+    register = _task_named("Register this node's public key on the agents' account")
     when = " ".join(register["when"]) if isinstance(register["when"], list) else register["when"]
     assert "regex_replace" not in when
-    assert "_gitea_keys.json" in when
+    assert "_gitea_keys.results[1].json" in when
     assert "selectattr('fingerprint'" in when, (
         "match the fingerprint on the answer too: a forge that ignored the filter "
         "would return every key, and any key would read as this node's"
@@ -117,6 +120,6 @@ def test_the_forge_key_is_looked_up_by_fingerprint() -> None:
 
 def test_the_forge_key_lookup_survives_a_dry_run() -> None:
     """`--check` skips a `command` task, and the lookup templates its stdout."""
-    lookup = _task_named("Look up this node's key on the machine account")
+    lookup = _task_named("Look up this node's key on each account it may be on")
     assert lookup.get("check_mode") is False
     assert lookup.get("when") == "_gitea_key_fp.rc == 0"

@@ -223,6 +223,7 @@ def _resolve(tmp_path: pathlib.Path, **env_overrides: str) -> tuple[int, dict[st
         env=env,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=60,
     )
     parsed = dict(line.split("=", 1) for line in output.read_text(encoding="utf-8").splitlines() if "=" in line)
@@ -447,7 +448,7 @@ def _contract(tmp_path: pathlib.Path, forge: str, release_answer: str, release_c
         "TOOLKIT": f"{stub} ",
     }
     proc = subprocess.run(  # noqa: S603
-        ["bash", "-c", step["run"]], cwd=tmp_path, env=env, capture_output=True, text=True, timeout=60
+        ["bash", "-c", step["run"]], cwd=tmp_path, env=env, capture_output=True, text=True, encoding="utf-8", timeout=60
     )
     return proc.returncode, proc.stdout + proc.stderr, calls.read_text(encoding="utf-8").splitlines()
 

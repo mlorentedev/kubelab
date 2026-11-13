@@ -152,6 +152,7 @@ def test_embedded_shell_script_parses(script):
         input=script,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
     )
     assert result.returncode == 0, (

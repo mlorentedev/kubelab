@@ -103,6 +103,7 @@ class Preflight:
             stdin=subprocess.DEVNULL,
             capture_output=True,
             text=True,
+            encoding="utf-8",
             timeout=60,
         )
 
@@ -224,6 +225,7 @@ def test_a_missing_key_or_model_is_a_usage_error_not_a_model_failure(preflight: 
             stdin=subprocess.DEVNULL,
             capture_output=True,
             text=True,
+            encoding="utf-8",
             timeout=60,
         ).returncode
 
@@ -309,6 +311,7 @@ def _run_real(nan: LocalNaN, tmp_path: Path, model: str) -> tuple[subprocess.Com
         stdin=subprocess.DEVNULL,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=60,
     )
     return proc, out.read_text(encoding="utf-8").splitlines()

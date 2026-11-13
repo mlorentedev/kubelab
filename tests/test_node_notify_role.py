@@ -363,6 +363,7 @@ def test_config_stdin_delivers_the_token_byte_exact(token: str):
         ["bash", "-c", f'TOKEN="$1"\nPAYLOAD=\'{{"probe":1}}\'\n{block}', "bash", token],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=60,
     )
     assert proc.returncode == 0, f"curl failed: {proc.stderr}"
@@ -495,7 +496,7 @@ def test_token_value_is_not_shell_interpreted():
     """
     hostile = "$(touch /tmp/kubelab-notify-pwned)`touch /tmp/kubelab-notify-pwned2`"
     probe = 'TOKEN="$1"\nprintf "%s" "Authorization: Bearer ${TOKEN}"\n'
-    proc = subprocess.run(["bash", "-c", probe, "bash", hostile], capture_output=True, text=True)
+    proc = subprocess.run(["bash", "-c", probe, "bash", hostile], capture_output=True, text=True, encoding="utf-8")
     assert proc.returncode == 0
     assert proc.stdout == f"Authorization: Bearer {hostile}"
     assert not Path("/tmp/kubelab-notify-pwned").exists()

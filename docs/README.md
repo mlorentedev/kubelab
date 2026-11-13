@@ -9,7 +9,7 @@ Project-bound knowledge (docs-as-code). The *build/operate* layer lives here, ve
 | Understand what's versioned and how a release ships | [`architecture/versioning-strategy.md`](architecture/versioning-strategy.md) |
 | Understand the CI/CD pipeline (workflows, runner routing) | [`runbooks/cicd.md`](runbooks/cicd.md) |
 | Get a build from a merge into staging or prod | [`runbooks/gitops-delivery-promotion.md`](runbooks/gitops-delivery-promotion.md) — canonical deploy/promotion doc |
-| Add a brand-new service to the platform | [`runbooks/new-service.md`](runbooks/new-service.md), [`runbooks/deploy-new-k3s-service.md`](runbooks/deploy-new-k3s-service.md) |
+| Add a brand-new service to the platform | [`runbooks/deploy-new-k3s-service.md`](runbooks/deploy-new-k3s-service.md) |
 | Manage SOPS secrets | [`runbooks/sops-and-secrets.md`](runbooks/sops-and-secrets.md) (mechanics), [`runbooks/secrets-reference.md`](runbooks/secrets-reference.md) (catalog) |
 | Change someone's access tier (admin, operator, viewer) | [`runbooks/identity-tier-change.md`](runbooks/identity-tier-change.md) |
 | Get into a service while Authelia is down | [`runbooks/break-glass.md`](runbooks/break-glass.md) |

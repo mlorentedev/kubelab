@@ -419,6 +419,7 @@ def test_only_force_1_forces(force: str, expected: bool) -> None:
         ["make", "-n", "-C", str(repo), "argo-set-revision", "APP=kubelab-staging", "REV=feat/mine", f"FORCE={force}"],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=True,
     ).stdout
     line = next(ln for ln in out.splitlines() if "--app" in ln)

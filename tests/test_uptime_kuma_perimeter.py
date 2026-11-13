@@ -66,6 +66,7 @@ def _routes(env: str) -> tuple[dict, ...]:
         ["kubectl", "kustomize", str(ROOT / "infra/k8s/overlays" / env)],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=True,
     ).stdout
     docs = [d for d in yaml.safe_load_all(out) if d]

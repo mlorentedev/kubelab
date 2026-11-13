@@ -22,6 +22,8 @@ The console reads three tables in the API's Postgres tenant
 | `forge_event` | webhook deliveries, projected or not | no: an unprojected delivery is lost, and the next read covers the change it carried |
 | `console_usage` | one row per operator identity and UTC day the console page was opened (ADR-066 A8) | no: not read model, kept only by the nightly `pg_dumpall` of the VPS backup; never truncate it with the forge tables |
 
+Read the A8 gate with `make console-usage ENV=prod`: for each identity, the best window of 14 consecutive UTC days, how many of them have a row, and whether 5 of 14 holds. It fails, rather than reporting no use, when the table cannot be read.
+
 ## Rebuild from the forges
 
 The read model is a cache. A source with no `forge_source` row reads as never
@@ -115,6 +117,40 @@ keeps one public name.
 
 The installation tokens the API mints from the App key last one hour and are
 renewed by the API; nothing to rotate.
+
+## Read the events
+
+The API writes one JSON line per forge event, with a stable `event` field, next
+to its text log (#3342). Query them in Grafana's Loki datasource:
+
+| Event | Written | LogQL |
+|---|---|---|
+| `forge_source_freshness` | per source, after each read attempt: `source`, `reachable`, `as_of`, `age_seconds` (no `as_of` for a source never read), `error` | `{namespace="kubelab", container="api"} \| json \| event="forge_source_freshness" \| reachable="false"` |
+| `forge_reconcile_cycle` | per pass: `scope` (`full`, or `retry` for the failed sources alone), `sources`, `failed`, `duration_ms` | `{namespace="kubelab", container="api"} \| json \| event="forge_reconcile_cycle" \| line_format "{{.scope}} {{.duration_ms}}ms {{.failed}}/{{.sources}}"` |
+| `forge_webhook_failure` | per refused or unprojected delivery: `forge`, `reason` (`signature`, `sources`, `store`, `unreadable`, `projection`), `delivery`, `status`, `error` | `sum by (reason) (count_over_time({namespace="kubelab", container="api"} \| json \| event="forge_webhook_failure" [1h]))` |
+
+A `signature` failure carries no `delivery`: the caller was not authenticated and
+chose every header.
+
+## A source is stale
+
+Two Grafana rules (`grafana-alerting/forge-rules.yaml`, #3387) fire when a source
+has not been read successfully for more than 20 minutes, two missed full passes:
+
+- **A GitHub source**: pages in prod. It also fires when the api has written no
+  freshness line for 30 minutes, which means the reconciler stopped or the source
+  declaration did not load.
+- **A Gitea source**: reaches the log tier only. Gitea is read from the Beelink,
+  which is on-demand, so this is expected while the homelab is off.
+
+Find the source and its last error:
+
+`{namespace="kubelab", container="api"} | json | event="forge_source_freshness" | reachable="false"`
+
+Then check the forge itself (an outage, an expired credential, see
+[Rotate the credentials](#rotate-the-credentials)). The rule clears on the first
+successful read. A source never read since the api started writes no
+`age_seconds`, so neither rule sees it; the query above still lists it.
 
 ## Verify
 

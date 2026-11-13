@@ -78,15 +78,18 @@ git@beelink.kubelab.internal: Permission denied (publickey).
 
 ### Not yet settled
 
-Nothing. R1, R2 and R3 are closed; `proposal.md`'s "Risks / open questions" holds no unresolved item blocking Part 1. R4 was a scheduling risk (both on-demand nodes powered), satisfied for these runs.
+AC6 (2026-11-12): agent forwarding is off fleet-wide, so D1's human half cannot work as written; owner decision on #1075. Before that, nothing: R1, R2 and R3 are closed; `proposal.md`'s "Risks / open questions" holds no unresolved item blocking Part 1. R4 was a scheduling risk (both on-demand nodes powered), satisfied for these runs.
 
 ## Evidence
 
-Map every acceptance criterion from `proposal.md` to concrete proof (commit hash, test name, or observed behavior).
+Measured 2026-11-12 against the agents' account (D1 as amended, #1075), from the controller with ace2 and the Beelink powered.
 
-- [ ] Criterion 1 -> commit `<hash>` / test `<name>`
-- [ ] Criterion 2 -> commit `<hash>` / test `<name>`
-- [ ] Criterion 3 -> commit `<hash>` / test `<name>`
+- **AC1, idempotence**: `make provision NODE=ace2 ENV=staging TAGS=gitea`, twice. Run 1 `ok=31 changed=2` (the key removed from the machine account, then registered on the agents' account). Run 2 `ok=29 changed=0 failed=0`.
+- **AC1, identity and read**: from ace2, `ssh -T git@<ssh_host>` answers `Hi there, dedalo! You've successfully authenticated with the key named kubelab-ace2-dev-node`. `git ls-remote` on `personal/resume` returns HEAD.
+- **AC1, push**: from ace2, a clone of `personal/resume`, an empty commit pushed as `probe/ace2-agent-key` (`* [new branch]`), then deleted (`- [deleted]`). The first attempt was refused by that repository's commitizen hook on the probe commit message, before any push.
+- **AC2**: `tests/test_dev_node_gitea_agent_key.py` and `tests/test_dev_node_gitea_identity.py` (the identity resolves from `apps.auth.identities.agent`, and the credential from the forge's own vault).
+- **AC4**: `ac4_revocation_probe.sh`, now on the admin API as the superadmin. Baseline greets `dedalo`; `DELETE /admin/users/dedalo/keys/5 -> 204`; the retry with no wait fails closed; re-provisioning (`changed=1`) restores access as `dedalo`. `PASS — both halves demonstrated`.
+- **AC6: not met, and not reachable as designed.** `ssh -A ace2` gives an empty `SSH_AUTH_SOCK`: `ssh_hardening` keeps `AllowAgentForwarding no` on every node, by fleet policy. Separately, the role's `IdentitiesOnly yes` for the forge host would keep a forwarded key from being offered. D1's "the human half needs no provisioning" therefore does not hold. Recorded on #1075 as an owner decision; nothing was changed to work around it.
 
 ## Test status
 

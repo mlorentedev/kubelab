@@ -105,6 +105,16 @@ ROTATABLE_TOKENS: dict[str, RotatableToken] = {
         identity="reviewer",
         store_env="staging",
     ),
+    # The cluster's image pull credential (IDP-053 S2c, D2): a token on the reviewer's
+    # account, `read:package` only, rendered into the `pull-<host-slug>` Secret. Both
+    # clusters pull with it, so its value lives in common's file; Gitea is prod's, so
+    # prod rotates it.
+    "registry_pull": RotatableToken(
+        secret_key="apps.services.core.gitea.registry_pull_token",
+        token_name="kubelab-registry-puller",
+        identity="reviewer",
+        store_env="common",
+    ),
     # The product path's repository reader (IDP-053 S5c, D2): a fifth token on the
     # reviewer's account, `read:repository` only, for `GiteaForge`. The receiver reads
     # it from a GitHub Actions secret the owner sets by hand from SOPS.
@@ -149,6 +159,13 @@ REVIEW_NOTICE_SCOPES: frozenset[str] = frozenset({"write:issue"})
 #: requests with `type=pulls`, so no repository scope is asked for. Not yet measured
 #: against a live Gitea; the first read is, and a 403 widens this deliberately.
 ISSUE_READER_SCOPES: frozenset[str] = frozenset({"read:issue"})
+
+#: What the cluster's image pull token must hold -- exactly (IDP-053 S2c, AC4). A decision
+#: (owner, D2): the kubelet reads a manifest and its blobs from the forge's container
+#: registry and never pushes. Whether `read:package` on the reviewer's account reaches a
+#: given product's package depends on the owner's visibility and the account's team units,
+#: and is established by `toolkit services gitea registry-check`, not by this grant.
+REGISTRY_PULL_SCOPES: frozenset[str] = frozenset({"read:package"})
 
 #: What the product path's repository reader must hold -- exactly (IDP-053 S5c, AC8). A
 #: decision (owner, D2): `GiteaForge` resolves a commit, compares two refs, and reads a

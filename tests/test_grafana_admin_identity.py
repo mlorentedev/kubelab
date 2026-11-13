@@ -244,7 +244,7 @@ class TestReconcileAdminIdentity:
 
         reset_calls = []
 
-        def fake_run(argv, input=None, capture_output=None, text=None, timeout=None):
+        def fake_run(argv, input=None, capture_output=None, text=None, encoding=None, timeout=None):
             reset_calls.append((argv, input))
             assert "reset-admin-password" in argv
             assert input == "s3cret"

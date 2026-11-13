@@ -369,6 +369,12 @@ def load_test_run(
             help="Seconds each step runs before its verdict reads; reported as the cold burst. 0 turns it off",
         ),
     ] = 30,  # load_test.WARMUP_SECONDS, which a test holds this to
+    max_vus: Annotated[
+        int | None,
+        typer.Option(
+            "--max-vus", help="Cap on k6's pool, to hold connections below a cold burst's; unset, 2x the rate"
+        ),
+    ] = None,
     output: Annotated[str, typer.Option("--output", help="Results directory")] = "docs/load-test",
 ) -> None:
     """Measure staging: a baseline under the limiter, then ramps to the first degraded step.
@@ -416,6 +422,7 @@ def load_test_run(
                 accept_encoding=accept_encoding,
                 sample_seconds=sample_seconds,
                 warmup=warmup_seconds,
+                max_vus=max_vus,
             )
         )
     except (LoadTestRefused, subprocess.SubprocessError, OSError) as e:
@@ -1653,7 +1660,7 @@ def k8s_provision_postgres_tenant(
             "-d",
             "kubelab",
         ]
-        res = subprocess.run(cmd, input=sql, text=True, capture_output=True)
+        res = subprocess.run(cmd, input=sql, text=True, encoding="utf-8", capture_output=True)
         if res.returncode != 0:
             # psql echoes a statement it cannot parse, and these statements hold the password.
             detail = res.stderr.replace(password, "***")

@@ -34,6 +34,7 @@ def _render(env: str) -> list[dict[str, Any]]:
         ["kubectl", "kustomize", str(PROJECT_ROOT / "infra/k8s/overlays" / env)],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=True,
     ).stdout
     return [d for d in yaml.safe_load_all(out) if d]

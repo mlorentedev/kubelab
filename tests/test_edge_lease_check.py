@@ -146,6 +146,7 @@ def _run(
         [_sh(awk_bin), str(SCRIPT), interface, *args],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         env=env,
         check=False,
     )
@@ -324,6 +325,7 @@ def test_a_malformed_network_is_a_usage_error(tmp_path: Path, awk_bin: Path, spe
         [_sh(awk_bin), str(SCRIPT), UPLINK, spec],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         env={"PATH": f"{awk_bin}:/usr/bin:/bin", "EDGE_LEASES_DIR": str(tmp_path), "EDGE_SYS_NET": str(tmp_path)},
         check=False,
     )
@@ -414,6 +416,7 @@ def test_the_units_pass_systemd_analyze_verify(tmp_path: Path) -> None:
         ["systemd-analyze", "verify", "--man=no", *(str(tmp_path / unit) for unit in (SERVICE, PATH_UNIT, TIMER))],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         env={"SYSTEMD_UNIT_PATH": f"{tmp_path}:", "PATH": "/usr/bin:/bin"},
         check=False,
     )

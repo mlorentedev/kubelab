@@ -68,7 +68,7 @@ def run_mutation_tests() -> None:
         TARGET_FILE.write_text(mutated_code, encoding="utf-8")
 
         # Run test suite
-        res = subprocess.run(TEST_COMMAND, capture_output=True, text=True)
+        res = subprocess.run(TEST_COMMAND, capture_output=True, text=True, encoding="utf-8")
 
         if res.returncode != 0:
             killed += 1

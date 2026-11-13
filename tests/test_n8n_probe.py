@@ -496,6 +496,7 @@ def test_the_in_pod_script_redacts_credentials_from_error_messages() -> None:
         ["node", "-e", f"{line}\nprocess.stdout.write(redact({message!r}))"],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=True,
     ).stdout
     for leaked in ("abc.def-123", "xyz9", "k1", "u7x"):

@@ -30,6 +30,7 @@ def _git(cwd: Path, *args: str) -> str:
         cwd=cwd,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=True,
     )
     return done.stdout
@@ -223,6 +224,7 @@ def _provision_commands(*extra: str) -> str:
         cwd=_ROOT,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
     )
     assert done.returncode == 0, done.stderr
@@ -254,6 +256,7 @@ def _deploy_commands(*extra: str) -> str:
         cwd=_ROOT,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
     )
     assert done.returncode == 0, done.stderr

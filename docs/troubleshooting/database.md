@@ -32,7 +32,7 @@ docker exec -it postgres_container psql -U user -d database
 
 ```bash
 # Restart the database container
-toolkit apps restart postgres
+toolkit services restart postgres
 
 # Check database logs for errors
 make logs APP=postgres

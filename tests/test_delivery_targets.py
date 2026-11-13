@@ -59,6 +59,7 @@ def _make(*args: str) -> subprocess.CompletedProcess[str]:
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=120,
     )
 
@@ -174,6 +175,7 @@ def test_an_unreadable_registry_is_refused_as_such() -> None:
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=120,
     )
     assert proc.returncode == 2
@@ -253,7 +255,7 @@ def test_ci_cleanup_triggers_on_promotions_to_staging_and_prod() -> None:
 def test_both_targets_are_listed_in_make_help() -> None:
     """A target nobody can find is a `gh workflow run` line with extra steps."""
     proc = subprocess.run(  # noqa: S603
-        ["make", "help"], cwd=REPO_ROOT, capture_output=True, text=True, timeout=120
+        ["make", "help"], cwd=REPO_ROOT, capture_output=True, text=True, encoding="utf-8", timeout=120
     )
     assert proc.returncode == 0
     assert "make promote-prod APP=x VERSION=y" in proc.stdout

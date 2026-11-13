@@ -156,6 +156,8 @@ ENV_TARGETS: dict[str, tuple[str, str]] = {
     "restore-window": ("--env", "prod"),
     # Added with the target (BACKUP-057): the node keys live in prod SOPS only.
     "backup-mint-node-tokens": ("--env", "prod"),
+    # Added with the target (#3341): the A8 gate is read from prod's counter.
+    "console-usage": ("--env", "prod"),
     # Already correct before #1644. Included as a regression net: "correct and
     # untested" is exactly the state the eight above were in.
     "maintain": ("-e", "staging"),
@@ -181,6 +183,8 @@ ENV_TARGETS: dict[str, tuple[str, str]] = {
     "headscale-rejoin": ("--env", "prod"),
     # Added with the target (VPN-ACL-016, #2863): minted on that env's Headscale.
     "headscale-authkey": ("--env", "prod"),
+    # Added with the target (OPS-065, #3076): prod is the traffic the bound will cut.
+    "edge-slow-routes": ("--env", "prod"),
 }
 
 #: Resolves an environment but passes it under no flag at all, so the
@@ -256,6 +260,7 @@ class TestTheDefaultIsReachedInPractice:
             cwd=REPO_ROOT,
             capture_output=True,
             text=True,
+            encoding="utf-8",
         )
         return proc.stdout
 

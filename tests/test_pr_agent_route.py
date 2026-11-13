@@ -172,6 +172,7 @@ class Route:
             stdin=subprocess.DEVNULL,
             capture_output=True,
             text=True,
+            encoding="utf-8",
             timeout=60,
         )
 
@@ -573,6 +574,7 @@ def test_it_runs_under_bash_e_as_a_workflow_step_does(route: Route) -> None:
         stdin=subprocess.DEVNULL,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=60,
     )
     assert proc.returncode == 0, _output(proc)
@@ -682,6 +684,7 @@ class RealRoute:
             stdin=subprocess.DEVNULL,
             capture_output=True,
             text=True,
+            encoding="utf-8",
             timeout=60,
         )
 

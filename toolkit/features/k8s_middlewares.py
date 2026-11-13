@@ -211,6 +211,7 @@ def _kubectl_apply(env: str, namespace: str, rendered: str, spec_name: str) -> b
             input=rendered,
             capture_output=True,
             text=True,
+            encoding="utf-8",
             check=True,
         )
         logger.success(f"  {result.stdout.strip() or spec_name + ' applied'}")
@@ -241,7 +242,7 @@ def _scrub_legacy_annotation(env: str, namespace: str, spec_name: str) -> None:
         "--overwrite=true",
     ]
     try:
-        subprocess.run(cmd, capture_output=True, text=True, check=True)
+        subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", check=True)
     except subprocess.CalledProcessError as exc:
         # Non-fatal — the apply already succeeded; scrub is a best-effort
         # cleanup. Surface the reason so a real failure (RBAC, missing

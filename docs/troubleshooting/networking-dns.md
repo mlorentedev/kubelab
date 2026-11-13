@@ -184,11 +184,11 @@ dig +trace kubelab.live
 # For local development, add to /etc/hosts
 echo "127.0.0.1 api.localhost web.localhost" | sudo tee -a /etc/hosts
 
-# For staging (KubeLab), ensure WireGuard is connected
-sudo wg show
+# Staging names are VPN-only: check the tailnet is up
+tailscale status
 
-# Restart CoreDNS if DNS gateway issues
-toolkit edge restart dns-gateway
+# Staging DNS is CoreDNS + Pi-hole on the RPi4, deployed by Ansible
+make deploy TARGET=dns ENV=prod
 
 # Flush local DNS cache
 sudo systemd-resolve --flush-caches   # Ubuntu/Debian
@@ -211,7 +211,7 @@ sudo dscacheutil -flushcache           # macOS
 
 ```bash
 # Check Traefik dashboard
-toolkit edge logs traefik | grep error
+toolkit services logs traefik | grep error
 
 # Verify router configuration
 docker exec traefik-container cat /etc/traefik/dynamic/app-api.yml
@@ -227,7 +227,7 @@ curl http://localhost:8080/api/http/services   # Traefik API
 ENVIRONMENT=dev toolkit config generate
 
 # Restart Traefik
-toolkit edge restart traefik
+toolkit services restart traefik
 
 # Verify container labels
 docker inspect api-container | grep traefik
@@ -270,7 +270,7 @@ docker network rm mlorente-network
 docker network create mlorente-network
 
 # Restart affected services
-toolkit apps down api && toolkit apps up api
+toolkit services down api && toolkit services up api
 
 # Check firewall rules
 sudo iptables -L -n | grep DOCKER
@@ -313,11 +313,8 @@ mtr api.kubelab.live
 # Increase Traefik timeouts (edge/traefik/templates/middlewares.template.yml)
 # Adjust forwardedHeaders.trustedIPs timeout settings
 
-# For Nginx caching issues
-toolkit edge restart nginx
-
 # Check backend health
-toolkit apps logs api --no-follow | grep "slow query"
+toolkit services logs api --no-follow | grep "slow query"
 
 # Database connection pool exhaustion
 docker exec postgres-container psql -c "SELECT * FROM pg_stat_activity;"

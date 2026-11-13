@@ -66,7 +66,7 @@ def _path_is_gnu() -> bool:
         binary = shutil.which(tool)
         if binary is None:
             return False
-        result = subprocess.run([binary, "--version"], capture_output=True, text=True, check=False)
+        result = subprocess.run([binary, "--version"], capture_output=True, text=True, encoding="utf-8", check=False)
         if "GNU coreutils" not in result.stdout:
             return False
     return True

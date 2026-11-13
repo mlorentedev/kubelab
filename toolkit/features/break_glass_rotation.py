@@ -351,5 +351,6 @@ def _uncommitted(project_root: Any, file_env: str) -> bool:
         ["git", "-C", str(project_root), "status", "--porcelain", "--", f"infra/config/secrets/{file_env}.enc.yaml"],
         capture_output=True,
         text=True,
+        encoding="utf-8",
     )
     return result.returncode == 0 and bool(result.stdout.strip())

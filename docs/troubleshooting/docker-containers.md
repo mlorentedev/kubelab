@@ -80,7 +80,7 @@ docker pull mlorente/api:latest
 docker pull mirror.gcr.io/library/nginx:latest
 
 # Build locally instead
-toolkit apps build api
+toolkit services build api
 ```
 
 ### Prevention
@@ -215,7 +215,7 @@ docker stats --format "table {{.Container}}\t{{.CPUPerc}}\t{{.MemUsage}}"
 docker system prune -a --volumes
 
 # Restart containers to free memory
-toolkit apps restart api
+toolkit services restart api
 
 # Scale down non-critical services in staging
 toolkit services down <service>

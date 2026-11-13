@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 )
@@ -46,6 +47,7 @@ type Receiver struct {
 	Secrets map[string]string
 	Sources []Source
 	Store   EventStore
+	Events  *slog.Logger // nil writes JSON lines to stderr (events.go)
 
 	sourcesErr error // the declaration did not parse; see NewReceiver
 }
@@ -101,15 +103,15 @@ func (rc *Receiver) Handle(ctx context.Context, forgeName string, header http.He
 		return http.StatusRequestEntityTooLarge
 	}
 	if !VerifySignature(forgeName, rc.Secrets[forgeName], header.Get(names.Signature), payload) {
-		return http.StatusUnauthorized
+		// The caller is unauthenticated and chose every header, so none is logged.
+		return rc.failed(forgeName, "", "signature", http.StatusUnauthorized, nil)
 	}
 	delivery, event := header.Get(names.Delivery), header.Get(names.Event)
 	if delivery == "" || event == "" || !json.Valid(payload) {
 		return http.StatusBadRequest
 	}
 	if rc.sourcesErr != nil {
-		log.Printf("forge webhook: %s delivery %s: sources: %v", forgeName, delivery, rc.sourcesErr)
-		return http.StatusServiceUnavailable
+		return rc.failed(forgeName, delivery, "sources", http.StatusServiceUnavailable, rc.sourcesErr)
 	}
 	if !rc.declares(forgeName, payload) {
 		// Unreachable while the hook's scope matches the sources, so this line is what
@@ -121,8 +123,25 @@ func (rc *Receiver) Handle(ctx context.Context, forgeName string, header http.He
 	if err := rc.Store.StoreEvent(ctx, stored); err != nil {
 		// A 5xx makes the delivery show as failed, so it can be redelivered. The log
 		// tells a missing table from a passing outage; the forge sees neither.
-		log.Printf("forge webhook: store %s delivery %s: %v", forgeName, delivery, err)
-		return http.StatusServiceUnavailable
+		return rc.failed(forgeName, delivery, "store", http.StatusServiceUnavailable, err)
 	}
 	return http.StatusAccepted
+}
+
+// failed writes the refusal as an event and returns its status.
+func (rc *Receiver) failed(forgeName, delivery, reason string, status int, err error) int {
+	webhookFailure(rc.Events, forgeName, delivery, reason, err, slog.Int("status", status))
+	return status
+}
+
+// webhookFailure is a delivery the console did not take: refused, not stored or not projected.
+func webhookFailure(l *slog.Logger, forgeName, delivery, reason string, err error, extra ...slog.Attr) {
+	attrs := append([]slog.Attr{slog.String("forge", forgeName), slog.String("reason", reason)}, extra...)
+	if delivery != "" {
+		attrs = append(attrs, slog.String("delivery", delivery))
+	}
+	if err != nil {
+		attrs = append(attrs, slog.String("error", err.Error()))
+	}
+	emit(l, slog.LevelWarn, EventWebhookFailure, attrs...)
 }

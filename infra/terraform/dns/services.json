@@ -39,7 +39,8 @@
     "name": "gitea",
     "zone": "kubelab",
     "proxied": false,
-    "environments": ["prod"]
+    "environments": ["prod"],
+    "target": "vps"
   },
   {
     "name": "n8n",

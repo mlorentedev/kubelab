@@ -65,6 +65,7 @@ def _kubectl(args: str, env: str, timeout: int = 30) -> subprocess.CompletedProc
         ["kubectl", "--kubeconfig", _kubeconfig(env), *args.split()],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
         timeout=timeout,
     )

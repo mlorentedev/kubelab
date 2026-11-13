@@ -20,7 +20,9 @@ FLAG_FORM = re.compile(r"""\bEXTRA=["']?-""")
 
 
 def _tracked_text_files() -> list[Path]:
-    names = subprocess.run(["git", "ls-files"], cwd=REPO, capture_output=True, text=True, check=True).stdout
+    names = subprocess.run(
+        ["git", "ls-files"], cwd=REPO, capture_output=True, text=True, encoding="utf-8", check=True
+    ).stdout
     return [REPO / name for name in names.splitlines() if (REPO / name).is_file()]
 
 

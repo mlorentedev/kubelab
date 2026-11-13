@@ -160,6 +160,7 @@ def node_ssh_run(
         ],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=timeout,
     )
 
@@ -191,7 +192,7 @@ def vpn_unavailable() -> str | None:
             return f"Tailscale CLI cannot run: {MACOS_TAILSCALE_CLI} is not executable"
         return f"Tailscale CLI not found: not on PATH, and no {MACOS_TAILSCALE_CLI}"
     try:
-        result = subprocess.run([cli, "status", "--json"], capture_output=True, text=True, timeout=5)
+        result = subprocess.run([cli, "status", "--json"], capture_output=True, text=True, encoding="utf-8", timeout=5)
     except subprocess.TimeoutExpired:
         return f"Tailscale not connected: `{cli} status` timed out"
     except OSError as exc:

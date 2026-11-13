@@ -1,0 +1,168 @@
+# Grafana alerting — a forge console source not read within its bound (CONSOLE-004 AC6, #3387).
+#
+# Reads the `forge_source_freshness` JSON lines the api writes per source after each read
+# attempt (apps/api/src/internal/forge/reconcile.go). A full pass reads every source each
+# 10 minutes and a failed source is retried each minute, so `age_seconds` (time since the
+# source was last read successfully) is refreshed at least each minute while it is failing.
+# Above 1200 seconds the console has missed two full passes on that source.
+#
+# Two rules, split by forge, because the forges differ in where they are read from. GitHub is
+# read over the internet and should always be reachable: its rule reaches the page tier in
+# prod. Gitea is read from the Beelink, which is on-demand (ADR-028) and off whenever the
+# homelab is: its rule goes to the log tier in both environments
+# (overlays/prod/grafana-alerting/policies.yaml), so powering the homelab down pages nobody.
+#
+# Known gap: a source never read since the api started has no `as_of`, so it writes no
+# `age_seconds` and neither rule sees it. It is visible as `reachable="false"` in the
+# runbook's query until its first successful read.
+---
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: forge-console
+    folder: kubelab
+    interval: 5m
+    rules:
+      - uid: console004-github-source-stale
+        title: A GitHub source of the forge console has not been read for 20 minutes
+        condition: C
+        # `age_seconds` is itself a duration, so the rule needs no `for` on top of it.
+        for: 0s
+        # The api writes no freshness line at all when the reconciler stopped, or the
+        # source declaration failed to load. That silence is the outage this rule is for.
+        noDataState: Alerting
+        execErrState: Alerting
+        annotations:
+          summary: >-
+            At least one GitHub repository the forge console reads has not been read
+            successfully for more than 20 minutes, or the api has written no freshness
+            line for 30 minutes. The source and its last error are in the api's
+            `forge_source_freshness` lines.
+          runbook_url: >-
+            https://github.com/mlorentedev/kubelab/blob/master/docs/runbooks/forge-console-operations.md#a-source-is-stale
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 1800
+              to: 0
+            datasourceUid: loki
+            model:
+              refId: A
+              datasource:
+                type: loki
+                uid: loki
+              editorMode: code
+              queryType: range
+              # `max by (source)` folds the api's pods into one series per source.
+              expr: >-
+                max by (source) (
+                  last_over_time(
+                    {namespace="kubelab", container="api"}
+                      | json
+                      | event="forge_source_freshness"
+                      | source=~"github:.+"
+                      | __error__=""
+                      | unwrap age_seconds
+                    [30m]
+                  )
+                )
+          - refId: B
+            relativeTimeRange:
+              from: 1800
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              reducer: last
+              expression: A
+              datasource:
+                type: __expr__
+                uid: __expr__
+          - refId: C
+            relativeTimeRange:
+              from: 1800
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [1200]
+              datasource:
+                type: __expr__
+                uid: __expr__
+      - uid: console004-gitea-source-stale
+        title: A Gitea source of the forge console has not been read for 20 minutes
+        condition: C
+        for: 0s
+        # The GitHub rule already pages on a silent api; here no data is only a homelab
+        # that is off, or an api with no Gitea source declared.
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: >-
+            At least one Gitea repository the forge console reads has not been read
+            successfully for more than 20 minutes. Expected while the Beelink is off; when
+            it is on, the source and its last error are in the api's
+            `forge_source_freshness` lines.
+          runbook_url: >-
+            https://github.com/mlorentedev/kubelab/blob/master/docs/runbooks/forge-console-operations.md#a-source-is-stale
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 1800
+              to: 0
+            datasourceUid: loki
+            model:
+              refId: A
+              datasource:
+                type: loki
+                uid: loki
+              editorMode: code
+              queryType: range
+              expr: >-
+                max by (source) (
+                  last_over_time(
+                    {namespace="kubelab", container="api"}
+                      | json
+                      | event="forge_source_freshness"
+                      | source=~"gitea:.+"
+                      | __error__=""
+                      | unwrap age_seconds
+                    [30m]
+                  )
+                )
+          - refId: B
+            relativeTimeRange:
+              from: 1800
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              reducer: last
+              expression: A
+              datasource:
+                type: __expr__
+                uid: __expr__
+          - refId: C
+            relativeTimeRange:
+              from: 1800
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [1200]
+              datasource:
+                type: __expr__
+                uid: __expr__

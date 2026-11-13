@@ -47,9 +47,7 @@ def test_a_lesson_early_in_a_large_index_is_found(tmp_path: Path) -> None:
     # so bash answered 127 for a file that was there (TOOL-132). `as_posix` because MSYS
     # bash opens C:/x but not C:\x.
     script = (tmp_path / "scripts/check-lessons.sh").as_posix()
-    result = subprocess.run(
-        [shutil.which("bash") or "bash", script], capture_output=True, text=True
-    )
+    result = subprocess.run([shutil.which("bash") or "bash", script], capture_output=True, text=True, encoding="utf-8")
 
     assert result.returncode == 0, result.stdout[-600:] + result.stderr[-600:]
     assert f"OK ({LESSONS} lessons)" in result.stdout

@@ -358,7 +358,7 @@ def _require_kubectl() -> None:
 def _render_claims(kustomization: pathlib.Path) -> set[str]:
     """The claims one kustomization renders, by the same rule as the manifest scan."""
     out = subprocess.run(
-        ["kubectl", "kustomize", str(kustomization)], capture_output=True, text=True, check=True
+        ["kubectl", "kustomize", str(kustomization)], capture_output=True, text=True, encoding="utf-8", check=True
     ).stdout
     return _rendered_claims(out)
 

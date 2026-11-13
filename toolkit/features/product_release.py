@@ -30,8 +30,10 @@ from toolkit.features.product_guards import validate_registered
 from toolkit.features.registry import (
     SHA_TAG_HEX_LENGTHS,
     SHA_TAG_PREFIX,
+    BearerCache,
     RegistryCredential,
     catalog_secret,
+    catalog_secret_variable,
     is_docker_hub,
     tag_digest,
 )
@@ -74,7 +76,9 @@ def _credential(
             f"the pull credential for {host} is not available: the catalog key {declared.secret} holds no value here",
             f"'{app}' is private on {host}, so the release proof reads it as {declared.username} with that token; "
             "the catalog decrypts only where the SOPS age key is, so a runner without it cannot read the image.",
-            f"run the promotion where `toolkit secrets` decrypts {declared.secret}, or set it "
+            f"set the environment variable {catalog_secret_variable(declared.secret)} to the token (on a hosted "
+            "runner, an Actions secret of that name exported in the step's env), or run the promotion where "
+            f"`toolkit secrets` decrypts {declared.secret} "
             f"(`toolkit secrets set {declared.secret} --env common --stdin`).",
         )
     return RegistryCredential(declared.username, token)
@@ -113,7 +117,8 @@ def _prove_image(
     image = product_registry.derived_image(app, registry)
     host, image_name = image.rsplit("/", 1)
     credential = _credential(app, host, product_registry.product(app, registry), secret)
-    digest_of = functools.partial(tag_digest, credential=credential, http=http)
+    # One bearer serves every tag of the image: a miss across all the sha lengths trades for it once (#3287).
+    digest_of = functools.partial(tag_digest, credential=credential, http=http, bearers=BearerCache())
     released = digest_of(host, image_name, version)
     if released is None:
         raise _unreadable(image, version, host, credential)

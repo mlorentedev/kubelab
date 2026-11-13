@@ -303,6 +303,7 @@ def _make_lan_link(*args: str) -> str:
         ["make", "-n", "-C", str(REPO), "edge-lan-link", *args],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=True,
     ).stdout
     return next(ln for ln in out.splitlines() if "infra edge lan-link" in ln)

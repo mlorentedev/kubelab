@@ -50,9 +50,13 @@ class _Registry:
     def __init__(self) -> None:
         self.answers: dict[str, str | None] = {VERSION: DIGEST, f"sha-{FULL[:7]}": DIGEST}
         self.seen: list[tuple[str, str, str]] = []
+        self.bearers: list[object] = []
 
-    def __call__(self, registry: str, image_name: str, tag: str, credential=None, http=None) -> str | None:
+    def __call__(
+        self, registry: str, image_name: str, tag: str, credential=None, http=None, bearers=None
+    ) -> str | None:
         self.seen.append((registry, image_name, tag))
+        self.bearers.append(bearers)
         return self.answers.get(tag)
 
 
@@ -146,6 +150,16 @@ def test_the_proof_finds_the_sha_tag_the_product_publishes(gh, digests, tmp_path
     assert code == 0, answer
     assert digests.seen[-1][2] == f"sha-{FULL[:length]}"
     assert [tag for _, _, tag in digests.seen[1:]] == [f"sha-{FULL[:n]}" for n in range(7, length + 1)]
+
+
+def test_every_read_of_one_proof_shares_one_bearer_cache(gh, digests, tmp_path: pathlib.Path) -> None:
+    """The release tag and each sha length are tags of one repository: one cache, so one bearer (#3287)."""
+    code, _ = _fetch(tmp_path / "web.yaml")
+
+    assert code == 0
+    assert len(digests.bearers) == 2
+    first, *rest = digests.bearers
+    assert first is not None and all(cache is first for cache in rest)
 
 
 def test_a_missing_release_tag_reads_no_sha_tag(gh, digests, tmp_path: pathlib.Path) -> None:

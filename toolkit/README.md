@@ -69,6 +69,8 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit config generate` | Generate configuration files from templates (Traefik, Ansible, Terraform). |
 | `toolkit config get` | Print one NON-SECRET value from the SSOT, for scripts and Makefile targets. |
 | `toolkit config validate` | Validate generated configuration files (sanity check). |
+| `toolkit console` | Forge console: read what the console records. |
+| `toolkit console usage` | Report the A8 usage gate: days the console was opened, in the best 14-day window. |
 | `toolkit credentials` | Generate credentials and manage GitHub secrets. |
 | `toolkit credentials delete-gh-secret` | Delete a single GitHub secret. |
 | `toolkit credentials extract-common` | Extract shared infrastructure secrets into common.enc.yaml. |
@@ -165,6 +167,7 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit obs drill-pvc-unbound` | Prove `obs015-pvc-unbound-failure` fires, and remove the claim afterwards. |
 | `toolkit obs logs` | Query Loki logs with LogQL filtering and traceback deduplication. |
 | `toolkit obs slack` | Read or post messages to Slack incident channels. |
+| `toolkit obs slow-routes` | Slow requests per route from the edge's access log, to size Traefik's backend bound (OPS-065). |
 | `toolkit obs triage` | Execute the 4-step automated SRE triage pipeline. |
 | `toolkit obs watcher-run` | Run a CronJob once now, print its log, and delete the Job. |
 | `toolkit product` | Validate and render kubelab.yaml product contracts, and read the product registry (ADR-067). |
@@ -208,6 +211,7 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit services gitea git` | Run `git` against the forge over HTTPS as the agents' authoring account. |
 | `toolkit services gitea prune-runners` | Deregister Actions runners the declaration does not name. |
 | `toolkit services gitea reconcile` | Create declared organizations and repositories in Gitea; report undeclared ones. |
+| `toolkit services gitea registry-check` | Pull a manifest with a private product's pull token and report what the registry answers. |
 | `toolkit services gitea rotate-token` | Revoke a Gitea machine token and clear its SOPS key so a re-provision re-mints it. |
 | `toolkit services gitea token-scopes` | Check each machine token's MINTED scopes against its declared grant (TOOL-056, #1551). |
 | `toolkit services health` | Check health of running services using config-driven endpoints. |

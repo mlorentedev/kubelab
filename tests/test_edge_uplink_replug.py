@@ -148,7 +148,11 @@ def test_udev_accepts_the_rendered_rule(kind: str, tmp_path: Path) -> None:
     rules = tmp_path / "90-rendered.rules"
     rules.write_text(_rule(kind), encoding="utf-8")
     proc = subprocess.run(
-        ["udevadm", "verify", "--resolve-names=never", str(rules)], capture_output=True, text=True, check=False
+        ["udevadm", "verify", "--resolve-names=never", str(rules)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
     )
     assert proc.returncode == 0, proc.stdout + proc.stderr
 

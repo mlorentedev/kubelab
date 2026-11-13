@@ -52,12 +52,51 @@ class RegistryCredential:
     token: str = field(repr=False)
 
 
-def catalog_secret(key: str) -> str | None:
-    """The value the secrets catalog holds at ``key`` (a product's ``pull_credential.secret``), or ``None``.
+class BearerCache:
+    """The pull bearers one proof has been issued, per ``(host, repository)``; a token never appears in its repr.
 
-    The catalog is SOPS, so this resolves only where the age key is: a runner without it
-    gets ``None`` and the caller refuses by name. Tests inject a lookup instead.
+    A bearer is scoped to one repository and valid for all its tags, so a caller reading many tags of
+    one image hands the same cache to every ``tag_digest`` call and trades for a bearer once (#3287).
+    Make one per proof: nothing is kept between proofs, and a long-lived credential never enters it.
     """
+
+    def __init__(self) -> None:
+        self._tokens: dict[tuple[str, str], str] = {}
+
+    def __repr__(self) -> str:
+        return f"BearerCache({len(self._tokens)} bearers)"
+
+    def get(self, host: str, repository: str) -> str | None:
+        return self._tokens.get((host, repository))
+
+    def put(self, host: str, repository: str, token: str) -> None:
+        self._tokens[(host, repository)] = token
+
+    def drop(self, host: str, repository: str) -> None:
+        self._tokens.pop((host, repository), None)
+
+
+def catalog_secret_variable(key: str) -> str:
+    """The environment variable for catalog ``key``: its flattened form (``ghcr.pull_token`` is ``GHCR_PULL_TOKEN``)."""
+    return re.sub(r"[^A-Za-z0-9]", "_", key).upper()
+
+
+def catalog_secret(key: str) -> str | None:
+    """The value for the catalog ``key`` (a product's ``pull_credential.secret``), or ``None``.
+
+    The environment variable the key flattens to wins when it holds a value: a hosted runner has
+    the pull token as an Actions secret and no age key, and the token never needs decrypting there
+    (#3286). An empty variable is unset, since an Actions secret nobody created arrives as ``""``.
+    Otherwise the catalog is SOPS, so this resolves only where the age key is: a runner with
+    neither gets ``None`` and the caller refuses by name. Tests inject a lookup instead.
+    """
+    variable = catalog_secret_variable(key)
+    from_env = os.environ.get(variable, "").strip()
+    if from_env:
+        # The source, never the value: a stale exported variable shadows a rotated SOPS entry,
+        # and a 401 alone would not say which one was used.
+        logger.info(f"catalog secret {key}: using {variable} from the environment, not SOPS")
+        return from_env
     from toolkit.features.configuration import ConfigurationManager
 
     return ConfigurationManager("prod").get_secret_by_path(key)
@@ -162,6 +201,7 @@ def tag_digest(
     tag: str,
     credential: RegistryCredential | None = None,
     http: Callable[..., httpx.Response] | None = None,
+    bearers: BearerCache | None = None,
 ) -> str | None:
     """The manifest digest a tag names, or ``None`` when it cannot be read (absent tag, refused login, no digest).
 
@@ -170,9 +210,12 @@ def tag_digest(
     API; any other registry through an OCI manifest ``HEAD``, trading ``credential``
     (or nothing, for a public package) for a bearer token when the registry asks
     (IDP-053 D3, the authenticated half). ``http`` replaces ``httpx.request`` (``httpx.get`` on Docker Hub) for tests.
+    ``bearers`` keeps the bearer between calls: a read that finds the repository's bearer there sends it
+    first, and on a 401 (it expired) trades for a new one once. Without it each call trades for its own.
     """
     if not is_docker_hub(registry):
-        return _oci_tag_digest(registry, image_name, tag, credential, http or httpx.request)
+        cache = bearers if bearers is not None else BearerCache()
+        return _oci_tag_digest(registry, image_name, tag, credential, http or httpx.request, cache)
     namespace = registry.split("/", 1)[1]
     try:
         url = f"{_HUB}/repositories/{namespace}/{image_name}/tags/{tag}"
@@ -203,26 +246,53 @@ def _oci_tag_digest(
     tag: str,
     credential: RegistryCredential | None,
     http: Callable[..., httpx.Response],
+    bearers: BearerCache,
 ) -> str | None:
     host, _, owner = registry.partition("/")
     repository = "/".join(part for part in (owner, image_name) if part)
     subject = f"{host}: the digest of {image_name}:{tag}"
     url = f"https://{host}/v2/{repository}/manifests/{tag}"
-    headers = {"Accept": _MANIFEST_TYPES}
     try:
-        resp = http("HEAD", url, headers=headers, timeout=15.0)
-        if resp.status_code == 401:
-            token = _bearer_token(host, repository, resp.headers.get("www-authenticate", ""), credential, http)
-            if token is None:
-                return None
-            resp = http("HEAD", url, headers={**headers, "Authorization": f"Bearer {token}"}, timeout=15.0)
+        resp = _manifest_head(host, repository, url, credential, http, bearers)
     except httpx.HTTPError as exc:
         logger.warning(f"{subject} is unread, the registry is unreachable ({exc})")
+        return None
+    if resp is None:
         return None
     digest = _digest_or_none(resp.headers.get("docker-content-digest")) if resp.status_code == 200 else None
     if digest is None:
         logger.warning(f"{subject} is unread, the registry answered HTTP {resp.status_code} with no sha256 digest")
     return digest
+
+
+def _manifest_head(
+    host: str,
+    repository: str,
+    url: str,
+    credential: RegistryCredential | None,
+    http: Callable[..., httpx.Response],
+    bearers: BearerCache,
+) -> httpx.Response | None:
+    """HEAD a manifest with the repository's cached bearer (none yet: anonymously); ``None`` when no bearer can be had.
+
+    A 401 means the registry wants a bearer, or the cached one expired: trade the credential for a fresh one,
+    keep it, and read once more. A 401 to that fresh bearer is final and is not kept, so a refusal never loops.
+    """
+    headers = {"Accept": _MANIFEST_TYPES}
+    cached = bearers.get(host, repository)
+    if cached is not None:
+        headers["Authorization"] = f"Bearer {cached}"
+    resp = http("HEAD", url, headers=headers, timeout=15.0)
+    if resp.status_code != 401:
+        return resp
+    bearers.drop(host, repository)
+    token = _bearer_token(host, repository, resp.headers.get("www-authenticate", ""), credential, http)
+    if token is None:
+        return None
+    resp = http("HEAD", url, headers={**headers, "Authorization": f"Bearer {token}"}, timeout=15.0)
+    if resp.status_code != 401:
+        bearers.put(host, repository, token)
+    return resp
 
 
 def _token_of(resp: httpx.Response) -> str | None:

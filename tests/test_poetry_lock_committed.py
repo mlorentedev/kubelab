@@ -18,7 +18,7 @@ REPO = pathlib.Path(__file__).resolve().parent.parent
 
 
 def _git(*args: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(["git", *args], cwd=REPO, capture_output=True, text=True, check=False)
+    return subprocess.run(["git", *args], cwd=REPO, capture_output=True, text=True, encoding="utf-8", check=False)
 
 
 def _ignoring_pattern(cwd: pathlib.Path) -> str | None:
@@ -30,7 +30,9 @@ def _ignoring_pattern(cwd: pathlib.Path) -> str | None:
     check = ["git", "check-ignore", "--no-index"]
     if subprocess.run([*check, "poetry.lock"], cwd=cwd, capture_output=True, check=False).returncode != 0:
         return None
-    verbose = subprocess.run([*check, "-v", "poetry.lock"], cwd=cwd, capture_output=True, text=True, check=False)
+    verbose = subprocess.run(
+        [*check, "-v", "poetry.lock"], cwd=cwd, capture_output=True, text=True, encoding="utf-8", check=False
+    )
     return verbose.stdout.strip()
 
 
@@ -50,7 +52,9 @@ def test_a_negated_pattern_is_not_read_as_ignoring_the_lock(tmp_path: pathlib.Pa
 def test_the_lock_matches_pyproject() -> None:
     poetry = shutil.which("poetry")
     assert poetry, "poetry is not on PATH, so the lock cannot be checked"
-    done = subprocess.run([poetry, "check", "--lock"], cwd=REPO, capture_output=True, text=True, check=False)
+    done = subprocess.run(
+        [poetry, "check", "--lock"], cwd=REPO, capture_output=True, text=True, encoding="utf-8", check=False
+    )
     assert done.returncode == 0, f"run `poetry lock` and commit it: {(done.stdout + done.stderr)[-1000:]}"
 
 

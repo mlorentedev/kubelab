@@ -76,6 +76,7 @@ def edge(tmp_path: pathlib.Path, request):
                 env={**self.env, **overrides},
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
                 timeout=30,
             )
 

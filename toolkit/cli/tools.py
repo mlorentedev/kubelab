@@ -89,6 +89,7 @@ def install_mkcert() -> None:
             ["mkcert", "-CAROOT"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
         )
         logger.info(f"CA root: {result.stdout.strip()}")
         return
@@ -225,6 +226,7 @@ def certs_status(
                 ],
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
             )
             if result.returncode == 0:
                 for line in result.stdout.strip().split("\n"):
@@ -244,6 +246,7 @@ def certs_status(
             ["mkcert", "-CAROOT"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
         )
         logger.info(f"mkcert CA root: {result.stdout.strip()}")
     else:
@@ -516,6 +519,7 @@ def mutate_cmd(
                 env={**os.environ, "PYTHONPYCACHEPREFIX": cache},
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
                 check=False,
             )
         lines = result.stdout.strip().splitlines()

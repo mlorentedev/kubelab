@@ -185,6 +185,7 @@ def _run_preflight(tmp_path: Path, fail_first: int) -> tuple[subprocess.Complete
         env=env,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
     )
     elapsed = time.monotonic() - started
