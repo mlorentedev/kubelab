@@ -557,3 +557,16 @@ def test_a_disabled_run_releases_the_engine() -> None:
     assert holder["name"] == _task(HOLDER)["community.docker.docker_container"]["name"]
     assert holder["state"] == "absent"
     assert "not (renovate_enabled | bool)" in str(task["when"])
+
+
+def test_the_holder_is_not_in_the_forge_stacks_compose_project() -> None:
+    # compose names its project after the directory, and `down --remove-orphans`
+    # there would delete a container that claims the same project.
+    value = _task(HOLDER)["community.docker.docker_container"]["labels"]["com.docker.compose.project"]
+    assert value != Path(_defaults()["beelink_deploy_dir"]).name
+
+
+def test_the_docker_reclaim_never_selects_the_holder() -> None:
+    from toolkit.features.docker_reclaim import BUILDER_PREFIX
+
+    assert not _task(HOLDER)["community.docker.docker_container"]["name"].startswith(BUILDER_PREFIX)
