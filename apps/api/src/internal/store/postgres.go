@@ -170,6 +170,25 @@ func (m ForgeModel) MarkUnreachable(ctx context.Context, src forge.Source, at ti
 	return err
 }
 
+// Backlog counts the deliveries not yet projected and returns the oldest one's receipt
+// time, zero when there is none.
+func (m ForgeModel) Backlog(ctx context.Context) (int, time.Time, error) {
+	db, err := Pool(m.Conf)
+	if err != nil {
+		return 0, time.Time{}, err
+	}
+	var depth int
+	var oldest *time.Time
+	if err := db.QueryRow(ctx, `SELECT count(*), min(received_at) FROM forge_event
+		WHERE projected_at IS NULL`).Scan(&depth, &oldest); err != nil {
+		return 0, time.Time{}, err
+	}
+	if oldest == nil {
+		return depth, time.Time{}, nil
+	}
+	return depth, *oldest, nil
+}
+
 // Pending returns deliveries not yet projected, oldest first.
 func (m ForgeModel) Pending(ctx context.Context, limit int) ([]forge.Event, error) {
 	db, err := Pool(m.Conf)

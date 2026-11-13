@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/mlorentedev/kubelab/apps/api/internal/forge"
 )
@@ -40,9 +41,19 @@ type fakeLog struct {
 	pending   []forge.Event
 	projected map[string]*forge.Item
 	refuse    int
+	// depth and oldest answer Backlog, which counts the whole table, not a batch.
+	depth      int
+	oldest     time.Time
+	backlogErr error
+	backlogs   int
 }
 
 func (f *fakeLog) Pending(context.Context, int) ([]forge.Event, error) { return f.pending, nil }
+
+func (f *fakeLog) Backlog(context.Context) (int, time.Time, error) {
+	f.backlogs++
+	return f.depth, f.oldest, f.backlogErr
+}
 
 func (f *fakeLog) Project(_ context.Context, e forge.Event, item *forge.Item) error {
 	if item != nil && item.Number == f.refuse {

@@ -132,6 +132,40 @@ func TestSameDeliveryProjectsOnce(t *testing.T) {
 	}
 }
 
+func TestBacklogCountsEveryPendingDeliveryNotABatch(t *testing.T) {
+	conf := testPostgres(t)
+	ctx := context.Background()
+	model := store.ForgeModel{Conf: conf}
+	cleanup, err := pgx.Connect(ctx, conf.DSN())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup.Close(ctx)
+	if _, err := cleanup.Exec(ctx, `TRUNCATE forge_event, forge_item, forge_source`); err != nil {
+		t.Fatal(err)
+	}
+	if depth, oldest, err := model.Backlog(ctx); err != nil || depth != 0 || !oldest.IsZero() {
+		t.Fatalf("empty: depth = %d, oldest = %v, err = %v", depth, oldest, err)
+	}
+	// More than one Pending batch, so a count taken from Pending would stop at its limit.
+	for i := 0; i < 60; i++ {
+		if err := store.StoreEvent(ctx, conf, "gitea", "d"+strconv.Itoa(i), "issues", []byte(`{}`)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	first := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
+	if _, err := cleanup.Exec(ctx, `UPDATE forge_event SET received_at = $1 WHERE delivery_id = 'd0'`, first); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cleanup.Exec(ctx, `UPDATE forge_event SET projected_at = now() WHERE delivery_id = 'd1'`); err != nil {
+		t.Fatal(err)
+	}
+	depth, oldest, err := model.Backlog(ctx)
+	if err != nil || depth != 59 || !oldest.Equal(first) {
+		t.Fatalf("depth = %d, oldest = %v, err = %v", depth, oldest, err)
+	}
+}
+
 func TestQueueReadsDeclaredOpenItemsNewestFirst(t *testing.T) {
 	conf := testPostgres(t)
 	ctx := context.Background()
