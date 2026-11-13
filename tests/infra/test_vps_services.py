@@ -33,14 +33,12 @@ def _curl(url: str, *, follow: bool = False, auth: str = "") -> tuple[int, str]:
 
 
 def _curl_body(url: str) -> tuple[int, str]:
-    """Curl a URL and return (status_code, body)."""
-    cmd = ["curl", "-sk", "--max-time", "10", url]
+    """Curl a URL once and return (status_code, body) from the same response."""
+    cmd = ["curl", "-sk", "-w", "\n%{http_code}", "--max-time", "10", url]
     result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", check=False)
-    # Get status code separately
-    cmd_code = ["curl", "-sk", "-o", "/dev/null", "-w", "%{http_code}", "--max-time", "10", url]
-    code_result = subprocess.run(cmd_code, capture_output=True, text=True, encoding="utf-8", check=False)
-    code = int(code_result.stdout.strip()) if code_result.stdout.strip().isdigit() else 0
-    return code, result.stdout
+    body, _, status = result.stdout.rpartition("\n")
+    code = int(status) if status.isdigit() else 0
+    return code, body
 
 
 class TestHeadscale:
