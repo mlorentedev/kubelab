@@ -2910,6 +2910,13 @@ backup:
           act_runner's shared tool cache, the Gitea twin of github_runner_toolcache:
           every entry is re-fetched from its upstream by the next job that needs it.
         tier: 3
+      resume-trivy-cache:
+        reason: >-
+          Trivy's vulnerability database, kept between the resume repository's CI scans
+          on purpose (resume#763) so a run does not download it again inside Trivy's
+          timeout. Trivy downloads it again whenever it is missing or stale, so an empty
+          volume costs one slow scan and nothing else.
+        tier: 3
     vps:
       grafana:
         pvc:
