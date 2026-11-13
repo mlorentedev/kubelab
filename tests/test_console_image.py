@@ -140,3 +140,18 @@ def test_dependabot_tracks_the_console_base_images() -> None:
     declared = {(u["package-ecosystem"], u["directory"]) for u in cfg["updates"]}
     assert ("docker", "/apps/console") in declared
     assert ("npm", "/apps/console") in declared
+
+
+def test_a_console_fix_cannot_release_before_there_is_a_job_to_publish_it() -> None:
+    """release-please puts every releasable package in one pull request. A `fix` commit under
+    apps/console would add `console-vX.Y.Z` to the next `api` release, and until `release.yml`
+    re-tags an image for it that tag names nothing. Dependabot writes such commits, so its
+    prefix for the app is `chore` until the publish job exists."""
+    release = yaml.safe_load((ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8"))
+    if "publish-console" in release["jobs"]:
+        return
+    cfg = yaml.safe_load((ROOT / ".github/dependabot.yml").read_text(encoding="utf-8"))
+    prefixes = {
+        u["commit-message"]["prefix"] for u in cfg["updates"] if u["directory"] == "/apps/console" and "commit-message" in u
+    }
+    assert prefixes == {"chore"}, f"console dependency commits would release without a publish job: {prefixes}"

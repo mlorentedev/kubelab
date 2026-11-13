@@ -36,7 +36,14 @@ LABEL org.opencontainers.image.title="kubelab-console" \
 # The base ships its own index.html and 50x.html in the web root, and the COPY below merges
 # into that directory. Emptying it first makes the served tree exactly dist/.
 USER 0
-RUN rm -rf /usr/share/nginx/html/*
+
+# SEC: take patched Alpine packages from the live index at build time instead of waiting for a
+# new base image. ci-publish.yml's Trivy step fails the publish on any fixable HIGH or CRITICAL,
+# and the pinned base carried several (musl, zlib, expat, libxslt) on 2026-11-13. This closes the
+# gap between an upstream fix and the next base image, not the gap between a fix and the next
+# build of this app: the weekly Dependabot bump of the digest above is what moves the base.
+# The runtime stage is the only one Trivy judges, as in edge/errors.
+RUN apk update && apk upgrade --no-cache && rm -rf /usr/share/nginx/html/*
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 # Fail the build, which pull requests run, on a config that would not start.
