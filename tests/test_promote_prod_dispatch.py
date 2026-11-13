@@ -542,6 +542,10 @@ def test_no_other_step_receives_the_pull_token() -> None:
     variable = catalog_secret_variable(PULL_TOKEN_KEY)
     holders = [step.get("id") or step.get("name") for step in _steps() if variable in str(step.get("env", {}))]
     assert holders == ["contract"]
+    # A workflow- or job-level `env:` would hand it to every step while the list above stays green.
+    doc = _load()
+    assert variable not in str(doc.get("env", {}))
+    assert [name for name, job in doc["jobs"].items() if variable in str(job.get("env", {}))] == []
 
 
 def test_a_secret_never_appears_inside_a_run_script() -> None:
