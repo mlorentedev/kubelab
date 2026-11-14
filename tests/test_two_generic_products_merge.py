@@ -26,6 +26,7 @@ import yaml
 
 from toolkit.features import product_registry, product_render, promotion
 from toolkit.features.product_contract import validate_contract
+from tests.shells import child_env
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 
@@ -225,7 +226,7 @@ def _python(tree: pathlib.Path, code: str, *args: str) -> None:
     done = subprocess.run(
         [sys.executable, "-c", code, *args],
         cwd=tree,
-        env={"PATH": "/usr/bin:/bin", "PYTHONPATH": str(tree), "HOME": str(tree)},
+        env=child_env({"PATH": "/usr/bin:/bin", "PYTHONPATH": str(tree), "HOME": str(tree)}),
         capture_output=True,
         encoding="utf-8",
     )

@@ -34,6 +34,7 @@ from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
 from toolkit.features.generator_ansible import AnsibleGenerator
 from tests.shells import BASH
+from tests.shells import child_env
 
 REPO = Path(__file__).resolve().parent.parent
 ROLE = REPO / "infra/ansible/roles/node_backup"
@@ -1457,7 +1458,7 @@ def test_every_rendered_unit_passes_systemd_analyze_verify(tmp_path):
         capture_output=True,
         text=True,
         encoding="utf-8",
-        env={"SYSTEMD_UNIT_PATH": f"{tmp_path}:", "PATH": "/usr/bin:/bin"},
+        env=child_env({"SYSTEMD_UNIT_PATH": f"{tmp_path}:", "PATH": "/usr/bin:/bin"}),
     )
     assert proc.returncode == 0, proc.stderr
 

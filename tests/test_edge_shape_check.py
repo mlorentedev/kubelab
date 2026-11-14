@@ -16,6 +16,7 @@ import pytest
 import yaml
 
 from toolkit.features import edge_shape_check as s
+from tests.shells import child_env
 
 REPO = Path(__file__).resolve().parents[1]
 NETWORKING = yaml.safe_load((REPO / "infra" / "config" / "values" / "common.yaml").read_text(encoding="utf-8"))[
@@ -281,7 +282,7 @@ def test_the_probe_writes_one_line_per_connect(tmp_path: Path) -> None:
     (bin_dir / "date").chmod(0o755)
     probe = tmp_path / "probe"
     script = s.probe_start_script(seconds=1).replace(s.PROBE_FILE, str(probe)).replace("nohup ", "").replace(" &", "")
-    env: dict[str, Any] = {"PATH": f"{bin_dir}:/usr/bin:/bin"}
+    env: dict[str, Any] = child_env({"PATH": f"{bin_dir}:/usr/bin:/bin"})
     subprocess.run(["sh", "-c", script], env=env, check=True, timeout=10)
     window = s.Window("t", None, True)
     s.read_probe(probe.read_text(encoding="utf-8"), window)

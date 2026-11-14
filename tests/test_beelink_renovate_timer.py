@@ -35,6 +35,7 @@ import yaml
 from jinja2 import StrictUndefined
 
 from tests.ansible_jinja import ansible_env
+from tests.shells import child_env
 
 REPO = Path(__file__).resolve().parent.parent
 ROLE = REPO / "infra/ansible/roles/beelink_services"
@@ -295,10 +296,12 @@ def _run_script(
         path.chmod(path.stat().st_mode | stat.S_IEXEC)
     unit = _unit("kubelab-renovate.service.j2")
     # Without curl the PATH is the stub directory alone: the script uses nothing else.
-    env = {
-        "PATH": f"{bin_dir}:/usr/bin:/bin" if with_curl else str(bin_dir),
-        "RENOVATE_IMAGE": "example/renovate:1.2.3",
-    }
+    env = child_env(
+        {
+            "PATH": f"{bin_dir}:/usr/bin:/bin" if with_curl else str(bin_dir),
+            "RENOVATE_IMAGE": "example/renovate:1.2.3",
+        }
+    )
     for value in unit["Service"]["Environment"]:
         env.update(pair.split("=", 1) for pair in _split_env(value))
     proc = subprocess.run(  # noqa: S603 - a repo script under test

@@ -81,8 +81,7 @@ def test_reclaim_is_limited_to_gateway_writable_trees_and_stopped_drift() -> Non
 def test_deleted_locks_are_not_reclaimed_after_they_are_removed() -> None:
     task = _named(VAULT_TASKS, "Reclaim existing vault-zone ownership")
     assert any(
-        "item.path not in" in condition and "_agent_stack_vault_memory_locks" in condition
-        for condition in task["when"]
+        "item.path not in" in condition and "_agent_stack_vault_memory_locks" in condition for condition in task["when"]
     ), "the pre-cleanup inventory includes locks that no longer exist by this task"
 
 

@@ -26,6 +26,7 @@ import pytest
 import yaml
 
 from toolkit.features import terraform_runner as tr
+from tests.shells import child_env
 
 REPO = Path(__file__).resolve().parent.parent
 TERRAFORM_DIR = REPO / "infra" / "terraform"
@@ -1205,7 +1206,7 @@ def test_the_default_terraform_seam_passes_the_environment_and_returns_the_code(
     script = tmp_path / "terraform"
     script.write_text('#!/bin/sh\necho "$TF_VAR_x"\nexit 4\n', encoding="utf-8", newline="\n")
     script.chmod(0o755)
-    env = {"PATH": f"{tmp_path}:{os.environ['PATH']}", "TF_VAR_x": "hello"}
+    env = child_env({"PATH": f"{tmp_path}:{os.environ['PATH']}", "TF_VAR_x": "hello"})
     result = tr.subprocess_terraform(["version"], env=env, capture=True, quiet=False)
     assert (result.returncode, result.stdout.strip()) == (4, "hello")
 

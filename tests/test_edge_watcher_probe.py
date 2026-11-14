@@ -17,6 +17,7 @@ import subprocess
 import time
 
 import pytest
+from tests.shells import child_env
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 PROBE = REPO / "infra/k8s/base/services/edge-watcher/probe.sh"
@@ -57,13 +58,15 @@ def edge(tmp_path: pathlib.Path, request):
         encoding="utf-8",
         newline="\n",
     )
-    env = {
-        "PATH": f"{bin_dir}:{os.environ['PATH']}",
-        "FAKE_DIR": str(fake),
-        "EDGE_TARGETS": str(targets),
-        "REACH_TIMEOUT": "1",
-        "NC": str(nc),
-    }
+    env = child_env(
+        {
+            "PATH": f"{bin_dir}:{os.environ['PATH']}",
+            "FAKE_DIR": str(fake),
+            "EDGE_TARGETS": str(targets),
+            "REACH_TIMEOUT": "1",
+            "NC": str(nc),
+        }
+    )
 
     class Edge:
         def __init__(self) -> None:
