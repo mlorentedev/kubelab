@@ -1,0 +1,101 @@
+# Managed by Ansible — do not edit manually
+# Source: infra/ansible/roles/coredns/templates/Corefile.j2
+
+# --- Staging zones (from networking.staging_zones in common.yaml) ---
+
+staging.kubelab.live {
+    # The apex only: the template below answers every name under it with the same
+    # address. A per-service line here added nothing but a 3600s TTL, which pinned
+    # retired names (web, blog, gitea) in Pi-hole for an hour (#2219).
+    hosts {
+        100.64.0.11 staging.kubelab.live
+        fallthrough
+    }
+    template IN A staging.kubelab.live {
+        match .*\.staging\.kubelab\.live
+        answer "{{ .Name }} 60 IN A 100.64.0.11"
+        fallthrough
+    }
+    # Every other type for those names: an empty NOERROR with the zone's SOA
+    # (NODATA, RFC 2308). Without it the chain ends with no handler and answers
+    # SERVFAIL, and musl (Alpine, busybox) asks A and AAAA together and fails the
+    # whole lookup when either fails: staging Vikunja could not resolve auth for
+    # eight days (DNS-005, #2711). The SOA's last field caps how long a resolver
+    # caches the empty answer. `fallthrough` is load-bearing: the apex matches no
+    # pattern and must still reach `hosts`.
+    template IN ANY staging.kubelab.live {
+        match .*\.staging\.kubelab\.live
+        rcode NOERROR
+        authority "staging.kubelab.live. 60 IN SOA ns.staging.kubelab.live. hostmaster.staging.kubelab.live. 1 7200 1800 1209600 60"
+        fallthrough
+    }
+    log
+    errors
+}
+
+staging.mlorente.dev {
+    hosts {
+        100.64.0.11 staging.mlorente.dev
+        fallthrough
+    }
+    log
+    errors
+}
+
+staging.imagesensortool.com {
+    hosts {
+        100.64.0.11 staging.imagesensortool.com
+        fallthrough
+    }
+    log
+    errors
+}
+
+# --- Prod zone ---
+
+kubelab.live {
+    hosts {
+        # Bare-metal services: individual Tailscale IPs
+        100.64.0.8 jetson.kubelab.live
+        # Every prod record Cloudflare publishes (infra/terraform/dns/services.json),
+        # at the same target over the tailnet: the VPS unless the record names a
+        # node. Rendered from that list, never kept by hand: a hand list sent
+        # status.kubelab.live to rpi3, where nothing serves 443 (#2212). LAN
+        # clients arrive from 100.64.0.0/10, which Authelia and CrowdSec trust.
+        100.64.0.2 kubelab.live
+        100.64.0.2 www.kubelab.live
+        100.64.0.2 api.kubelab.live
+        100.64.0.2 console.kubelab.live
+        100.64.0.2 status.kubelab.live
+        100.64.0.2 auth.kubelab.live
+        100.64.0.2 grafana.kubelab.live
+        100.64.0.2 gitea.kubelab.live
+        100.64.0.2 n8n.kubelab.live
+        100.64.0.2 pr-agent.kubelab.live
+        100.64.0.2 traefik.kubelab.live
+        100.64.0.2 argo.kubelab.live
+        100.64.0.11 pihole.kubelab.live
+        100.64.0.2 tasks.kubelab.live
+        100.64.0.2 chat.kubelab.live
+        100.64.0.2 assets.kubelab.live
+        # Headscale MUST use public IP — bootstrap dependency
+        162.55.57.175 vpn.kubelab.live
+        fallthrough
+    }
+    forward . 1.1.1.1 8.8.8.8
+    log
+    errors
+}
+
+. {
+    forward . 1.1.1.1 8.8.8.8
+    cache 30
+    log
+    errors
+    # Liveness/readiness over HTTP, because this image cannot be probed any other
+    # way: coredns/coredns is distroless (entrypoint /coredns, no shell, no dig),
+    # so every `exec`-based Docker healthcheck fails on a missing binary rather
+    # than on CoreDNS being unwell. See the compose template.
+    health :8080
+    ready :8181
+}

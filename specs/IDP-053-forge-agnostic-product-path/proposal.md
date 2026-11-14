@@ -242,6 +242,13 @@ The pull token's SOPS file is also open: Gitea tokens live in `prod.enc.yaml`
 `<label>.staging.kubelab.live`, not `staging.<label>.kubelab.live`, which would fall under prod's
 cookie domain. Any other prod hostname keeps `staging.` + itself. Recorded under ADR-067 D2.
 
+**Note, 2026-11-14 (owner, EDGE-001):** a `staging.<domain>` hostname no longer needs a line in
+`networking.staging_zones`. It is accepted when its apex is a key of
+`infra/terraform/dns/zones.json`, the platform's Cloudflare grant, and its split-DNS zone is
+derived into `infra/config/products/edge.json`. The refusal for an ungranted apex names
+`zones.json`, not a `staging_zones` line. AC13's wording below predates this; its verification
+command is unchanged and still selects the tests that hold the amended rule.
+
 The rule binds today's contract, so it is written as an amendment to ADR-067 D2 (accepted),
 not only in ADR-073 D8 (proposed), which replaces it with the domain registry on acceptance.
 It is enforced, not remembered: S3c's render-time check refuses a `hostnames.staging` that

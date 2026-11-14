@@ -9,6 +9,7 @@ always at the edge of what is left.
 from __future__ import annotations
 
 import pathlib
+from typing import Any
 
 import pytest
 
@@ -19,7 +20,7 @@ WEB = "kubelab-web-9a007d33a769b7b0fc2d@kubernetescrd"
 GITEA = "kubelab-gitea-4d0b79276f78ba8cd4d5@kubernetescrd"
 
 
-def _vec(router: str, value: float, **labels: str) -> dict:
+def _vec(router: str, value: float, **labels: str) -> dict[str, Any]:
     return {"metric": {"RouterName": router, **labels}, "value": [0, str(value)]}
 
 
@@ -61,7 +62,7 @@ class TestTheThreshold:
 
 
 class TestTheRows:
-    def _results(self) -> dict:
+    def _results(self) -> dict[str, Any]:
         return {
             "count": [_vec(WEB, 37), _vec(GITEA, 571)],
             "p50": [_vec(WEB, 3.21e9), _vec(GITEA, 1.6e9)],
