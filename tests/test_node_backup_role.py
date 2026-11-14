@@ -1237,7 +1237,12 @@ def test_the_schedule_report_counts_backups_from_lines_the_ship_still_prints() -
     week with no interrupted backup rather than a reader with nothing to read.
     """
     script = (ROLE / "templates" / "node-backup-ship.sh.j2").read_text(encoding="utf-8")
-    backup = next(line for line in script.splitlines() if line.startswith("$RESTIC backup "))
+    lines = script.splitlines()
+    start = next(i for i, line in enumerate(lines) if line.startswith("$RESTIC backup "))
+    end = start
+    while lines[end].rstrip().endswith("\\"):
+        end += 1
+    backup = " ".join(lines[start : end + 1])
     for flag in ("-q", "--quiet", "--json"):
         assert flag not in backup.split(), f"the ship's backup runs with {flag}"
     reader = next((t for t in _schedule_playbook()["tasks"] if "began" in t.get("name", "")), None)
