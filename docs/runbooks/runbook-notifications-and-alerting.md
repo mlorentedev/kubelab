@@ -166,6 +166,19 @@ Following Google SRE error budget doctrine, public ingress alerts fire on actual
 - **Fast Burn Rate (`obs015-slo-fast-burn-rate`)**: 14.4x normal error rate capacity in a 1-hour window (evaluating >50 HTTP 5xx errors from Traefik ingress logs, `for: 2m`). Consumes ~2% of the 30-day budget in 1 hour; triggers an immediate page in prod.
 - **Medium Burn Rate (`obs015-slo-medium-burn-rate`)**: 6x normal error rate capacity in a 6-hour window (evaluating >100 HTTP 5xx errors from Traefik ingress logs, `for: 15m`). Consumes ~5% of the 30-day budget in 6 hours; triggers a warning in ops logs.
 
+**Prod baseline** (#3144): the thresholds were checked against prod on 2026-11-14, over seven days. Since 2026-11-06 the edge has logged every 5xx, not only slow ones.
+
+| Window | Normal maximum | Threshold | Margin |
+|---|---|---|---|
+| 1 h | 19 errors (Headscale restart, 2026-11-11) | > 50 | 2.6× |
+| 6 h | about 20 errors | > 100 | 5× |
+
+A typical hour with any 5xx has 8 or fewer, and 158 of the 168 hours had none. The only event above either threshold was on 2026-11-08: Gitea 502s at the edge over 200s from Gitea, 91 in 1 h and 136 in 6 h (#3466). Both rules fired on it and on nothing else.
+
+The figures are totals across all routers, because that is what the rules sum. The per-router breakdown is in the #3144 comment. Compare a re-read against the thresholds the same way, never one router alone.
+
+Before changing a threshold, re-read the baseline. Pull `{container="traefik"} | json | __error__="" | DownstreamStatus >= 500` with `toolkit obs logs --env prod --since 8d --limit 5000 --json`, then count the lines in rolling 1 h and 6 h windows. Loki keeps 168 h, so seven days is the longest window available. Loki returns the newest lines first and truncates at `--limit` without an error. If the result has exactly 5,000 lines, the oldest hours are missing and the maxima are too low. In that case count in Grafana Explore instead, with the rule's own `sum(count_over_time(...[1h]))` expression, which aggregates in Loki and has no line cap.
+
 ## 8. Fleet Volume & Disk Saturation Watcher (`disk-watcher.yaml` & `disk-rules.yaml`)
 
 - In-cluster CronJob `disk-watcher` runs every 15 minutes inspecting PVCs and root disk capacity in `kubelab`.
