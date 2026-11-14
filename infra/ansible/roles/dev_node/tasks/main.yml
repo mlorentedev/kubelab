@@ -577,7 +577,6 @@
             IdentitiesOnly yes
             StrictHostKeyChecking yes
       become: true
-      register: _gitea_ssh_config
 
     - name: Read back the public half (never the private one)
       ansible.builtin.slurp:

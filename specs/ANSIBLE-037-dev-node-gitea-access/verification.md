@@ -94,24 +94,27 @@ Measured 2026-11-12 against the agents' account (D1 as amended, #1075), from the
 
 ## Test status
 
-- Test suite: `<command> -> <output / coverage %>`
-- Manual smoke test: what was exercised, what was observed
-- No regressions in existing test suite: yes / no (if no, document)
+- Test suite: `make test` (2026-11-13) -> `10303 passed, 95 skipped`, coverage 78%. The spec's own guards: `poetry run pytest tests/test_dev_node_gitea_host_key_pin.py tests/test_dev_node_gitea_agent_key.py tests/test_dev_node_gitea_identity.py tests/test_dev_node_npm_converges.py -q` -> `19 passed`.
+- Manual smoke test: the AC1, AC3 and AC4 runs under Evidence, on powered hardware.
+- No regressions in existing test suite: yes.
+- **AC1 on an untagged provision: blocked, not measured.** `make provision NODE=ace2 ENV=staging`, twice on 2026-11-13, fails both times at `Install global agent CLI tools via mise node npm`, before the gitea block: run 1 `ok=135 changed=3 failed=1`, run 2 `ok=134 changed=0 failed=1`. ace2's pinned node lost its `npm` to an interrupted `npm update --global` on 2026-10-31, and the role does not detect it: #3477 (ANSIBLE-090). The `changed=0` of run 2 is therefore not convergence evidence. AC1 stands on the `TAGS=gitea` runs above.
 
 ## Decisions made during implementation
 
 Brief log of non-obvious trade-offs or course corrections taken during the work. Routine choices belong in commit messages, not here.
 
--
--
+- **The forge account moved from the machine class to the agents' account** (D1 amendment, #1075). The original D1 used `hefesto` because the identity map had no agent key; since #2578 it has one (`dedalo`), and pushes made by agent sessions belong there. The role removes the key from the machine account before registering it on the agents' account, so a re-run on an old node converges instead of leaving the key on both.
+- **AC6 withdrawn, not worked around** (2026-11-12, owner decision on #1075). Agent forwarding is off fleet-wide by `ssh_hardening`, and `IdentitiesOnly yes` would have kept a forwarded key out anyway. The human half of D1 is the operator's workstation, not ace2. lesson-740 records why the criterion was untestable as written.
+- **AC3 and AC4 are drills, run by the operator, not CI tests.** Both clear or revoke real state on a powered node, which no CI runner reaches. Each has a static guard that runs without hardware (`test_dev_node_gitea_host_key_pin.py`, `test_dev_node_gitea_agent_key.py`), and each drill checks freshness before touching the node and prints the restore command if it stops early.
+- **The two TOOL-035 team probes left this folder** for `specs/archive/TOOL-035-gitea-repository-reconciliation/`, the spec they measured. They were here only because both specs ran against the forge in the same week.
 
 ## Promotion candidates
 
 Before archiving, flag what (if anything) should be promoted to the vault. If all three are "no", archive in repo is the only persistence.
 
-- [ ] Lesson for the repo's `docs/lessons/`? <yes / no - one line of what>
-- [ ] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? <yes / no - one line of what>
-- [ ] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. <yes / no - one line>
+- [x] Lesson for the repo's `docs/lessons/`? Yes, already landed in #3411: `docs/lessons/process-method/lesson-740-an-acceptance-criterion-is-only-testable-if-fleet-policy-allows-its-mechanism.md`.
+- [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? No: ADR-062 D1 still holds (which identity class a node uses); this spec changed only the access mechanism, recorded in `proposal.md` D1 as amended.
+- [x] New pattern candidate for `00_meta/patterns/`? No: one occurrence, in one project.
 
 ## Archive checklist
 
