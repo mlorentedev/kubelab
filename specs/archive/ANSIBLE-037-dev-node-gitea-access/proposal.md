@@ -1,7 +1,7 @@
 ---
 id: "ANSIBLE-037-dev-node-gitea-access"
 type: spec
-status: draft # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-09-01"
 issue: "mlorentedev/kubelab#1075"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal]

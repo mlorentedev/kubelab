@@ -123,7 +123,7 @@ Before archiving, flag what (if anything) should be promoted to the vault. If al
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/ANSIBLE-037-dev-node-gitea-access/` -> `specs/archive/ANSIBLE-037-dev-node-gitea-access/`
+- [x] `proposal.md` frontmatter set to `status: archived`
+- [x] Folder moved: `specs/ANSIBLE-037-dev-node-gitea-access/` -> `specs/archive/ANSIBLE-037-dev-node-gitea-access/`
 - [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
-- [ ] Promotions above executed (if any)
+- [x] Promotions above executed (if any)
