@@ -1,0 +1,751 @@
+{
+ "facts": {
+  "k6_image": "grafana/k6@sha256:2dd4756ec6e14e62778916e1eb850108e4b499304c02df56760fa0bdb0fba0b8",
+  "traefik_image": "rancher/mirrored-library-traefik:3.6.7",
+  "k3s": "v1.34.4+k3s1",
+  "kernel": "6.8.0-149-generic",
+  "node_capacity": {
+   "cpu": "4",
+   "memory": "12023364Ki"
+  },
+  "cpu_model": {
+   "ace1": "Intel(R) N95",
+   "ace2": "Intel(R) N95"
+  },
+  "workloads": {
+   "api": {
+    "image": "docker.io/mlorentedev/kubelab-api:sha-20ff5f8",
+    "resources": {
+     "limits": {
+      "cpu": "500m",
+      "memory": "512Mi"
+     },
+     "requests": {
+      "cpu": "250m",
+      "memory": "256Mi"
+     }
+    }
+   },
+   "web": {
+    "image": "docker.io/mlorentedev/kubelab-web:sha-9475b33",
+    "resources": {
+     "limits": {
+      "cpu": "500m",
+      "memory": "512Mi"
+     },
+     "requests": {
+      "cpu": "250m",
+      "memory": "256Mi"
+     }
+    }
+   }
+  },
+  "target_nic": {
+   "rps_cpus": {
+    "rx-0": "0"
+   },
+   "irq_cpus": {
+    "131": "2"
+   },
+   "iface": "enp1s0",
+   "driver": "r8169"
+  },
+  "accept_encoding": "gzip (k6 default)",
+  "sample_seconds": 2
+ },
+ "criteria": {
+  "max_error_rate": 0.01,
+  "max_p95_ms": 250.0,
+  "min_achieved_ratio": 0.95,
+  "max_generator_cpu": 85.0,
+  "step_seconds": 60,
+  "warmup_seconds": 30,
+  "max_vus": 1000,
+  "settle_seconds": 15
+ },
+ "baseline": [
+  {
+   "rate": 25,
+   "target": "api-health",
+   "requests": 1501.0,
+   "achieved_rps": 25.0,
+   "error_rate": 0.0,
+   "avg_ms": 2.968741551632245,
+   "p50_ms": 3.037663,
+   "p90_ms": 3.458209,
+   "p95_ms": 3.591802,
+   "p99_ms": 3.924651,
+   "max_ms": 5.383535,
+   "phases": {
+    "blocked": {
+     "p50_ms": 0.001026,
+     "p95_ms": 0.001141,
+     "p99_ms": 0.001194,
+     "max_ms": 0.005765
+    },
+    "connecting": {
+     "p50_ms": 0.0,
+     "p95_ms": 0.0,
+     "p99_ms": 0.0,
+     "max_ms": 0.0
+    },
+    "tls_handshaking": {
+     "p50_ms": 0.0,
+     "p95_ms": 0.0,
+     "p99_ms": 0.0,
+     "max_ms": 0.0
+    },
+    "waiting": {
+     "p50_ms": 2.675657,
+     "p95_ms": 3.220783,
+     "p99_ms": 3.506351,
+     "max_ms": 5.011383
+    },
+    "receiving": {
+     "p50_ms": 0.10684,
+     "p95_ms": 0.165934,
+     "p99_ms": 0.202504,
+     "max_ms": 0.621203
+    }
+   },
+   "status_429": 0.0,
+   "dropped": 0.0,
+   "vus_peak": 0.0,
+   "cold": {
+    "requests": 750.0,
+    "achieved_rps": 25.0,
+    "error_rate": 0.0,
+    "avg_ms": 3.053679374666667,
+    "p50_ms": 3.137917,
+    "p90_ms": 3.5424129,
+    "p95_ms": 3.6557332,
+    "p99_ms": 3.97757902,
+    "max_ms": 6.437421,
+    "phases": {
+     "blocked": {
+      "p50_ms": 0.001022,
+      "p95_ms": 0.0011732,
+      "p99_ms": 28.10389244,
+      "max_ms": 34.520157
+     },
+     "connecting": {
+      "p50_ms": 0.0,
+      "p95_ms": 0.0,
+      "p99_ms": 0.6599156899999998,
+      "max_ms": 0.972879
+     },
+     "tls_handshaking": {
+      "p50_ms": 0.0,
+      "p95_ms": 0.0,
+      "p99_ms": 27.34230913,
+      "max_ms": 33.730421
+     },
+     "waiting": {
+      "p50_ms": 2.7672885000000003,
+      "p95_ms": 3.2685712,
+      "p99_ms": 3.51701314,
+      "max_ms": 6.040235
+     },
+     "receiving": {
+      "p50_ms": 0.105991,
+      "p95_ms": 0.16177524999999995,
+      "p99_ms": 0.20701767999999984,
+      "max_ms": 0.37268
+     }
+    }
+   },
+   "warmup_seconds": 30,
+   "timeline": [
+    {"t": 2.0, "edge_rps": 16.5, "open_connections": 21, "goroutines": 302, "heap_mb": 35.5, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 2.4, "traefik_cores": 0.24, "edge_mean_ms": 0.8, "node_cores": 0.54, "softirq_cores": 0.01, "conntrack": 649, "max_cpu": "cpu2", "max_cpu_busy_pct": 17.2, "max_cpu_softirq_pct": 1.0, "net_rx_cpu": "cpu2", "net_rx_share_pct": 72.2, "edge_cgroup_cores": 0.26, "workload_cores": 0.01, "other_cores": 0.27, "generator_busy_pct": 9.4},
+    {"t": 4.0, "edge_rps": 25.5, "open_connections": 21, "goroutines": 302, "heap_mb": 37.6, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 1.4, "traefik_cores": 0.06, "edge_mean_ms": 1.27, "node_cores": 0.42, "softirq_cores": 0.02, "conntrack": 657, "max_cpu": "cpu2", "max_cpu_busy_pct": 11.7, "max_cpu_softirq_pct": 0.5, "net_rx_cpu": "cpu2", "net_rx_share_pct": 68.4, "edge_cgroup_cores": 0.07, "workload_cores": 0.02, "other_cores": 0.33, "generator_busy_pct": 2.5},
+    {"t": 6.0, "edge_rps": 25.0, "open_connections": 21, "goroutines": 301, "heap_mb": 39.9, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 1.4, "traefik_cores": 0.06, "edge_mean_ms": 1.33, "node_cores": 0.41, "softirq_cores": 0.02, "conntrack": 661, "max_cpu": "cpu1", "max_cpu_busy_pct": 11.2, "max_cpu_softirq_pct": 0.5, "net_rx_cpu": "cpu2", "net_rx_share_pct": 69.3, "edge_cgroup_cores": 0.07, "workload_cores": 0.02, "other_cores": 0.32, "generator_busy_pct": 3.0},
+    {"t": 8.0, "edge_rps": 25.0, "open_connections": 21, "goroutines": 302, "heap_mb": 41.6, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 1.0, "traefik_cores": 0.07, "edge_mean_ms": 1.38, "node_cores": 0.41, "softirq_cores": 0.01, "conntrack": 667, "max_cpu": "cpu3", "max_cpu_busy_pct": 11.7, "max_cpu_softirq_pct": 0.5, "net_rx_cpu": "cpu2", "net_rx_share_pct": 66.0, "edge_cgroup_cores": 0.07, "workload_cores": 0.02, "other_cores": 0.32, "generator_busy_pct": 2.7},
+    {"t": 10.0, "edge_rps": 25.1, "open_connections": 21, "goroutines": 302, "heap_mb": 43.3, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 1.0, "traefik_cores": 0.08, "edge_mean_ms": 1.43, "node_cores": 0.41, "softirq_cores": 0.02, "conntrack": 677, "max_cpu": "cpu1", "max_cpu_busy_pct": 11.4, "max_cpu_softirq_pct": 0.5, "net_rx_cpu": "cpu2", "net_rx_share_pct": 65.4, "edge_cgroup_cores": 0.07, "workload_cores": 0.02, "other_cores": 0.32, "generator_busy_pct": 5.9},
+    {"t": 12.0, "edge_rps": 24.9, "open_connections": 21, "goroutines": 301, "heap_mb": 45.0, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 1.0, "traefik_cores": 0.07, "edge_mean_ms": 1.37, "node_cores": 0.41, "softirq_cores": 0.02, "conntrack": 683, "max_cpu": "cpu0", "max_cpu_busy_pct": 11.5, "max_cpu_softirq_pct": 0.5, "net_rx_cpu": "cpu2", "net_rx_share_pct": 61.2, "edge_cgroup_cores": 0.07, "workload_cores": 0.02, "other_cores": 0.32, "generator_busy_pct": 3.8},
+    {"t": 14.0, "edge_rps": 25.5, "open_connections": 21, "goroutines": 303, "heap_mb": 35.8, "gc_per_s": 0.5, "gc_pause_ms": 0.106, "alloc_mb_s": 1.7, "traefik_cores": 0.12, "edge_mean_ms": 2.44, "node_cores": 0.46, "softirq_cores": 0.03, "conntrack": 705, "max_cpu": "cpu3", "max_cpu_busy_pct": 12.8, "max_cpu_softirq_pct": 0.5, "net_rx_cpu": "cpu2", "net_rx_share_pct": 66.9, "edge_cgroup_cores": 0.12, "workload_cores": 0.02, "other_cores": 0.32, "generator_busy_pct": 3.0},
+    {"t": 16.0, "edge_rps": 25.1, "open_connections": 21, "goroutines": 303, "heap_mb": 36.1, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 0.9, "traefik_cores": 0.07, "edge_mean_ms": 1.36, "node_cores": 0.41, "softirq_cores": 0.02, "conntrack": 711, "max_cpu": "cpu1", "max_cpu_busy_pct": 10.3, "max_cpu_softirq_pct": 0.0, "net_rx_cpu": "cpu2", "net_rx_share_pct": 64.6, "edge_cgroup_cores": 0.07, "workload_cores": 0.02, "other_cores": 0.32, "generator_busy_pct": 2.8},
+    {"t": 18.0, "edge_rps": 25.5, "open_connections": 21, "goroutines": 302, "heap_mb": 37.3, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 1.0, "traefik_cores": 0.07, "edge_mean_ms": 1.33, "node_cores": 0.38, "softirq_cores": 0.01, "conntrack": 418, "max_cpu": "cpu0", "max_cpu_busy_pct": 11.3, "max_cpu_softirq_pct": 0.5, "net_rx_cpu": "cpu2", "net_rx_share_pct": 65.3, "edge_cgroup_cores": 0.07, "workload_cores": 0.02, "other_cores": 0.29, "generator_busy_pct": 2.5},
+    {"t": 20.0, "edge_rps": 25.5, "open_connections": 21, "goroutines": 302, "heap_mb": 38.8, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 1.0, "traefik_cores": 0.06, "edge_mean_ms": 1.33, "node_cores": 0.39, "softirq_cores": 0.02, "conntrack": 427, "max_cpu": "cpu0", "max_cpu_busy_pct": 11.3, "max_cpu_softirq_pct": 0.5, "net_rx_cpu": "cpu2", "net_rx_share_pct": 60.9, "edge_cgroup_cores": 0.07, "workload_cores": 0.02, "other_cores": 0.3, "generator_busy_pct": 3.2},
+    {"t": 22.0, "edge_rps": 25.1, "open_connections": 21, "goroutines": 305, "heap_mb": 40.6, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 1.2, "traefik_cores": 0.09, "edge_mean_ms": 1.33, "node_cores": 0.4, "softirq_cores": 0.02, "conntrack": 441, "max_cpu": "cpu3", "max_cpu_busy_pct": 11.6, "max_cpu_softirq_pct": 0.5, "net_rx_cpu": "cpu2", "net_rx_share_pct": 68.6, "edge_cgroup_cores": 0.09, "workload_cores": 0.02, "other_cores": 0.29, "generator_busy_pct": 2.6},
+    {"t": 24.0, "edge_rps": 25.0, "open_connections": 21, "goroutines": 306, "heap_mb": 42.1, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 1.0, "traefik_cores": 0.06, "edge_mean_ms": 1.31, "node_cores": 0.43, "softirq_cores": 0.02, "conntrack": 454, "max_cpu": "cpu3", "max_cpu_busy_pct": 10.9, "max_cpu_softirq_pct": 0.5, "net_rx_cpu": "cpu2", "net_rx_share_pct": 65.8, "edge_cgroup_cores": 0.06, "workload_cores": 0.02, "other_cores": 0.35, "generator_busy_pct": 2.8},
+    {"t": 26.0, "edge_rps": 25.0, "open_connections": 21, "goroutines": 305, "heap_mb": 43.5, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 1.0, "traefik_cores": 0.06, "edge_mean_ms": 1.36, "node_cores": 0.37, "softirq_cores": 0.02, "conntrack": 459, "max_cpu": "cpu0", "max_cpu_busy_pct": 10.1, "max_cpu_softirq_pct": 0.0, "net_rx_cpu": "cpu2", "net_rx_share_pct": 65.6, "edge_cgroup_cores": 0.07, "workload_cores": 0.02, "other_cores": 0.28, "generator_busy_pct": 2.4},
+    {"t": 28.0, "edge_rps": 25.0, "open_connections": 21, "goroutines": 303, "heap_mb": 45.1, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 1.0, "traefik_cores": 0.07, "edge_mean_ms": 1.32, "node_cores": 0.42, "softirq_cores": 0.02, "conntrack": 464, "max_cpu": "cpu1", "max_cpu_busy_pct": 10.8, "max_cpu_softirq_pct": 0.0, "net_rx_cpu": "cpu2", "net_rx_share_pct": 63.6, "edge_cgroup_cores": 0.07, "workload_cores": 0.02, "other_cores": 0.33, "generator_busy_pct": 2.8},
+    {"t": 30.0, "edge_rps": 25.0, "open_connections": 21, "goroutines": 303, "heap_mb": 47.6, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 1.4, "traefik_cores": 0.06, "edge_mean_ms": 1.31, "node_cores": 0.38, "softirq_cores": 0.02, "conntrack": 473, "max_cpu": "cpu1", "max_cpu_busy_pct": 11.9, "max_cpu_softirq_pct": 0.5, "net_rx_cpu": "cpu2", "net_rx_share_pct": 64.2, "edge_cgroup_cores": 0.07, "workload_cores": 0.02, "other_cores": 0.29, "generator_busy_pct": 2.8},
+    {"t": 32.0, "edge_rps": 25.0, "open_connections": 21, "goroutines": 303, "heap_mb": 49.3, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 1.0, "traefik_cores": 0.07, "edge_mean_ms": 1.31, "node_cores": 0.42, "softirq_cores": 0.02, "conntrack": 480, "max_cpu": "cpu1", "max_cpu_busy_pct": 11.1, "max_cpu_softirq_pct": 0.0, "net_rx_cpu": "cpu2", "net_rx_share_pct": 62.7, "edge_cgroup_cores": 0.07, "workload_cores": 0.02, "other_cores": 0.33, "generator_busy_pct": 2.7},
+    {"t": 34.0, "edge_rps": 25.0, "open_connections": 21, "goroutines": 303, "heap_mb": 36.8, "gc_per_s": 0.5, "gc_pause_ms": 0.142, "alloc_mb_s": 2.0, "traefik_cores": 0.08, "edge_mean_ms": 1.42, "node_cores": 0.42, "softirq_cores": 0.02, "conntrack": 488, "max_cpu": "cpu3", "max_cpu_busy_pct": 11.1, "max_cpu_softirq_pct": 0.5, "net_rx_cpu": "cpu2", "net_rx_share_pct": 63.1, "edge_cgroup_cores": 0.08, "workload_cores": 0.02, "other_cores": 0.32, "generator_busy_pct": 2.9},
+    {"t": 36.0, "edge_rps": 24.9, "open_connections": 21, "goroutines": 303, "heap_mb": 37.3, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 0.9, "traefik_cores": 0.06, "edge_mean_ms": 1.33, "node_cores": 0.43, "softirq_cores": 0.02, "conntrack": 493, "max_cpu": "cpu3", "max_cpu_busy_pct": 12.0, "max_cpu_softirq_pct": 0.0, "net_rx_cpu": "cpu2", "net_rx_share_pct": 61.1, "edge_cgroup_cores": 0.07, "workload_cores": 0.02, "other_cores": 0.34, "generator_busy_pct": 2.8},
+    {"t": 38.0, "edge_rps": 25.0, "open_connections": 21, "goroutines": 303, "heap_mb": 38.4, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 0.9, "traefik_cores": 0.07, "edge_mean_ms": 1.35, "node_cores": 0.42, "softirq_cores": 0.02, "conntrack": 498, "max_cpu": "cpu0", "max_cpu_busy_pct": 12.5, "max_cpu_softirq_pct": 0.0, "net_rx_cpu": "cpu2", "net_rx_share_pct": 65.1, "edge_cgroup_cores": 0.07, "workload_cores": 0.02, "other_cores": 0.33, "generator_busy_pct": 2.8},
+    {"t": 40.0, "edge_rps": 25.5, "open_connections": 21, "goroutines": 304, "heap_mb": 39.8, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 1.0, "traefik_cores": 0.07, "edge_mean_ms": 1.3, "node_cores": 0.38, "softirq_cores": 0.02, "conntrack": 508, "max_cpu": "cpu0", "max_cpu_busy_pct": 10.6, "max_cpu_softirq_pct": 0.5, "net_rx_cpu": "cpu2", "net_rx_share_pct": 61.8, "edge_cgroup_cores": 0.07, "workload_cores": 0.02, "other_cores": 0.29, "generator_busy_pct": 2.6},
+    {"t": 42.0, "edge_rps": 24.5, "open_connections": 21, "goroutines": 303, "heap_mb": 41.1, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 1.0, "traefik_cores": 0.07, "edge_mean_ms": 1.32, "node_cores": 0.4, "softirq_cores": 0.02, "conntrack": 515, "max_cpu": "cpu3", "max_cpu_busy_pct": 10.7, "max_cpu_softirq_pct": 0.5, "net_rx_cpu": "cpu2", "net_rx_share_pct": 63.7, "edge_cgroup_cores": 0.07, "workload_cores": 0.02, "other_cores": 0.31, "generator_busy_pct": 3.5},
+    {"t": 44.0, "edge_rps": 25.5, "open_connections": 21, "goroutines": 301, "heap_mb": 42.7, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 1.1, "traefik_cores": 0.06, "edge_mean_ms": 1.31, "node_cores": 0.42, "softirq_cores": 0.02, "conntrack": 523, "max_cpu": "cpu0", "max_cpu_busy_pct": 11.7, "max_cpu_softirq_pct": 0.5, "net_rx_cpu": "cpu2", "net_rx_share_pct": 59.9, "edge_cgroup_cores": 0.07, "workload_cores": 0.02, "other_cores": 0.33, "generator_busy_pct": 3.2},
+    {"t": 46.0, "edge_rps": 24.5, "open_connections": 21, "goroutines": 301, "heap_mb": 44.1, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 1.0, "traefik_cores": 0.07, "edge_mean_ms": 1.29, "node_cores": 0.41, "softirq_cores": 0.02, "conntrack": 529, "max_cpu": "cpu0", "max_cpu_busy_pct": 10.9, "max_cpu_softirq_pct": 0.0, "net_rx_cpu": "cpu2", "net_rx_share_pct": 61.0, "edge_cgroup_cores": 0.07, "workload_cores": 0.02, "other_cores": 0.32, "generator_busy_pct": 2.9},
+    {"t": 48.0, "edge_rps": 29.0, "open_connections": 21, "goroutines": 305, "heap_mb": 46.0, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 1.2, "traefik_cores": 0.08, "edge_mean_ms": 1.74, "node_cores": 0.42, "softirq_cores": 0.02, "conntrack": 557, "max_cpu": "cpu1", "max_cpu_busy_pct": 11.0, "max_cpu_softirq_pct": 0.5, "net_rx_cpu": "cpu2", "net_rx_share_pct": 63.5, "edge_cgroup_cores": 0.07, "workload_cores": 0.02, "other_cores": 0.33, "generator_busy_pct": 2.5},
+    {"t": 50.0, "edge_rps": 21.0, "open_connections": 21, "goroutines": 306, "heap_mb": 47.4, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 0.9, "traefik_cores": 0.05, "edge_mean_ms": 1.33, "node_cores": 0.39, "softirq_cores": 0.02, "conntrack": 567, "max_cpu": "cpu2", "max_cpu_busy_pct": 10.2, "max_cpu_softirq_pct": 1.1, "net_rx_cpu": "cpu2", "net_rx_share_pct": 65.3, "edge_cgroup_cores": 0.07, "workload_cores": 0.02, "other_cores": 0.3, "generator_busy_pct": 2.7},
+    {"t": 52.0, "edge_rps": 25.9, "open_connections": 21, "goroutines": 304, "heap_mb": 49.1, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 1.0, "traefik_cores": 0.06, "edge_mean_ms": 1.25, "node_cores": 0.38, "softirq_cores": 0.02, "conntrack": 574, "max_cpu": "cpu2", "max_cpu_busy_pct": 10.8, "max_cpu_softirq_pct": 1.0, "net_rx_cpu": "cpu2", "net_rx_share_pct": 62.4, "edge_cgroup_cores": 0.06, "workload_cores": 0.02, "other_cores": 0.3, "generator_busy_pct": 3.6},
+    {"t": 54.0, "edge_rps": 24.5, "open_connections": 21, "goroutines": 303, "heap_mb": 50.7, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 1.0, "traefik_cores": 0.07, "edge_mean_ms": 1.3, "node_cores": 0.41, "softirq_cores": 0.01, "conntrack": 585, "max_cpu": "cpu2", "max_cpu_busy_pct": 11.3, "max_cpu_softirq_pct": 0.5, "net_rx_cpu": "cpu2", "net_rx_share_pct": 60.0, "edge_cgroup_cores": 0.07, "workload_cores": 0.02, "other_cores": 0.32, "generator_busy_pct": 2.6},
+    {"t": 56.0, "edge_rps": 26.5, "open_connections": 21, "goroutines": 304, "heap_mb": 52.6, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 1.1, "traefik_cores": 0.04, "edge_mean_ms": 1.05, "node_cores": 1.91, "softirq_cores": 0.04, "conntrack": 625, "max_cpu": "cpu1", "max_cpu_busy_pct": 61.6, "max_cpu_softirq_pct": 0.5, "net_rx_cpu": "cpu2", "net_rx_share_pct": 85.8, "edge_cgroup_cores": 0.04, "workload_cores": 0.01, "other_cores": 1.86, "generator_busy_pct": 2.5},
+    {"t": 58.0, "edge_rps": 24.0, "open_connections": 21, "goroutines": 304, "heap_mb": 37.7, "gc_per_s": 0.5, "gc_pause_ms": 0.071, "alloc_mb_s": 1.5, "traefik_cores": 0.07, "edge_mean_ms": 0.97, "node_cores": 1.23, "softirq_cores": 0.07, "conntrack": 637, "max_cpu": "cpu2", "max_cpu_busy_pct": 43.6, "max_cpu_softirq_pct": 5.3, "net_rx_cpu": "cpu2", "net_rx_share_pct": 89.8, "edge_cgroup_cores": 0.07, "workload_cores": 0.01, "other_cores": 1.15, "generator_busy_pct": 3.1},
+    {"t": 60.0, "edge_rps": 24.5, "open_connections": 21, "goroutines": 303, "heap_mb": 38.3, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 0.9, "traefik_cores": 0.05, "edge_mean_ms": 1.16, "node_cores": 0.8, "softirq_cores": 0.02, "conntrack": 700, "max_cpu": "cpu2", "max_cpu_busy_pct": 21.0, "max_cpu_softirq_pct": 1.5, "net_rx_cpu": "cpu2", "net_rx_share_pct": 69.1, "edge_cgroup_cores": 0.05, "workload_cores": 0.02, "other_cores": 0.73, "generator_busy_pct": 2.9},
+    {"t": 62.0, "edge_rps": 26.0, "open_connections": 21, "goroutines": 304, "heap_mb": 39.5, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 1.0, "traefik_cores": 0.06, "edge_mean_ms": 1.2, "node_cores": 0.59, "softirq_cores": 0.02, "conntrack": 707, "max_cpu": "cpu0", "max_cpu_busy_pct": 15.3, "max_cpu_softirq_pct": 0.5, "net_rx_cpu": "cpu2", "net_rx_share_pct": 70.7, "edge_cgroup_cores": 0.06, "workload_cores": 0.02, "other_cores": 0.51, "generator_busy_pct": 3.0},
+    {"t": 64.0, "edge_rps": 23.5, "open_connections": 21, "goroutines": 304, "heap_mb": 40.7, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 0.9, "traefik_cores": 0.06, "edge_mean_ms": 1.28, "node_cores": 0.4, "softirq_cores": 0.02, "conntrack": 714, "max_cpu": "cpu2", "max_cpu_busy_pct": 10.9, "max_cpu_softirq_pct": 0.5, "net_rx_cpu": "cpu2", "net_rx_share_pct": 71.1, "edge_cgroup_cores": 0.06, "workload_cores": 0.02, "other_cores": 0.32, "generator_busy_pct": 2.9},
+    {"t": 66.0, "edge_rps": 26.0, "open_connections": 21, "goroutines": 304, "heap_mb": 42.8, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 1.4, "traefik_cores": 0.07, "edge_mean_ms": 1.36, "node_cores": 0.52, "softirq_cores": 0.02, "conntrack": 718, "max_cpu": "cpu2", "max_cpu_busy_pct": 13.3, "max_cpu_softirq_pct": 1.5, "net_rx_cpu": "cpu2", "net_rx_share_pct": 80.7, "edge_cgroup_cores": 0.07, "workload_cores": 0.02, "other_cores": 0.43, "generator_busy_pct": 3.0},
+    {"t": 68.0, "edge_rps": 24.5, "open_connections": 21, "goroutines": 304, "heap_mb": 44.2, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 1.0, "traefik_cores": 0.07, "edge_mean_ms": 1.3, "node_cores": 0.46, "softirq_cores": 0.02, "conntrack": 724, "max_cpu": "cpu2", "max_cpu_busy_pct": 12.6, "max_cpu_softirq_pct": 1.0, "net_rx_cpu": "cpu2", "net_rx_share_pct": 73.7, "edge_cgroup_cores": 0.07, "workload_cores": 0.02, "other_cores": 0.37, "generator_busy_pct": 2.7},
+    {"t": 70.0, "edge_rps": 25.0, "open_connections": 21, "goroutines": 303, "heap_mb": 45.8, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 1.0, "traefik_cores": 0.06, "edge_mean_ms": 1.28, "node_cores": 0.42, "softirq_cores": 0.02, "conntrack": 734, "max_cpu": "cpu0", "max_cpu_busy_pct": 11.8, "max_cpu_softirq_pct": 0.5, "net_rx_cpu": "cpu2", "net_rx_share_pct": 75.0, "edge_cgroup_cores": 0.07, "workload_cores": 0.02, "other_cores": 0.33, "generator_busy_pct": 6.0},
+    {"t": 72.0, "edge_rps": 26.0, "open_connections": 21, "goroutines": 303, "heap_mb": 47.3, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 1.0, "traefik_cores": 0.07, "edge_mean_ms": 1.31, "node_cores": 0.39, "softirq_cores": 0.02, "conntrack": 740, "max_cpu": "cpu2", "max_cpu_busy_pct": 10.7, "max_cpu_softirq_pct": 0.5, "net_rx_cpu": "cpu2", "net_rx_share_pct": 59.8, "edge_cgroup_cores": 0.07, "workload_cores": 0.02, "other_cores": 0.3, "generator_busy_pct": 3.5},
+    {"t": 74.0, "edge_rps": 25.0, "open_connections": 21, "goroutines": 305, "heap_mb": 49.1, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 1.2, "traefik_cores": 0.09, "edge_mean_ms": 2.39, "node_cores": 0.42, "softirq_cores": 0.02, "conntrack": 762, "max_cpu": "cpu2", "max_cpu_busy_pct": 11.2, "max_cpu_softirq_pct": 1.1, "net_rx_cpu": "cpu2", "net_rx_share_pct": 67.7, "edge_cgroup_cores": 0.09, "workload_cores": 0.02, "other_cores": 0.31, "generator_busy_pct": 2.5},
+    {"t": 76.0, "edge_rps": 26.9, "open_connections": 21, "goroutines": 305, "heap_mb": 50.8, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 1.0, "traefik_cores": 0.06, "edge_mean_ms": 1.22, "node_cores": 0.49, "softirq_cores": 0.02, "conntrack": 769, "max_cpu": "cpu2", "max_cpu_busy_pct": 18.0, "max_cpu_softirq_pct": 1.5, "net_rx_cpu": "cpu2", "net_rx_share_pct": 72.6, "edge_cgroup_cores": 0.06, "workload_cores": 0.02, "other_cores": 0.41, "generator_busy_pct": 3.5},
+    {"t": 78.0, "edge_rps": 24.0, "open_connections": 21, "goroutines": 304, "heap_mb": 52.4, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 1.0, "traefik_cores": 0.06, "edge_mean_ms": 1.22, "node_cores": 0.52, "softirq_cores": 0.02, "conntrack": 773, "max_cpu": "cpu2", "max_cpu_busy_pct": 21.8, "max_cpu_softirq_pct": 1.1, "net_rx_cpu": "cpu2", "net_rx_share_pct": 75.2, "edge_cgroup_cores": 0.06, "workload_cores": 0.02, "other_cores": 0.44, "generator_busy_pct": 2.3},
+    {"t": 80.0, "edge_rps": 24.0, "open_connections": 21, "goroutines": 304, "heap_mb": 37.4, "gc_per_s": 0.5, "gc_pause_ms": 0.135, "alloc_mb_s": 1.5, "traefik_cores": 0.09, "edge_mean_ms": 1.35, "node_cores": 0.44, "softirq_cores": 0.02, "conntrack": 510, "max_cpu": "cpu2", "max_cpu_busy_pct": 11.9, "max_cpu_softirq_pct": 1.0, "net_rx_cpu": "cpu2", "net_rx_share_pct": 70.9, "edge_cgroup_cores": 0.09, "workload_cores": 0.02, "other_cores": 0.33, "generator_busy_pct": 2.6},
+    {"t": 82.0, "edge_rps": 26.0, "open_connections": 21, "goroutines": 308, "heap_mb": 38.2, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 1.2, "traefik_cores": 0.11, "edge_mean_ms": 1.42, "node_cores": 0.48, "softirq_cores": 0.03, "conntrack": 536, "max_cpu": "cpu1", "max_cpu_busy_pct": 12.4, "max_cpu_softirq_pct": 0.5, "net_rx_cpu": "cpu2", "net_rx_share_pct": 72.1, "edge_cgroup_cores": 0.11, "workload_cores": 0.02, "other_cores": 0.35, "generator_busy_pct": 3.1},
+    {"t": 84.0, "edge_rps": 25.5, "open_connections": 21, "goroutines": 308, "heap_mb": 39.2, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 1.0, "traefik_cores": 0.07, "edge_mean_ms": 1.35, "node_cores": 0.42, "softirq_cores": 0.03, "conntrack": 545, "max_cpu": "cpu2", "max_cpu_busy_pct": 11.6, "max_cpu_softirq_pct": 1.0, "net_rx_cpu": "cpu2", "net_rx_share_pct": 62.4, "edge_cgroup_cores": 0.07, "workload_cores": 0.02, "other_cores": 0.33, "generator_busy_pct": 2.5},
+    {"t": 86.0, "edge_rps": 25.0, "open_connections": 21, "goroutines": 308, "heap_mb": 40.5, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 1.0, "traefik_cores": 0.06, "edge_mean_ms": 1.32, "node_cores": 0.38, "softirq_cores": 0.02, "conntrack": 554, "max_cpu": "cpu2", "max_cpu_busy_pct": 10.3, "max_cpu_softirq_pct": 1.0, "net_rx_cpu": "cpu2", "net_rx_share_pct": 65.4, "edge_cgroup_cores": 0.07, "workload_cores": 0.02, "other_cores": 0.29, "generator_busy_pct": 2.3},
+    {"t": 88.0, "edge_rps": 25.0, "open_connections": 21, "goroutines": 308, "heap_mb": 41.9, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 1.0, "traefik_cores": 0.06, "edge_mean_ms": 1.4, "node_cores": 0.38, "softirq_cores": 0.02, "conntrack": 559, "max_cpu": "cpu3", "max_cpu_busy_pct": 11.1, "max_cpu_softirq_pct": 0.5, "net_rx_cpu": "cpu2", "net_rx_share_pct": 63.9, "edge_cgroup_cores": 0.07, "workload_cores": 0.02, "other_cores": 0.29, "generator_busy_pct": 2.9},
+    {"t": 90.0, "edge_rps": 25.1, "open_connections": 21, "goroutines": 308, "heap_mb": 43.2, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 1.0, "traefik_cores": 0.07, "edge_mean_ms": 1.31, "node_cores": 0.37, "softirq_cores": 0.02, "conntrack": 568, "max_cpu": "cpu1", "max_cpu_busy_pct": 9.3, "max_cpu_softirq_pct": 0.0, "net_rx_cpu": "cpu2", "net_rx_share_pct": 63.4, "edge_cgroup_cores": 0.07, "workload_cores": 0.02, "other_cores": 0.28, "generator_busy_pct": 2.4},
+    {"t": 92.0, "edge_rps": 9.0, "open_connections": 1, "goroutines": 268, "heap_mb": 43.8, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 0.4, "traefik_cores": 0.03, "edge_mean_ms": 1.32, "node_cores": 0.34, "softirq_cores": 0.02, "conntrack": 575, "max_cpu": "cpu3", "max_cpu_busy_pct": 9.1, "max_cpu_softirq_pct": 0.0, "net_rx_cpu": "cpu2", "net_rx_share_pct": 60.4, "edge_cgroup_cores": 0.03, "workload_cores": 0.01, "other_cores": 0.3, "generator_busy_pct": 3.3},
+    {"t": 94.0, "edge_rps": 0.0, "open_connections": 1, "goroutines": 267, "heap_mb": 44.0, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 0.1, "traefik_cores": 0.0, "node_cores": 0.29, "softirq_cores": 0.0, "conntrack": 582, "max_cpu": "cpu0", "max_cpu_busy_pct": 7.3, "max_cpu_softirq_pct": 0.5, "net_rx_cpu": "cpu2", "net_rx_share_pct": 75.1, "edge_cgroup_cores": 0.0, "workload_cores": 0.0, "other_cores": 0.29, "generator_busy_pct": 1.4},
+    {"t": 96.0, "edge_rps": 0.0, "open_connections": 1, "goroutines": 268, "heap_mb": 44.4, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 0.1, "traefik_cores": 0.01, "node_cores": 0.32, "softirq_cores": 0.01, "conntrack": 592, "max_cpu": "cpu2", "max_cpu_busy_pct": 9.7, "max_cpu_softirq_pct": 0.5, "net_rx_cpu": "cpu2", "net_rx_share_pct": 74.3, "edge_cgroup_cores": 0.0, "workload_cores": 0.0, "other_cores": 0.32, "generator_busy_pct": 1.4},
+    {"t": 98.0, "edge_rps": 0.0, "open_connections": 1, "goroutines": 267, "heap_mb": 44.7, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 0.2, "traefik_cores": 0.0, "node_cores": 0.32, "softirq_cores": 0.01, "conntrack": 597, "max_cpu": "cpu0", "max_cpu_busy_pct": 9.1, "max_cpu_softirq_pct": 0.0, "net_rx_cpu": "cpu2", "net_rx_share_pct": 81.4, "edge_cgroup_cores": 0.0, "workload_cores": 0.0, "other_cores": 0.32, "generator_busy_pct": 5.8},
+    {"t": 100.0, "edge_rps": 0.0, "open_connections": 1, "goroutines": 267, "heap_mb": 44.9, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 0.2, "traefik_cores": 0.01, "node_cores": 0.26, "softirq_cores": 0.01, "conntrack": 607, "max_cpu": "cpu1", "max_cpu_busy_pct": 7.0, "max_cpu_softirq_pct": 0.0, "net_rx_cpu": "cpu2", "net_rx_share_pct": 69.8, "edge_cgroup_cores": 0.0, "workload_cores": 0.0, "other_cores": 0.26, "generator_busy_pct": 3.9}
+   ],
+   "node_cpu": 11.7,
+   "generator_cpu": 3.2,
+   "node_mem_available_mb": 9048,
+   "pods_top": {
+    "traefik": "68m 169Mi",
+    "api": "18m 8Mi"
+   },
+   "throttled_ms": 0.0,
+   "edge_restarts": 0,
+   "pod_replaced": false,
+   "reasons": [],
+   "cold_reasons": []
+  },
+  {
+   "rate": 25,
+   "target": "web-static",
+   "requests": 1500.0,
+   "achieved_rps": 25.0,
+   "error_rate": 0.0,
+   "avg_ms": 4.455094651999999,
+   "p50_ms": 4.5568185,
+   "p90_ms": 5.087230400000001,
+   "p95_ms": 5.2449477,
+   "p99_ms": 5.54547567,
+   "max_ms": 8.712549,
+   "phases": {
+    "blocked": {
+     "p50_ms": 0.001002,
+     "p95_ms": 0.001132,
+     "p99_ms": 0.00121305,
+     "max_ms": 0.027642
+    },
+    "connecting": {
+     "p50_ms": 0.0,
+     "p95_ms": 0.0,
+     "p99_ms": 0.0,
+     "max_ms": 0.0
+    },
+    "tls_handshaking": {
+     "p50_ms": 0.0,
+     "p95_ms": 0.0,
+     "p99_ms": 0.0,
+     "max_ms": 0.0
+    },
+    "waiting": {
+     "p50_ms": 2.5111875,
+     "p95_ms": 3.15071125,
+     "p99_ms": 3.6464310399999995,
+     "max_ms": 7.299337
+    },
+    "receiving": {
+     "p50_ms": 1.736696,
+     "p95_ms": 2.2940808,
+     "p99_ms": 2.55168401,
+     "max_ms": 3.005069
+    }
+   },
+   "status_429": 0.0,
+   "dropped": 0.0,
+   "vus_peak": 0.0,
+   "cold": {
+    "requests": 750.0,
+    "achieved_rps": 25.0,
+    "error_rate": 0.0,
+    "avg_ms": 4.327468336000002,
+    "p50_ms": 4.4800775,
+    "p90_ms": 5.031765600000001,
+    "p95_ms": 5.17113345,
+    "p99_ms": 5.4610670400000005,
+    "max_ms": 5.899523,
+    "phases": {
+     "blocked": {
+      "p50_ms": 0.000958,
+      "p95_ms": 0.0011764999999999996,
+      "p99_ms": 27.64841186,
+      "max_ms": 29.85525
+     },
+     "connecting": {
+      "p50_ms": 0.0,
+      "p95_ms": 0.0,
+      "p99_ms": 0.5719137199999996,
+      "max_ms": 0.70044
+     },
+     "tls_handshaking": {
+      "p50_ms": 0.0,
+      "p95_ms": 0.0,
+      "p99_ms": 26.88940183,
+      "max_ms": 29.195801
+     },
+     "waiting": {
+      "p50_ms": 2.4977315,
+      "p95_ms": 3.0416721499999997,
+      "p99_ms": 3.4181187399999997,
+      "max_ms": 4.265257
+     },
+     "receiving": {
+      "p50_ms": 1.7044615,
+      "p95_ms": 2.26428795,
+      "p99_ms": 2.5367072499999996,
+      "max_ms": 2.868576
+     }
+    }
+   },
+   "warmup_seconds": 30,
+   "timeline": [
+    {"t": 2.0, "edge_rps": 21.5, "open_connections": 21, "goroutines": 305, "heap_mb": 51.4, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 3.6, "traefik_cores": 0.3, "edge_mean_ms": 2.5, "node_cores": 0.59, "softirq_cores": 0.03, "conntrack": 674, "max_cpu": "cpu1", "max_cpu_busy_pct": 17.3, "max_cpu_softirq_pct": 0.5, "net_rx_cpu": "cpu2", "net_rx_share_pct": 78.8, "edge_cgroup_cores": 0.27, "workload_cores": 0.01, "other_cores": 0.31, "generator_busy_pct": 8.8},
+    {"t": 4.0, "edge_rps": 21.5, "open_connections": 21, "goroutines": 307, "heap_mb": 39.5, "gc_per_s": 0.5, "gc_pause_ms": 0.206, "alloc_mb_s": 2.6, "traefik_cores": 0.12, "edge_mean_ms": 2.88, "node_cores": 0.47, "softirq_cores": 0.04, "conntrack": 687, "max_cpu": "cpu2", "max_cpu_busy_pct": 12.4, "max_cpu_softirq_pct": 2.8, "net_rx_cpu": "cpu2", "net_rx_share_pct": 74.5, "edge_cgroup_cores": 0.15, "workload_cores": 0.01, "other_cores": 0.31, "generator_busy_pct": 4.6},
+    {"t": 6.0, "edge_rps": 26.0, "open_connections": 21, "goroutines": 303, "heap_mb": 42.5, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 2.2, "traefik_cores": 0.14, "edge_mean_ms": 2.96, "node_cores": 0.5, "softirq_cores": 0.04, "conntrack": 694, "max_cpu": "cpu2", "max_cpu_busy_pct": 14.2, "max_cpu_softirq_pct": 2.5, "net_rx_cpu": "cpu2", "net_rx_share_pct": 73.9, "edge_cgroup_cores": 0.13, "workload_cores": 0.01, "other_cores": 0.36, "generator_busy_pct": 13.2},
+    {"t": 8.0, "edge_rps": 24.0, "open_connections": 21, "goroutines": 304, "heap_mb": 45.5, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 2.1, "traefik_cores": 0.13, "edge_mean_ms": 2.98, "node_cores": 0.47, "softirq_cores": 0.04, "conntrack": 703, "max_cpu": "cpu2", "max_cpu_busy_pct": 13.8, "max_cpu_softirq_pct": 2.6, "net_rx_cpu": "cpu2", "net_rx_share_pct": 77.5, "edge_cgroup_cores": 0.14, "workload_cores": 0.01, "other_cores": 0.32, "generator_busy_pct": 5.0},
+    {"t": 10.0, "edge_rps": 25.0, "open_connections": 21, "goroutines": 303, "heap_mb": 49.1, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 2.2, "traefik_cores": 0.13, "edge_mean_ms": 2.98, "node_cores": 0.46, "softirq_cores": 0.05, "conntrack": 712, "max_cpu": "cpu2", "max_cpu_busy_pct": 12.2, "max_cpu_softirq_pct": 2.6, "net_rx_cpu": "cpu2", "net_rx_share_pct": 80.5, "edge_cgroup_cores": 0.13, "workload_cores": 0.01, "other_cores": 0.32, "generator_busy_pct": 6.3},
+    {"t": 12.0, "edge_rps": 26.0, "open_connections": 21, "goroutines": 304, "heap_mb": 52.8, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 2.3, "traefik_cores": 0.13, "edge_mean_ms": 2.93, "node_cores": 0.49, "softirq_cores": 0.04, "conntrack": 717, "max_cpu": "cpu3", "max_cpu_busy_pct": 13.3, "max_cpu_softirq_pct": 0.5, "net_rx_cpu": "cpu2", "net_rx_share_pct": 77.7, "edge_cgroup_cores": 0.13, "workload_cores": 0.01, "other_cores": 0.35, "generator_busy_pct": 7.0},
+    {"t": 14.0, "edge_rps": 24.0, "open_connections": 21, "goroutines": 304, "heap_mb": 37.6, "gc_per_s": 0.5, "gc_pause_ms": 0.3, "alloc_mb_s": 2.8, "traefik_cores": 0.15, "edge_mean_ms": 3.05, "node_cores": 0.58, "softirq_cores": 0.05, "conntrack": 726, "max_cpu": "cpu2", "max_cpu_busy_pct": 16.9, "max_cpu_softirq_pct": 3.1, "net_rx_cpu": "cpu2", "net_rx_share_pct": 76.6, "edge_cgroup_cores": 0.16, "workload_cores": 0.01, "other_cores": 0.41, "generator_busy_pct": 7.1},
+    {"t": 16.0, "edge_rps": 25.5, "open_connections": 21, "goroutines": 303, "heap_mb": 40.1, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 2.1, "traefik_cores": 0.14, "edge_mean_ms": 3.02, "node_cores": 0.47, "softirq_cores": 0.04, "conntrack": 732, "max_cpu": "cpu2", "max_cpu_busy_pct": 13.8, "max_cpu_softirq_pct": 2.6, "net_rx_cpu": "cpu2", "net_rx_share_pct": 76.5, "edge_cgroup_cores": 0.14, "workload_cores": 0.01, "other_cores": 0.32, "generator_busy_pct": 4.8},
+    {"t": 18.0, "edge_rps": 26.0, "open_connections": 21, "goroutines": 303, "heap_mb": 43.3, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 2.3, "traefik_cores": 0.13, "edge_mean_ms": 2.89, "node_cores": 0.45, "softirq_cores": 0.04, "conntrack": 740, "max_cpu": "cpu2", "max_cpu_busy_pct": 12.2, "max_cpu_softirq_pct": 2.5, "net_rx_cpu": "cpu2", "net_rx_share_pct": 78.2, "edge_cgroup_cores": 0.13, "workload_cores": 0.01, "other_cores": 0.31, "generator_busy_pct": 3.2},
+    {"t": 20.0, "edge_rps": 25.1, "open_connections": 21, "goroutines": 303, "heap_mb": 47.4, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 2.6, "traefik_cores": 0.14, "edge_mean_ms": 3.0, "node_cores": 0.42, "softirq_cores": 0.04, "conntrack": 745, "max_cpu": "cpu3", "max_cpu_busy_pct": 11.4, "max_cpu_softirq_pct": 1.0, "net_rx_cpu": "cpu2", "net_rx_share_pct": 79.4, "edge_cgroup_cores": 0.14, "workload_cores": 0.01, "other_cores": 0.27, "generator_busy_pct": 3.1},
+    {"t": 22.0, "edge_rps": 26.5, "open_connections": 21, "goroutines": 304, "heap_mb": 51.3, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 2.4, "traefik_cores": 0.13, "edge_mean_ms": 2.92, "node_cores": 0.51, "softirq_cores": 0.04, "conntrack": 751, "max_cpu": "cpu2", "max_cpu_busy_pct": 14.0, "max_cpu_softirq_pct": 3.0, "net_rx_cpu": "cpu2", "net_rx_share_pct": 79.0, "edge_cgroup_cores": 0.13, "workload_cores": 0.01, "other_cores": 0.37, "generator_busy_pct": 2.9},
+    {"t": 24.0, "edge_rps": 23.5, "open_connections": 21, "goroutines": 304, "heap_mb": 54.8, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 2.1, "traefik_cores": 0.13, "edge_mean_ms": 2.96, "node_cores": 0.42, "softirq_cores": 0.03, "conntrack": 761, "max_cpu": "cpu2", "max_cpu_busy_pct": 11.0, "max_cpu_softirq_pct": 2.1, "net_rx_cpu": "cpu2", "net_rx_share_pct": 78.9, "edge_cgroup_cores": 0.13, "workload_cores": 0.01, "other_cores": 0.28, "generator_busy_pct": 3.5},
+    {"t": 26.0, "edge_rps": 24.0, "open_connections": 21, "goroutines": 304, "heap_mb": 40.4, "gc_per_s": 0.5, "gc_pause_ms": 0.416, "alloc_mb_s": 2.9, "traefik_cores": 0.14, "edge_mean_ms": 3.03, "node_cores": 0.48, "softirq_cores": 0.04, "conntrack": 768, "max_cpu": "cpu2", "max_cpu_busy_pct": 13.6, "max_cpu_softirq_pct": 2.6, "net_rx_cpu": "cpu2", "net_rx_share_pct": 76.1, "edge_cgroup_cores": 0.16, "workload_cores": 0.01, "other_cores": 0.31, "generator_busy_pct": 4.2},
+    {"t": 28.0, "edge_rps": 26.5, "open_connections": 21, "goroutines": 307, "heap_mb": 43.7, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 2.5, "traefik_cores": 0.16, "edge_mean_ms": 2.84, "node_cores": 0.49, "softirq_cores": 0.05, "conntrack": 790, "max_cpu": "cpu2", "max_cpu_busy_pct": 13.4, "max_cpu_softirq_pct": 3.1, "net_rx_cpu": "cpu2", "net_rx_share_pct": 78.2, "edge_cgroup_cores": 0.16, "workload_cores": 0.01, "other_cores": 0.32, "generator_busy_pct": 3.1},
+    {"t": 30.0, "edge_rps": 24.0, "open_connections": 21, "goroutines": 308, "heap_mb": 47.7, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 2.5, "traefik_cores": 0.12, "edge_mean_ms": 3.01, "node_cores": 0.43, "softirq_cores": 0.04, "conntrack": 800, "max_cpu": "cpu2", "max_cpu_busy_pct": 11.7, "max_cpu_softirq_pct": 2.6, "net_rx_cpu": "cpu2", "net_rx_share_pct": 78.0, "edge_cgroup_cores": 0.13, "workload_cores": 0.01, "other_cores": 0.29, "generator_busy_pct": 3.7},
+    {"t": 32.0, "edge_rps": 25.5, "open_connections": 21, "goroutines": 304, "heap_mb": 51.2, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 2.2, "traefik_cores": 0.13, "edge_mean_ms": 2.96, "node_cores": 0.45, "softirq_cores": 0.04, "conntrack": 804, "max_cpu": "cpu2", "max_cpu_busy_pct": 11.8, "max_cpu_softirq_pct": 2.1, "net_rx_cpu": "cpu2", "net_rx_share_pct": 79.4, "edge_cgroup_cores": 0.13, "workload_cores": 0.01, "other_cores": 0.31, "generator_busy_pct": 3.4},
+    {"t": 34.0, "edge_rps": 27.0, "open_connections": 21, "goroutines": 304, "heap_mb": 37.3, "gc_per_s": 0.5, "gc_pause_ms": 0.107, "alloc_mb_s": 2.7, "traefik_cores": 0.16, "edge_mean_ms": 3.13, "node_cores": 0.44, "softirq_cores": 0.04, "conntrack": 813, "max_cpu": "cpu2", "max_cpu_busy_pct": 11.7, "max_cpu_softirq_pct": 2.6, "net_rx_cpu": "cpu2", "net_rx_share_pct": 77.6, "edge_cgroup_cores": 0.16, "workload_cores": 0.01, "other_cores": 0.27, "generator_busy_pct": 2.8},
+    {"t": 36.0, "edge_rps": 23.5, "open_connections": 21, "goroutines": 307, "heap_mb": 40.1, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 2.2, "traefik_cores": 0.15, "edge_mean_ms": 2.94, "node_cores": 0.5, "softirq_cores": 0.04, "conntrack": 436, "max_cpu": "cpu1", "max_cpu_busy_pct": 14.0, "max_cpu_softirq_pct": 0.5, "net_rx_cpu": "cpu2", "net_rx_share_pct": 77.5, "edge_cgroup_cores": 0.16, "workload_cores": 0.01, "other_cores": 0.33, "generator_busy_pct": 3.5},
+    {"t": 38.0, "edge_rps": 25.5, "open_connections": 21, "goroutines": 307, "heap_mb": 43.4, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 2.2, "traefik_cores": 0.13, "edge_mean_ms": 2.97, "node_cores": 0.49, "softirq_cores": 0.04, "conntrack": 445, "max_cpu": "cpu2", "max_cpu_busy_pct": 12.8, "max_cpu_softirq_pct": 2.6, "net_rx_cpu": "cpu2", "net_rx_share_pct": 78.4, "edge_cgroup_cores": 0.13, "workload_cores": 0.01, "other_cores": 0.35, "generator_busy_pct": 3.1},
+    {"t": 40.0, "edge_rps": 25.0, "open_connections": 21, "goroutines": 305, "heap_mb": 47.6, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 2.6, "traefik_cores": 0.13, "edge_mean_ms": 3.04, "node_cores": 0.4, "softirq_cores": 0.04, "conntrack": 450, "max_cpu": "cpu2", "max_cpu_busy_pct": 10.9, "max_cpu_softirq_pct": 2.6, "net_rx_cpu": "cpu2", "net_rx_share_pct": 80.1, "edge_cgroup_cores": 0.14, "workload_cores": 0.01, "other_cores": 0.25, "generator_busy_pct": 3.3},
+    {"t": 42.0, "edge_rps": 25.5, "open_connections": 22, "goroutines": 306, "heap_mb": 36.6, "gc_per_s": 0.5, "gc_pause_ms": 0.175, "alloc_mb_s": 2.8, "traefik_cores": 0.16, "edge_mean_ms": 2.81, "node_cores": 0.48, "softirq_cores": 0.05, "conntrack": 458, "max_cpu": "cpu0", "max_cpu_busy_pct": 12.9, "max_cpu_softirq_pct": 0.5, "net_rx_cpu": "cpu2", "net_rx_share_pct": 78.3, "edge_cgroup_cores": 0.16, "workload_cores": 0.01, "other_cores": 0.31, "generator_busy_pct": 3.0},
+    {"t": 44.0, "edge_rps": 25.5, "open_connections": 21, "goroutines": 304, "heap_mb": 40.1, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 2.6, "traefik_cores": 0.14, "edge_mean_ms": 3.19, "node_cores": 0.46, "softirq_cores": 0.04, "conntrack": 469, "max_cpu": "cpu2", "max_cpu_busy_pct": 13.0, "max_cpu_softirq_pct": 2.6, "net_rx_cpu": "cpu2", "net_rx_share_pct": 78.7, "edge_cgroup_cores": 0.16, "workload_cores": 0.01, "other_cores": 0.29, "generator_busy_pct": 3.1},
+    {"t": 46.0, "edge_rps": 25.0, "open_connections": 21, "goroutines": 303, "heap_mb": 43.2, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 2.2, "traefik_cores": 0.13, "edge_mean_ms": 2.97, "node_cores": 0.47, "softirq_cores": 0.04, "conntrack": 475, "max_cpu": "cpu2", "max_cpu_busy_pct": 12.3, "max_cpu_softirq_pct": 2.1, "net_rx_cpu": "cpu2", "net_rx_share_pct": 76.2, "edge_cgroup_cores": 0.14, "workload_cores": 0.01, "other_cores": 0.32, "generator_busy_pct": 3.5},
+    {"t": 48.0, "edge_rps": 24.6, "open_connections": 21, "goroutines": 304, "heap_mb": 47.4, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 2.6, "traefik_cores": 0.13, "edge_mean_ms": 2.98, "node_cores": 0.45, "softirq_cores": 0.04, "conntrack": 483, "max_cpu": "cpu2", "max_cpu_busy_pct": 11.9, "max_cpu_softirq_pct": 3.1, "net_rx_cpu": "cpu2", "net_rx_share_pct": 79.2, "edge_cgroup_cores": 0.14, "workload_cores": 0.01, "other_cores": 0.3, "generator_busy_pct": 3.3},
+    {"t": 50.0, "edge_rps": 25.9, "open_connections": 21, "goroutines": 304, "heap_mb": 36.3, "gc_per_s": 0.5, "gc_pause_ms": 0.14, "alloc_mb_s": 2.7, "traefik_cores": 0.15, "edge_mean_ms": 2.94, "node_cores": 0.44, "softirq_cores": 0.04, "conntrack": 489, "max_cpu": "cpu2", "max_cpu_busy_pct": 12.2, "max_cpu_softirq_pct": 2.6, "net_rx_cpu": "cpu2", "net_rx_share_pct": 79.5, "edge_cgroup_cores": 0.15, "workload_cores": 0.01, "other_cores": 0.28, "generator_busy_pct": 2.9},
+    {"t": 52.0, "edge_rps": 25.0, "open_connections": 21, "goroutines": 303, "heap_mb": 39.0, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 2.1, "traefik_cores": 0.13, "edge_mean_ms": 2.9, "node_cores": 0.49, "softirq_cores": 0.04, "conntrack": 494, "max_cpu": "cpu2", "max_cpu_busy_pct": 12.4, "max_cpu_softirq_pct": 2.6, "net_rx_cpu": "cpu2", "net_rx_share_pct": 79.3, "edge_cgroup_cores": 0.13, "workload_cores": 0.01, "other_cores": 0.35, "generator_busy_pct": 3.2},
+    {"t": 54.0, "edge_rps": 24.5, "open_connections": 21, "goroutines": 303, "heap_mb": 42.7, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 2.5, "traefik_cores": 0.13, "edge_mean_ms": 3.07, "node_cores": 0.44, "softirq_cores": 0.04, "conntrack": 508, "max_cpu": "cpu1", "max_cpu_busy_pct": 11.7, "max_cpu_softirq_pct": 0.5, "net_rx_cpu": "cpu2", "net_rx_share_pct": 77.6, "edge_cgroup_cores": 0.14, "workload_cores": 0.01, "other_cores": 0.29, "generator_busy_pct": 3.5},
+    {"t": 56.0, "edge_rps": 25.5, "open_connections": 21, "goroutines": 303, "heap_mb": 47.0, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 2.7, "traefik_cores": 0.14, "edge_mean_ms": 2.98, "node_cores": 0.45, "softirq_cores": 0.04, "conntrack": 515, "max_cpu": "cpu3", "max_cpu_busy_pct": 13.3, "max_cpu_softirq_pct": 0.5, "net_rx_cpu": "cpu2", "net_rx_share_pct": 76.1, "edge_cgroup_cores": 0.13, "workload_cores": 0.01, "other_cores": 0.31, "generator_busy_pct": 4.0},
+    {"t": 58.0, "edge_rps": 24.5, "open_connections": 21, "goroutines": 301, "heap_mb": 50.5, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 2.2, "traefik_cores": 0.12, "edge_mean_ms": 2.8, "node_cores": 0.61, "softirq_cores": 0.05, "conntrack": 523, "max_cpu": "cpu0", "max_cpu_busy_pct": 16.2, "max_cpu_softirq_pct": 0.5, "net_rx_cpu": "cpu2", "net_rx_share_pct": 77.3, "edge_cgroup_cores": 0.13, "workload_cores": 0.01, "other_cores": 0.47, "generator_busy_pct": 2.9},
+    {"t": 60.0, "edge_rps": 25.5, "open_connections": 21, "goroutines": 301, "heap_mb": 39.4, "gc_per_s": 0.5, "gc_pause_ms": 0.224, "alloc_mb_s": 2.6, "traefik_cores": 0.14, "edge_mean_ms": 2.87, "node_cores": 0.55, "softirq_cores": 0.03, "conntrack": 529, "max_cpu": "cpu2", "max_cpu_busy_pct": 14.1, "max_cpu_softirq_pct": 2.1, "net_rx_cpu": "cpu2", "net_rx_share_pct": 78.4, "edge_cgroup_cores": 0.15, "workload_cores": 0.01, "other_cores": 0.39, "generator_busy_pct": 3.8},
+    {"t": 62.0, "edge_rps": 34.0, "open_connections": 21, "goroutines": 306, "heap_mb": 44.2, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 3.4, "traefik_cores": 0.16, "edge_mean_ms": 3.02, "node_cores": 0.69, "softirq_cores": 0.05, "conntrack": 554, "max_cpu": "cpu2", "max_cpu_busy_pct": 19.7, "max_cpu_softirq_pct": 3.6, "net_rx_cpu": "cpu2", "net_rx_share_pct": 80.3, "edge_cgroup_cores": 0.12, "workload_cores": 0.01, "other_cores": 0.56, "generator_busy_pct": 3.4},
+    {"t": 64.0, "edge_rps": 16.0, "open_connections": 21, "goroutines": 304, "heap_mb": 46.4, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 1.4, "traefik_cores": 0.08, "edge_mean_ms": 2.92, "node_cores": 0.46, "softirq_cores": 0.04, "conntrack": 562, "max_cpu": "cpu2", "max_cpu_busy_pct": 11.7, "max_cpu_softirq_pct": 2.5, "net_rx_cpu": "cpu2", "net_rx_share_pct": 79.9, "edge_cgroup_cores": 0.13, "workload_cores": 0.01, "other_cores": 0.32, "generator_busy_pct": 3.3},
+    {"t": 66.0, "edge_rps": 26.5, "open_connections": 21, "goroutines": 302, "heap_mb": 50.9, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 2.7, "traefik_cores": 0.14, "edge_mean_ms": 3.0, "node_cores": 0.47, "softirq_cores": 0.05, "conntrack": 569, "max_cpu": "cpu2", "max_cpu_busy_pct": 13.6, "max_cpu_softirq_pct": 3.0, "net_rx_cpu": "cpu2", "net_rx_share_pct": 76.6, "edge_cgroup_cores": 0.13, "workload_cores": 0.01, "other_cores": 0.33, "generator_busy_pct": 3.5},
+    {"t": 68.0, "edge_rps": 23.5, "open_connections": 21, "goroutines": 302, "heap_mb": 37.1, "gc_per_s": 0.5, "gc_pause_ms": 0.089, "alloc_mb_s": 2.4, "traefik_cores": 0.15, "edge_mean_ms": 2.96, "node_cores": 0.51, "softirq_cores": 0.04, "conntrack": 578, "max_cpu": "cpu2", "max_cpu_busy_pct": 13.9, "max_cpu_softirq_pct": 3.1, "net_rx_cpu": "cpu2", "net_rx_share_pct": 77.1, "edge_cgroup_cores": 0.15, "workload_cores": 0.01, "other_cores": 0.35, "generator_busy_pct": 3.2},
+    {"t": 70.0, "edge_rps": 25.0, "open_connections": 21, "goroutines": 301, "heap_mb": 39.9, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 2.1, "traefik_cores": 0.13, "edge_mean_ms": 2.98, "node_cores": 0.49, "softirq_cores": 0.04, "conntrack": 587, "max_cpu": "cpu0", "max_cpu_busy_pct": 13.2, "max_cpu_softirq_pct": 0.5, "net_rx_cpu": "cpu2", "net_rx_share_pct": 76.5, "edge_cgroup_cores": 0.13, "workload_cores": 0.01, "other_cores": 0.35, "generator_busy_pct": 3.1},
+    {"t": 72.0, "edge_rps": 25.1, "open_connections": 21, "goroutines": 301, "heap_mb": 43.1, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 2.2, "traefik_cores": 0.13, "edge_mean_ms": 2.82, "node_cores": 0.46, "softirq_cores": 0.03, "conntrack": 591, "max_cpu": "cpu2", "max_cpu_busy_pct": 13.8, "max_cpu_softirq_pct": 2.6, "net_rx_cpu": "cpu2", "net_rx_share_pct": 78.5, "edge_cgroup_cores": 0.13, "workload_cores": 0.01, "other_cores": 0.32, "generator_busy_pct": 2.8},
+    {"t": 74.0, "edge_rps": 24.9, "open_connections": 21, "goroutines": 301, "heap_mb": 46.6, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 2.2, "traefik_cores": 0.13, "edge_mean_ms": 3.0, "node_cores": 0.46, "softirq_cores": 0.03, "conntrack": 600, "max_cpu": "cpu2", "max_cpu_busy_pct": 13.3, "max_cpu_softirq_pct": 2.0, "net_rx_cpu": "cpu2", "net_rx_share_pct": 77.8, "edge_cgroup_cores": 0.13, "workload_cores": 0.01, "other_cores": 0.32, "generator_busy_pct": 3.3},
+    {"t": 76.0, "edge_rps": 25.1, "open_connections": 21, "goroutines": 301, "heap_mb": 51.0, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 2.6, "traefik_cores": 0.13, "edge_mean_ms": 2.74, "node_cores": 0.56, "softirq_cores": 0.04, "conntrack": 611, "max_cpu": "cpu1", "max_cpu_busy_pct": 16.1, "max_cpu_softirq_pct": 0.5, "net_rx_cpu": "cpu2", "net_rx_share_pct": 80.0, "edge_cgroup_cores": 0.13, "workload_cores": 0.01, "other_cores": 0.42, "generator_busy_pct": 3.4},
+    {"t": 78.0, "edge_rps": 25.5, "open_connections": 21, "goroutines": 302, "heap_mb": 39.2, "gc_per_s": 0.5, "gc_pause_ms": 0.217, "alloc_mb_s": 2.9, "traefik_cores": 0.13, "edge_mean_ms": 2.6, "node_cores": 0.61, "softirq_cores": 0.04, "conntrack": 619, "max_cpu": "cpu1", "max_cpu_busy_pct": 23.5, "max_cpu_softirq_pct": 0.5, "net_rx_cpu": "cpu2", "net_rx_share_pct": 79.1, "edge_cgroup_cores": 0.13, "workload_cores": 0.01, "other_cores": 0.47, "generator_busy_pct": 3.2},
+    {"t": 80.0, "edge_rps": 24.5, "open_connections": 21, "goroutines": 301, "heap_mb": 42.2, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 2.2, "traefik_cores": 0.13, "edge_mean_ms": 3.01, "node_cores": 0.43, "softirq_cores": 0.04, "conntrack": 625, "max_cpu": "cpu2", "max_cpu_busy_pct": 11.8, "max_cpu_softirq_pct": 2.6, "net_rx_cpu": "cpu2", "net_rx_share_pct": 80.2, "edge_cgroup_cores": 0.14, "workload_cores": 0.01, "other_cores": 0.28, "generator_busy_pct": 3.0},
+    {"t": 82.0, "edge_rps": 24.5, "open_connections": 21, "goroutines": 302, "heap_mb": 45.3, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 2.2, "traefik_cores": 0.12, "edge_mean_ms": 2.75, "node_cores": 0.72, "softirq_cores": 0.04, "conntrack": 631, "max_cpu": "cpu2", "max_cpu_busy_pct": 19.5, "max_cpu_softirq_pct": 2.6, "net_rx_cpu": "cpu2", "net_rx_share_pct": 79.4, "edge_cgroup_cores": 0.12, "workload_cores": 0.01, "other_cores": 0.59, "generator_busy_pct": 3.3},
+    {"t": 84.0, "edge_rps": 25.5, "open_connections": 21, "goroutines": 301, "heap_mb": 48.9, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 2.2, "traefik_cores": 0.13, "edge_mean_ms": 2.9, "node_cores": 0.43, "softirq_cores": 0.04, "conntrack": 641, "max_cpu": "cpu2", "max_cpu_busy_pct": 11.8, "max_cpu_softirq_pct": 2.6, "net_rx_cpu": "cpu2", "net_rx_share_pct": 78.2, "edge_cgroup_cores": 0.13, "workload_cores": 0.01, "other_cores": 0.29, "generator_busy_pct": 4.1},
+    {"t": 86.0, "edge_rps": 25.0, "open_connections": 21, "goroutines": 301, "heap_mb": 52.5, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 2.2, "traefik_cores": 0.13, "edge_mean_ms": 3.05, "node_cores": 0.46, "softirq_cores": 0.04, "conntrack": 648, "max_cpu": "cpu2", "max_cpu_busy_pct": 13.3, "max_cpu_softirq_pct": 2.6, "net_rx_cpu": "cpu2", "net_rx_share_pct": 77.2, "edge_cgroup_cores": 0.14, "workload_cores": 0.01, "other_cores": 0.31, "generator_busy_pct": 5.8},
+    {"t": 88.0, "edge_rps": 26.0, "open_connections": 21, "goroutines": 304, "heap_mb": 37.6, "gc_per_s": 0.5, "gc_pause_ms": 0.114, "alloc_mb_s": 2.8, "traefik_cores": 0.18, "edge_mean_ms": 4.12, "node_cores": 0.5, "softirq_cores": 0.04, "conntrack": 669, "max_cpu": "cpu2", "max_cpu_busy_pct": 15.4, "max_cpu_softirq_pct": 3.1, "net_rx_cpu": "cpu2", "net_rx_share_pct": 78.6, "edge_cgroup_cores": 0.18, "workload_cores": 0.01, "other_cores": 0.31, "generator_busy_pct": 3.2},
+    {"t": 90.0, "edge_rps": 25.0, "open_connections": 21, "goroutines": 304, "heap_mb": 40.3, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 2.1, "traefik_cores": 0.13, "edge_mean_ms": 3.04, "node_cores": 0.44, "softirq_cores": 0.04, "conntrack": 675, "max_cpu": "cpu2", "max_cpu_busy_pct": 12.8, "max_cpu_softirq_pct": 2.6, "net_rx_cpu": "cpu2", "net_rx_share_pct": 77.8, "edge_cgroup_cores": 0.14, "workload_cores": 0.01, "other_cores": 0.29, "generator_busy_pct": 4.8},
+    {"t": 92.0, "edge_rps": 7.0, "open_connections": 1, "goroutines": 262, "heap_mb": 41.1, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 0.6, "traefik_cores": 0.04, "edge_mean_ms": 2.94, "node_cores": 0.39, "softirq_cores": 0.02, "conntrack": 679, "max_cpu": "cpu2", "max_cpu_busy_pct": 11.3, "max_cpu_softirq_pct": 1.0, "net_rx_cpu": "cpu2", "net_rx_share_pct": 72.8, "edge_cgroup_cores": 0.05, "workload_cores": 0.0, "other_cores": 0.34, "generator_busy_pct": 3.3},
+    {"t": 94.0, "edge_rps": 0.0, "open_connections": 1, "goroutines": 261, "heap_mb": 41.3, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 0.1, "traefik_cores": 0.0, "node_cores": 0.24, "softirq_cores": 0.01, "conntrack": 689, "max_cpu": "cpu1", "max_cpu_busy_pct": 7.5, "max_cpu_softirq_pct": 0.0, "net_rx_cpu": "cpu2", "net_rx_share_pct": 61.6, "edge_cgroup_cores": 0.0, "workload_cores": 0.0, "other_cores": 0.24, "generator_busy_pct": 1.4},
+    {"t": 96.0, "edge_rps": 1.5, "open_connections": 1, "goroutines": 266, "heap_mb": 41.7, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 0.4, "traefik_cores": 0.05, "edge_mean_ms": 3.57, "node_cores": 0.33, "softirq_cores": 0.02, "conntrack": 715, "max_cpu": "cpu1", "max_cpu_busy_pct": 8.2, "max_cpu_softirq_pct": 0.5, "net_rx_cpu": "cpu2", "net_rx_share_pct": 67.9, "edge_cgroup_cores": 0.05, "workload_cores": 0.0, "other_cores": 0.28, "generator_busy_pct": 1.8},
+    {"t": 98.0, "edge_rps": 0.0, "open_connections": 1, "goroutines": 265, "heap_mb": 42.6, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 0.5, "traefik_cores": 0.0, "node_cores": 0.29, "softirq_cores": 0.01, "conntrack": 448, "max_cpu": "cpu2", "max_cpu_busy_pct": 9.0, "max_cpu_softirq_pct": 0.5, "net_rx_cpu": "cpu2", "net_rx_share_pct": 65.2, "edge_cgroup_cores": 0.0, "workload_cores": 0.0, "other_cores": 0.29, "generator_busy_pct": 1.4},
+    {"t": 100.0, "edge_rps": 0.0, "open_connections": 1, "goroutines": 265, "heap_mb": 42.7, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 0.1, "traefik_cores": 0.01, "node_cores": 0.26, "softirq_cores": 0.01, "conntrack": 453, "max_cpu": "cpu3", "max_cpu_busy_pct": 7.1, "max_cpu_softirq_pct": 0.0, "net_rx_cpu": "cpu2", "net_rx_share_pct": 67.7, "edge_cgroup_cores": 0.0, "workload_cores": 0.0, "other_cores": 0.26, "generator_busy_pct": 1.3}
+   ],
+   "node_cpu": 11.9,
+   "generator_cpu": 4.0,
+   "node_mem_available_mb": 9010,
+   "pods_top": {
+    "traefik": "141m 174Mi",
+    "web": "13m 4Mi"
+   },
+   "throttled_ms": 0.0,
+   "edge_restarts": 0,
+   "pod_replaced": false,
+   "reasons": [],
+   "cold_reasons": []
+  }
+ ],
+ "ramps": [
+  {
+   "target": "api-health",
+   "repeat": 1,
+   "steps": [
+    {
+     "rate": 2000,
+     "target": "api-health",
+     "requests": 120000.0,
+     "achieved_rps": 2000.0,
+     "error_rate": 0.0,
+     "avg_ms": 1.4052628724749952,
+     "p50_ms": 0.9314205,
+     "p90_ms": 1.8190586000000002,
+     "p95_ms": 2.804842949999999,
+     "p99_ms": 9.896380729999992,
+     "max_ms": 116.610216,
+     "phases": {
+      "blocked": {
+       "p50_ms": 0.000453,
+       "p95_ms": 0.000576,
+       "p99_ms": 0.000653,
+       "max_ms": 0.046809
+      },
+      "connecting": {
+       "p50_ms": 0.0,
+       "p95_ms": 0.0,
+       "p99_ms": 0.0,
+       "max_ms": 0.0
+      },
+      "tls_handshaking": {
+       "p50_ms": 0.0,
+       "p95_ms": 0.0,
+       "p99_ms": 0.0,
+       "max_ms": 0.0
+      },
+      "waiting": {
+       "p50_ms": 0.8130379999999999,
+       "p95_ms": 2.474548349999999,
+       "p99_ms": 8.151782169999993,
+       "max_ms": 103.05658
+      },
+      "receiving": {
+       "p50_ms": 0.0551935,
+       "p95_ms": 0.21860184999999932,
+       "p99_ms": 1.7780306799999965,
+       "max_ms": 56.088985
+      }
+     },
+     "status_429": 0.0,
+     "dropped": 2047.0,
+     "vus_peak": 615.0,
+     "cold": {
+      "requests": 57952.0,
+      "achieved_rps": 1931.7,
+      "error_rate": 0.0005176697956929873,
+      "avg_ms": 7.6391952195265445,
+      "p50_ms": 1.032761,
+      "p90_ms": 8.640568800000002,
+      "p95_ms": 18.17992994999998,
+      "p99_ms": 83.17605832999998,
+      "max_ms": 1212.716521,
+      "phases": {
+       "blocked": {
+        "p50_ms": 0.000457,
+        "p95_ms": 0.000602,
+        "p99_ms": 1288.0712145399918,
+        "max_ms": 4981.32425
+       },
+       "connecting": {
+        "p50_ms": 0.0,
+        "p95_ms": 0.0,
+        "p99_ms": 0.18942436999999998,
+        "max_ms": 24.290999
+       },
+       "tls_handshaking": {
+        "p50_ms": 0.0,
+        "p95_ms": 0.0,
+        "p99_ms": 1284.8014178699962,
+        "max_ms": 4980.978443
+       },
+       "waiting": {
+        "p50_ms": 0.911608,
+        "p95_ms": 15.038418649999977,
+        "p99_ms": 75.97493454999987,
+        "max_ms": 1179.312491
+       },
+       "receiving": {
+        "p50_ms": 0.057154,
+        "p95_ms": 2.36373935,
+        "p99_ms": 7.554564829999979,
+        "max_ms": 931.285215
+       }
+      }
+     },
+     "warmup_seconds": 30,
+     "timeline": [
+      {"t": 2.0, "edge_rps": 147.5, "open_connections": 348, "goroutines": 2190, "heap_mb": 72.0, "gc_per_s": 1.5, "gc_pause_ms": 0.416, "alloc_mb_s": 40.4, "traefik_cores": 2.94, "edge_mean_ms": 261.11, "node_cores": 2.59, "softirq_cores": 0.06, "conntrack": 1429, "max_cpu": "cpu0", "max_cpu_busy_pct": 65.3, "max_cpu_softirq_pct": 0.0, "net_rx_cpu": "cpu2", "net_rx_share_pct": 90.1, "edge_cgroup_cores": 2.38, "workload_cores": 0.02, "other_cores": 0.19, "generator_busy_pct": 41.8},
+      {"t": 4.0, "edge_rps": 1957.7, "open_connections": 586, "goroutines": 2265, "heap_mb": 102.4, "gc_per_s": 1.5, "gc_pause_ms": 1.782, "alloc_mb_s": 87.8, "traefik_cores": 2.83, "edge_mean_ms": 12.9, "node_cores": 3.97, "softirq_cores": 0.21, "conntrack": 1715, "max_cpu": "cpu2", "max_cpu_busy_pct": 99.5, "max_cpu_softirq_pct": 12.0, "net_rx_cpu": "cpu2", "net_rx_share_pct": 70.2, "edge_cgroup_cores": 3.23, "workload_cores": 0.28, "other_cores": 0.46, "generator_busy_pct": 43.2},
+      {"t": 6.0, "edge_rps": 2174.7, "open_connections": 860, "goroutines": 2452, "heap_mb": 111.5, "gc_per_s": 1.5, "gc_pause_ms": 0.443, "alloc_mb_s": 93.8, "traefik_cores": 3.15, "edge_mean_ms": 3.23, "node_cores": 3.99, "softirq_cores": 0.23, "conntrack": 1719, "max_cpu": "cpu0", "max_cpu_busy_pct": 100.0, "max_cpu_softirq_pct": 3.0, "net_rx_cpu": "cpu2", "net_rx_share_pct": 67.9, "edge_cgroup_cores": 3.18, "workload_cores": 0.3, "other_cores": 0.51, "generator_busy_pct": 42.2},
+      {"t": 8.0, "edge_rps": 1990.0, "open_connections": 924, "goroutines": 2510, "heap_mb": 116.8, "gc_per_s": 1.0, "gc_pause_ms": 0.155, "alloc_mb_s": 71.5, "traefik_cores": 1.69, "edge_mean_ms": 1.07, "node_cores": 2.97, "softirq_cores": 0.29, "conntrack": 1726, "max_cpu": "cpu2", "max_cpu_busy_pct": 79.8, "max_cpu_softirq_pct": 16.1, "net_rx_cpu": "cpu2", "net_rx_share_pct": 68.6, "edge_cgroup_cores": 1.9, "workload_cores": 0.38, "other_cores": 0.69, "generator_busy_pct": 33.8},
+      {"t": 10.0, "edge_rps": 2021.0, "open_connections": 924, "goroutines": 2509, "heap_mb": 142.9, "gc_per_s": 0.5, "gc_pause_ms": 0.115, "alloc_mb_s": 67.3, "traefik_cores": 1.32, "edge_mean_ms": 0.53, "node_cores": 2.58, "softirq_cores": 0.34, "conntrack": 1733, "max_cpu": "cpu2", "max_cpu_busy_pct": 71.1, "max_cpu_softirq_pct": 18.4, "net_rx_cpu": "cpu2", "net_rx_share_pct": 67.9, "edge_cgroup_cores": 1.4, "workload_cores": 0.43, "other_cores": 0.75, "generator_busy_pct": 32.0},
+      {"t": 12.0, "edge_rps": 1984.5, "open_connections": 924, "goroutines": 2510, "heap_mb": 133.0, "gc_per_s": 1.0, "gc_pause_ms": 0.235, "alloc_mb_s": 66.2, "traefik_cores": 1.31, "edge_mean_ms": 0.56, "node_cores": 2.61, "softirq_cores": 0.32, "conntrack": 1742, "max_cpu": "cpu2", "max_cpu_busy_pct": 71.5, "max_cpu_softirq_pct": 17.7, "net_rx_cpu": "cpu2", "net_rx_share_pct": 68.0, "edge_cgroup_cores": 1.4, "workload_cores": 0.43, "other_cores": 0.78, "generator_busy_pct": 27.9},
+      {"t": 14.0, "edge_rps": 1996.5, "open_connections": 924, "goroutines": 2507, "heap_mb": 129.1, "gc_per_s": 1.0, "gc_pause_ms": 0.304, "alloc_mb_s": 66.8, "traefik_cores": 1.32, "edge_mean_ms": 0.58, "node_cores": 2.61, "softirq_cores": 0.33, "conntrack": 1748, "max_cpu": "cpu2", "max_cpu_busy_pct": 71.8, "max_cpu_softirq_pct": 18.1, "net_rx_cpu": "cpu2", "net_rx_share_pct": 67.9, "edge_cgroup_cores": 1.42, "workload_cores": 0.43, "other_cores": 0.76, "generator_busy_pct": 31.6},
+      {"t": 16.0, "edge_rps": 2030.5, "open_connections": 924, "goroutines": 2508, "heap_mb": 126.1, "gc_per_s": 1.0, "gc_pause_ms": 0.248, "alloc_mb_s": 68.1, "traefik_cores": 1.34, "edge_mean_ms": 0.58, "node_cores": 2.6, "softirq_cores": 0.34, "conntrack": 1753, "max_cpu": "cpu2", "max_cpu_busy_pct": 72.0, "max_cpu_softirq_pct": 19.6, "net_rx_cpu": "cpu2", "net_rx_share_pct": 68.1, "edge_cgroup_cores": 1.42, "workload_cores": 0.44, "other_cores": 0.74, "generator_busy_pct": 32.6},
+      {"t": 18.0, "edge_rps": 1997.4, "open_connections": 924, "goroutines": 2510, "heap_mb": 122.1, "gc_per_s": 1.0, "gc_pause_ms": 0.459, "alloc_mb_s": 66.9, "traefik_cores": 1.31, "edge_mean_ms": 0.54, "node_cores": 2.68, "softirq_cores": 0.31, "conntrack": 1761, "max_cpu": "cpu2", "max_cpu_busy_pct": 72.3, "max_cpu_softirq_pct": 17.0, "net_rx_cpu": "cpu2", "net_rx_share_pct": 68.0, "edge_cgroup_cores": 1.39, "workload_cores": 0.43, "other_cores": 0.86, "generator_busy_pct": 32.0},
+      {"t": 20.0, "edge_rps": 2227.0, "open_connections": 924, "goroutines": 2507, "heap_mb": 124.4, "gc_per_s": 1.0, "gc_pause_ms": 0.242, "alloc_mb_s": 74.4, "traefik_cores": 1.46, "edge_mean_ms": 0.53, "node_cores": 2.58, "softirq_cores": 0.34, "conntrack": 1775, "max_cpu": "cpu2", "max_cpu_busy_pct": 71.2, "max_cpu_softirq_pct": 19.7, "net_rx_cpu": "cpu2", "net_rx_share_pct": 68.2, "edge_cgroup_cores": 1.41, "workload_cores": 0.42, "other_cores": 0.75, "generator_busy_pct": 29.4},
+      {"t": 22.0, "edge_rps": 1875.6, "open_connections": 926, "goroutines": 2516, "heap_mb": 118.1, "gc_per_s": 1.0, "gc_pause_ms": 0.342, "alloc_mb_s": 63.2, "traefik_cores": 1.16, "edge_mean_ms": 0.62, "node_cores": 2.79, "softirq_cores": 0.3, "conntrack": 1793, "max_cpu": "cpu2", "max_cpu_busy_pct": 76.5, "max_cpu_softirq_pct": 16.8, "net_rx_cpu": "cpu2", "net_rx_share_pct": 68.5, "edge_cgroup_cores": 1.29, "workload_cores": 0.4, "other_cores": 1.1, "generator_busy_pct": 35.1},
+      {"t": 24.0, "edge_rps": 2053.8, "open_connections": 924, "goroutines": 2511, "heap_mb": 113.4, "gc_per_s": 1.0, "gc_pause_ms": 0.38, "alloc_mb_s": 69.0, "traefik_cores": 1.32, "edge_mean_ms": 0.61, "node_cores": 2.61, "softirq_cores": 0.33, "conntrack": 1840, "max_cpu": "cpu2", "max_cpu_busy_pct": 71.9, "max_cpu_softirq_pct": 17.9, "net_rx_cpu": "cpu2", "net_rx_share_pct": 68.4, "edge_cgroup_cores": 1.38, "workload_cores": 0.41, "other_cores": 0.82, "generator_busy_pct": 31.6},
+      {"t": 26.0, "edge_rps": 1821.5, "open_connections": 924, "goroutines": 2514, "heap_mb": 136.4, "gc_per_s": 0.5, "gc_pause_ms": 0.113, "alloc_mb_s": 61.0, "traefik_cores": 1.12, "edge_mean_ms": 0.5, "node_cores": 2.6, "softirq_cores": 0.33, "conntrack": 1844, "max_cpu": "cpu2", "max_cpu_busy_pct": 73.2, "max_cpu_softirq_pct": 19.6, "net_rx_cpu": "cpu2", "net_rx_share_pct": 69.7, "edge_cgroup_cores": 1.34, "workload_cores": 0.4, "other_cores": 0.86, "generator_busy_pct": 27.0},
+      {"t": 28.0, "edge_rps": 2027.5, "open_connections": 924, "goroutines": 2508, "heap_mb": 126.6, "gc_per_s": 1.0, "gc_pause_ms": 0.315, "alloc_mb_s": 67.4, "traefik_cores": 1.29, "edge_mean_ms": 0.59, "node_cores": 2.73, "softirq_cores": 0.32, "conntrack": 1851, "max_cpu": "cpu2", "max_cpu_busy_pct": 74.1, "max_cpu_softirq_pct": 18.5, "net_rx_cpu": "cpu2", "net_rx_share_pct": 67.9, "edge_cgroup_cores": 1.34, "workload_cores": 0.41, "other_cores": 0.98, "generator_busy_pct": 32.8},
+      {"t": 30.0, "edge_rps": 2009.0, "open_connections": 924, "goroutines": 2510, "heap_mb": 118.9, "gc_per_s": 1.0, "gc_pause_ms": 0.319, "alloc_mb_s": 67.0, "traefik_cores": 1.33, "edge_mean_ms": 0.55, "node_cores": 2.63, "softirq_cores": 0.35, "conntrack": 1859, "max_cpu": "cpu2", "max_cpu_busy_pct": 71.7, "max_cpu_softirq_pct": 19.4, "net_rx_cpu": "cpu2", "net_rx_share_pct": 66.7, "edge_cgroup_cores": 1.42, "workload_cores": 0.43, "other_cores": 0.78, "generator_busy_pct": 32.7},
+      {"t": 32.0, "edge_rps": 1958.0, "open_connections": 924, "goroutines": 2512, "heap_mb": 113.2, "gc_per_s": 1.0, "gc_pause_ms": 0.337, "alloc_mb_s": 65.8, "traefik_cores": 1.32, "edge_mean_ms": 0.54, "node_cores": 2.63, "softirq_cores": 0.33, "conntrack": 1874, "max_cpu": "cpu2", "max_cpu_busy_pct": 71.9, "max_cpu_softirq_pct": 19.5, "net_rx_cpu": "cpu2", "net_rx_share_pct": 67.4, "edge_cgroup_cores": 1.43, "workload_cores": 0.42, "other_cores": 0.78, "generator_busy_pct": 28.4},
+      {"t": 34.0, "edge_rps": 2009.9, "open_connections": 924, "goroutines": 2512, "heap_mb": 149.5, "gc_per_s": 0.5, "gc_pause_ms": 0.133, "alloc_mb_s": 67.0, "traefik_cores": 1.29, "edge_mean_ms": 0.51, "node_cores": 2.61, "softirq_cores": 0.33, "conntrack": 1580, "max_cpu": "cpu2", "max_cpu_busy_pct": 73.0, "max_cpu_softirq_pct": 18.0, "net_rx_cpu": "cpu2", "net_rx_share_pct": 66.8, "edge_cgroup_cores": 1.37, "workload_cores": 0.43, "other_cores": 0.81, "generator_busy_pct": 32.6},
+      {"t": 36.0, "edge_rps": 2015.7, "open_connections": 924, "goroutines": 2512, "heap_mb": 136.2, "gc_per_s": 1.0, "gc_pause_ms": 0.258, "alloc_mb_s": 67.1, "traefik_cores": 1.29, "edge_mean_ms": 0.71, "node_cores": 2.7, "softirq_cores": 0.32, "conntrack": 1584, "max_cpu": "cpu2", "max_cpu_busy_pct": 74.0, "max_cpu_softirq_pct": 17.7, "net_rx_cpu": "cpu2", "net_rx_share_pct": 66.2, "edge_cgroup_cores": 1.37, "workload_cores": 0.42, "other_cores": 0.91, "generator_busy_pct": 31.9},
+      {"t": 38.0, "edge_rps": 2050.1, "open_connections": 924, "goroutines": 2512, "heap_mb": 126.1, "gc_per_s": 1.0, "gc_pause_ms": 0.362, "alloc_mb_s": 68.3, "traefik_cores": 1.37, "edge_mean_ms": 0.54, "node_cores": 2.63, "softirq_cores": 0.32, "conntrack": 1590, "max_cpu": "cpu2", "max_cpu_busy_pct": 71.1, "max_cpu_softirq_pct": 17.1, "net_rx_cpu": "cpu2", "net_rx_share_pct": 66.5, "edge_cgroup_cores": 1.41, "workload_cores": 0.43, "other_cores": 0.79, "generator_busy_pct": 27.0},
+      {"t": 40.0, "edge_rps": 1946.5, "open_connections": 924, "goroutines": 2513, "heap_mb": 121.9, "gc_per_s": 1.0, "gc_pause_ms": 0.231, "alloc_mb_s": 68.3, "traefik_cores": 1.41, "edge_mean_ms": 0.48, "node_cores": 2.47, "softirq_cores": 0.3, "conntrack": 1600, "max_cpu": "cpu1", "max_cpu_busy_pct": 69.8, "max_cpu_softirq_pct": 3.6, "net_rx_cpu": "cpu2", "net_rx_share_pct": 67.4, "edge_cgroup_cores": 1.54, "workload_cores": 0.37, "other_cores": 0.56, "generator_busy_pct": 30.9},
+      {"t": 42.0, "edge_rps": 2008.0, "open_connections": 924, "goroutines": 2513, "heap_mb": 117.7, "gc_per_s": 1.0, "gc_pause_ms": 0.141, "alloc_mb_s": 69.7, "traefik_cores": 1.43, "edge_mean_ms": 0.56, "node_cores": 2.41, "softirq_cores": 0.32, "conntrack": 1609, "max_cpu": "cpu2", "max_cpu_busy_pct": 66.3, "max_cpu_softirq_pct": 18.2, "net_rx_cpu": "cpu2", "net_rx_share_pct": 67.6, "edge_cgroup_cores": 1.51, "workload_cores": 0.38, "other_cores": 0.52, "generator_busy_pct": 31.5},
+      {"t": 44.0, "edge_rps": 2031.0, "open_connections": 924, "goroutines": 2515, "heap_mb": 111.1, "gc_per_s": 1.0, "gc_pause_ms": 2.789, "alloc_mb_s": 67.8, "traefik_cores": 1.36, "edge_mean_ms": 0.52, "node_cores": 2.41, "softirq_cores": 0.33, "conntrack": 1616, "max_cpu": "cpu2", "max_cpu_busy_pct": 67.7, "max_cpu_softirq_pct": 19.0, "net_rx_cpu": "cpu2", "net_rx_share_pct": 67.2, "edge_cgroup_cores": 1.42, "workload_cores": 0.42, "other_cores": 0.57, "generator_busy_pct": 28.8},
+      {"t": 46.0, "edge_rps": 1935.3, "open_connections": 924, "goroutines": 2509, "heap_mb": 145.5, "gc_per_s": 0.5, "gc_pause_ms": 0.354, "alloc_mb_s": 67.4, "traefik_cores": 1.23, "edge_mean_ms": 0.61, "node_cores": 2.73, "softirq_cores": 0.3, "conntrack": 1624, "max_cpu": "cpu2", "max_cpu_busy_pct": 73.1, "max_cpu_softirq_pct": 19.4, "net_rx_cpu": "cpu2", "net_rx_share_pct": 68.5, "edge_cgroup_cores": 1.37, "workload_cores": 0.41, "other_cores": 0.95, "generator_busy_pct": 32.8},
+      {"t": 48.0, "edge_rps": 3099.6, "open_connections": 924, "goroutines": 2509, "heap_mb": 136.3, "gc_per_s": 1.5, "gc_pause_ms": 1.027, "alloc_mb_s": 103.7, "traefik_cores": 1.95, "edge_mean_ms": 0.71, "node_cores": 2.77, "softirq_cores": 0.31, "conntrack": 1646, "max_cpu": "cpu2", "max_cpu_busy_pct": 74.5, "max_cpu_softirq_pct": 19.0, "net_rx_cpu": "cpu2", "net_rx_share_pct": 68.7, "edge_cgroup_cores": 1.32, "workload_cores": 0.41, "other_cores": 1.04, "generator_busy_pct": 29.3},
+      {"t": 50.0, "edge_rps": 956.0, "open_connections": 924, "goroutines": 2509, "heap_mb": 131.8, "gc_per_s": 0.5, "gc_pause_ms": 0.116, "alloc_mb_s": 32.4, "traefik_cores": 0.62, "edge_mean_ms": 0.72, "node_cores": 2.73, "softirq_cores": 0.32, "conntrack": 1652, "max_cpu": "cpu2", "max_cpu_busy_pct": 72.0, "max_cpu_softirq_pct": 18.3, "net_rx_cpu": "cpu2", "net_rx_share_pct": 69.4, "edge_cgroup_cores": 1.34, "workload_cores": 0.4, "other_cores": 0.99, "generator_busy_pct": 24.5},
+      {"t": 52.0, "edge_rps": 2001.6, "open_connections": 924, "goroutines": 2512, "heap_mb": 121.2, "gc_per_s": 1.0, "gc_pause_ms": 0.276, "alloc_mb_s": 67.0, "traefik_cores": 1.23, "edge_mean_ms": 0.61, "node_cores": 2.73, "softirq_cores": 0.33, "conntrack": 1665, "max_cpu": "cpu2", "max_cpu_busy_pct": 74.3, "max_cpu_softirq_pct": 18.8, "net_rx_cpu": "cpu2", "net_rx_share_pct": 68.6, "edge_cgroup_cores": 1.3, "workload_cores": 0.41, "other_cores": 1.02, "generator_busy_pct": 31.1},
+      {"t": 54.0, "edge_rps": 1942.8, "open_connections": 924, "goroutines": 2508, "heap_mb": 114.0, "gc_per_s": 1.0, "gc_pause_ms": 0.964, "alloc_mb_s": 65.1, "traefik_cores": 1.27, "edge_mean_ms": 0.66, "node_cores": 2.59, "softirq_cores": 0.33, "conntrack": 1671, "max_cpu": "cpu2", "max_cpu_busy_pct": 71.3, "max_cpu_softirq_pct": 18.6, "net_rx_cpu": "cpu2", "net_rx_share_pct": 67.8, "edge_cgroup_cores": 1.35, "workload_cores": 0.42, "other_cores": 0.82, "generator_busy_pct": 26.9},
+      {"t": 56.0, "edge_rps": 2009.0, "open_connections": 924, "goroutines": 2511, "heap_mb": 144.1, "gc_per_s": 0.5, "gc_pause_ms": 0.155, "alloc_mb_s": 67.0, "traefik_cores": 1.26, "edge_mean_ms": 0.59, "node_cores": 2.61, "softirq_cores": 0.33, "conntrack": 1676, "max_cpu": "cpu2", "max_cpu_busy_pct": 71.4, "max_cpu_softirq_pct": 19.4, "net_rx_cpu": "cpu2", "net_rx_share_pct": 67.0, "edge_cgroup_cores": 1.35, "workload_cores": 0.42, "other_cores": 0.84, "generator_busy_pct": 32.1},
+      {"t": 58.0, "edge_rps": 1998.5, "open_connections": 924, "goroutines": 2512, "heap_mb": 129.9, "gc_per_s": 1.0, "gc_pause_ms": 0.243, "alloc_mb_s": 66.8, "traefik_cores": 1.28, "edge_mean_ms": 0.56, "node_cores": 2.72, "softirq_cores": 0.33, "conntrack": 1700, "max_cpu": "cpu2", "max_cpu_busy_pct": 73.5, "max_cpu_softirq_pct": 19.0, "net_rx_cpu": "cpu2", "net_rx_share_pct": 66.3, "edge_cgroup_cores": 1.35, "workload_cores": 0.42, "other_cores": 0.95, "generator_busy_pct": 27.4},
+      {"t": 60.0, "edge_rps": 2124.0, "open_connections": 924, "goroutines": 2511, "heap_mb": 123.9, "gc_per_s": 1.0, "gc_pause_ms": 0.875, "alloc_mb_s": 71.0, "traefik_cores": 1.43, "edge_mean_ms": 0.62, "node_cores": 2.62, "softirq_cores": 0.32, "conntrack": 1709, "max_cpu": "cpu2", "max_cpu_busy_pct": 71.9, "max_cpu_softirq_pct": 18.9, "net_rx_cpu": "cpu2", "net_rx_share_pct": 66.7, "edge_cgroup_cores": 1.44, "workload_cores": 0.43, "other_cores": 0.75, "generator_busy_pct": 32.1},
+      {"t": 62.0, "edge_rps": 1904.0, "open_connections": 924, "goroutines": 2515, "heap_mb": 157.0, "gc_per_s": 0.5, "gc_pause_ms": 0.234, "alloc_mb_s": 63.4, "traefik_cores": 1.24, "edge_mean_ms": 0.51, "node_cores": 2.57, "softirq_cores": 0.32, "conntrack": 1718, "max_cpu": "cpu2", "max_cpu_busy_pct": 71.3, "max_cpu_softirq_pct": 18.1, "net_rx_cpu": "cpu2", "net_rx_share_pct": 66.0, "edge_cgroup_cores": 1.39, "workload_cores": 0.43, "other_cores": 0.75, "generator_busy_pct": 28.7},
+      {"t": 64.0, "edge_rps": 1978.3, "open_connections": 924, "goroutines": 2507, "heap_mb": 139.2, "gc_per_s": 1.0, "gc_pause_ms": 0.224, "alloc_mb_s": 66.0, "traefik_cores": 1.28, "edge_mean_ms": 0.58, "node_cores": 2.62, "softirq_cores": 0.31, "conntrack": 1743, "max_cpu": "cpu2", "max_cpu_busy_pct": 72.8, "max_cpu_softirq_pct": 18.3, "net_rx_cpu": "cpu2", "net_rx_share_pct": 67.0, "edge_cgroup_cores": 1.4, "workload_cores": 0.42, "other_cores": 0.8, "generator_busy_pct": 31.2},
+      {"t": 66.0, "edge_rps": 2000.6, "open_connections": 924, "goroutines": 2509, "heap_mb": 128.4, "gc_per_s": 1.0, "gc_pause_ms": 0.218, "alloc_mb_s": 66.7, "traefik_cores": 1.31, "edge_mean_ms": 0.53, "node_cores": 2.57, "softirq_cores": 0.32, "conntrack": 1747, "max_cpu": "cpu2", "max_cpu_busy_pct": 71.4, "max_cpu_softirq_pct": 18.9, "net_rx_cpu": "cpu2", "net_rx_share_pct": 67.8, "edge_cgroup_cores": 1.43, "workload_cores": 0.43, "other_cores": 0.71, "generator_busy_pct": 33.3},
+      {"t": 68.0, "edge_rps": 1992.6, "open_connections": 924, "goroutines": 2510, "heap_mb": 123.3, "gc_per_s": 1.0, "gc_pause_ms": 6.098, "alloc_mb_s": 66.9, "traefik_cores": 1.27, "edge_mean_ms": 1.82, "node_cores": 2.8, "softirq_cores": 0.31, "conntrack": 1751, "max_cpu": "cpu2", "max_cpu_busy_pct": 74.3, "max_cpu_softirq_pct": 18.7, "net_rx_cpu": "cpu2", "net_rx_share_pct": 67.5, "edge_cgroup_cores": 1.34, "workload_cores": 0.41, "other_cores": 1.05, "generator_busy_pct": 27.6},
+      {"t": 70.0, "edge_rps": 2034.4, "open_connections": 924, "goroutines": 2509, "heap_mb": 114.5, "gc_per_s": 1.0, "gc_pause_ms": 0.2, "alloc_mb_s": 67.8, "traefik_cores": 1.34, "edge_mean_ms": 0.55, "node_cores": 2.62, "softirq_cores": 0.34, "conntrack": 1760, "max_cpu": "cpu2", "max_cpu_busy_pct": 72.7, "max_cpu_softirq_pct": 20.1, "net_rx_cpu": "cpu2", "net_rx_share_pct": 67.6, "edge_cgroup_cores": 1.4, "workload_cores": 0.43, "other_cores": 0.79, "generator_busy_pct": 32.8},
+      {"t": 72.0, "edge_rps": 1964.9, "open_connections": 924, "goroutines": 2510, "heap_mb": 143.2, "gc_per_s": 0.5, "gc_pause_ms": 0.108, "alloc_mb_s": 65.5, "traefik_cores": 1.26, "edge_mean_ms": 0.51, "node_cores": 2.61, "softirq_cores": 0.33, "conntrack": 1769, "max_cpu": "cpu2", "max_cpu_busy_pct": 72.3, "max_cpu_softirq_pct": 19.7, "net_rx_cpu": "cpu2", "net_rx_share_pct": 66.9, "edge_cgroup_cores": 1.4, "workload_cores": 0.42, "other_cores": 0.79, "generator_busy_pct": 28.0},
+      {"t": 74.0, "edge_rps": 2029.6, "open_connections": 924, "goroutines": 2510, "heap_mb": 132.4, "gc_per_s": 1.0, "gc_pause_ms": 0.207, "alloc_mb_s": 67.5, "traefik_cores": 1.33, "edge_mean_ms": 0.54, "node_cores": 2.66, "softirq_cores": 0.34, "conntrack": 1776, "max_cpu": "cpu2", "max_cpu_busy_pct": 72.8, "max_cpu_softirq_pct": 19.5, "net_rx_cpu": "cpu2", "net_rx_share_pct": 66.7, "edge_cgroup_cores": 1.4, "workload_cores": 0.43, "other_cores": 0.83, "generator_busy_pct": 31.2},
+      {"t": 76.0, "edge_rps": 2002.9, "open_connections": 924, "goroutines": 2509, "heap_mb": 122.5, "gc_per_s": 1.0, "gc_pause_ms": 0.138, "alloc_mb_s": 66.9, "traefik_cores": 1.29, "edge_mean_ms": 0.62, "node_cores": 2.65, "softirq_cores": 0.34, "conntrack": 1785, "max_cpu": "cpu2", "max_cpu_busy_pct": 73.1, "max_cpu_softirq_pct": 21.0, "net_rx_cpu": "cpu2", "net_rx_share_pct": 66.9, "edge_cgroup_cores": 1.38, "workload_cores": 0.42, "other_cores": 0.85, "generator_busy_pct": 29.0},
+      {"t": 78.0, "edge_rps": 1956.6, "open_connections": 924, "goroutines": 2509, "heap_mb": 156.4, "gc_per_s": 0.5, "gc_pause_ms": 0.096, "alloc_mb_s": 65.2, "traefik_cores": 1.25, "edge_mean_ms": 0.52, "node_cores": 2.62, "softirq_cores": 0.35, "conntrack": 1792, "max_cpu": "cpu2", "max_cpu_busy_pct": 71.7, "max_cpu_softirq_pct": 21.7, "net_rx_cpu": "cpu2", "net_rx_share_pct": 67.0, "edge_cgroup_cores": 1.39, "workload_cores": 0.43, "other_cores": 0.8, "generator_busy_pct": 32.8},
+      {"t": 80.0, "edge_rps": 2060.5, "open_connections": 924, "goroutines": 2510, "heap_mb": 138.6, "gc_per_s": 1.0, "gc_pause_ms": 0.188, "alloc_mb_s": 68.7, "traefik_cores": 1.36, "edge_mean_ms": 0.46, "node_cores": 2.29, "softirq_cores": 0.34, "conntrack": 1800, "max_cpu": "cpu2", "max_cpu_busy_pct": 64.6, "max_cpu_softirq_pct": 20.8, "net_rx_cpu": "cpu2", "net_rx_share_pct": 67.2, "edge_cgroup_cores": 1.41, "workload_cores": 0.4, "other_cores": 0.48, "generator_busy_pct": 30.5},
+      {"t": 82.0, "edge_rps": 1959.4, "open_connections": 926, "goroutines": 2514, "heap_mb": 124.5, "gc_per_s": 1.0, "gc_pause_ms": 0.245, "alloc_mb_s": 65.4, "traefik_cores": 1.32, "edge_mean_ms": 0.52, "node_cores": 2.38, "softirq_cores": 0.34, "conntrack": 1810, "max_cpu": "cpu2", "max_cpu_busy_pct": 66.1, "max_cpu_softirq_pct": 19.4, "net_rx_cpu": "cpu2", "net_rx_share_pct": 66.7, "edge_cgroup_cores": 1.46, "workload_cores": 0.42, "other_cores": 0.5, "generator_busy_pct": 33.3},
+      {"t": 84.0, "edge_rps": 2010.7, "open_connections": 924, "goroutines": 2518, "heap_mb": 116.0, "gc_per_s": 1.0, "gc_pause_ms": 0.13, "alloc_mb_s": 67.3, "traefik_cores": 1.36, "edge_mean_ms": 0.54, "node_cores": 2.33, "softirq_cores": 0.35, "conntrack": 1839, "max_cpu": "cpu2", "max_cpu_busy_pct": 65.4, "max_cpu_softirq_pct": 21.1, "net_rx_cpu": "cpu2", "net_rx_share_pct": 66.8, "edge_cgroup_cores": 1.45, "workload_cores": 0.41, "other_cores": 0.47, "generator_busy_pct": 30.8},
+      {"t": 86.0, "edge_rps": 1966.5, "open_connections": 924, "goroutines": 2513, "heap_mb": 143.0, "gc_per_s": 0.5, "gc_pause_ms": 0.255, "alloc_mb_s": 65.4, "traefik_cores": 1.27, "edge_mean_ms": 0.45, "node_cores": 2.26, "softirq_cores": 0.33, "conntrack": 1844, "max_cpu": "cpu2", "max_cpu_busy_pct": 63.8, "max_cpu_softirq_pct": 21.1, "net_rx_cpu": "cpu2", "net_rx_share_pct": 67.0, "edge_cgroup_cores": 1.41, "workload_cores": 0.41, "other_cores": 0.44, "generator_busy_pct": 27.6},
+      {"t": 88.0, "edge_rps": 2000.5, "open_connections": 924, "goroutines": 2515, "heap_mb": 126.8, "gc_per_s": 1.0, "gc_pause_ms": 0.194, "alloc_mb_s": 66.3, "traefik_cores": 1.32, "edge_mean_ms": 0.52, "node_cores": 2.36, "softirq_cores": 0.35, "conntrack": 1849, "max_cpu": "cpu2", "max_cpu_busy_pct": 66.7, "max_cpu_softirq_pct": 20.1, "net_rx_cpu": "cpu2", "net_rx_share_pct": 67.5, "edge_cgroup_cores": 1.42, "workload_cores": 0.41, "other_cores": 0.53, "generator_busy_pct": 32.5},
+      {"t": 90.0, "edge_rps": 2041.9, "open_connections": 924, "goroutines": 2513, "heap_mb": 118.5, "gc_per_s": 1.0, "gc_pause_ms": 0.234, "alloc_mb_s": 68.0, "traefik_cores": 1.36, "edge_mean_ms": 0.5, "node_cores": 2.27, "softirq_cores": 0.32, "conntrack": 1858, "max_cpu": "cpu2", "max_cpu_busy_pct": 64.4, "max_cpu_softirq_pct": 19.1, "net_rx_cpu": "cpu2", "net_rx_share_pct": 67.3, "edge_cgroup_cores": 1.44, "workload_cores": 0.4, "other_cores": 0.43, "generator_busy_pct": 27.7},
+      {"t": 92.0, "edge_rps": 662.6, "open_connections": 1, "goroutines": 669, "heap_mb": 143.0, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 22.6, "traefik_cores": 0.51, "edge_mean_ms": 0.43, "node_cores": 1.1, "softirq_cores": 0.15, "conntrack": 1886, "max_cpu": "cpu2", "max_cpu_busy_pct": 30.2, "max_cpu_softirq_pct": 9.4, "net_rx_cpu": "cpu2", "net_rx_share_pct": 61.2, "edge_cgroup_cores": 0.6, "workload_cores": 0.15, "other_cores": 0.35, "generator_busy_pct": 21.2},
+      {"t": 94.0, "edge_rps": 0.0, "open_connections": 1, "goroutines": 444, "heap_mb": 143.2, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 0.1, "traefik_cores": 0.01, "node_cores": 0.29, "softirq_cores": 0.0, "conntrack": 1894, "max_cpu": "cpu1", "max_cpu_busy_pct": 8.3, "max_cpu_softirq_pct": 0.5, "net_rx_cpu": "cpu2", "net_rx_share_pct": 51.3, "edge_cgroup_cores": 0.01, "workload_cores": 0.01, "other_cores": 0.27, "generator_busy_pct": 1.3},
+      {"t": 96.0, "edge_rps": 0.0, "open_connections": 1, "goroutines": 436, "heap_mb": 144.1, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 0.5, "traefik_cores": 0.01, "node_cores": 0.25, "softirq_cores": 0.01, "conntrack": 1583, "max_cpu": "cpu0", "max_cpu_busy_pct": 6.7, "max_cpu_softirq_pct": 0.5, "net_rx_cpu": "cpu2", "net_rx_share_pct": 59.4, "edge_cgroup_cores": 0.01, "workload_cores": 0.0, "other_cores": 0.24, "generator_busy_pct": 1.4},
+      {"t": 98.0, "edge_rps": 0.0, "open_connections": 1, "goroutines": 435, "heap_mb": 144.3, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 0.1, "traefik_cores": 0.0, "node_cores": 0.3, "softirq_cores": 0.01, "conntrack": 1592, "max_cpu": "cpu3", "max_cpu_busy_pct": 8.8, "max_cpu_softirq_pct": 0.0, "net_rx_cpu": "cpu2", "net_rx_share_pct": 64.7, "edge_cgroup_cores": 0.0, "workload_cores": 0.0, "other_cores": 0.3, "generator_busy_pct": 1.3},
+      {"t": 100.0, "edge_rps": 0.0, "open_connections": 1, "goroutines": 435, "heap_mb": 145.3, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 0.6, "traefik_cores": 0.0, "node_cores": 0.24, "softirq_cores": 0.01, "conntrack": 1601, "max_cpu": "cpu2", "max_cpu_busy_pct": 6.0, "max_cpu_softirq_pct": 0.0, "net_rx_cpu": "cpu2", "net_rx_share_pct": 61.2, "edge_cgroup_cores": 0.0, "workload_cores": 0.0, "other_cores": 0.24, "generator_busy_pct": 1.5}
+     ],
+     "node_cpu": 57.8,
+     "generator_cpu": 27.5,
+     "node_mem_available_mb": 8917,
+     "pods_top": {
+      "traefik": "1277m 286Mi",
+      "api": "393m 15Mi"
+     },
+     "throttled_ms": 29.739,
+     "edge_restarts": 0,
+     "pod_replaced": false,
+     "reasons": [],
+     "cold_reasons": []
+    }
+   ],
+   "knee": {
+    "measured": true,
+    "last_healthy_rps": 2000,
+    "first_degraded_rps": null,
+    "reasons": [],
+    "lower_bound_only": true,
+    "vus_at_last_healthy": 615.0
+   },
+   "cold_knee": {
+    "measured": true,
+    "last_healthy_rps": 2000,
+    "first_degraded_rps": null,
+    "reasons": [],
+    "lower_bound_only": true,
+    "vus_at_last_healthy": 615.0
+   }
+  },
+  {
+   "target": "web-static",
+   "repeat": 1,
+   "steps": [
+    {
+     "rate": 2000,
+     "target": "web-static",
+     "requests": 120002.0,
+     "achieved_rps": 2000.0,
+     "error_rate": 0.0,
+     "avg_ms": 7.765334985166939,
+     "p50_ms": 2.4693985,
+     "p90_ms": 18.219347100000007,
+     "p95_ms": 29.178631349999993,
+     "p99_ms": 86.6168684100003,
+     "max_ms": 633.040444,
+     "phases": {
+      "blocked": {
+       "p50_ms": 0.000255,
+       "p95_ms": 0.000483,
+       "p99_ms": 0.000647,
+       "max_ms": 0.231092
+      },
+      "connecting": {
+       "p50_ms": 0.0,
+       "p95_ms": 0.0,
+       "p99_ms": 0.0,
+       "max_ms": 0.0
+      },
+      "tls_handshaking": {
+       "p50_ms": 0.0,
+       "p95_ms": 0.0,
+       "p99_ms": 0.0,
+       "max_ms": 0.0
+      },
+      "waiting": {
+       "p50_ms": 1.1852209999999999,
+       "p95_ms": 10.68116174999999,
+       "p99_ms": 28.591822430000075,
+       "max_ms": 239.369446
+      },
+      "receiving": {
+       "p50_ms": 1.1970245,
+       "p95_ms": 21.0462554,
+       "p99_ms": 60.228433420000236,
+       "max_ms": 582.999687
+      }
+     },
+     "status_429": 0.0,
+     "dropped": 7790.0,
+     "vus_peak": 1000.0,
+     "cold": {
+      "requests": 52209.0,
+      "achieved_rps": 1740.3,
+      "error_rate": 0.00038307571491505297,
+      "avg_ms": 97.9531824146592,
+      "p50_ms": 4.02418,
+      "p90_ms": 356.90794260000234,
+      "p95_ms": 564.9312047999995,
+      "p99_ms": 1478.5544648799973,
+      "max_ms": 3164.029825,
+      "phases": {
+       "blocked": {
+        "p50_ms": 0.000258,
+        "p95_ms": 0.0005485999999999986,
+        "p99_ms": 2113.796699399997,
+        "max_ms": 4700.024719
+       },
+       "connecting": {
+        "p50_ms": 0.0,
+        "p95_ms": 0.0,
+        "p99_ms": 0.20161484,
+        "max_ms": 29.3543
+       },
+       "tls_handshaking": {
+        "p50_ms": 0.0,
+        "p95_ms": 0.0,
+        "p99_ms": 2113.3984791199973,
+        "max_ms": 4678.12664
+       },
+       "waiting": {
+        "p50_ms": 1.531976,
+        "p95_ms": 404.2612219999999,
+        "p99_ms": 1134.7653042399995,
+        "max_ms": 3117.201778
+       },
+       "receiving": {
+        "p50_ms": 1.916699,
+        "p95_ms": 190.38595459999993,
+        "p99_ms": 545.8170304799986,
+        "max_ms": 2439.96834
+       }
+      }
+     },
+     "warmup_seconds": 30,
+     "timeline": [
+      {"t": 2.0, "edge_rps": 154.5, "open_connections": 894, "goroutines": 2202, "heap_mb": 108.2, "gc_per_s": 1.5, "gc_pause_ms": 0.541, "alloc_mb_s": 69.5, "traefik_cores": 5.96, "edge_mean_ms": 1027.68, "node_cores": 2.62, "softirq_cores": 0.1, "conntrack": 1671, "max_cpu": "cpu1", "max_cpu_busy_pct": 66.5, "max_cpu_softirq_pct": 1.0, "net_rx_cpu": "cpu2", "net_rx_share_pct": 85.5, "edge_cgroup_cores": 2.39, "workload_cores": 0.02, "other_cores": 0.21, "generator_busy_pct": 44.2},
+      {"t": 4.7, "edge_rps": 297.7, "open_connections": 928, "goroutines": 4686, "heap_mb": 185.4, "gc_per_s": 0.75, "gc_pause_ms": 0.343, "alloc_mb_s": 61.9, "traefik_cores": 1.58, "edge_mean_ms": 489.96, "node_cores": 4.0, "softirq_cores": 0.08, "conntrack": 2296, "max_cpu": "cpu0", "max_cpu_busy_pct": 100.0, "max_cpu_softirq_pct": 0.4, "net_rx_cpu": "cpu2", "net_rx_share_pct": 82.8, "edge_cgroup_cores": 3.81, "workload_cores": 0.02, "other_cores": 0.17, "generator_busy_pct": 29.9},
+      {"t": 6.0, "edge_rps": 1483.0, "open_connections": 1001, "goroutines": 4355, "heap_mb": 305.8, "gc_per_s": 1.5, "gc_pause_ms": 2.249, "alloc_mb_s": 243.0, "traefik_cores": 3.15, "edge_mean_ms": 302.63, "node_cores": 3.99, "softirq_cores": 0.74, "conntrack": 3158, "max_cpu": "cpu1", "max_cpu_busy_pct": 99.3, "max_cpu_softirq_pct": 8.6, "net_rx_cpu": "cpu2", "net_rx_share_pct": 68.8, "edge_cgroup_cores": 3.32, "workload_cores": 0.33, "other_cores": 0.34, "generator_busy_pct": 43.8},
+      {"t": 8.0, "edge_rps": 1830.5, "open_connections": 1001, "goroutines": 2751, "heap_mb": 188.8, "gc_per_s": 1.0, "gc_pause_ms": 1.473, "alloc_mb_s": 167.5, "traefik_cores": 2.42, "edge_mean_ms": 132.55, "node_cores": 3.72, "softirq_cores": 0.96, "conntrack": 3267, "max_cpu": "cpu2", "max_cpu_busy_pct": 99.0, "max_cpu_softirq_pct": 73.0, "net_rx_cpu": "cpu2", "net_rx_share_pct": 66.3, "edge_cgroup_cores": 2.91, "workload_cores": 0.28, "other_cores": 0.53, "generator_busy_pct": 42.6},
+      {"t": 10.0, "edge_rps": 2056.5, "open_connections": 1001, "goroutines": 2667, "heap_mb": 227.4, "gc_per_s": 1.0, "gc_pause_ms": 1.206, "alloc_mb_s": 168.1, "traefik_cores": 2.45, "edge_mean_ms": 4.09, "node_cores": 3.5, "softirq_cores": 0.94, "conntrack": 3279, "max_cpu": "cpu2", "max_cpu_busy_pct": 99.0, "max_cpu_softirq_pct": 73.3, "net_rx_cpu": "cpu2", "net_rx_share_pct": 67.6, "edge_cgroup_cores": 2.41, "workload_cores": 0.32, "other_cores": 0.77, "generator_busy_pct": 35.7},
+      {"t": 12.0, "edge_rps": 2041.0, "open_connections": 1002, "goroutines": 2665, "heap_mb": 213.0, "gc_per_s": 1.5, "gc_pause_ms": 0.887, "alloc_mb_s": 167.5, "traefik_cores": 2.42, "edge_mean_ms": 2.59, "node_cores": 3.46, "softirq_cores": 0.82, "conntrack": 3298, "max_cpu": "cpu2", "max_cpu_busy_pct": 97.5, "max_cpu_softirq_pct": 60.3, "net_rx_cpu": "cpu2", "net_rx_share_pct": 72.9, "edge_cgroup_cores": 2.39, "workload_cores": 0.32, "other_cores": 0.75, "generator_busy_pct": 42.2},
+      {"t": 14.0, "edge_rps": 1958.5, "open_connections": 1001, "goroutines": 2664, "heap_mb": 188.6, "gc_per_s": 1.5, "gc_pause_ms": 0.467, "alloc_mb_s": 161.1, "traefik_cores": 2.31, "edge_mean_ms": 2.27, "node_cores": 3.42, "softirq_cores": 0.83, "conntrack": 3314, "max_cpu": "cpu2", "max_cpu_busy_pct": 97.4, "max_cpu_softirq_pct": 60.7, "net_rx_cpu": "cpu2", "net_rx_share_pct": 72.4, "edge_cgroup_cores": 2.4, "workload_cores": 0.31, "other_cores": 0.71, "generator_busy_pct": 29.8},
+      {"t": 16.0, "edge_rps": 2013.5, "open_connections": 1001, "goroutines": 2662, "heap_mb": 168.2, "gc_per_s": 1.5, "gc_pause_ms": 0.571, "alloc_mb_s": 166.2, "traefik_cores": 2.39, "edge_mean_ms": 3.21, "node_cores": 3.35, "softirq_cores": 0.83, "conntrack": 3318, "max_cpu": "cpu2", "max_cpu_busy_pct": 97.0, "max_cpu_softirq_pct": 59.7, "net_rx_cpu": "cpu2", "net_rx_share_pct": 73.3, "edge_cgroup_cores": 2.4, "workload_cores": 0.3, "other_cores": 0.65, "generator_busy_pct": 34.4},
+      {"t": 18.0, "edge_rps": 1966.4, "open_connections": 1001, "goroutines": 2653, "heap_mb": 230.5, "gc_per_s": 1.0, "gc_pause_ms": 0.577, "alloc_mb_s": 161.9, "traefik_cores": 2.32, "edge_mean_ms": 1.93, "node_cores": 3.42, "softirq_cores": 0.85, "conntrack": 3324, "max_cpu": "cpu2", "max_cpu_busy_pct": 98.0, "max_cpu_softirq_pct": 62.4, "net_rx_cpu": "cpu2", "net_rx_share_pct": 73.1, "edge_cgroup_cores": 2.44, "workload_cores": 0.32, "other_cores": 0.66, "generator_busy_pct": 30.5},
+      {"t": 20.0, "edge_rps": 2018.9, "open_connections": 1001, "goroutines": 2653, "heap_mb": 214.0, "gc_per_s": 1.5, "gc_pause_ms": 0.932, "alloc_mb_s": 166.7, "traefik_cores": 2.4, "edge_mean_ms": 2.43, "node_cores": 3.39, "softirq_cores": 0.82, "conntrack": 3332, "max_cpu": "cpu2", "max_cpu_busy_pct": 98.0, "max_cpu_softirq_pct": 59.0, "net_rx_cpu": "cpu2", "net_rx_share_pct": 72.9, "edge_cgroup_cores": 2.41, "workload_cores": 0.3, "other_cores": 0.68, "generator_busy_pct": 34.7},
+      {"t": 22.0, "edge_rps": 2196.4, "open_connections": 1001, "goroutines": 2647, "heap_mb": 216.2, "gc_per_s": 1.5, "gc_pause_ms": 1.613, "alloc_mb_s": 180.6, "traefik_cores": 2.61, "edge_mean_ms": 2.24, "node_cores": 3.39, "softirq_cores": 0.83, "conntrack": 2976, "max_cpu": "cpu2", "max_cpu_busy_pct": 97.1, "max_cpu_softirq_pct": 59.5, "net_rx_cpu": "cpu2", "net_rx_share_pct": 73.0, "edge_cgroup_cores": 2.43, "workload_cores": 0.31, "other_cores": 0.65, "generator_busy_pct": 34.2},
+      {"t": 24.0, "edge_rps": 1783.2, "open_connections": 1001, "goroutines": 2654, "heap_mb": 171.4, "gc_per_s": 1.5, "gc_pause_ms": 1.014, "alloc_mb_s": 147.3, "traefik_cores": 2.11, "edge_mean_ms": 3.19, "node_cores": 3.46, "softirq_cores": 0.8, "conntrack": 2985, "max_cpu": "cpu2", "max_cpu_busy_pct": 98.4, "max_cpu_softirq_pct": 61.6, "net_rx_cpu": "cpu2", "net_rx_share_pct": 72.6, "edge_cgroup_cores": 2.41, "workload_cores": 0.31, "other_cores": 0.74, "generator_busy_pct": 29.5},
+      {"t": 26.0, "edge_rps": 2004.9, "open_connections": 1001, "goroutines": 2683, "heap_mb": 243.4, "gc_per_s": 1.0, "gc_pause_ms": 0.377, "alloc_mb_s": 166.1, "traefik_cores": 2.36, "edge_mean_ms": 2.46, "node_cores": 3.35, "softirq_cores": 0.83, "conntrack": 2988, "max_cpu": "cpu2", "max_cpu_busy_pct": 97.0, "max_cpu_softirq_pct": 60.0, "net_rx_cpu": "cpu2", "net_rx_share_pct": 72.7, "edge_cgroup_cores": 2.35, "workload_cores": 0.29, "other_cores": 0.71, "generator_busy_pct": 34.0},
+      {"t": 28.0, "edge_rps": 2009.6, "open_connections": 1001, "goroutines": 2646, "heap_mb": 214.4, "gc_per_s": 1.5, "gc_pause_ms": 2.735, "alloc_mb_s": 165.2, "traefik_cores": 2.31, "edge_mean_ms": 2.32, "node_cores": 3.44, "softirq_cores": 0.83, "conntrack": 2994, "max_cpu": "cpu2", "max_cpu_busy_pct": 97.5, "max_cpu_softirq_pct": 61.1, "net_rx_cpu": "cpu2", "net_rx_share_pct": 72.9, "edge_cgroup_cores": 2.37, "workload_cores": 0.3, "other_cores": 0.77, "generator_busy_pct": 29.7},
+      {"t": 30.0, "edge_rps": 2014.4, "open_connections": 1001, "goroutines": 2633, "heap_mb": 189.1, "gc_per_s": 1.5, "gc_pause_ms": 1.344, "alloc_mb_s": 165.6, "traefik_cores": 2.41, "edge_mean_ms": 2.41, "node_cores": 3.4, "softirq_cores": 0.84, "conntrack": 3002, "max_cpu": "cpu2", "max_cpu_busy_pct": 98.0, "max_cpu_softirq_pct": 61.5, "net_rx_cpu": "cpu2", "net_rx_share_pct": 73.2, "edge_cgroup_cores": 2.41, "workload_cores": 0.31, "other_cores": 0.68, "generator_busy_pct": 33.2},
+      {"t": 32.0, "edge_rps": 1975.6, "open_connections": 1001, "goroutines": 2622, "heap_mb": 167.9, "gc_per_s": 1.5, "gc_pause_ms": 1.16, "alloc_mb_s": 162.4, "traefik_cores": 2.31, "edge_mean_ms": 2.45, "node_cores": 3.42, "softirq_cores": 0.84, "conntrack": 3010, "max_cpu": "cpu2", "max_cpu_busy_pct": 96.9, "max_cpu_softirq_pct": 62.6, "net_rx_cpu": "cpu2", "net_rx_share_pct": 72.8, "edge_cgroup_cores": 2.38, "workload_cores": 0.31, "other_cores": 0.73, "generator_busy_pct": 28.7},
+      {"t": 34.0, "edge_rps": 2001.8, "open_connections": 1001, "goroutines": 2613, "heap_mb": 236.2, "gc_per_s": 1.0, "gc_pause_ms": 0.309, "alloc_mb_s": 164.5, "traefik_cores": 2.31, "edge_mean_ms": 2.37, "node_cores": 3.42, "softirq_cores": 0.86, "conntrack": 3035, "max_cpu": "cpu2", "max_cpu_busy_pct": 97.5, "max_cpu_softirq_pct": 61.9, "net_rx_cpu": "cpu2", "net_rx_share_pct": 72.5, "edge_cgroup_cores": 2.34, "workload_cores": 0.3, "other_cores": 0.78, "generator_busy_pct": 30.8},
+      {"t": 36.0, "edge_rps": 2023.9, "open_connections": 1001, "goroutines": 2608, "heap_mb": 203.4, "gc_per_s": 1.5, "gc_pause_ms": 0.833, "alloc_mb_s": 166.6, "traefik_cores": 2.38, "edge_mean_ms": 2.76, "node_cores": 3.41, "softirq_cores": 0.84, "conntrack": 3045, "max_cpu": "cpu2", "max_cpu_busy_pct": 96.5, "max_cpu_softirq_pct": 61.9, "net_rx_cpu": "cpu2", "net_rx_share_pct": 72.5, "edge_cgroup_cores": 2.38, "workload_cores": 0.31, "other_cores": 0.72, "generator_busy_pct": 31.1},
+      {"t": 38.0, "edge_rps": 2030.7, "open_connections": 1001, "goroutines": 2599, "heap_mb": 184.3, "gc_per_s": 1.5, "gc_pause_ms": 3.243, "alloc_mb_s": 167.3, "traefik_cores": 2.38, "edge_mean_ms": 2.89, "node_cores": 3.42, "softirq_cores": 0.82, "conntrack": 3051, "max_cpu": "cpu2", "max_cpu_busy_pct": 97.5, "max_cpu_softirq_pct": 59.9, "net_rx_cpu": "cpu2", "net_rx_share_pct": 72.9, "edge_cgroup_cores": 2.38, "workload_cores": 0.31, "other_cores": 0.73, "generator_busy_pct": 27.5},
+      {"t": 40.0, "edge_rps": 1983.7, "open_connections": 1001, "goroutines": 2596, "heap_mb": 168.6, "gc_per_s": 1.5, "gc_pause_ms": 0.798, "alloc_mb_s": 163.2, "traefik_cores": 2.36, "edge_mean_ms": 2.54, "node_cores": 3.39, "softirq_cores": 0.82, "conntrack": 3059, "max_cpu": "cpu2", "max_cpu_busy_pct": 97.4, "max_cpu_softirq_pct": 61.0, "net_rx_cpu": "cpu2", "net_rx_share_pct": 73.5, "edge_cgroup_cores": 2.43, "workload_cores": 0.31, "other_cores": 0.65, "generator_busy_pct": 33.4},
+      {"t": 42.0, "edge_rps": 1951.9, "open_connections": 1001, "goroutines": 2636, "heap_mb": 245.2, "gc_per_s": 1.0, "gc_pause_ms": 1.148, "alloc_mb_s": 161.1, "traefik_cores": 2.34, "edge_mean_ms": 2.23, "node_cores": 3.38, "softirq_cores": 0.84, "conntrack": 3068, "max_cpu": "cpu2", "max_cpu_busy_pct": 97.5, "max_cpu_softirq_pct": 59.6, "net_rx_cpu": "cpu2", "net_rx_share_pct": 72.7, "edge_cgroup_cores": 2.38, "workload_cores": 0.29, "other_cores": 0.71, "generator_busy_pct": 29.3},
+      {"t": 44.0, "edge_rps": 2644.6, "open_connections": 1001, "goroutines": 2573, "heap_mb": 203.0, "gc_per_s": 1.99, "gc_pause_ms": 0.933, "alloc_mb_s": 216.5, "traefik_cores": 3.07, "edge_mean_ms": 2.46, "node_cores": 3.4, "softirq_cores": 0.82, "conntrack": 3076, "max_cpu": "cpu2", "max_cpu_busy_pct": 96.6, "max_cpu_softirq_pct": 58.2, "net_rx_cpu": "cpu2", "net_rx_share_pct": 72.9, "edge_cgroup_cores": 2.4, "workload_cores": 0.3, "other_cores": 0.7, "generator_busy_pct": 31.9},
+      {"t": 46.1, "edge_rps": 5840.2, "open_connections": 1001, "goroutines": 2564, "heap_mb": 241.7, "gc_per_s": 3.91, "gc_pause_ms": 3.404, "alloc_mb_s": 481.7, "traefik_cores": 6.89, "edge_mean_ms": 4.89, "node_cores": 3.54, "softirq_cores": 0.84, "conntrack": 3081, "max_cpu": "cpu2", "max_cpu_busy_pct": 97.9, "max_cpu_softirq_pct": 62.8, "net_rx_cpu": "cpu2", "net_rx_share_pct": 72.5, "edge_cgroup_cores": 2.35, "workload_cores": 0.32, "other_cores": 0.87, "generator_busy_pct": 31.3},
+      {"t": 51.5, "edge_rps": 1561.5, "open_connections": 1001, "goroutines": 2543, "heap_mb": 216.6, "gc_per_s": 1.09, "gc_pause_ms": 1.383, "alloc_mb_s": 128.3, "traefik_cores": 1.87, "edge_mean_ms": 1.89, "node_cores": 3.28, "softirq_cores": 0.83, "conntrack": 3106, "max_cpu": "cpu2", "max_cpu_busy_pct": 97.3, "max_cpu_softirq_pct": 60.6, "net_rx_cpu": "cpu2", "net_rx_share_pct": 72.7, "edge_cgroup_cores": 2.42, "workload_cores": 0.29, "other_cores": 0.57, "generator_busy_pct": 29.7},
+      {"t": 55.1, "edge_rps": 188.4, "open_connections": 1001, "goroutines": 2538, "heap_mb": 169.4, "gc_per_s": 0.28, "gc_pause_ms": 0.248, "alloc_mb_s": 15.8, "traefik_cores": 0.23, "edge_mean_ms": 3.12, "node_cores": 3.28, "softirq_cores": 0.87, "conntrack": 3116, "max_cpu": "cpu2", "max_cpu_busy_pct": 97.3, "max_cpu_softirq_pct": 62.6, "net_rx_cpu": "cpu2", "net_rx_share_pct": 72.9, "edge_cgroup_cores": 2.42, "workload_cores": 0.28, "other_cores": 0.58, "generator_busy_pct": 27.4},
+      {"t": 55.5, "edge_rps": 1935.5, "open_connections": 1001, "goroutines": 2539, "heap_mb": 216.6, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 161.7, "traefik_cores": 2.22, "edge_mean_ms": 1.2, "node_cores": 3.28, "softirq_cores": 0.86, "conntrack": 3117, "max_cpu": "cpu2", "max_cpu_busy_pct": 97.1, "max_cpu_softirq_pct": 62.9, "net_rx_cpu": "cpu2", "net_rx_share_pct": 72.9, "edge_cgroup_cores": 2.41, "workload_cores": 0.28, "other_cores": 0.59, "generator_busy_pct": 30.6},
+      {"t": 55.9, "edge_rps": 2015.4, "open_connections": 1001, "goroutines": 2537, "heap_mb": 171.4, "gc_per_s": 2.8, "gc_pause_ms": 0.156, "alloc_mb_s": 168.2, "traefik_cores": 2.52, "edge_mean_ms": 2.92, "node_cores": 3.29, "softirq_cores": 0.82, "conntrack": 3118, "max_cpu": "cpu2", "max_cpu_busy_pct": 97.2, "max_cpu_softirq_pct": 55.6, "net_rx_cpu": "cpu2", "net_rx_share_pct": 72.9, "edge_cgroup_cores": 2.53, "workload_cores": 0.29, "other_cores": 0.47, "generator_busy_pct": 54.3},
+      {"t": 56.2, "edge_rps": 2033.9, "open_connections": 1001, "goroutines": 2533, "heap_mb": 218.0, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 168.7, "traefik_cores": 2.29, "edge_mean_ms": 1.21, "node_cores": 3.34, "softirq_cores": 0.82, "conntrack": 3120, "max_cpu": "cpu2", "max_cpu_busy_pct": 97.3, "max_cpu_softirq_pct": 59.5, "net_rx_cpu": "cpu2", "net_rx_share_pct": 72.1, "edge_cgroup_cores": 2.34, "workload_cores": 0.3, "other_cores": 0.7, "generator_busy_pct": 53.1},
+      {"t": 58.0, "edge_rps": 2156.3, "open_connections": 1001, "goroutines": 2525, "heap_mb": 186.8, "gc_per_s": 1.66, "gc_pause_ms": 0.455, "alloc_mb_s": 177.2, "traefik_cores": 2.61, "edge_mean_ms": 2.16, "node_cores": 3.26, "softirq_cores": 0.83, "conntrack": 3128, "max_cpu": "cpu2", "max_cpu_busy_pct": 97.3, "max_cpu_softirq_pct": 59.6, "net_rx_cpu": "cpu2", "net_rx_share_pct": 73.2, "edge_cgroup_cores": 2.44, "workload_cores": 0.29, "other_cores": 0.53, "generator_busy_pct": 37.4},
+      {"t": 60.0, "edge_rps": 1905.2, "open_connections": 1001, "goroutines": 2534, "heap_mb": 249.6, "gc_per_s": 1.0, "gc_pause_ms": 0.489, "alloc_mb_s": 156.7, "traefik_cores": 2.3, "edge_mean_ms": 1.49, "node_cores": 3.19, "softirq_cores": 0.84, "conntrack": 3136, "max_cpu": "cpu2", "max_cpu_busy_pct": 96.9, "max_cpu_softirq_pct": 60.2, "net_rx_cpu": "cpu2", "net_rx_share_pct": 73.2, "edge_cgroup_cores": 2.41, "workload_cores": 0.28, "other_cores": 0.5, "generator_busy_pct": 40.8},
+      {"t": 62.0, "edge_rps": 1880.7, "open_connections": 1001, "goroutines": 2502, "heap_mb": 207.5, "gc_per_s": 1.5, "gc_pause_ms": 1.019, "alloc_mb_s": 154.3, "traefik_cores": 2.23, "edge_mean_ms": 1.69, "node_cores": 3.24, "softirq_cores": 0.84, "conntrack": 3144, "max_cpu": "cpu2", "max_cpu_busy_pct": 97.0, "max_cpu_softirq_pct": 58.5, "net_rx_cpu": "cpu2", "net_rx_share_pct": 73.2, "edge_cgroup_cores": 2.43, "workload_cores": 0.28, "other_cores": 0.53, "generator_busy_pct": 32.3},
+      {"t": 64.0, "edge_rps": 2014.6, "open_connections": 1001, "goroutines": 2491, "heap_mb": 189.0, "gc_per_s": 1.5, "gc_pause_ms": 0.675, "alloc_mb_s": 165.6, "traefik_cores": 2.41, "edge_mean_ms": 1.79, "node_cores": 3.25, "softirq_cores": 0.82, "conntrack": 3151, "max_cpu": "cpu2", "max_cpu_busy_pct": 97.5, "max_cpu_softirq_pct": 59.4, "net_rx_cpu": "cpu2", "net_rx_share_pct": 73.4, "edge_cgroup_cores": 2.43, "workload_cores": 0.28, "other_cores": 0.54, "generator_busy_pct": 31.1},
+      {"t": 66.0, "edge_rps": 2159.0, "open_connections": 1001, "goroutines": 2480, "heap_mb": 194.1, "gc_per_s": 1.5, "gc_pause_ms": 0.963, "alloc_mb_s": 177.3, "traefik_cores": 2.61, "edge_mean_ms": 1.71, "node_cores": 3.24, "softirq_cores": 0.79, "conntrack": 3155, "max_cpu": "cpu2", "max_cpu_busy_pct": 97.0, "max_cpu_softirq_pct": 58.1, "net_rx_cpu": "cpu2", "net_rx_share_pct": 73.6, "edge_cgroup_cores": 2.47, "workload_cores": 0.28, "other_cores": 0.49, "generator_busy_pct": 37.2},
+      {"t": 68.0, "edge_rps": 1931.3, "open_connections": 1001, "goroutines": 2463, "heap_mb": 172.1, "gc_per_s": 1.5, "gc_pause_ms": 2.709, "alloc_mb_s": 158.6, "traefik_cores": 2.32, "edge_mean_ms": 1.73, "node_cores": 3.25, "softirq_cores": 0.86, "conntrack": 3162, "max_cpu": "cpu2", "max_cpu_busy_pct": 97.5, "max_cpu_softirq_pct": 63.5, "net_rx_cpu": "cpu2", "net_rx_share_pct": 73.1, "edge_cgroup_cores": 2.43, "workload_cores": 0.28, "other_cores": 0.54, "generator_busy_pct": 30.2},
+      {"t": 70.0, "edge_rps": 1934.7, "open_connections": 1001, "goroutines": 2467, "heap_mb": 231.9, "gc_per_s": 1.0, "gc_pause_ms": 0.404, "alloc_mb_s": 159.1, "traefik_cores": 2.34, "edge_mean_ms": 1.38, "node_cores": 3.17, "softirq_cores": 0.86, "conntrack": 3170, "max_cpu": "cpu2", "max_cpu_busy_pct": 96.5, "max_cpu_softirq_pct": 61.3, "net_rx_cpu": "cpu2", "net_rx_share_pct": 73.8, "edge_cgroup_cores": 2.39, "workload_cores": 0.28, "other_cores": 0.5, "generator_busy_pct": 36.8},
+      {"t": 72.0, "edge_rps": 2073.3, "open_connections": 1001, "goroutines": 2405, "heap_mb": 147.2, "gc_per_s": 2.0, "gc_pause_ms": 0.882, "alloc_mb_s": 170.6, "traefik_cores": 2.5, "edge_mean_ms": 1.78, "node_cores": 3.21, "softirq_cores": 0.82, "conntrack": 3184, "max_cpu": "cpu2", "max_cpu_busy_pct": 97.0, "max_cpu_softirq_pct": 59.6, "net_rx_cpu": "cpu2", "net_rx_share_pct": 73.3, "edge_cgroup_cores": 2.45, "workload_cores": 0.29, "other_cores": 0.47, "generator_busy_pct": 36.3},
+      {"t": 74.0, "edge_rps": 1895.7, "open_connections": 1001, "goroutines": 2391, "heap_mb": 204.7, "gc_per_s": 1.0, "gc_pause_ms": 0.309, "alloc_mb_s": 155.5, "traefik_cores": 2.24, "edge_mean_ms": 1.57, "node_cores": 3.18, "softirq_cores": 0.84, "conntrack": 3200, "max_cpu": "cpu2", "max_cpu_busy_pct": 95.8, "max_cpu_softirq_pct": 59.4, "net_rx_cpu": "cpu2", "net_rx_share_pct": 73.5, "edge_cgroup_cores": 2.4, "workload_cores": 0.28, "other_cores": 0.5, "generator_busy_pct": 43.6},
+      {"t": 76.0, "edge_rps": 2011.8, "open_connections": 1001, "goroutines": 2377, "heap_mb": 193.2, "gc_per_s": 1.5, "gc_pause_ms": 0.714, "alloc_mb_s": 165.6, "traefik_cores": 2.39, "edge_mean_ms": 2.33, "node_cores": 3.28, "softirq_cores": 0.84, "conntrack": 3205, "max_cpu": "cpu2", "max_cpu_busy_pct": 97.5, "max_cpu_softirq_pct": 61.4, "net_rx_cpu": "cpu2", "net_rx_share_pct": 73.8, "edge_cgroup_cores": 2.4, "workload_cores": 0.3, "other_cores": 0.58, "generator_busy_pct": 31.9},
+      {"t": 78.0, "edge_rps": 2068.7, "open_connections": 1001, "goroutines": 2377, "heap_mb": 180.5, "gc_per_s": 1.5, "gc_pause_ms": 0.636, "alloc_mb_s": 169.8, "traefik_cores": 2.5, "edge_mean_ms": 1.73, "node_cores": 3.2, "softirq_cores": 0.82, "conntrack": 3224, "max_cpu": "cpu2", "max_cpu_busy_pct": 97.0, "max_cpu_softirq_pct": 58.7, "net_rx_cpu": "cpu2", "net_rx_share_pct": 73.7, "edge_cgroup_cores": 2.45, "workload_cores": 0.29, "other_cores": 0.46, "generator_busy_pct": 35.2},
+      {"t": 80.0, "edge_rps": 1976.2, "open_connections": 1001, "goroutines": 2362, "heap_mb": 161.5, "gc_per_s": 1.5, "gc_pause_ms": 0.445, "alloc_mb_s": 162.3, "traefik_cores": 2.4, "edge_mean_ms": 1.62, "node_cores": 3.24, "softirq_cores": 0.82, "conntrack": 3244, "max_cpu": "cpu2", "max_cpu_busy_pct": 96.5, "max_cpu_softirq_pct": 57.8, "net_rx_cpu": "cpu2", "net_rx_share_pct": 72.7, "edge_cgroup_cores": 2.45, "workload_cores": 0.28, "other_cores": 0.51, "generator_busy_pct": 30.0},
+      {"t": 82.0, "edge_rps": 2004.4, "open_connections": 1001, "goroutines": 2356, "heap_mb": 162.7, "gc_per_s": 1.5, "gc_pause_ms": 0.613, "alloc_mb_s": 165.3, "traefik_cores": 2.43, "edge_mean_ms": 2.25, "node_cores": 3.26, "softirq_cores": 0.83, "conntrack": 2932, "max_cpu": "cpu2", "max_cpu_busy_pct": 97.0, "max_cpu_softirq_pct": 59.3, "net_rx_cpu": "cpu2", "net_rx_share_pct": 73.1, "edge_cgroup_cores": 2.46, "workload_cores": 0.29, "other_cores": 0.51, "generator_busy_pct": 30.7},
+      {"t": 84.0, "edge_rps": 2004.1, "open_connections": 1001, "goroutines": 2357, "heap_mb": 153.4, "gc_per_s": 1.5, "gc_pause_ms": 0.783, "alloc_mb_s": 164.8, "traefik_cores": 2.4, "edge_mean_ms": 1.9, "node_cores": 3.2, "softirq_cores": 0.85, "conntrack": 2941, "max_cpu": "cpu2", "max_cpu_busy_pct": 96.9, "max_cpu_softirq_pct": 60.1, "net_rx_cpu": "cpu2", "net_rx_share_pct": 73.2, "edge_cgroup_cores": 2.41, "workload_cores": 0.28, "other_cores": 0.51, "generator_busy_pct": 36.3},
+      {"t": 86.0, "edge_rps": 1980.5, "open_connections": 1001, "goroutines": 2367, "heap_mb": 190.1, "gc_per_s": 1.5, "gc_pause_ms": 0.63, "alloc_mb_s": 162.8, "traefik_cores": 2.4, "edge_mean_ms": 1.56, "node_cores": 3.22, "softirq_cores": 0.84, "conntrack": 2945, "max_cpu": "cpu2", "max_cpu_busy_pct": 96.5, "max_cpu_softirq_pct": 60.6, "net_rx_cpu": "cpu2", "net_rx_share_pct": 73.3, "edge_cgroup_cores": 2.43, "workload_cores": 0.28, "other_cores": 0.51, "generator_busy_pct": 32.8},
+      {"t": 88.0, "edge_rps": 1947.8, "open_connections": 1001, "goroutines": 2352, "heap_mb": 201.1, "gc_per_s": 1.0, "gc_pause_ms": 0.368, "alloc_mb_s": 160.6, "traefik_cores": 2.31, "edge_mean_ms": 2.05, "node_cores": 3.22, "softirq_cores": 0.86, "conntrack": 2959, "max_cpu": "cpu2", "max_cpu_busy_pct": 96.9, "max_cpu_softirq_pct": 62.8, "net_rx_cpu": "cpu2", "net_rx_share_pct": 73.4, "edge_cgroup_cores": 2.45, "workload_cores": 0.28, "other_cores": 0.49, "generator_busy_pct": 36.4},
+      {"t": 90.0, "edge_rps": 2029.1, "open_connections": 1001, "goroutines": 2337, "heap_mb": 138.5, "gc_per_s": 2.01, "gc_pause_ms": 1.885, "alloc_mb_s": 167.1, "traefik_cores": 2.48, "edge_mean_ms": 2.16, "node_cores": 3.21, "softirq_cores": 0.85, "conntrack": 2967, "max_cpu": "cpu2", "max_cpu_busy_pct": 96.9, "max_cpu_softirq_pct": 60.0, "net_rx_cpu": "cpu2", "net_rx_share_pct": 73.0, "edge_cgroup_cores": 2.44, "workload_cores": 0.28, "other_cores": 0.49, "generator_busy_pct": 30.5},
+      {"t": 92.0, "edge_rps": 627.3, "open_connections": 1, "goroutines": 334, "heap_mb": 139.7, "gc_per_s": 0.5, "gc_pause_ms": 0.861, "alloc_mb_s": 52.1, "traefik_cores": 0.82, "edge_mean_ms": 2.43, "node_cores": 1.48, "softirq_cores": 0.36, "conntrack": 2975, "max_cpu": "cpu2", "max_cpu_busy_pct": 42.9, "max_cpu_softirq_pct": 25.8, "net_rx_cpu": "cpu2", "net_rx_share_pct": 70.7, "edge_cgroup_cores": 1.01, "workload_cores": 0.11, "other_cores": 0.36, "generator_busy_pct": 18.4},
+      {"t": 94.0, "edge_rps": 0.0, "open_connections": 1, "goroutines": 333, "heap_mb": 140.6, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 0.5, "traefik_cores": 0.0, "node_cores": 0.29, "softirq_cores": 0.01, "conntrack": 2983, "max_cpu": "cpu0", "max_cpu_busy_pct": 7.6, "max_cpu_softirq_pct": 0.0, "net_rx_cpu": "cpu2", "net_rx_share_pct": 60.7, "edge_cgroup_cores": 0.0, "workload_cores": 0.0, "other_cores": 0.29, "generator_busy_pct": 4.8},
+      {"t": 96.0, "edge_rps": 0.5, "open_connections": 1, "goroutines": 334, "heap_mb": 141.4, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 0.5, "traefik_cores": 0.01, "edge_mean_ms": 22.24, "node_cores": 0.31, "softirq_cores": 0.02, "conntrack": 2997, "max_cpu": "cpu3", "max_cpu_busy_pct": 8.6, "max_cpu_softirq_pct": 0.5, "net_rx_cpu": "cpu2", "net_rx_share_pct": 73.8, "edge_cgroup_cores": 0.01, "workload_cores": 0.0, "other_cores": 0.3, "generator_busy_pct": 4.3},
+      {"t": 98.0, "edge_rps": 0.0, "open_connections": 1, "goroutines": 333, "heap_mb": 142.3, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 0.5, "traefik_cores": 0.01, "node_cores": 0.29, "softirq_cores": 0.0, "conntrack": 3004, "max_cpu": "cpu2", "max_cpu_busy_pct": 7.5, "max_cpu_softirq_pct": 0.0, "net_rx_cpu": "cpu2", "net_rx_share_pct": 70.5, "edge_cgroup_cores": 0.01, "workload_cores": 0.0, "other_cores": 0.28, "generator_busy_pct": 4.4},
+      {"t": 100.0, "edge_rps": 0.0, "open_connections": 1, "goroutines": 333, "heap_mb": 143.3, "gc_per_s": 0.0, "gc_pause_ms": 0.0, "alloc_mb_s": 0.5, "traefik_cores": 0.0, "node_cores": 0.35, "softirq_cores": 0.01, "conntrack": 3011, "max_cpu": "cpu1", "max_cpu_busy_pct": 14.1, "max_cpu_softirq_pct": 0.0, "net_rx_cpu": "cpu2", "net_rx_share_pct": 60.6, "edge_cgroup_cores": 0.0, "workload_cores": 0.0, "other_cores": 0.35, "generator_busy_pct": 5.4}
+     ],
+     "node_cpu": 73.7,
+     "generator_cpu": 29.9,
+     "node_mem_available_mb": 8825,
+     "pods_top": {
+      "traefik": "2354m 407Mi",
+      "web": "286m 5Mi"
+     },
+     "throttled_ms": 265.553,
+     "edge_restarts": 0,
+     "pod_replaced": false,
+     "reasons": [],
+     "cold_reasons": [
+      "latency",
+      "throughput"
+     ]
+    }
+   ],
+   "knee": {
+    "measured": true,
+    "last_healthy_rps": 2000,
+    "first_degraded_rps": null,
+    "reasons": [],
+    "lower_bound_only": true,
+    "vus_at_last_healthy": 1000.0
+   },
+   "cold_knee": {
+    "measured": true,
+    "last_healthy_rps": null,
+    "first_degraded_rps": 2000,
+    "reasons": [
+     "latency",
+     "throughput"
+    ],
+    "lower_bound_only": false,
+    "vus_at_last_healthy": null
+   }
+  }
+ ],
+ "restarts_during_run": {
+  "api": 0,
+  "web": 0,
+  "traefik": 0
+ },
+ "date": "2026-11-14T20:05Z",
+ "commit": "25cfca66"
+}
