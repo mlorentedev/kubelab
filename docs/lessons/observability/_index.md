@@ -4,7 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
-| 753 | [An on-demand liveness watchdog must be local but independent of the agent kill switch](lesson-753-an-on-demand-liveness-watchdog-must-be-local-but-independent-of-the-agent-kill-switch.md) | 2026-11-14 |
+| 754 | [An on-demand liveness watchdog must be local but independent of the agent kill switch](lesson-754-an-on-demand-liveness-watchdog-must-be-local-but-independent-of-the-agent-kill-switch.md) | 2026-11-14 |
 | 745 | [An intermittent client error can be an event race inside the library](lesson-745-an-intermittent-client-error-can-be-an-event-race-inside-the-library.md) | 2026-11-13 |
 | 719 | [The errors service answers 200 on /health for any host, so a health monitor through the edge is blind](lesson-719-the-errors-service-answers-200-on-health-for-any-host-so-a-health-monitor-through-the-edge-is-blind.md) | 2026-11-06 |
 | 705 | [A Grafana range query keeps a missing series alive for its whole range, and a misspelled provisioning key changes nothing silently](lesson-705-a-grafana-range-query-keeps-a-missing-series-alive-for-its-whole-range.md) | 2026-11-04 |
