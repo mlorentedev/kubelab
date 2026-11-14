@@ -18,7 +18,7 @@ from unittest.mock import MagicMock
 import pytest
 import yaml
 
-from toolkit.features import generator_k8s, product_registry
+from toolkit.features import generator_base, generator_k8s, product_registry
 from toolkit.features.generator_k8s import K8sGenerator
 
 REPO = Path(__file__).resolve().parent.parent
@@ -76,7 +76,7 @@ def test_an_app_with_a_version_is_emitted_on_exactly_that_tag(context) -> None:
 
 def test_the_skip_is_logged_as_a_warning_naming_the_app(context, monkeypatch: pytest.MonkeyPatch) -> None:
     log = MagicMock()
-    monkeypatch.setattr(generator_k8s, "logger", log)
+    monkeypatch.setattr(generator_base, "logger", log)
     context(None)
     warned = [str(call.args[0]) for call in log.warning.call_args_list]
     assert any("fresh" in m and "version" in m for m in warned), warned
@@ -84,7 +84,7 @@ def test_the_skip_is_logged_as_a_warning_naming_the_app(context, monkeypatch: py
 
 def test_a_pinned_app_logs_no_warning(context, monkeypatch: pytest.MonkeyPatch) -> None:
     log = MagicMock()
-    monkeypatch.setattr(generator_k8s, "logger", log)
+    monkeypatch.setattr(generator_base, "logger", log)
     context("sha-2222222")
     assert not log.warning.call_args_list
 
