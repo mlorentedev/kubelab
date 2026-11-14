@@ -52,7 +52,7 @@ apps:
       enable_blog: false
       enable_homelabs: false
       enable_contact: false
-      version: sha-489d805
+      version: sha-ff81db6
     imagesensortool:
       domain: staging.imagesensortool.com
       site_domain: staging.imagesensortool.com
