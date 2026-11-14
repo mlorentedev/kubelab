@@ -16,14 +16,18 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
+import yaml
 
-from tests.test_k8s_generator_contract_resources import _contract, _env, _objects, _one
+from tests.test_k8s_generator_contract_resources import REPO, _contract, _env, _objects, _one
 from toolkit.features import generator_k8s, product_registry
 from toolkit.features.generator_k8s import K8sGenerator
 from toolkit.features.product_contract import ContractError, validate_contract
 
 NAME = "app.kubernetes.io/name"
-PRIVATE_RANGES = ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10", "169.254.0.0/16"]
+COMMON = REPO / "infra/config/values/common.yaml"
+# Not a trusted network: a target to block. It is the generator's own constant, not part of the SSOT list.
+METADATA_RANGE = "169.254.0.0/16"
+TRUSTED_CIDRS = yaml.safe_load(COMMON.read_text(encoding="utf-8"))["networking"]["trusted_cidrs"]
 TRAEFIK = {
     "namespaceSelector": {"matchLabels": {"kubernetes.io/metadata.name": "kube-system"}},
     "podSelector": {"matchLabels": {NAME: "traefik"}},
@@ -53,7 +57,7 @@ def snapshots(tmp_path: Path) -> Path:
 def build(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, snapshots: Path):
     """`_build_context("staging")` for `api` (no claims) and `sample` (a volume and a job)."""
 
-    def run(egress: str = "[dns, public-https, notify]") -> dict[str, Any]:
+    def run(egress: str = "[dns, public-https, notify]", trusted: list[str] | None = None) -> dict[str, Any]:
         registry = tmp_path / "products.yaml"
         registry.write_text(REGISTRY.format(egress=egress), encoding="utf-8", newline="\n")
         monkeypatch.setattr(product_registry, "registry_path", lambda: registry)
@@ -66,6 +70,7 @@ def build(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, snapshots: Path):
             "REGISTRY": "docker.io/mlorentedev",
             **_env("api"),
             **_env("sample"),
+            "NETWORKING_TRUSTED_CIDRS": TRUSTED_CIDRS if trusted is None else trusted,
         }
         monkeypatch.setattr(generator_k8s, "ConfigurationManager", manager)
         return K8sGenerator()._build_context("staging")
@@ -118,10 +123,32 @@ class TestEgress:
     def test_public_https_is_443_to_anywhere_but_the_private_tailnet_and_metadata_ranges(
         self, build, tmp_path: Path
     ) -> None:
-        (rule,) = self._egress(build, tmp_path, "[public-https]")["spec"]["egress"]
+        """The blocked ranges are the SSOT's `networking.trusted_cidrs` read from common.yaml, plus metadata."""
+        (rule,) = _one(
+            _objects(build("[public-https]", trusted=TRUSTED_CIDRS), tmp_path), "NetworkPolicy", "sample-egress"
+        )["spec"]["egress"]
 
-        assert rule["to"] == [{"ipBlock": {"cidr": "0.0.0.0/0", "except": PRIVATE_RANGES}}]
+        assert rule["to"] == [{"ipBlock": {"cidr": "0.0.0.0/0", "except": [*TRUSTED_CIDRS, METADATA_RANGE]}}]
         assert rule["ports"] == [{"protocol": "TCP", "port": 443}]
+
+    def test_a_range_added_to_trusted_cidrs_is_blocked_too(self, build, tmp_path: Path) -> None:
+        added = "198.51.100.0/24"
+
+        (rule,) = _one(
+            _objects(build("[public-https]", trusted=[*TRUSTED_CIDRS, added]), tmp_path),
+            "NetworkPolicy",
+            "sample-egress",
+        )["spec"]["egress"]
+
+        assert added in rule["to"][0]["ipBlock"]["except"]
+
+    def test_the_committed_values_name_the_ranges_the_policy_has_always_blocked(self) -> None:
+        """Pins the SSOT, so an edit that drops a private range is seen here and not only on a cluster."""
+        assert {"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10"} <= set(TRUSTED_CIDRS)
+
+    def test_no_trusted_cidrs_is_refused_rather_than_rendered_as_open(self, build) -> None:
+        with pytest.raises(ValueError, match="trusted_cidrs"):
+            build("[public-https]", trusted=[])
 
     def test_notify_is_the_n8n_pods_on_5678(self, build, tmp_path: Path) -> None:
         (rule,) = self._egress(build, tmp_path, "[notify]")["spec"]["egress"]

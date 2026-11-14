@@ -79,6 +79,10 @@ class K8sGenerator(BaseGenerator):
         ("networkpolicies.yaml.j2", "networkpolicies.yaml"),
     ]
 
+    # Cloud metadata (the link-local range) is never reachable from a product's pods. It is not a trusted
+    # network, so it is not in `networking.trusted_cidrs`: it is a target to block, named here.
+    _METADATA_CIDR = "169.254.0.0/16"
+
     # Where each env's contract snapshots live; a class attribute so a test can point it at a fixture tree.
     snapshot_dir = SNAPSHOT_DIR
 
@@ -305,6 +309,9 @@ class K8sGenerator(BaseGenerator):
                     "middlewares": middlewares,
                     "extra_routes": self._build_extra_routes(env_vars, component),
                     "egress": list(entry.egress),
+                    "egress_except": (
+                        self._egress_except(env_vars) if "public-https" in entry.egress and (volumes or jobs) else []
+                    ),
                     "volumes": volumes,
                     "jobs": jobs,
                     "fs_group": self._fs_group(volumes),
@@ -360,6 +367,16 @@ class K8sGenerator(BaseGenerator):
             if isinstance(claim, JobClaim)
         ]
         return list(volumes.values()), jobs
+
+    def _egress_except(self, env_vars: dict[str, str]) -> list[str]:
+        """The ranges `public-https` must not reach: the SSOT's private and tailnet ranges, and metadata.
+
+        An empty list would render 0.0.0.0/0 with nothing excepted, so it is refused, not rendered.
+        """
+        trusted = env_vars.get("NETWORKING_TRUSTED_CIDRS")
+        if not trusted:
+            raise ValueError("networking.trusted_cidrs is empty or missing: public-https would block no private range")
+        return [*trusted, self._METADATA_CIDR]
 
     @staticmethod
     def _fs_group(volumes: list[dict[str, Any]]) -> int | None:
