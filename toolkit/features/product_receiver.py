@@ -179,7 +179,7 @@ def fetch_contract(app: str, sha: str, out: Path, registry: Path | None = None) 
             f"{forge.name} answered: {e}",
             f"add kubelab.yaml at the root of {forge.repository} and publish a new image",
         ) from None
-    out.write_text(fetched, encoding="utf-8")
+    out.write_text(fetched, encoding="utf-8", newline="\n")
     return Fetched(app=app, repository=forge.repository, sha=sha)
 
 

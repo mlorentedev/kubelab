@@ -146,7 +146,7 @@ def _process_spec(
     audit_path = project_root / "infra/k8s/overlays" / env / "middlewares/.rendered" / f"{spec.name}.yaml"
     try:
         audit_path.parent.mkdir(parents=True, exist_ok=True)
-        audit_path.write_text(rendered, encoding="utf-8")
+        audit_path.write_text(rendered, encoding="utf-8", newline="\n")
     except OSError as exc:
         logger.error(f"  Failed to write audit copy '{audit_path}': {exc}")
         return False

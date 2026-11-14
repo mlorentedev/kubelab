@@ -1,0 +1,10 @@
+---
+import Shell from '../layouts/Shell.astro';
+import ForgeView from '../components/ForgeView';
+---
+
+<Shell title="Forge queue">
+  <!-- Client only: the view is data the browser fetches with the operator's session, so a
+       prerender would ship an empty shell and a hydration mismatch for nothing. -->
+  <ForgeView client:only="react" />
+</Shell>

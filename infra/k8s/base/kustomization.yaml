@@ -108,8 +108,22 @@ configMapGenerator:
     namespace: kubelab
     files:
       - services/grafana-dashboards/kubelab-logs-overview.json
+      - services/grafana-dashboards/forge-stats.json
     options:
       disableNameSuffixHash: true
+
+  # Grafana's datasources. Keeps the name hash, unlike `grafana-dashboards` above: the
+  # dashboards are re-read on a timer, but datasource provisioning is read once at
+  # start, so a stable name would leave a changed datasource unseen (lesson-404).
+  - name: grafana-datasources
+    namespace: kubelab
+    files:
+      - datasources.yaml=services/grafana-datasources/datasources.yaml
+    options:
+      labels:
+        app.kubernetes.io/name: grafana
+        app.kubernetes.io/component: observability
+        app.kubernetes.io/part-of: kubelab
 
   # Grafana's environment. Keeps the name hash for the same reason
   # grafana-alerting below does, and the stronger version of it: env vars are

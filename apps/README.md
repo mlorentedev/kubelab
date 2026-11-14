@@ -7,6 +7,7 @@ Custom applications deployed on KubeLab infrastructure.
 ```
 apps/
 ├── api/           Go REST API (backend services)
+├── console/       Operator console frontend (Astro + React, ADR-074)
 └── wiki/          Generated docs output (not an app)
 ```
 
