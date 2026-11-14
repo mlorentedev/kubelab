@@ -356,3 +356,24 @@ def docker_mount_dir() -> Generator[Path, None, None]:
     base.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=base) as path:
         yield Path(path)
+
+
+# TEMPORARY measurement shim (#3409), reverted in the next commit: resolve a bare
+# "bash" through PATH (Git Bash) instead of CreateProcess's System32 WSL stub, and
+# make Path.write_text default to LF, to measure which failures these two cause.
+if sys.platform == "win32":
+    _git_bash = shutil.which("bash")
+    _popen_init = subprocess.Popen.__init__
+
+    def _shim_popen_init(self: Any, args: Any, *a: Any, **kw: Any) -> None:
+        if _git_bash and isinstance(args, (list, tuple)) and args and args[0] == "bash":
+            args = [_git_bash, *args[1:]]
+        _popen_init(self, args, *a, **kw)
+
+    subprocess.Popen.__init__ = _shim_popen_init  # type: ignore[method-assign]
+    _write_text = Path.write_text
+
+    def _shim_write_text(self: Path, data: str, encoding: Any = None, errors: Any = None, newline: Any = None) -> int:
+        return _write_text(self, data, encoding, errors, "\n" if newline is None else newline)
+
+    Path.write_text = _shim_write_text  # type: ignore[method-assign]
