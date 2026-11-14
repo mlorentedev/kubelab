@@ -548,3 +548,15 @@ def test_a_product_without_a_contract_at_the_commit_fails(tmp_path: pathlib.Path
     assert code != 0
     assert "kubelab.yaml" in log and "ERROR: " in log
     assert not snapshot.exists()
+
+
+def test_the_edge_manifest_follows_the_snapshot_into_the_same_pr() -> None:
+    """EDGE-001 AC5: a new staging hostname arrives with its derived zone, never as a hand step.
+
+    The manifest is regenerated after the snapshot is rendered (it reads the snapshot)
+    and is staged with it; otherwise the bot's PR would fail `make validate-sync`.
+    """
+    steps = _steps("promote")
+    render = next(s for s in steps if "product render" in s.get("run", ""))["run"]
+    assert render.index("product render") < render.index("sync edge-dns")
+    assert "infra/config/products/edge.json" in _step("promote", "open-pr")["run"]

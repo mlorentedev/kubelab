@@ -79,7 +79,7 @@ RECEIVERS = {
         _generic_step,
         "deploy/staging-web",
         {"APP": "web", "REPOSITORY": "mlorentedev/web"},
-        ("infra/config/products/contracts/web.yaml",),
+        ("infra/config/products/contracts/web.yaml", "infra/config/products/edge.json"),
     ),
     # The job sets APP itself, but the step reads it from env like the
     # generic one, so the stub hands it the same way.
