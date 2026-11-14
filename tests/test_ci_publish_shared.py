@@ -17,6 +17,8 @@ import subprocess
 import pytest
 import yaml
 
+from tests.shells import BASH, child_env
+
 REPO = pathlib.Path(__file__).resolve().parent.parent
 WORKFLOWS = REPO / ".github/workflows"
 PUBLISH = WORKFLOWS / "ci-publish.yml"
@@ -90,8 +92,8 @@ def _tags(tag: str, tmp_path: pathlib.Path) -> dict[str, str]:
         "OWNER": "mlorentedev",
         "APP": "api",
     }
-    subprocess.run(["bash", "-e", "-c", step["run"]], env=env, check=True, capture_output=True)
-    return dict(line.split("=", 1) for line in out.read_text().splitlines())
+    subprocess.run([BASH, "-e", "-c", step["run"]], env=child_env(env), check=True, capture_output=True)
+    return dict(line.split("=", 1) for line in out.read_text(encoding="utf-8").splitlines())
 
 
 @pytest.mark.parametrize(
