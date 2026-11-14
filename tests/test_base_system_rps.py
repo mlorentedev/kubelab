@@ -59,3 +59,17 @@ def test_the_rule_matches_only_that_interface_when_it_appears() -> None:
 def test_the_mask_covers_every_cpu_of_the_node() -> None:
     assert "echo f > $q" in _rule("enp1s0", 4)
     assert "echo ff > $q" in _rule("enp1s0", 8)
+
+
+def test_steering_is_on_by_default_once_an_interface_is_named() -> None:
+    assert DEFAULTS["base_system_rps_enabled"] is True
+
+
+def test_the_off_path_removes_the_rule_and_writes_the_kernels_default() -> None:
+    """Without it, dropping the change would leave the node steering with no IaC declaring it."""
+    tasks = yaml.safe_load((ROLE / "tasks/rps.yml").read_text(encoding="utf-8"))
+    (want,) = [t for t in tasks if "ansible.builtin.set_fact" in t]
+    assert want["ansible.builtin.set_fact"]["_rps_want"].endswith("else '0' }}")
+    (remove,) = [t for t in tasks if "ansible.builtin.file" in t]
+    assert remove["ansible.builtin.file"] == {"path": "{{ base_system_rps_rules_path }}", "state": "absent"}
+    assert remove["when"] == "not (base_system_rps_enabled | bool)"

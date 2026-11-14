@@ -114,8 +114,11 @@ base_system_netplan_probe_host: github.com
 # off, every receive softirq runs there: on ace1 (r8169) that CPU is where `web`
 # runs out under load, at 97% busy with 60% of it softirq. Naming the interface
 # spreads the receive work across the node's CPUs (the mask below, every CPU).
-# Empty leaves the kernel's default, which is off. Interface names come from
+# Empty leaves the node alone. With an interface named, `base_system_rps_enabled:
+# false` is the off path: the rule is removed and every queue's mask is written
+# back to 0 (the kernel's default) and read back. Interface names come from
 # networking.nodes.<node>.lan_interface, never a literal.
 base_system_rps_interface: ""
+base_system_rps_enabled: true
 base_system_rps_mask: "{{ '%x' % (2 ** (ansible_facts.processor_nproc | int) - 1) }}"
 base_system_rps_rules_path: /etc/udev/rules.d/60-kubelab-rps.rules

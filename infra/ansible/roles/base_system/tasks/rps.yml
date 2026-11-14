@@ -5,6 +5,10 @@
 # report ok on a node still steering nothing (lesson-620). It writes sysfs and
 # never triggers udev, because a `change` on the LAN interface reaches the
 # network stack's own rules too.
+- name: The mask this run declares (0 is the kernel's default, steering off)
+  ansible.builtin.set_fact:
+    _rps_want: "{{ base_system_rps_mask if base_system_rps_enabled | bool else '0' }}"
+
 - name: Render the receive packet steering rule
   ansible.builtin.template:
     src: rps.rules.j2
@@ -12,15 +16,22 @@
     owner: root
     group: root
     mode: "0644"
+  when: base_system_rps_enabled | bool
+
+- name: Remove the rule when steering is off
+  ansible.builtin.file:
+    path: "{{ base_system_rps_rules_path }}"
+    state: absent
+  when: not (base_system_rps_enabled | bool)
 
 - name: Set the steering mask on every receive queue that differs
   ansible.builtin.shell: |
     set -eu
-    want=$((0x{{ base_system_rps_mask }}))
+    want=$((0x{{ _rps_want }}))
     changed=0
     for q in /sys/class/net/{{ base_system_rps_interface | quote }}/queues/rx-*/rps_cpus; do
       have=$((0x$(tr -d ',' < "$q")))
-      if [ "$have" -ne "$want" ]; then echo {{ base_system_rps_mask }} > "$q"; changed=1; fi
+      if [ "$have" -ne "$want" ]; then echo {{ _rps_want }} > "$q"; changed=1; fi
     done
     echo "changed=$changed"
   args:
@@ -34,12 +45,12 @@
   changed_when: false
   check_mode: false
 
-- name: Every receive queue steers across the declared CPUs
+- name: Every receive queue carries the declared mask
   ansible.builtin.assert:
     that:
       - _rps_masks.stdout_lines | length > 0
       - _rps_masks.stdout_lines | map('replace', ',', '') | map('int', base=16) | unique | list
-        == [base_system_rps_mask | int(base=16)]
+        == [_rps_want | int(base=16)]
     fail_msg: >-
-      {{ base_system_rps_interface }} reads {{ _rps_masks.stdout_lines }}, not {{ base_system_rps_mask }}.
+      {{ base_system_rps_interface }} reads {{ _rps_masks.stdout_lines }}, not {{ _rps_want }}.
   when: not ansible_check_mode
