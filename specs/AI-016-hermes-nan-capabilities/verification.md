@@ -15,14 +15,14 @@ owner: manu
 - [x] **AC2 — pinned capabilities work.** `tests/test_hermes_config.py` proves the v0.22.1 keys and `${NAN_API_KEY}` reference without a literal credential. Live one-shot chat returned exactly `AI016-CHAT-OK`. Through `tools.vision_tools.vision_analyze_tool`, configured `qwen3.6` identified a synthetic solid-red PNG as `Red`. Through the pinned Kokoro adapter then Whisper adapter, a 28,077-byte sample saying `Hermes speech verification` returned `Hermes Speech Verificación.`. These were direct Hermes adapter proofs, not Slack voice-message round trips.
 - [x] **AC3 — bounded selectable image generation.** `tests/test_hermes_nan_image_provider.py` covers both models, one shared counter, locking, month reset, corruption refusal and no backend call at exhaustion. The live registry reported `registered=True, available=True`. One `NaNImageGenProvider.generate(..., aspect_ratio='square')` call materialized a `flux-2-klein` image at `1024x1024`, returned 49 remaining and moved `$HERMES_HOME/cache/nan-image-quota.json` from `used=0` to `used=1` for `2026-11`. A later read after gateway recreations still returned `used=1`. No second live image was spent after the response-label unit correction.
 - [x] **AC4 — memory and sandbox writes recover.** Live `MemoryStore` add/patch/remove returned success for all three operations and advanced `MEMORY.md` mtime. The memories directory was `0755`, UID/GID `10000:10000` in the gateway; the memory file remained `0600`. After removing the synthetic entry the file was byte-identical to `HEAD`. A real `DockerEnvironment` with rendered `docker_run_as_host_user: true` wrote as `10000:10000`; the host observed `534287:534287`. The rest of the vault stayed read-only, the synthetic file was removed, and namespace-aware git status contained no memory changes or locks.
-- [x] **AC5 — reproducible delivery.** Final consecutive provisions after the independent-review fixes both reported **`changed=0, failed=0`**. Open WebUI returned `{"status":true}` and Hermes was `running`, `oom=false`. `make test` finished with **10,460 passed, 96 skipped**; `make lint` passed Ruff and formatting; `make lint-ansible` parsed all 26 playbooks. `docs/runbooks/hermes-kubelab.md` records the operating boundaries and sibling follow-ups.
+- [x] **AC5 — reproducible delivery.** Final consecutive provisions after the independent-review fixes both reported **`changed=0, failed=0`**. Open WebUI returned `{"status":true}` and Hermes was `running`, `oom=false`. `make test` finished with **10,462 passed, 96 skipped**; `make lint` passed Ruff and formatting; `make lint-ansible` parsed all 26 playbooks. `docs/runbooks/hermes-kubelab.md` records the operating boundaries and sibling follow-ups.
 
 ## Test status
 
 | Check | Observed result |
 |---|---|
 | `poetry run pytest -q tests/test_agent_stack_role.py tests/test_open_webui_models.py tests/test_open_webui_rag.py tests/test_hermes_config.py tests/test_hermes_curator_judge.py tests/test_hermes_digest.py tests/test_hermes_sidecar.py tests/test_hermes_memory_permissions.py tests/test_hermes_nan_image_provider.py` | 206 passed |
-| `make test` | 10,460 passed, 96 skipped, 30 warnings; 78% total coverage |
+| `make test` | 10,462 passed, 96 skipped, 30 warnings; 78% total coverage |
 | `make lint` | All checks passed; 168 files already formatted |
 | `make lint-ansible` | All 26 playbooks parse |
 | `make sync-platform-json` plus committed-manifest test | Manifest regenerated; drift test passed |
@@ -71,6 +71,8 @@ owner: manu
 | Question: closing process | PR #3518 exists. CI/reviewer triage is recorded on the PR before ready; handoff remains the final session step. |
 
 Post-review focused ownership/config/vault tests: **112 passed, 1 skipped**. Two final `agent_stack` provisions after these changes both returned `changed=0, failed=0`.
+
+Cross-platform CI follow-up: Windows exposed the provider tests' POSIX-only `fcntl` dependency, so those tests now skip explicitly on Windows rather than faking the lock. A newer master LF guard then caught one unpinned `write_text` in the same test file; it now passes `newline="\n"`. `origin/master` was merged without force, bringing the independently owned Windows bash-launcher fix (#3512). The merged local suite passed **10,462 tests**, including the new LF guard and all affected Hermes tests.
 
 ## Promotion candidates
 

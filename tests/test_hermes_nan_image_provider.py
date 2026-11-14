@@ -106,7 +106,7 @@ def test_a_new_utc_month_starts_a_new_budget(plugin) -> None:
 def test_corrupt_state_fails_closed_without_calling_nan(plugin, tmp_path: Path) -> None:
     state = tmp_path / "cache/nan-image-quota.json"
     state.parent.mkdir(parents=True)
-    state.write_text("not json", encoding="utf-8")
+    state.write_text("not json", encoding="utf-8", newline="\n")
     result = plugin.NaNImageGenProvider().generate("must not run")
     assert result["success"] is False
     assert result["error_type"] == "quota_unavailable"
