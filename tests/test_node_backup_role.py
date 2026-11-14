@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 import socket
 import subprocess
 from pathlib import Path
@@ -342,19 +343,29 @@ def test_capture_script_fails_closed_on_error():
 
 FAKE_SQLITE3 = """#!/bin/sh
 # Called as: sqlite3 -cmd ".timeout N" <db> ".backup '<dest>'"
+# and then on the staged copy: sqlite3 <db> "PRAGMA journal_mode;" and
+# sqlite3 <db> "VACUUM INTO '<dest>'", which copies it unchanged here.
+case "$2" in
+    PRAGMA*) echo delete; exit 0 ;;
+    VACUUM*) cp "$1" "$(printf '%s' "$2" | sed "s/^VACUUM INTO '\\(.*\\)'$/\\1/")"; exit 0 ;;
+esac
 dest=$(printf '%s' "$4" | sed "s/^.backup '\\(.*\\)'$/\\1/")
 printf 'SNAPSHOT of %s\\n' "$3" > "$dest"
 """
 
 
-def _capture(tmp_path: Path, source: dict[str, object], shims: dict[str, str] | None = None) -> Path:
+def _capture(
+    tmp_path: Path, source: dict[str, object], shims: dict[str, str] | None = None, *, real_sqlite: bool = False
+) -> Path:
     """Render the capture for one `path:` source at tmp_path/src, run it, return its staging dir.
 
-    `shims` puts more fake commands on PATH, by name and script body.
+    `shims` puts more fake commands on PATH, by name and script body. With
+    `real_sqlite` the host's sqlite3 runs instead of the fake.
     """
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
-    for name, body in {"sqlite3": FAKE_SQLITE3, **(shims or {})}.items():
+    fakes = {} if real_sqlite else {"sqlite3": FAKE_SQLITE3}
+    for name, body in {**fakes, **(shims or {})}.items():
         (bin_dir / name).write_text(body, encoding="utf-8", newline="\n")
         (bin_dir / name).chmod(0o755)
     staging = tmp_path / "staging"
@@ -377,6 +388,7 @@ def _capture(tmp_path: Path, source: dict[str, object], shims: dict[str, str] | 
         [BASH, str(script)], env=env, capture_output=True, text=True, encoding="utf-8", check=False, timeout=60
     )
     assert result.returncode == 0, result.stderr
+    (tmp_path / "capture.stderr").write_text(result.stderr, encoding="utf-8")
     assert (staging / ".capture-complete").exists()
     return staging / "svc"
 
@@ -412,6 +424,54 @@ def test_no_journal_of_the_database_is_copied_raw(tmp_path: Path) -> None:
     )
     staged = _capture(tmp_path, {"sqlite": "db.sqlite3"})
     assert set(_files(staged)) == {"db.sqlite3"}
+
+
+def _sqlite(db: Path, sql: str) -> str:
+    return subprocess.run(
+        ["sqlite3", str(db), sql], capture_output=True, text=True, encoding="utf-8", check=True
+    ).stdout.strip()
+
+
+def _database_with_free_pages(db: Path) -> None:
+    db.parent.mkdir(parents=True, exist_ok=True)
+    _sqlite(
+        db,
+        "PRAGMA journal_mode=WAL; CREATE TABLE t(x); CREATE TABLE gone(x);"
+        " WITH RECURSIVE c(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM c WHERE i<2000)"
+        " INSERT INTO gone SELECT randomblob(1000) FROM c;"
+        " INSERT INTO t VALUES ('kept'); DROP TABLE gone;",
+    )
+    assert int(_sqlite(db, "PRAGMA freelist_count;")) > 0
+
+
+@pytest.mark.skipif(shutil.which("sqlite3") is None, reason="needs the sqlite3 CLI")
+def test_the_staged_database_ships_without_free_pages_and_keeps_its_mode(tmp_path: Path) -> None:
+    """#3053: `.backup` copies free pages, and their stale bytes ship as data.
+
+    The staged copy is compacted, still a valid database with the same rows, and
+    still in WAL: `VACUUM INTO` writes rollback-journal mode, and a restore must
+    not change the mode the application chose.
+    """
+    _database_with_free_pages(tmp_path / "src" / "gitea" / "gitea.db")
+    staged = _capture(tmp_path, {"sqlite": "gitea/gitea.db"}, real_sqlite=True) / "gitea" / "gitea.db"
+    assert _sqlite(staged, "PRAGMA freelist_count;") == "0"
+    assert _sqlite(staged, "PRAGMA integrity_check;") == "ok"
+    assert _sqlite(staged, "SELECT x FROM t;") == "kept"
+    assert _sqlite(staged, "PRAGMA journal_mode;") == "wal"
+    assert not (staged.parent / "gitea.db.compact").exists()
+
+
+@pytest.mark.skipif(shutil.which("sqlite3") is None, reason="needs the sqlite3 CLI")
+def test_a_failed_compaction_ships_the_uncompacted_copy(tmp_path: Path) -> None:
+    """Compaction is an optimisation: when it fails the backup still ships."""
+    _database_with_free_pages(tmp_path / "src" / "db.sqlite")
+    real = shutil.which("sqlite3")
+    refuse_vacuum = f'#!/bin/sh\ncase "$2" in VACUUM*) exit 1 ;; esac\nexec {real} "$@"\n'
+    staged = _capture(tmp_path, {"sqlite": "db.sqlite"}, {"sqlite3": refuse_vacuum}, real_sqlite=True)
+    assert _sqlite(staged / "db.sqlite", "SELECT x FROM t;") == "kept"
+    assert int(_sqlite(staged / "db.sqlite", "PRAGMA freelist_count;")) > 0
+    assert not (staged / "db.sqlite.compact").exists()
+    assert "could not compact the staged copy of db.sqlite" in (tmp_path / "capture.stderr").read_text()
 
 
 def test_a_source_may_declare_several_databases(tmp_path: Path) -> None:

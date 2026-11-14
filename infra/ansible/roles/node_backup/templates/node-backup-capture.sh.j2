@@ -176,6 +176,24 @@ capture_sqlite_{{ service }}_{{ loop.index }}() {
         if sqlite3 -cmd ".timeout 10000" \
                    "$SRC_DIR_{{ service }}/{{ db }}" \
                    ".backup '$STAGING/{{ service }}/{{ db }}'"; then
+            # #3053: `.backup` copies free pages too, and their stale bytes ship as
+            # data (48% of beelink's gitea.db, measured 2026-11-03). Compacted
+            # here, on the private staged copy, never on the live file: a VACUUM
+            # there holds a read lock for the whole rewrite, and in rollback-
+            # journal mode that refuses the application's commits. `VACUUM INTO`
+            # writes a new file and leaves the copy intact, so a failure costs
+            # only the optimisation, never the backup. Its output is always in
+            # rollback-journal mode (measured, SQLite 3.x), so a copy that `.backup`
+            # left in WAL is put back in WAL: a restore must not change the mode.
+            local staged="$STAGING/{{ service }}/{{ db }}" mode
+            mode="$(sqlite3 "$staged" "PRAGMA journal_mode;" || true)"
+            if sqlite3 "$staged" "VACUUM INTO '${staged}.compact'" && [ -s "${staged}.compact" ] \
+               && { [ "$mode" != wal ] || sqlite3 "${staged}.compact" "PRAGMA journal_mode=WAL;" >/dev/null; }; then
+                mv -f "${staged}.compact" "$staged"
+            else
+                rm -f "${staged}.compact"
+                echo "{{ service }}: could not compact the staged copy of {{ db }}; shipping it uncompacted" >&2
+            fi
             # `.backup` creates the file as root with its own mode; a restore puts
             # back what was staged, so it carries the source database's instead.
             chown --reference="$SRC_DIR_{{ service }}/{{ db }}" "$STAGING/{{ service }}/{{ db }}"
