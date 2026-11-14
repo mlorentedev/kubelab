@@ -57,9 +57,9 @@ spec:
             app.kubernetes.io/part-of: kubelab
         spec:
           restartPolicy: Never
-{% if job.volume.fs_group %}
+{% if app.fs_group %}
           securityContext:
-            fsGroup: {{ job.volume.fs_group }}
+            fsGroup: {{ app.fs_group }}
             fsGroupChangePolicy: OnRootMismatch
 {% endif %}
           volumes:

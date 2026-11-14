@@ -79,8 +79,8 @@ def snapshots(tmp_path: Path) -> Path:
     """The contract snapshot tree `_build_context` reads: staging flat, prod under `prod/`."""
     root = tmp_path / "contracts"
     (root / "prod").mkdir(parents=True)
-    (root / "sample.yaml").write_text(_contract("1Gi"), encoding="utf-8")
-    (root / "prod" / "sample.yaml").write_text(_contract("5Gi"), encoding="utf-8")
+    (root / "sample.yaml").write_text(_contract("1Gi"), encoding="utf-8", newline="\n")
+    (root / "prod" / "sample.yaml").write_text(_contract("5Gi"), encoding="utf-8", newline="\n")
     return root
 
 
@@ -88,7 +88,7 @@ def snapshots(tmp_path: Path) -> Path:
 def build(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, snapshots: Path):
     """`_build_context(env)` for `api` (no snapshot) and `sample` (a snapshot with a volume and a job)."""
     registry = tmp_path / "products.yaml"
-    registry.write_text(REGISTRY, encoding="utf-8")
+    registry.write_text(REGISTRY, encoding="utf-8", newline="\n")
     monkeypatch.setattr(product_registry, "registry_path", lambda: registry)
     monkeypatch.setattr(K8sGenerator, "snapshot_dir", snapshots)
     monkeypatch.setattr(K8sGenerator, "_build_migrations", lambda self, env_vars: {})
@@ -275,7 +275,7 @@ class TestDeploymentMountingAClaim:
     def test_sets_no_security_context_when_the_claim_names_no_fs_group(
         self, build, snapshots: Path, tmp_path: Path
     ) -> None:
-        (snapshots / "sample.yaml").write_text(_contract(fs_group=None), encoding="utf-8")
+        (snapshots / "sample.yaml").write_text(_contract(fs_group=None), encoding="utf-8", newline="\n")
 
         pod = _one(_objects(build(), tmp_path), "Deployment", "sample")["spec"]["template"]["spec"]
 
@@ -287,18 +287,32 @@ class TestConflictingFsGroups:
     def test_two_volumes_naming_different_groups_are_refused(self, build, snapshots: Path) -> None:
         """A pod has one `fsGroup`; picking one of two would leave a volume owned by the wrong group."""
         other = "  logs:\n    type: volume\n    params: {size: 1Gi, mount_path: /logs, fs_group: 20002}\n"
-        (snapshots / "sample.yaml").write_text(_contract() + other, encoding="utf-8")
+        (snapshots / "sample.yaml").write_text(_contract() + other, encoding="utf-8", newline="\n")
 
         with pytest.raises(ContractError, match=r"resources\.logs\.params\.fs_group.*20002.*10001"):
             build()
 
     def test_two_volumes_naming_the_same_group_are_accepted(self, build, snapshots: Path) -> None:
         other = "  logs:\n    type: volume\n    params: {size: 1Gi, mount_path: /logs, fs_group: 10001}\n"
-        (snapshots / "sample.yaml").write_text(_contract() + other, encoding="utf-8")
+        (snapshots / "sample.yaml").write_text(_contract() + other, encoding="utf-8", newline="\n")
 
         sample = next(a for a in build()["apps"] if a["name"] == "sample")
 
         assert sample["fs_group"] == 10001
+
+    def test_the_cronjob_pod_takes_the_same_group_as_the_deployment(
+        self, build, snapshots: Path, tmp_path: Path
+    ) -> None:
+        """The job mounts `data`, which names no group; `logs` does. One app, one group, in both pods."""
+        other = "  logs:\n    type: volume\n    params: {size: 1Gi, mount_path: /logs, fs_group: 2000}\n"
+        (snapshots / "sample.yaml").write_text(_contract(fs_group=None) + other, encoding="utf-8", newline="\n")
+        objects = _objects(build(), tmp_path)
+
+        deployment = _one(objects, "Deployment", "sample")["spec"]["template"]["spec"]
+        job = _one(objects, "CronJob", "sample-daily")["spec"]["jobTemplate"]["spec"]["template"]["spec"]
+        expected = {"fsGroup": 2000, "fsGroupChangePolicy": "OnRootMismatch"}
+        assert deployment["securityContext"] == expected
+        assert job["securityContext"] == expected
 
 
 class TestAppWithoutClaims:

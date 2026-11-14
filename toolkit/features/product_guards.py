@@ -124,9 +124,9 @@ def staging_hostname_for(prod: str) -> str:
 def check_resources(contract: Contract) -> None:
     """Refuse claims that only conflict as a set (RES-HOST-001 B2, C).
 
-    The schema checks each claim alone. That a job's ``volume`` names a volume claim, and that the
-    volume claims agree on one ``fs_group``, are only known with the whole mapping in hand, so they
-    are checked here, before any manifest is rendered.
+    The schema checks each claim alone. That a job's ``volume`` names a volume claim, that the volume
+    claims mount distinct paths, and that they agree on one ``fs_group`` are only known with the whole
+    mapping in hand, so they are checked here, before any manifest is rendered.
     """
     volumes = sorted(name for name, claim in contract.resources.items() if claim.type == "volume")
     for name, claim in contract.resources.items():
@@ -139,6 +139,20 @@ def check_resources(contract: Contract) -> None:
                 "an unknown name would render a CronJob whose pod can never start.",
                 f"set it to a declared volume claim (declared: {declared}), or add that volume under resources.",
             )
+    mounted: dict[str, str] = {}
+    for name, claim in contract.resources.items():
+        if claim.type != "volume":
+            continue
+        path = claim.params.mount_path
+        if path in mounted:
+            raise ContractError(
+                f"field 'resources.{name}.params.mount_path': '{path}' is already mounted by "
+                f"'resources.{mounted[path]}'",
+                "the product's containers mount every volume claim, and Kubernetes rejects a container "
+                "with two mounts at one path.",
+                "give each volume claim its own mount_path.",
+            )
+        mounted[path] = name
     first: tuple[str, int] | None = None
     for name, claim in contract.resources.items():
         group = claim.params.fs_group if claim.type == "volume" else None
