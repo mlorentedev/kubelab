@@ -1987,6 +1987,19 @@ SECRET_CATALOG: list[SecretSpec] = [
         rotate_note="apply-secrets for api-secrets, restart api, then update the Gitea webhook's secret.",
         envs=("prod",),
     ),
+    # The machine token the forge console's create write accepts (CONSOLE-004 AC3), and
+    # nothing else: n8n's Slack capture (CONSOLE-007) creates an issue with it. Apart from
+    # the operator's Authelia session and from the forge read credentials. Both envs, so
+    # the capture is exercised in staging before prod.
+    SecretSpec(
+        key_path="apps.platform.api.forge_create_token",
+        description="Bearer token the API accepts on the forge create write, and on no other route",
+        kind=SecretKind.RANDOM_HEX,
+        length=32,
+        services=("api", "n8n"),
+        rotate_note="apply-secrets for api-secrets, restart api, then update n8n's credential.",
+        envs=("staging", "prod"),
+    ),
     SecretSpec(
         key_path="apps.platform.api.db_password",
         description="PostgreSQL password for the api tenant role (DATA-007)",

@@ -45,6 +45,14 @@ systemctl status kubelab-renovate.service         # exit status of the last run
 `systemctl start` on a oneshot returns when the run does, which is minutes on a first run. A tick that finds
 the unit still running starts nothing.
 
+## Check a config change before it ships
+
+`make renovate-dry-run` runs the same engine (`renovate/engine.json` at `ci.renovate.preset_tag`) over
+the working tree with `--platform=local --dry-run=extract` and prints every dependency each manager
+extracted. It needs Docker, takes about 15 seconds once the image is pulled, and writes to no forge.
+A regex manager that stops matching reports success in a real run (lesson-691). Here it shows up as
+a missing row, and `tests/test_renovate_engine_extracts_the_ssot.py` fails CI on it.
+
 ## Reading the skip line
 
 When Gitea does not answer for 30 s the wrapper logs one line and exits 0, so the unit shows `inactive (dead)`,

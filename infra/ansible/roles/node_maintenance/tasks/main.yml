@@ -367,8 +367,32 @@
     var: _docker_reclaim.stdout_lines
   when: maintenance_run_cleanup | bool and maintenance_docker_reclaim | bool
 
+# Same gate as the script's `docker-prune-gate` block (#3079): with a threshold
+# set, everything unused goes only when the filesystem holding Docker passes it.
+- name: Measure the filesystem that holds Docker
+  shell: >-
+    set -o pipefail;
+    df --output=pcent "$(docker info -f '{{ '{{' }}.DockerRootDir{{ '}}' }}')" | tail -1 | tr -dc '0-9'
+  args:
+    executable: /bin/bash
+  register: _docker_fs_percent
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when: >-
+    maintenance_run_cleanup | bool and 'docker_hosts' in group_names
+    and maintenance_docker_prune_above_percent | int > 0
+
+- name: Decide whether the prune takes everything unused
+  set_fact:
+    _docker_prune_all: >-
+      {{ maintenance_docker_prune_above_percent | int <= 0
+         or (_docker_fs_percent.stdout | default('') | length == 0)
+         or (_docker_fs_percent.stdout | int >= maintenance_docker_prune_above_percent | int) }}
+  when: maintenance_run_cleanup | bool and 'docker_hosts' in group_names
+
 - name: Prune unused Docker images
-  command: docker image prune -af
+  command: "docker image prune -f{{ ' -a' if _docker_prune_all | bool else '' }}"
   when: maintenance_run_cleanup | bool and 'docker_hosts' in group_names
   register: _docker_prune
   changed_when: "'Total reclaimed space' in _docker_prune.stdout"
@@ -380,7 +404,7 @@
   when: _docker_prune is defined and _docker_prune.rc | default(0) != 0
 
 - name: Prune Docker build cache
-  command: docker builder prune -af
+  command: "docker builder prune -f{{ ' -a' if _docker_prune_all | bool else '' }}"
   when: maintenance_run_cleanup | bool and 'docker_hosts' in group_names
   register: _docker_builder
   changed_when: "'Total reclaimed space' in _docker_builder.stdout"
