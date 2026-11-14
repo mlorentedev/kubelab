@@ -1,0 +1,566 @@
+{
+  "sources": [
+    {
+      "source": "github:mlorentedev/kubelab",
+      "as_of": "2026-11-12T11:41:30Z",
+      "reachable": true
+    },
+    {
+      "source": "github:mlorentedev/dotfiles",
+      "as_of": "2026-11-12T11:41:30Z",
+      "reachable": true
+    },
+    {
+      "source": "github:mlorentedev/web",
+      "as_of": "2026-11-12T11:41:30Z",
+      "reachable": true
+    },
+    {
+      "source": "gitea:teledyne/openkm-brain",
+      "as_of": "2026-11-12T04:12:09Z",
+      "reachable": false
+    },
+    {
+      "source": "gitea:personal/resume",
+      "as_of": null,
+      "reachable": false
+    }
+  ],
+  "items": [
+    {
+      "source": "github:mlorentedev/kubelab",
+      "number": 3500,
+      "kind": "pull",
+      "title": "CONSOLE-004: scaffold apps/console at parity with the embedded page",
+      "author": "mlorentedev",
+      "assignees": [
+        "mlorentedev"
+      ],
+      "labels": [
+        "area:console",
+        "priority:p1"
+      ],
+      "url": "https://github.com/mlorentedev/kubelab/pull/3500",
+      "updated_at": "2026-11-12T11:40:00Z"
+    },
+    {
+      "source": "github:mlorentedev/dotfiles",
+      "number": 399,
+      "kind": "issue",
+      "title": "fix(api): answer 503 to a delivery when the source declaration does not parse",
+      "author": "renovate[bot]",
+      "assignees": [],
+      "labels": [
+        "area:api"
+      ],
+      "url": "https://github.com/mlorentedev/dotfiles/issues/399",
+      "updated_at": "2026-11-12T11:23:00Z"
+    },
+    {
+      "source": "github:mlorentedev/web",
+      "number": 398,
+      "kind": "issue",
+      "title": "OPS-054: load test the API before the console ships",
+      "author": "manu",
+      "assignees": [],
+      "labels": [
+        "type:bug",
+        "area:auth"
+      ],
+      "url": "https://github.com/mlorentedev/web/issues/398",
+      "updated_at": "2026-11-12T11:05:00Z"
+    },
+    {
+      "source": "gitea:teledyne/openkm-brain",
+      "number": 397,
+      "kind": "pull",
+      "title": "chore(staging): deploy web sha-30e2566",
+      "author": "kubelab-bot",
+      "assignees": [],
+      "labels": [],
+      "url": "https://gitea.kubelab.live/teledyne/openkm-brain/pull/397",
+      "updated_at": "2026-11-12T10:46:00Z"
+    },
+    {
+      "source": "gitea:personal/resume",
+      "number": 396,
+      "kind": "issue",
+      "title": "docs(adr): add grouping, a board layout and board parity to the console's view",
+      "author": "mlorentedev",
+      "assignees": [
+        "mlorentedev"
+      ],
+      "labels": null,
+      "url": "https://gitea.kubelab.live/personal/resume/issues/396",
+      "updated_at": "2026-11-12T10:27:00Z"
+    },
+    {
+      "source": "github:mlorentedev/kubelab",
+      "number": 3465,
+      "kind": "issue",
+      "title": "BACKUP-057: forget old snapshots after the restore rehearsal",
+      "author": "renovate[bot]",
+      "assignees": [],
+      "labels": [
+        "area:infra",
+        "priority:p2"
+      ],
+      "url": "https://github.com/mlorentedev/kubelab/issues/3465",
+      "updated_at": "2026-11-12T10:07:00Z"
+    },
+    {
+      "source": "github:mlorentedev/dotfiles",
+      "number": 394,
+      "kind": "pull",
+      "title": "NET-005: edge boot check fails when the uplink dongle is unplugged",
+      "author": "manu",
+      "assignees": [],
+      "labels": [
+        "type:chore"
+      ],
+      "url": "https://github.com/mlorentedev/dotfiles/pull/394",
+      "updated_at": "2026-11-12T09:46:00Z"
+    },
+    {
+      "source": "github:mlorentedev/web",
+      "number": 393,
+      "kind": "issue",
+      "title": "feat(gitea): declare the forge console's webhook on every repository",
+      "author": "kubelab-bot",
+      "assignees": [],
+      "labels": [
+        "area:console",
+        "priority:p1"
+      ],
+      "url": "https://github.com/mlorentedev/web/issues/393",
+      "updated_at": "2026-11-12T09:25:00Z"
+    },
+    {
+      "source": "gitea:teledyne/openkm-brain",
+      "number": 392,
+      "kind": "issue",
+      "title": "Renovate: update dependency astro to v7.4.11",
+      "author": "mlorentedev",
+      "assignees": [
+        "mlorentedev"
+      ],
+      "labels": [
+        "area:api"
+      ],
+      "url": "https://gitea.kubelab.live/teledyne/openkm-brain/issues/392",
+      "updated_at": "2026-11-12T09:03:00Z"
+    },
+    {
+      "source": "gitea:personal/resume",
+      "number": 391,
+      "kind": "pull",
+      "title": "SEC-037: audit identity on Headscale node registration",
+      "author": "renovate[bot]",
+      "assignees": [],
+      "labels": [
+        "type:bug",
+        "area:auth"
+      ],
+      "url": "https://gitea.kubelab.live/personal/resume/pull/391",
+      "updated_at": "2026-11-12T08:40:00Z"
+    },
+    {
+      "source": "github:mlorentedev/kubelab",
+      "number": 3430,
+      "kind": "issue",
+      "title": "<img src=x onerror=alert(1)> title kept as text, never as HTML",
+      "author": "manu",
+      "assignees": [],
+      "labels": [],
+      "url": "https://github.com/mlorentedev/kubelab/issues/3430",
+      "updated_at": "2026-11-12T08:17:00Z"
+    },
+    {
+      "source": "github:mlorentedev/dotfiles",
+      "number": 389,
+      "kind": "issue",
+      "title": "Authelia session cookie collides between staging and prod",
+      "author": "kubelab-bot",
+      "assignees": [],
+      "labels": null,
+      "url": "https://github.com/mlorentedev/dotfiles/issues/389",
+      "updated_at": "2026-11-12T07:53:00Z"
+    },
+    {
+      "source": "github:mlorentedev/web",
+      "number": 388,
+      "kind": "pull",
+      "title": "TOOL-063: PATCH repos applies merge settings only with has_pull_requests",
+      "author": "mlorentedev",
+      "assignees": [
+        "mlorentedev"
+      ],
+      "labels": [
+        "area:infra",
+        "priority:p2"
+      ],
+      "url": "https://github.com/mlorentedev/web/pull/388",
+      "updated_at": "2026-11-12T07:28:00Z"
+    },
+    {
+      "source": "gitea:teledyne/openkm-brain",
+      "number": 387,
+      "kind": "issue",
+      "title": "Résumé: add the 2026 consulting section (naïve cache bust)",
+      "author": "renovate[bot]",
+      "assignees": [],
+      "labels": [
+        "type:chore"
+      ],
+      "url": "https://gitea.kubelab.live/teledyne/openkm-brain/issues/387",
+      "updated_at": "2026-11-12T07:03:00Z"
+    },
+    {
+      "source": "gitea:personal/resume",
+      "number": 386,
+      "kind": "issue",
+      "title": "feat(toolkit): sync branding projects the Tailwind theme",
+      "author": "manu",
+      "assignees": [],
+      "labels": [
+        "area:console",
+        "priority:p1"
+      ],
+      "url": "https://gitea.kubelab.live/personal/resume/issues/386",
+      "updated_at": "2026-11-12T06:37:00Z"
+    },
+    {
+      "source": "github:mlorentedev/kubelab",
+      "number": 3395,
+      "kind": "pull",
+      "title": "CONSOLE-004: scaffold apps/console at parity with the embedded page (15)",
+      "author": "kubelab-bot",
+      "assignees": [],
+      "labels": [
+        "area:api"
+      ],
+      "url": "https://github.com/mlorentedev/kubelab/pull/3395",
+      "updated_at": "2026-11-12T06:10:00Z"
+    },
+    {
+      "source": "github:mlorentedev/dotfiles",
+      "number": 384,
+      "kind": "issue",
+      "title": "fix(api): answer 503 to a delivery when the source declaration does not parse (16)",
+      "author": "mlorentedev",
+      "assignees": [
+        "mlorentedev"
+      ],
+      "labels": [
+        "type:bug",
+        "area:auth"
+      ],
+      "url": "https://github.com/mlorentedev/dotfiles/issues/384",
+      "updated_at": "2026-11-12T05:43:00Z"
+    },
+    {
+      "source": "github:mlorentedev/web",
+      "number": 383,
+      "kind": "issue",
+      "title": "OPS-054: load test the API before the console ships (17)",
+      "author": "renovate[bot]",
+      "assignees": [],
+      "labels": [],
+      "url": "https://github.com/mlorentedev/web/issues/383",
+      "updated_at": "2026-11-12T05:15:00Z"
+    },
+    {
+      "source": "gitea:teledyne/openkm-brain",
+      "number": 382,
+      "kind": "pull",
+      "title": "chore(staging): deploy web sha-30e2566 (18)",
+      "author": "manu",
+      "assignees": [],
+      "labels": null,
+      "url": "https://gitea.kubelab.live/teledyne/openkm-brain/pull/382",
+      "updated_at": "2026-11-12T04:46:00Z"
+    },
+    {
+      "source": "gitea:personal/resume",
+      "number": 381,
+      "kind": "issue",
+      "title": "docs(adr): add grouping, a board layout and board parity to the console's view (19)",
+      "author": "kubelab-bot",
+      "assignees": [],
+      "labels": [
+        "area:infra",
+        "priority:p2"
+      ],
+      "url": "https://gitea.kubelab.live/personal/resume/issues/381",
+      "updated_at": "2026-11-12T04:17:00Z"
+    },
+    {
+      "source": "github:mlorentedev/kubelab",
+      "number": 3360,
+      "kind": "issue",
+      "title": "BACKUP-057: forget old snapshots after the restore rehearsal (20)",
+      "author": "mlorentedev",
+      "assignees": [
+        "mlorentedev"
+      ],
+      "labels": [
+        "type:chore"
+      ],
+      "url": "https://github.com/mlorentedev/kubelab/issues/3360",
+      "updated_at": "2026-11-12T03:47:00Z"
+    },
+    {
+      "source": "github:mlorentedev/dotfiles",
+      "number": 379,
+      "kind": "pull",
+      "title": "NET-005: edge boot check fails when the uplink dongle is unplugged (21)",
+      "author": "renovate[bot]",
+      "assignees": [],
+      "labels": [
+        "area:console",
+        "priority:p1"
+      ],
+      "url": "https://github.com/mlorentedev/dotfiles/pull/379",
+      "updated_at": "2026-11-12T03:16:00Z"
+    },
+    {
+      "source": "github:mlorentedev/web",
+      "number": 378,
+      "kind": "issue",
+      "title": "feat(gitea): declare the forge console's webhook on every repository (22)",
+      "author": "manu",
+      "assignees": [],
+      "labels": [
+        "area:api"
+      ],
+      "url": "https://github.com/mlorentedev/web/issues/378",
+      "updated_at": "2026-11-12T02:45:00Z"
+    },
+    {
+      "source": "gitea:teledyne/openkm-brain",
+      "number": 377,
+      "kind": "issue",
+      "title": "Renovate: update dependency astro to v7.4.11 (23)",
+      "author": "kubelab-bot",
+      "assignees": [],
+      "labels": [
+        "type:bug",
+        "area:auth"
+      ],
+      "url": "https://gitea.kubelab.live/teledyne/openkm-brain/issues/377",
+      "updated_at": "2026-11-12T02:13:00Z"
+    },
+    {
+      "source": "gitea:personal/resume",
+      "number": 376,
+      "kind": "pull",
+      "title": "SEC-037: audit identity on Headscale node registration (24)",
+      "author": "mlorentedev",
+      "assignees": [
+        "mlorentedev"
+      ],
+      "labels": [],
+      "url": "https://gitea.kubelab.live/personal/resume/pull/376",
+      "updated_at": "2026-11-12T01:40:00Z"
+    },
+    {
+      "source": "github:mlorentedev/kubelab",
+      "number": 3325,
+      "kind": "issue",
+      "title": "<img src=x onerror=alert(1)> title kept as text, never as HTML (25)",
+      "author": "renovate[bot]",
+      "assignees": [],
+      "labels": null,
+      "url": "https://github.com/mlorentedev/kubelab/issues/3325",
+      "updated_at": "2026-11-12T01:07:00Z"
+    },
+    {
+      "source": "github:mlorentedev/dotfiles",
+      "number": 374,
+      "kind": "issue",
+      "title": "Authelia session cookie collides between staging and prod (26)",
+      "author": "manu",
+      "assignees": [],
+      "labels": [
+        "area:infra",
+        "priority:p2"
+      ],
+      "url": "https://github.com/mlorentedev/dotfiles/issues/374",
+      "updated_at": "2026-11-12T00:33:00Z"
+    },
+    {
+      "source": "github:mlorentedev/web",
+      "number": 373,
+      "kind": "pull",
+      "title": "TOOL-063: PATCH repos applies merge settings only with has_pull_requests (27)",
+      "author": "kubelab-bot",
+      "assignees": [],
+      "labels": [
+        "type:chore"
+      ],
+      "url": "https://github.com/mlorentedev/web/pull/373",
+      "updated_at": "2026-11-11T23:58:00Z"
+    },
+    {
+      "source": "gitea:teledyne/openkm-brain",
+      "number": 372,
+      "kind": "issue",
+      "title": "Résumé: add the 2026 consulting section (naïve cache bust) (28)",
+      "author": "mlorentedev",
+      "assignees": [
+        "mlorentedev"
+      ],
+      "labels": [
+        "area:console",
+        "priority:p1"
+      ],
+      "url": "https://gitea.kubelab.live/teledyne/openkm-brain/issues/372",
+      "updated_at": "2026-11-11T23:23:00Z"
+    },
+    {
+      "source": "gitea:personal/resume",
+      "number": 371,
+      "kind": "issue",
+      "title": "feat(toolkit): sync branding projects the Tailwind theme (29)",
+      "author": "renovate[bot]",
+      "assignees": [],
+      "labels": [
+        "area:api"
+      ],
+      "url": "https://gitea.kubelab.live/personal/resume/issues/371",
+      "updated_at": "2026-11-11T22:47:00Z"
+    },
+    {
+      "source": "github:mlorentedev/kubelab",
+      "number": 3290,
+      "kind": "pull",
+      "title": "CONSOLE-004: scaffold apps/console at parity with the embedded page (30)",
+      "author": "manu",
+      "assignees": [],
+      "labels": [
+        "type:bug",
+        "area:auth"
+      ],
+      "url": "https://github.com/mlorentedev/kubelab/pull/3290",
+      "updated_at": "2026-11-11T22:10:00Z"
+    },
+    {
+      "source": "github:mlorentedev/dotfiles",
+      "number": 369,
+      "kind": "issue",
+      "title": "fix(api): answer 503 to a delivery when the source declaration does not parse (31)",
+      "author": "kubelab-bot",
+      "assignees": [],
+      "labels": [],
+      "url": "https://github.com/mlorentedev/dotfiles/issues/369",
+      "updated_at": "2026-11-11T21:33:00Z"
+    },
+    {
+      "source": "github:mlorentedev/web",
+      "number": 368,
+      "kind": "issue",
+      "title": "OPS-054: load test the API before the console ships (32)",
+      "author": "mlorentedev",
+      "assignees": [
+        "mlorentedev"
+      ],
+      "labels": null,
+      "url": "https://github.com/mlorentedev/web/issues/368",
+      "updated_at": "2026-11-11T20:55:00Z"
+    },
+    {
+      "source": "gitea:teledyne/openkm-brain",
+      "number": 367,
+      "kind": "pull",
+      "title": "chore(staging): deploy web sha-30e2566 (33)",
+      "author": "renovate[bot]",
+      "assignees": [],
+      "labels": [
+        "area:infra",
+        "priority:p2"
+      ],
+      "url": "https://gitea.kubelab.live/teledyne/openkm-brain/pull/367",
+      "updated_at": "2026-11-11T20:16:00Z"
+    },
+    {
+      "source": "gitea:personal/resume",
+      "number": 366,
+      "kind": "issue",
+      "title": "docs(adr): add grouping, a board layout and board parity to the console's view (34)",
+      "author": "manu",
+      "assignees": [],
+      "labels": [
+        "type:chore"
+      ],
+      "url": "https://gitea.kubelab.live/personal/resume/issues/366",
+      "updated_at": "2026-11-11T19:37:00Z"
+    },
+    {
+      "source": "github:mlorentedev/kubelab",
+      "number": 3255,
+      "kind": "issue",
+      "title": "BACKUP-057: forget old snapshots after the restore rehearsal (35)",
+      "author": "kubelab-bot",
+      "assignees": [],
+      "labels": [
+        "area:console",
+        "priority:p1"
+      ],
+      "url": "https://github.com/mlorentedev/kubelab/issues/3255",
+      "updated_at": "2026-11-11T18:57:00Z"
+    },
+    {
+      "source": "github:mlorentedev/dotfiles",
+      "number": 364,
+      "kind": "pull",
+      "title": "NET-005: edge boot check fails when the uplink dongle is unplugged (36)",
+      "author": "mlorentedev",
+      "assignees": [
+        "mlorentedev"
+      ],
+      "labels": [
+        "area:api"
+      ],
+      "url": "https://github.com/mlorentedev/dotfiles/pull/364",
+      "updated_at": "2026-11-11T18:16:00Z"
+    },
+    {
+      "source": "github:mlorentedev/web",
+      "number": 363,
+      "kind": "issue",
+      "title": "feat(gitea): declare the forge console's webhook on every repository (37)",
+      "author": "renovate[bot]",
+      "assignees": [],
+      "labels": [
+        "type:bug",
+        "area:auth"
+      ],
+      "url": "https://github.com/mlorentedev/web/issues/363",
+      "updated_at": "2026-11-11T17:35:00Z"
+    },
+    {
+      "source": "gitea:teledyne/openkm-brain",
+      "number": 362,
+      "kind": "issue",
+      "title": "Renovate: update dependency astro to v7.4.11 (38)",
+      "author": "manu",
+      "assignees": [],
+      "labels": [],
+      "url": "https://gitea.kubelab.live/teledyne/openkm-brain/issues/362",
+      "updated_at": "2026-11-11T16:53:00Z"
+    },
+    {
+      "source": "gitea:personal/resume",
+      "number": 361,
+      "kind": "pull",
+      "title": "SEC-037: audit identity on Headscale node registration (39)",
+      "author": "kubelab-bot",
+      "assignees": [],
+      "labels": null,
+      "url": "https://gitea.kubelab.live/personal/resume/pull/361",
+      "updated_at": "2026-11-11T16:10:00Z"
+    }
+  ],
+  "total": 95,
+  "next": null
+}
