@@ -29,7 +29,7 @@ Any other upload longer than 60 s through the edge is cut the same way: a large 
 
 ## Scope
 
-Owner ruling 2026-11-14: option (c), both changes, in two PRs. The order below (the root fix first) is proposed and still awaits the owner's ruling.
+Owner ruling 2026-11-14: option (c), both changes, in two PRs. Order ruled the same day: the local push (root fix) first. PR 2's value ruled: declare 60 s, no behaviour change, raised later only on a measured off-LAN failure.
 
 **PR 1: CI pushes to the registry without crossing the edge (root cause).**
 
@@ -74,9 +74,7 @@ Owner ruling 2026-11-14: option (c), both changes, in two PRs. The order below (
 
 ## Next
 
-Get the owner's rulings, then start PR 1:
-1. **The PR 2 value.** Either keep 60 s and only declare it (no behaviour change; PR 1 is the fix), or raise it for what still crosses the edge after PR 1: off-LAN git push, LFS, release assets. A raised bound lets a slow client hold a connection longer on every route. At the rate limit (30/s per host), the exposure is 30 × T open requests per host.
-2. **PR 1 in imagesensortool:** the product's session makes the change once the variable exists.
+The imagesensortool session runs the throwaway push (owner OK 2026-11-14); its result decides PR 1's shape.
 
 ## Promotion candidates
 
