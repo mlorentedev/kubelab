@@ -7,6 +7,7 @@ from typing import Any
 from toolkit.config.settings import PROJECT_ROOT, settings
 from toolkit.core.logging import logger
 from toolkit.features.configuration import ConfigurationManager
+from toolkit.features.product_registry import platform_apps
 
 
 class BaseGenerator(ABC):
@@ -76,3 +77,22 @@ class BaseGenerator(ABC):
         except Exception as e:
             logger.error(f"Failed to process template {template_path}: {e}")
             return False
+
+    @staticmethod
+    def pinned_platform_apps(env_vars: dict[str, str], env: str) -> dict[str, str]:
+        """The registered platform apps that have a ``version`` in ``env``, with that version.
+
+        No pin means the app is not deployed in that env, so no generator emits anything for
+        it: not a Deployment, and not a route or an access rule that would point at one that
+        does not exist. The fallback to ``latest`` this replaces put a registered app on a
+        mutable tag in every overlay, prod included (#3456, ADR-046 defect #1). The skip is a
+        warning, never silent.
+        """
+        pinned: dict[str, str] = {}
+        for component in platform_apps():
+            version = env_vars.get(f"APPS_PLATFORM_{component.upper().replace('-', '_')}_VERSION")
+            if version:
+                pinned[component] = str(version)
+            else:
+                logger.warning(f"Skipping {component} in {env}: apps.platform.{component}.version is not set")
+        return pinned
