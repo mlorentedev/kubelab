@@ -290,6 +290,7 @@ def edge_dns(
         manifest = edge.MANIFEST.relative_to(settings.project_root)
         logger.error(f"{manifest} differs from the derivation: run `toolkit sync edge-dns`")
         raise typer.Exit(rc)
+    logger.success("edge-dns: in sync" if check else "edge-dns: infra/config/products/edge.json written")
 
 
 @app.command()
@@ -566,6 +567,8 @@ def sync_all(
         if edge.sync(check=check) != 0:
             logger.error("edge-dns: infra/config/products/edge.json differs from the derivation")
             failures.append("edge-dns")
+        else:
+            logger.success("edge-dns: in sync" if check else "edge-dns: infra/config/products/edge.json written")
     except Exception as e:
         logger.error(f"edge-dns sync crashed: {e}")
         failures.append("edge-dns")
