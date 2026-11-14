@@ -18,7 +18,7 @@ import yaml
 
 from toolkit.features import product_render
 from toolkit.features.product_contract import Contract, ContractError
-from toolkit.features.product_guards import check_staging_hostname, staging_zones
+from toolkit.features.product_guards import check_staging_hostname, staging_hostname_for, staging_zones
 
 ZONE_LINE = '"staging.example-product.test"'
 ZONES = ["staging.kubelab.live", "staging.mlorente.dev", "staging.example-product.test"]
@@ -145,14 +145,17 @@ def test_a_prod_label_under_the_apex_refuses_another_label() -> None:
 
 
 @pytest.mark.parametrize(
-    ("staging", "prod"),
+    ("prod", "staging"),
     [
-        ("kubelab.staging.kubelab.live", "kubelab.live"),  # the apex itself is not a label under it
-        ("b.staging.kubelab.live", "a.b.kubelab.live"),  # two labels deep keeps staging.<prod>
+        ("shop.kubelab.live", "shop.staging.kubelab.live"),
+        ("a.b.kubelab.live", "staging.a.b.kubelab.live"),  # two labels deep: not a sibling
+        ("shop.kubelab.live.example.test", "staging.shop.kubelab.live.example.test"),  # apex is not a suffix match
+        ("kubelab.live", "staging.kubelab.live"),  # the apex itself has no label under it
+        ("shop.example-product.test", "staging.shop.example-product.test"),
     ],
 )
-def test_only_one_non_staging_label_under_the_apex_takes_the_sibling_rule(staging: str, prod: str) -> None:
-    _refused(staging, prod)
+def test_the_staging_hostname_a_prod_hostname_implies(prod: str, staging: str) -> None:
+    assert staging_hostname_for(prod) == staging
 
 
 @pytest.mark.parametrize(
