@@ -33,12 +33,19 @@ from toolkit.config.settings import PROJECT_ROOT
 from toolkit.features.declared_domains import VALUES_DIR
 from toolkit.features.edge_dns import DNS_ZONES, granted_apexes
 from toolkit.features.product_contract import Contract, ContractError
-from toolkit.features.product_guards import check_staging_hostname, refuse_oidc_at_render, staging_zones
+from toolkit.features.product_guards import (
+    check_resources,
+    check_staging_hostname,
+    refuse_oidc_at_render,
+    staging_zones,
+)
 from toolkit.features.product_registry import load_registry
 
 SNAPSHOT_DIR = PROJECT_ROOT / "infra" / "config" / "products" / "contracts"
 
-_AUTH_LEVEL = {"public": "bypass", "forwardauth": "one_factor"}
+# forwardauth-admins renders like forwardauth; the admins group is the Authelia rule's subject,
+# added with the product's onboarding (RES-HOST-001 D8).
+_AUTH_LEVEL = {"public": "bypass", "forwardauth": "one_factor", "forwardauth-admins": "one_factor"}
 
 
 def _hostname(contract: Contract, env: str) -> str:
@@ -94,6 +101,7 @@ def rendered(
 ) -> dict[str, Any]:
     """The contract-owned keys of ``apps.platform.<app>`` for ``env``."""
     refuse_oidc_at_render(contract, app)
+    check_resources(contract)
     # One contract, one convention: refused for either env, against the zones ``values_dir`` declares and
     # the Cloudflare zones ``dns_zones`` grants (D8, EDGE-001).
     check_staging_hostname(contract, staging_zones(values_dir), granted_apexes(dns_zones))
