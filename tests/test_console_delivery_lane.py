@@ -91,3 +91,12 @@ def test_the_release_job_for_console_is_api_s_for_another_app() -> None:
             if line.strip() and not line.strip().startswith("#")
         )
     assert api_steps == console_steps
+
+
+def test_release_please_hands_the_release_job_console_s_own_outputs() -> None:
+    """The job's `if:` reads these outputs, so an output wired to another package publishes nothing or the wrong tag."""
+    outputs = yaml.safe_load((ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8"))["jobs"][
+        "release-please"
+    ]["outputs"]
+    assert outputs["console_release_created"] == "${{ steps.release.outputs['apps/console--release_created'] }}"
+    assert outputs["console_version"] == "${{ steps.release.outputs['apps/console--version'] }}"
