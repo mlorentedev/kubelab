@@ -1229,6 +1229,24 @@ def test_the_schedule_report_reads_the_wait_line_the_prune_prints() -> None:
     assert f'--grep "{phrase}"' in str(reader["ansible.builtin.command"]["cmd"])
 
 
+def test_the_schedule_report_counts_backups_from_lines_the_ship_still_prints() -> None:
+    """#3496: begun minus saved counts the runs that can leave packs in no index.
+
+    Both lines are restic's human summary. A `--quiet` or `--json` backup drops
+    them, and the report would then read 0 / 0 on every node, which looks like a
+    week with no interrupted backup rather than a reader with nothing to read.
+    """
+    script = (ROLE / "templates" / "node-backup-ship.sh.j2").read_text(encoding="utf-8")
+    backup = next(line for line in script.splitlines() if line.startswith("$RESTIC backup "))
+    for flag in ("-q", "--quiet", "--json"):
+        assert flag not in backup.split(), f"the ship's backup runs with {flag}"
+    reader = next((t for t in _schedule_playbook()["tasks"] if "began" in t.get("name", "")), None)
+    assert reader is not None, "backup-schedule reads no begun/saved backup count"
+    cmd = str(reader["ansible.builtin.command"]["cmd"])
+    for unit in ("node-backup-ship.service", "node-backup-ship-check.service"):
+        assert f"-u {unit}" in cmd, f"{unit} also runs a backup and is not counted"
+
+
 def test_every_journal_read_in_the_schedule_report_covers_the_same_week() -> None:
     """A count over eight days printed beside denominators over seven pairs a
     refusal with runs it did not come from."""
