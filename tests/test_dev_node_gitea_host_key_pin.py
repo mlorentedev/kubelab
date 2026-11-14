@@ -72,3 +72,12 @@ def test_only_the_declared_key_type_authenticates_the_forge() -> None:
     """known_hosts keeps entries the role did not write; the declared type is the only one offered."""
     content = _task(SSH_CONFIG)["ansible.builtin.copy"]["content"]
     assert "HostKeyAlgorithms {{ dev_node_gitea_ssh_host_key.split() | first }}" in content
+
+
+def test_the_pin_and_the_drop_in_land_where_the_dev_users_ssh_reads_them() -> None:
+    """Content guards stay green if a task writes root's ~/.ssh instead of the dev user's."""
+    pin_task = _task(PIN)
+    assert pin_task["ansible.builtin.known_hosts"]["path"] == "{{ dev_node_home }}/.ssh/known_hosts"
+    assert pin_task["become_user"] == "{{ dev_node_user }}"
+    # System-wide on purpose: Ubuntu's ssh_config includes it for every user.
+    assert _task(SSH_CONFIG)["ansible.builtin.copy"]["dest"] == "/etc/ssh/ssh_config.d/60-kubelab-gitea.conf"

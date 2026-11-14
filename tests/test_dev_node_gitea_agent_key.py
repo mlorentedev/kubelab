@@ -170,6 +170,12 @@ def test_an_empty_credential_skips_loudly() -> None:
         "the notice must be the block's exact complement"
     )
     assert "SKIPPED" in notice["ansible.builtin.debug"]["msg"]
+    assert "gitea" in notice["tags"] and set(block["tags"]) <= set(notice["tags"]), (
+        "with --tags gitea an untagged notice is skipped, and the node is silent again"
+    )
+    assert names.index("Say the forge block is skipped, and why") < names.index(
+        "Configure git access to the private forge"
+    )
 
 
 def test_an_existing_key_is_recommented_to_its_account() -> None:
