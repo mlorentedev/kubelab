@@ -633,6 +633,10 @@
             IdentityFile {{ dev_node_gitea_key_path }}
             IdentitiesOnly yes
             StrictHostKeyChecking yes
+            # Only the declared key's type, so entries known_hosts gathered by
+            # trust-on-first-use for the same host (ace2 held ecdsa and rsa ones
+            # from the R1 probe) are never what authenticates the forge.
+            HostKeyAlgorithms {{ dev_node_gitea_ssh_host_key.split() | first }}
       become: true
 
     - name: Read back the public half (never the private one)

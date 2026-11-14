@@ -66,3 +66,9 @@ def test_the_key_comes_from_the_ssot_never_a_scan() -> None:
 def test_ssh_refuses_an_unknown_forge_key() -> None:
     content = _task(SSH_CONFIG)["ansible.builtin.copy"]["content"]
     assert "StrictHostKeyChecking yes" in content, "without it, a cleared known_hosts would prompt or accept"
+
+
+def test_only_the_declared_key_type_authenticates_the_forge() -> None:
+    """known_hosts keeps entries the role did not write; the declared type is the only one offered."""
+    content = _task(SSH_CONFIG)["ansible.builtin.copy"]["content"]
+    assert "HostKeyAlgorithms {{ dev_node_gitea_ssh_host_key.split() | first }}" in content
