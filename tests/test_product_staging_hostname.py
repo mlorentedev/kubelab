@@ -3,8 +3,9 @@
 The contract model cannot read ``common.yaml``, so the check runs at render time, where the
 values directory is known. A staging hostname is accepted only if it is exactly a zone in
 ``networking.staging_zones`` (other than the platform wildcard zone) or one label under
-``staging.kubelab.live``; a product that also declares prod must name ``staging.`` + its prod
-hostname. Names here are fixtures, not any real product's.
+``staging.kubelab.live``; a product that also declares prod must name the staging hostname its
+prod hostname implies (``staging.`` + prod, or ``<label>.staging.kubelab.live`` for a prod one
+label under ``kubelab.live``). Names here are fixtures, not any real product's.
 """
 
 from __future__ import annotations
@@ -17,7 +18,7 @@ import yaml
 
 from toolkit.features import product_render
 from toolkit.features.product_contract import Contract, ContractError
-from toolkit.features.product_guards import check_staging_hostname, staging_zones
+from toolkit.features.product_guards import check_staging_hostname, staging_hostname_for, staging_zones
 
 ZONE_LINE = '"staging.example-product.test"'
 ZONES = ["staging.kubelab.live", "staging.mlorente.dev", "staging.example-product.test"]
@@ -120,3 +121,58 @@ def test_the_refusal_comes_before_any_env_is_rendered(env: str, tmp_path: Path) 
 
     with pytest.raises(ContractError, match="hostnames.staging"):
         product_render.rendered(contract, "web", env, values_dir=_values(tmp_path, ZONES))
+
+
+# RES-HOST-001 D9: a prod hostname one label under the apex pairs with that label under the wildcard
+# zone, because `staging.<label>.kubelab.live` would sit under prod's cookie domain while staging's
+# Authelia scopes to `staging.kubelab.live` (#1805).
+
+
+def test_a_prod_label_under_the_apex_pairs_with_the_same_label_under_the_wildcard_zone() -> None:
+    check_staging_hostname(_contract("shop.staging.kubelab.live", "shop.kubelab.live"), ZONES)
+
+
+def test_a_prod_label_under_the_apex_refuses_staging_dot_prod_even_when_that_zone_is_listed() -> None:
+    err = _refused("staging.shop.kubelab.live", "shop.kubelab.live", ZONES + ["staging.shop.kubelab.live"])
+
+    assert "shop.staging.kubelab.live" in err.fix
+
+
+def test_a_prod_label_under_the_apex_refuses_another_label() -> None:
+    err = _refused("other.staging.kubelab.live", "shop.kubelab.live")
+
+    assert "shop.staging.kubelab.live" in err.fix
+
+
+@pytest.mark.parametrize(
+    ("prod", "staging"),
+    [
+        ("shop.kubelab.live", "shop.staging.kubelab.live"),
+        ("a.b.kubelab.live", "staging.a.b.kubelab.live"),  # two labels deep: not a sibling
+        ("shop.kubelab.live.example.test", "staging.shop.kubelab.live.example.test"),  # apex is not a suffix match
+        ("kubelab.live", "staging.kubelab.live"),  # the apex itself has no label under it
+        ("shop.example-product.test", "staging.shop.example-product.test"),
+    ],
+)
+def test_the_staging_hostname_a_prod_hostname_implies(prod: str, staging: str) -> None:
+    assert staging_hostname_for(prod) == staging
+
+
+@pytest.mark.parametrize(
+    ("staging", "prod"),
+    [
+        ("staging.a.b.kubelab.live", "a.b.kubelab.live"),  # two labels deep
+        ("staging.staging.kubelab.live", "staging.kubelab.live"),  # both rules agree here
+    ],
+)
+def test_any_other_prod_under_the_apex_keeps_staging_dot_prod(staging: str, prod: str) -> None:
+    check_staging_hostname(_contract(staging, prod), ZONES + ["staging.a.b.kubelab.live"])
+
+
+def test_a_declared_prod_hostname_does_not_stop_a_staging_render(tmp_path: Path) -> None:
+    """The fixture registry gives this contract no prod lane; naming prod early is still allowed."""
+    contract = _contract("shop.staging.kubelab.live", "shop.kubelab.live")
+
+    rendered = product_render.rendered(contract, "web", "staging", values_dir=_values(tmp_path, ZONES))
+
+    assert rendered["domain"] == "shop.staging.kubelab.live"
