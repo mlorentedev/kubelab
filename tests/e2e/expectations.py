@@ -169,6 +169,10 @@ EXPECTATIONS: dict[str, ServiceExpectation] = {
         content_type="text/html",
         body_contains="<html",
     ),
+    "imagesensortool": ServiceExpectation(
+        content_type="text/html",
+        body_contains="<html",
+    ),
     # blog: removed 2026-03-15
     # -- Security --
     "authelia": ServiceExpectation(

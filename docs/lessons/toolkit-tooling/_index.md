@@ -4,6 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 746 | [On Windows a bare `"bash"` argv starts the WSL launcher, even when Git Bash is on PATH](lesson-746-bare-bash-on-windows-is-the-wsl-launcher.md) | 2026-11-13 |
 | 741 | [A tool that fails only on its first run is missing a dependency it imports lazily](lesson-741-a-tool-broken-only-on-its-first-run-is-missing-a-lazily-imported-dependency.md) | 2026-11-12 |
 | 737 | [A rate over the client's clock is skewed when the read arrives late; divide by the kernel's clock from the same read](lesson-737-a-rate-over-the-clients-clock-is-skewed-when-the-read-is-late.md) | 2026-11-11 |
 | 733 | [Gitea answers an ambiguous short sha with the same 404 as an unknown one](lesson-733-gitea-answers-an-ambiguous-short-sha-with-the-same-404-as-an-unknown-one.md) | 2026-11-10 |

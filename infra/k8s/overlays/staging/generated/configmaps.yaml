@@ -78,3 +78,33 @@ data:
   SITE_URL: "https://staging.mlorente.dev"
   TWITTER_URL: "https://x.com/mlorentedev"
   YOUTUBE_URL: "https://www.youtube.com/@mlorentedev"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: imagesensortool-config
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: imagesensortool
+    app.kubernetes.io/part-of: kubelab
+    app.kubernetes.io/managed-by: toolkit
+data:
+  ENVIRONMENT: "staging"
+  INFRA_FORGE_CONSOLE_DOMAIN: "console.staging.kubelab.live"
+  INFRA_FORGE_GITEA_URL: "http://gitea:3000"
+  INFRA_FORGE_GITHUB_APP_ID: "5573076"
+  INFRA_FORGE_GITHUB_INSTALLATION_ID: "177667607"
+  INFRA_FORGE_SOURCES: >-
+    gitea:personal/imagesensortool, gitea:personal/resume, gitea:teledyne/fae-brain,
+    gitea:teledyne/openkm-brain, gitea:teledyne/projects-toolkit, github:mlorentedev/*
+  INFRA_POSTGRES_DATABASE: "kubelab"
+  INFRA_POSTGRES_HOST: "postgres"
+  INFRA_POSTGRES_PORT: "5432"
+  INFRA_POSTGRES_USERNAME: "kubelab"
+  INFRA_SMTP_FROM: "mlorentedev"
+  INFRA_SMTP_HOST: "smtp.gmail.com"
+  INFRA_SMTP_PORT: "587"
+  INFRA_SMTP_SECURE: "true"
+  INFRA_SMTP_USER: "mlorentedev@gmail.com"
+  SITE_DOMAIN: "staging.imagesensortool.com"
+  SITE_URL: "https://staging.imagesensortool.com"

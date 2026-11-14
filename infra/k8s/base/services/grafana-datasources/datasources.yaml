@@ -1,0 +1,30 @@
+apiVersion: 1
+datasources:
+  - name: Loki
+    type: loki
+    uid: loki
+    access: proxy
+    url: http://loki:3100
+    isDefault: true
+    editable: false
+  # CONSOLE-004 AC6: the forge read model's statistics, through a read-only role that holds
+  # SELECT on the counts-only `forge_stats` view and on nothing else (role: toolkit's
+  # postgres_provisioner `READER_ROLES`; view: apps/api/migrations/*_forge_stats.sql).
+  # The password is not here: Grafana expands `$FORGE_STATS_DB_PASSWORD` from its own
+  # environment, which the Deployment fills from the `grafana-admin` Secret. TLS is off
+  # because the connection stays on the cluster network, behind the postgres
+  # NetworkPolicy (the api's own DSN does the same).
+  - name: Forge stats
+    type: grafana-postgresql-datasource
+    uid: forge-stats
+    access: proxy
+    url: postgres:5432
+    user: forge_stats
+    editable: false
+    jsonData:
+      database: api
+      sslmode: disable
+      postgresVersion: 1600
+      timescaledb: false
+    secureJsonData:
+      password: $FORGE_STATS_DB_PASSWORD

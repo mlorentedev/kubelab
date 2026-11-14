@@ -417,7 +417,7 @@ def fetch_kubeconfig(env: str, direct: bool = False) -> Path:
 
     dest = output_path(env)
     dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_text(rewritten, encoding="utf-8")
+    dest.write_text(rewritten, encoding="utf-8", newline="\n")
     dest.chmod(stat.S_IRUSR | stat.S_IWUSR)  # 0600 — kubeconfig holds admin certs
 
     logger.success(f"Saved {dest} (server {endpoint}). {follow_up}")

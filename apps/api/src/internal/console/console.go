@@ -103,6 +103,17 @@ type itemView struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+// queueView is the answer of GET /console/queue. apps/console's fixtures and its TypeScript
+// contract (src/lib/contract.ts) mirror it, and TestFixturesMatchTheQueueContract holds them to it.
+// Next is the cursor of the following page, null on the last one. Total counts every open
+// item of the declared sources, so the page can say "N of M".
+type queueView struct {
+	Sources []sourceView `json:"sources"`
+	Items   []itemView   `json:"items"`
+	Total   int          `json:"total"`
+	Next    *string      `json:"next"`
+}
+
 // Deps returns the read model and the sources to show; a seam for tests.
 type Deps func() (QueueReader, []forge.Source, error)
 
@@ -192,14 +203,7 @@ func queueHandler(c *gin.Context, deps Deps) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	// Next is the cursor of the following page, null on the last one. Total counts
-	// every open item of the declared sources, so the page can say "N of M".
-	out := struct {
-		Sources []sourceView `json:"sources"`
-		Items   []itemView   `json:"items"`
-		Total   int          `json:"total"`
-		Next    *string      `json:"next"`
-	}{Sources: []sourceView{}, Items: []itemView{}}
+	out := queueView{Sources: []sourceView{}, Items: []itemView{}}
 	if len(sources) > 0 {
 		// One more than the page tells whether another page exists, without a count.
 		page, err := reader.Queue(c.Request.Context(), sources, after, limit+1)

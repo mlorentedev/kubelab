@@ -982,6 +982,19 @@ def build_service_tables(
         ]
 
     staging = _env_services("staging")
+    # imagesensortool declares a staging lane only (IDP-053): a tile here, none in prod.
+    if "imagesensortool" in platform:
+        staging.append(
+            _svc(
+                "ImageSensorTool",
+                "https://staging.imagesensortool.com",
+                "https://staging.imagesensortool.com/healthz",
+                "Public",
+                "Platform",
+                "ace1",
+                "Sensor comparator",
+            )
+        )
     prod = _env_services("prod")
     prod.append(_svc("kubelab.live", f"https://{base}", f"https://{base}", "-", "Core", "VPS", "301 → mlorente.dev"))
 

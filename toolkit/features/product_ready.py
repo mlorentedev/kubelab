@@ -88,6 +88,6 @@ def check_ready(app: str, env: str = "staging", registry: Path | None = None) ->
         ) from None
     with tempfile.TemporaryDirectory() as scratch:
         path = Path(scratch) / CONTRACT_PATH
-        path.write_text(fetched, encoding="utf-8")
+        path.write_text(fetched, encoding="utf-8", newline="\n")
         validate_registered(path, app, registry)
     return Ready(app=app, repository=forge.repository, tag=tag, sha=sha)

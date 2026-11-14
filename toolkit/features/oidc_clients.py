@@ -247,7 +247,7 @@ def sync_env(env: str, project_root: Path = PROJECT_ROOT) -> int:
         logger.error(f"oidc: {exc}")
         return 1
     target = clients_file(env)
-    if target.exists() and target.read_text(encoding="utf-8") == content:
+    if target.exists() and target.read_bytes() == content.encode("utf-8"):  # bytes, so a CRLF copy is rewritten
         logger.info(f"oidc: {target.name} for {env} already current")
         return 0
     write_text_lf(target, content)

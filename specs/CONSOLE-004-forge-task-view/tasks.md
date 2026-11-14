@@ -84,9 +84,14 @@ created: "2026-10-21"
 - [x] [P] [AC6] Structured log events for freshness, webhook failures and reconcile duration, through Vector to Loki ✓ 2026-11-12 (#3342)
 - [x] [P] [AC6] Projection backlog as a structured event (`forge_projection_backlog`: the deliveries the projector has not marked; not the AC2 outbox, which is the outbound write queue) ✓ 2026-11-13 (#3410)
 - [ ] [AC6] Read-only Postgres role on a counts-only view, a Grafana datasource, and the dashboard (throughput, queue age, time to first review, time with a red CI, items by status, priority and area)
-- [ ] [AC6] The datasource credential reaches Grafana through a Secret (`secureJsonData`, read from env or file), never the plain `grafana-datasources` ConfigMap, and a change to it restarts Grafana (generated name or explicit restart)
+  - [x] ✓ 2026-11-13 (#3419) View `forge_stats` (no title, URL, author, assignee, free-text label or number), role `forge_stats` with `SELECT` on that view only (provisioner `READER_ROLES`), datasource `forge-stats`, dashboard `forge-stats`: throughput, queue age, items by status, priority and area, source freshness. Throughput and queue age run on `updated_at`: the read model keeps no `created_at` or `closed_at`
+  - [ ] Time to first review and time with a red CI: left out until the CI state of AC1's inbox reasons exists in the read model
+  - [ ] Applied to staging and the dashboard read there, by the operator's go (#3419)
+- [x] [AC6] The datasource credential reaches Grafana through a Secret (`secureJsonData`, read from env or file), never the plain `grafana-datasources` ConfigMap, and a change to it restarts Grafana (generated name or explicit restart) ✓ 2026-11-13 (#3419): `secureJsonData.password` is `$FORGE_STATS_DB_PASSWORD`, filled from `grafana-admin` (`forge-stats-db-password`); `grafana-datasources` is a hashed generator, so a datasource change rolls the pod, and a changed Secret restarts Grafana through `apply-secrets`
 - [x] [AC6] Grafana alert for a source not read within the declared bound ✓ 2026-11-12 (#3387): GitHub sources page, Gitea sources (on-demand Beelink) reach the log tier; a source never read since the api started writes no `age_seconds` and is not seen
 - [ ] [AC6] NetworkPolicy rule for Grafana to Postgres (NET-002) and the dashboard shown with no private titles
+  - [x] ✓ 2026-11-13 (#3419) Grafana in `postgres-ingress`; the view has no title column, held by `forge_stats_test.go`
+  - [ ] The dashboard read on staging, by the operator's go (#3419)
 
 ### 5. Operations
 

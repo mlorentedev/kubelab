@@ -161,6 +161,8 @@ def test_apply_secrets_restarts_the_consumers_of_what_it_changed(monkeypatch) ->
         lambda cm: {"grafana-admin": {"admin-user": "manu"}},
     )
     monkeypatch.setattr(k8s_secrets, "SECRET_DEFINITIONS", [SecretMapping(name="authelia-users", keys={})])
+    # The committed registry's pull Secret is not what this test measures (IDP-053 S3b).
+    monkeypatch.setattr(k8s_secrets, "pull_secret_mappings", lambda registry: [])
 
     def apply(mapping, *a, changed=None, namespace="kubelab", **k):
         changed.add((namespace, mapping.name))

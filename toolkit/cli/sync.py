@@ -235,6 +235,14 @@ def images(
             raise typer.Exit(result)
 
 
+def _branding_outputs() -> list[Path]:
+    """Every file `sync branding` writes: the master brand.css and the console's theme."""
+    return [
+        settings.project_root / "edge/errors/html/brand/brand.css",
+        settings.project_root / "apps/console/src/styles/brand.css",
+    ]
+
+
 @app.command()
 def branding(
     check: Annotated[bool, typer.Option("--check", help="Check for drift without modifying files")] = False,
@@ -242,7 +250,7 @@ def branding(
     """Sync IDP brand CSS from common.yaml SSOT."""
     from toolkit.scripts import sync_branding
 
-    output_files = [settings.project_root / "edge/errors/html/brand/brand.css"]
+    output_files = _branding_outputs()
     if check:
         if not _run_with_check(output_files, sync_branding.main, "branding"):
             raise typer.Exit(1)
@@ -507,7 +515,7 @@ def sync_all(
     try:
         from toolkit.scripts import sync_branding
 
-        output_files = [settings.project_root / "edge/errors/html/brand/brand.css"]
+        output_files = _branding_outputs()
         if check:
             if not _run_with_check(output_files, sync_branding.main, "branding"):
                 failures.append("branding")

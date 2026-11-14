@@ -1,0 +1,29 @@
+# Ingress allowlist for imagesensortool (NET-002 shape, as web's in
+# base/governance/networkpolicies.yaml). Staging-overlay-only (IDP-053): the
+# product declares no prod lane, so a base policy would select no pod in prod and
+# tests/test_networkpolicy_coverage.py fails a policy that selects nothing.
+# IngressRoute imagesensortool.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: imagesensortool-ingress
+  labels:
+    app.kubernetes.io/name: imagesensortool
+    app.kubernetes.io/part-of: kubelab
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: imagesensortool
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+      ports:
+        - protocol: TCP
+          port: 8080

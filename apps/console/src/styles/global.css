@@ -1,0 +1,12 @@
+@import 'tailwindcss';
+/* Brand tokens, generated from infra/config/values/common.yaml by `toolkit sync branding`. */
+@import './brand.css';
+
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+  body {
+    @apply bg-kl-bg-dark font-sans text-kl-text-primary antialiased;
+  }
+}

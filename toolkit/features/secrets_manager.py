@@ -2009,6 +2009,16 @@ SECRET_CATALOG: list[SecretSpec] = [
         envs=("staging", "prod"),
     ),
     SecretSpec(
+        key_path="apps.platform.api.forge_stats_db_password",
+        description="PostgreSQL password for Grafana's read-only forge_stats role (CONSOLE-004 AC6)",
+        kind=SecretKind.RANDOM_TOKEN,
+        services=("grafana", "postgres"),
+        rotate_note=(
+            "provision-postgres-tenant TENANT=forge_stats, then apply-secrets for grafana-admin (restarts Grafana)."
+        ),
+        envs=("staging", "prod"),
+    ),
+    SecretSpec(
         key_path="apps.platform.api.beehiiv_api_key",
         expiry=Expiry.NEVER,
         description="Beehiiv newsletter API key",

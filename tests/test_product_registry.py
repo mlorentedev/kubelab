@@ -268,9 +268,15 @@ class TestRegistryFields:
         entry = product_registry.load_registry().products["web"]
         assert (entry.image_registry, entry.private, entry.pull_credential) == (None, False, None)
 
-    def test_the_committed_registry_is_unchanged_by_the_new_fields(self) -> None:
-        """No committed entry names a registry yet; a new entry is a separate slice."""
-        assert [n for n, p in product_registry.load_registry().products.items() if p.image_registry] == []
+    def test_the_committed_registry_names_a_registry_only_for_imagesensortool(self) -> None:
+        """IDP-053 S3b: the one entry on another registry, private, pulling with the catalogued token."""
+        products = product_registry.load_registry().products
+        assert [n for n, p in products.items() if p.image_registry] == ["imagesensortool"]
+        entry = products["imagesensortool"]
+        assert (entry.forge, entry.repository, entry.receiver) == ("gitea", "personal/imagesensortool", "generic")
+        assert (entry.image_registry, entry.private) == ("gitea.kubelab.live/personal", True)
+        assert entry.pull_credential is not None
+        assert entry.pull_credential.secret == "apps.services.core.gitea.registry_pull_token"
 
     @pytest.mark.parametrize(
         "image_registry",
@@ -380,8 +386,11 @@ class TestPullSecretsAreCatalogued:
         registry = self._registry(tmp_path, _private(secret="ghcr.pull_token"))
         product_registry.check_pull_secrets_catalogued(registry, {"ghcr.pull_token"})
 
-    def test_an_entry_without_a_credential_is_skipped(self) -> None:
-        product_registry.check_pull_secrets_catalogued(product_registry.load_registry(), set())
+    def test_an_entry_without_a_credential_is_skipped(self, tmp_path: Path) -> None:
+        registry = self._registry(
+            tmp_path, "products:\n  web:\n    repository: mlorentedev/web\n    forge: github\n    receiver: generic\n"
+        )
+        product_registry.check_pull_secrets_catalogued(registry, set())
 
     def test_every_committed_pull_secret_is_in_the_secrets_catalog(self) -> None:
         catalogued = {spec.key_path for spec in SECRET_CATALOG}
@@ -435,7 +444,9 @@ class TestDerivedImage:
         for app, product in product_registry.load_registry().products.items():
             if not product.contract_managed:
                 continue
-            deployed = f"{common['registry']}/{common['apps']['platform'][app]['image_name']}"
+            # A product on another registry names it in its entry (D4); the platform's applies otherwise.
+            host = product.image_registry or common["registry"]
+            deployed = f"{host}/{common['apps']['platform'][app]['image_name']}"
             assert product_registry.derived_image(app) == deployed, app
             checked += 1
         assert checked > 0

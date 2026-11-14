@@ -375,7 +375,7 @@ def _serve(
     """Start the restored server with no network and wait until its CLI answers."""
     config = workdir / "config"
     config.mkdir()
-    (config / "config.yaml").write_text(_drill_config(cidr), encoding="utf-8")
+    (config / "config.yaml").write_text(_drill_config(cidr), encoding="utf-8", newline="\n")
     # No network: a copy of the control plane must never be reachable by a node.
     rc, _, err = run(
         [

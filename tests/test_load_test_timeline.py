@@ -11,6 +11,7 @@ from __future__ import annotations
 import contextlib
 import pathlib
 import subprocess
+import sys
 
 import pytest
 
@@ -311,6 +312,7 @@ class TestStepCarriesItsTimeline:
         assert ("close", ("node", "gen")) in seen
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="Win32 OpenSSH has no ControlMaster; see test_windows_connects_directly")
 class TestMultiplexed:
     """The step's ssh master: opened per node, closed per node, and never in the operator's ~/.ssh."""
 
@@ -462,3 +464,13 @@ def test_a_node_read_without_proc_stat_is_a_failed_read_not_a_crash() -> None:
 def test_a_generator_read_that_is_not_a_cpu_line_is_a_failed_read(text: str) -> None:
     with pytest.raises(ValueError):
         tl.parse_cpu_line(text)
+
+
+def test_windows_connects_directly_without_a_master(monkeypatch: pytest.MonkeyPatch) -> None:
+    """On Windows no master is opened and the readers get no ControlPath (#3480)."""
+    argvs: list = []
+    monkeypatch.setattr(lt.sys, "platform", "win32")
+    monkeypatch.setattr(lt.subprocess, "run", lambda argv, **kw: argvs.append(argv))
+    with lt.Lab(REPO, "kc", "op", "node", "gen").multiplexed(("node", "gen"), 90) as options:
+        assert options == ()
+    assert argvs == []

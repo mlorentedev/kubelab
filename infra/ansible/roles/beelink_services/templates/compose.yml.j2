@@ -138,6 +138,11 @@ services:
       GITEA__actions__LOG_RETENTION_DAYS: "{{ act_runner_log_retention_days }}"
       GITEA__actions__ARTIFACT_RETENTION_DAYS: "{{ act_runner_artifact_retention_days }}"
       GITEA__actions__RUN_RETENTION_DAYS: "{{ act_runner_run_retention_days }}"
+      # #3079. How long Gitea lets a task run, sit silent, or wait for a runner before
+      # failing it. Ordered against the runner's own `timeout` in `gitea_runner`.
+      GITEA__actions__ZOMBIE_TASK_TIMEOUT: "{{ act_runner_zombie_task_timeout }}"
+      GITEA__actions__ENDLESS_TASK_TIMEOUT: "{{ act_runner_endless_task_timeout }}"
+      GITEA__actions__ABANDONED_JOB_TIMEOUT: "{{ act_runner_abandoned_job_timeout }}"
       GITEA__security__SECRET_KEY: "{{ gitea_secret_key }}"
       GITEA__security__INSTALL_LOCK: "true"
       # Consumed by gitea-bootstrap.sh, not by Gitea itself.

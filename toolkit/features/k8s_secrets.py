@@ -88,6 +88,14 @@ SECRET_DEFINITIONS: list[SecretMapping] = [
             # authenticated with, so the two sides cannot hold different ones.
             "n8n-webhook-secret": "APPS_SERVICES_AUTOMATION_NOTIFY_WEBHOOK_SECRET",
         },
+        optional_keys={
+            # CONSOLE-004 AC6: the password of the read-only `forge_stats` Postgres role, which
+            # Grafana's datasource reads from its environment. Optional because the key
+            # arrives with the vault entry, not with the image: a pod that waited for it
+            # would take Grafana down. Without it the datasource fails to connect and the
+            # rest of Grafana is unaffected.
+            "forge-stats-db-password": "APPS_PLATFORM_API_FORGE_STATS_DB_PASSWORD",
+        },
     ),
     SecretMapping(
         name="crowdsec-bouncer",

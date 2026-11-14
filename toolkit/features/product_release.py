@@ -171,7 +171,7 @@ def fetch_release_contract(
         ) from None
     with tempfile.TemporaryDirectory() as scratch:
         path = Path(scratch) / product_ready.CONTRACT_PATH
-        path.write_text(fetched, encoding="utf-8")
+        path.write_text(fetched, encoding="utf-8", newline="\n")
         validate_registered(path, app, registry)
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(path, dest)

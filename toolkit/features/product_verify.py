@@ -196,14 +196,15 @@ def targets_at(rev: str, app: str, env: str, show: Callable[[str, str], str] = g
     """
     from toolkit.features.product_registry import REGISTRY_RELPATH, Registry
 
-    registry = Registry.model_validate(yaml.safe_load(show(rev, str(REGISTRY_RELPATH))))
+    registry = Registry.model_validate(yaml.safe_load(show(rev, REGISTRY_RELPATH.as_posix())))
     entry = registry.products.get(app)
     if entry is None or not entry.contract_managed:
         raise NoContractError(f"'{app}' has no product contract at {rev[:7]}: nothing declares its hostname")
     from toolkit.config.settings import PROJECT_ROOT
     from toolkit.features.product_render import snapshot_path
 
-    contract = yaml.safe_load(show(rev, str(snapshot_path(app, env).relative_to(PROJECT_ROOT))))
+    # A git tree path is `/`-separated on every platform; `str(Path)` is `\`-separated on Windows.
+    contract = yaml.safe_load(show(rev, snapshot_path(app, env).relative_to(PROJECT_ROOT).as_posix()))
     host = contract["hostnames"].get(env)
     if host is None:
         # hostnames.prod is optional before a product has a prod lane (#3250).

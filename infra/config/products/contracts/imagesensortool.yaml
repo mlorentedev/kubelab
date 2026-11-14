@@ -1,0 +1,21 @@
+# imagesensortool's platform contract (kubelab ADR-067): what the site needs from
+# kubelab to run. kubelab reads it at the commit of each published image,
+# validates it against its product registry, and keeps a byte-for-byte copy at
+# infra/config/products/contracts/imagesensortool.yaml. A new hostname, auth
+# level or secret: allow it in kubelab first, then edit it here.
+# kubelab decides where it comes from and where it goes; this file names neither.
+#
+# Staging only for now: `prod` joins `hostnames` when kubelab declares a prod
+# lane for the product. The staging hostname resolves on the tailnet only, so
+# `auth: public` puts no login in front of it; the image sends
+# `X-Robots-Tag: noindex` unless SITE_INDEXING=on. tests/kubelab-contract.test.ts
+# ties `image`, `port` and `health_path` to the Dockerfile, the nginx template
+# and the image workflow.
+schema_version: 1
+image: gitea.kubelab.live/personal/imagesensortool
+port: 8080
+health_path: /healthz
+hostnames:
+  staging: staging.imagesensortool.com
+auth: public
+secrets: []

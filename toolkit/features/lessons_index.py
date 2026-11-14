@@ -340,7 +340,7 @@ def _order_rows(path: pathlib.Path, apply: bool) -> list[Fix]:
             fixes.append(Fix(path=path, line_number=i + 1, was=lines[i], now=moved))
             lines[i] = moved
     if fixes and apply:
-        path.write_text("".join(lines), encoding="utf-8")
+        path.write_text("".join(lines), encoding="utf-8", newline="\n")
     return fixes
 
 

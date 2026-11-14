@@ -49,7 +49,7 @@ class TemplateRenderer:
             output_path.parent.mkdir(parents=True, exist_ok=True)
 
             # Write rendered content to output file
-            output_path.write_text(rendered_content, encoding="utf-8")
+            output_path.write_text(rendered_content, encoding="utf-8", newline="\n")
 
             logger.debug(f"Rendered {template_name} -> {output_path}")
             return True

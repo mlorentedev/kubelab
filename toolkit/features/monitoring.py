@@ -281,11 +281,11 @@ def export_monitors(project_root: Path) -> Path:
             raise SystemExit(1)
 
         ordered = _in_seed_order(clean_monitors, monitors_path)
-        monitors_path.write_text(_seed_json(ordered), encoding="utf-8")
+        monitors_path.write_text(_seed_json(ordered), encoding="utf-8", newline="\n")
         logger.success(f"Exported {len(clean_monitors)} monitors → {monitors_path}")
 
         notifications_path = export_dir / NOTIFICATIONS_FILE
-        notifications_path.write_text(_seed_json(clean_notifications), encoding="utf-8")
+        notifications_path.write_text(_seed_json(clean_notifications), encoding="utf-8", newline="\n")
         logger.success(f"Exported {len(clean_notifications)} notifications → {notifications_path}")
 
         return monitors_path

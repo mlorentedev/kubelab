@@ -133,11 +133,22 @@ def _tcp_probe_cmd(dst: str, port: int) -> str:
     return f"timeout {_CONNECT_TIMEOUT} bash -c '</dev/tcp/{dst}/{port}'"
 
 
+# The controller is the operator's workstation, which may lack `timeout` (macOS) or
+# resolve a bare `bash` to the WSL launcher (Windows), so it connects from Python.
+_CONTROLLER_CONNECT = (
+    "import socket, sys; socket.create_connection((sys.argv[1], int(sys.argv[2])), float(sys.argv[3])).close()"
+)
+
+
+def _controller_probe_argv(dst: str, port: int) -> list[str]:
+    return [sys.executable, "-c", _CONTROLLER_CONNECT, dst, str(port), str(_CONNECT_TIMEOUT)]
+
+
 def check_flow(flow: Flow, net: dict[str, Any], runner: Callable[[list[str]], int]) -> str:
     """Return 'pass' | 'fail' | 'skip'. `runner` executes a command and returns its exit code."""
     probe = _tcp_probe_cmd(flow.dst, flow.port)
     if flow.src == "controller":
-        return "pass" if runner(["bash", "-c", probe]) == 0 else "fail"
+        return "pass" if runner(_controller_probe_argv(flow.dst, flow.port)) == 0 else "fail"
     target = _ssh_target(net, flow.src)
     ssh_base = ["ssh", "-o", f"ConnectTimeout={_CONNECT_TIMEOUT}", "-o", "BatchMode=yes", target]
     # if the source node itself is unreachable (homelab powered off), skip optional flows

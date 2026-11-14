@@ -9,7 +9,7 @@ from toolkit.core.templating import create_renderer
 from toolkit.features.configuration import ConfigurationManager
 from toolkit.features.generator_base import BaseGenerator
 from toolkit.features.k8s_secrets import SECRET_DEFINITIONS, pull_secret_name
-from toolkit.features.product_registry import platform_apps, product
+from toolkit.features.product_registry import product
 
 
 class K8sGenerator(BaseGenerator):
@@ -239,7 +239,9 @@ class K8sGenerator(BaseGenerator):
         }
 
         apps = []
-        for component in platform_apps():
+        # An app with no pin in this env is not deployed there (BaseGenerator.pinned_platform_apps).
+        pinned = self.pinned_platform_apps(env_vars, env)
+        for component in pinned:
             image_name = self._find_var(env_vars, component, "IMAGE_NAME")
             domain = self._find_var(env_vars, component, "DOMAIN")
             port = self._find_var(env_vars, component, "DEFAULT_PORT")
@@ -249,7 +251,7 @@ class K8sGenerator(BaseGenerator):
                 logger.debug(f"Skipping {component}: missing image_name, domain, or port")
                 continue
 
-            version = self._find_var(env_vars, component, "VERSION") or "latest"
+            version = pinned[component]
             health_path, readiness_path = self._health_paths(env_vars, component)
             enable_auth_val = self._find_var(env_vars, component, "ENABLE_AUTH")
             enable_auth = bool(enable_auth_val and enable_auth_val.lower() in ("true", "1", "yes"))

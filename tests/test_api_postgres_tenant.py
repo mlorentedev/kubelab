@@ -11,7 +11,7 @@ import yaml
 
 from toolkit.cli import infra
 from toolkit.features.k8s_secrets import SECRET_DEFINITIONS
-from toolkit.features.postgres_provisioner import TENANT_PASSWORD_PATHS
+from toolkit.features.postgres_provisioner import READER_ROLES, ROLE_PASSWORD_PATHS, TENANT_PASSWORD_PATHS
 from toolkit.features.secrets_manager import SECRET_CATALOG
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -63,12 +63,28 @@ def _mock(mocker, returncode: int = 0):
     return cfg, run
 
 
-def test_without_a_tenant_every_declared_tenant_is_provisioned(mocker) -> None:
+def test_without_a_tenant_every_declared_role_is_provisioned(mocker) -> None:
     cfg, run = _mock(mocker)
     infra.k8s_provision_postgres_tenant(env="staging", tenant=None, dry_run=False)
-    assert run.call_count == len(TENANT_PASSWORD_PATHS)
+    assert run.call_count == len(TENANT_PASSWORD_PATHS) + len(READER_ROLES)
     read = {call.args[0] for call in cfg.get_secret_by_path.call_args_list}
-    assert read == set(TENANT_PASSWORD_PATHS.values())
+    assert read == set(ROLE_PASSWORD_PATHS.values())
+
+
+def test_a_reader_is_provisioned_after_the_tenants_it_reads_from(mocker) -> None:
+    _, run = _mock(mocker)
+    infra.k8s_provision_postgres_tenant(env="staging", tenant=None, dry_run=False)
+    scripts = [call.kwargs["input"] for call in run.call_args_list]
+    assert [("CREATE DATABASE" in s) for s in scripts] == [True] * len(TENANT_PASSWORD_PATHS) + [False] * len(
+        READER_ROLES
+    )
+
+
+def test_a_reader_can_be_provisioned_alone(mocker) -> None:
+    _, run = _mock(mocker)
+    infra.k8s_provision_postgres_tenant(env="staging", tenant="forge_stats", dry_run=False)
+    assert run.call_count == 1
+    assert "GRANT SELECT ON public.forge_stats TO forge_stats" in run.call_args.kwargs["input"]
 
 
 def test_an_undeclared_tenant_is_refused(mocker) -> None:

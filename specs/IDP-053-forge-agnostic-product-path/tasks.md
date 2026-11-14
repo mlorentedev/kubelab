@@ -156,10 +156,10 @@ regenerated overlays, and one line in `infra/config/values/common.yaml`
 (`networking.staging_zones`: `staging.imagesensortool.com`); the hairpin block follows from
 S3c.
 
-- [ ] [AC6] Registry entry: `forge: gitea`, `repository: personal/imagesensortool`, `receiver: generic` (dormant until S6b and S7; proposal risk 3), `image_registry: gitea.kubelab.live/personal`, `private: true`, `pull_credential`, `events: {staging: ...}` and no `events.prod`
-- [ ] [AC6] Snapshot: `toolkit product render --contract ... --env staging` and commit the snapshot
-- [ ] [AC6] Staging values block with a pinned `version` (never `:latest`), platform tile, e2e expectation, and the staging zone line
-- [ ] [AC6] `make test`, `make validate-sync ENV=staging`, `product render --check` exit 0
+- [x] [AC6] Registry entry: `forge: gitea`, `repository: personal/imagesensortool`, `receiver: generic` (dormant until S6b and S7; proposal risk 3), `image_registry: gitea.kubelab.live/personal`, `private: true`, `pull_credential`, `events: {staging: ...}` and no `events.prod`
+- [x] [AC6] Snapshot: `toolkit product render --contract ... --env staging` and commit the snapshot
+- [x] [AC6] Staging values block with a pinned `version` (never `:latest`), platform tile, e2e expectation, and the staging zone line
+- [x] [AC6] `make test`, `make validate-sync ENV=staging`, `product render --check` exit 0
 - [ ] Owner widens the ACME token (`kubelab-acme-dns`) to `imagesensortool.com` in Cloudflare, provisions the staging zone (VPS, RPi4), and confirms with `toolkit secrets acme-token-scope` (see "What cannot be verified")
 
 ### S4. First deploy by hand (owner, ~80 LOC of runbook)
