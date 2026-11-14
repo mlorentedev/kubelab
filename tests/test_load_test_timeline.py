@@ -529,3 +529,17 @@ class TestNicFacts:
 
     def test_an_unreadable_node_gives_empty_facts_not_an_error(self) -> None:
         assert tl.parse_nic("") == {"rps_cpus": {}, "irq_cpus": {}}
+
+
+class TestReviewFollowUps:
+    def test_softirq_columns_take_their_names_from_the_header_not_their_position(self) -> None:
+        """/proc/stat skips an offline CPU; /proc/softirqs' header names the columns it has."""
+        text = "                    CPU0       CPU2       CPU3\n      NET_RX:         10         20         30\n"
+        assert tl._net_rx(text) == {"cpu0": 10, "cpu2": 20, "cpu3": 30}
+
+    def test_the_nic_command_emits_every_label_the_parser_reads(self) -> None:
+        for label in ('"iface=', '"driver=', '"rps ', '"irq '):
+            assert label in tl.NIC_COMMAND
+
+    def test_an_unmatched_glob_is_not_read_as_a_queue(self) -> None:
+        assert tl.parse_nic("iface=x\nrps rx-*=\n")["rps_cpus"] == {}

@@ -94,10 +94,12 @@ def _sections(text: str) -> list[str]:
 
 def _net_rx(text: str) -> dict[str, int] | None:
     """The NET_RX row of /proc/softirqs per CPU, named as /proc/stat names them (#3375)."""
-    for line in text.splitlines():
+    lines = text.splitlines()
+    names = [name.lower() for name in lines[0].split()] if lines else []
+    for line in lines[1:]:
         fields = line.split()
         if fields and fields[0] == "NET_RX:":
-            return {f"cpu{i}": int(n) for i, n in enumerate(fields[1:])}
+            return dict(zip(names, (int(n) for n in fields[1:]), strict=False))
     return None
 
 
@@ -305,6 +307,8 @@ def parse_nic(text: str) -> dict[str, Any]:
         if not sep:
             continue
         kind, _, name = key.partition(" ")
+        if "*" in name:
+            continue  # a glob that matched nothing, not a queue or vector
         if kind == "rps":
             facts["rps_cpus"][name] = value.strip()
         elif kind == "irq":
