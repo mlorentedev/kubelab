@@ -48,6 +48,7 @@ ENVIRONMENTS = ("staging", "prod")
 
 #: Where a product's apex is granted (EDGE-001), named in refusals.
 DNS_ZONES_RELPATH = "infra/terraform/dns/zones.json"
+_APEX = WILDCARD_ZONE.partition(".")[2]
 
 #: Values subtree a product owns; declarations under it are the product's own.
 OWN_SUBTREE = "apps.platform.{app}."
@@ -90,8 +91,8 @@ def check_staging_hostname(contract: Contract, zones: Iterable[str], apexes: Ite
     (``networking.staging_zones``), or ``staging.<domain>`` whose apex is a Cloudflare zone
     granted in ``infra/terraform/dns/zones.json`` (``apexes``; read from there when omitted).
     The last becomes the product's own split-DNS zone, derived into ``edge.json``. A contract
-    that also declares prod must name ``staging.`` + its prod hostname. The contract model
-    cannot read either file, so this runs at render time.
+    that also declares prod must name the staging hostname ``staging_hostname_for`` derives
+    from it. The contract model cannot read either file, so this runs at render time.
     """
     host = contract.hostnames.staging
     declared = list(zones)
@@ -119,10 +120,27 @@ def check_staging_hostname(contract: Contract, zones: Iterable[str], apexes: Ite
                 f"or use <label>.{WILDCARD_ZONE}",
             ) from exc
     prod = contract.hostnames.prod
-    if prod is not None and host != f"staging.{prod}":
+    if prod is not None and host != (expected := staging_hostname_for(prod)):
         raise _staging_refusal(
-            host, f"is not 'staging.' + the declared prod hostname '{prod}'", f"set hostnames.staging: staging.{prod}"
+            host,
+            f"is not the staging name the declared prod hostname '{prod}' implies",
+            f"set hostnames.staging: {expected}",
         )
+
+
+def staging_hostname_for(prod: str) -> str:
+    """The staging hostname a prod hostname implies (IDP-053 D8, amended by RES-HOST-001 D9).
+
+    One label under the platform apex takes that label under the wildcard zone:
+    ``shop.kubelab.live`` -> ``shop.staging.kubelab.live``, because ``staging.shop.kubelab.live``
+    would sit under prod's cookie domain while staging's Authelia scopes to the wildcard zone.
+    Every other prod hostname takes ``staging.`` + itself. (The label ``staging`` gives the same
+    name either way: ``staging.staging.kubelab.live``.)
+    """
+    label, _, parent = prod.partition(".")
+    if parent == _APEX:
+        return f"{label}.{WILDCARD_ZONE}"
+    return f"staging.{prod}"
 
 
 def _staging_refusal(host: str, reason: str, fix: str) -> ContractError:

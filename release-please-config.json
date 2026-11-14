@@ -16,6 +16,10 @@
       "release-type": "simple",
       "component": "api"
     },
+    "apps/console": {
+      "release-type": "simple",
+      "component": "console"
+    },
     "edge/errors": {
       "release-type": "simple",
       "component": "errors"
