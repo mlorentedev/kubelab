@@ -102,6 +102,8 @@ def test_the_class_may_be_given_explicitly(tmp_path: Path) -> None:
         (_claims(daily__active_deadline_seconds=0), "resources.daily.job.params.active_deadline_seconds"),
         ({"Data": CLAIMS["data"]}, "resources.Data"),
         ({"-data": CLAIMS["data"]}, "resources.-data"),
+        # A trailing hyphen would render the PVC `<app>-data-`, which Kubernetes refuses.
+        ({"data-": CLAIMS["data"]}, "resources.data-"),
         ({"d" * 32: CLAIMS["data"]}, "resources." + "d" * 32),
         ({"data": {"type": "volume"}}, "resources.data.volume.params"),
         ([CLAIMS["data"]], "resources"),
@@ -133,6 +135,54 @@ def test_a_job_must_mount_a_declared_volume_claim(tmp_path: Path, volume: str) -
     assert "field 'resources.daily.params.volume'" in err.error
     assert f"'{volume}'" in err.error
     assert "data" in err.fix
+
+
+def test_volumes_naming_different_fs_groups_are_refused(tmp_path: Path) -> None:
+    """A pod has one `fsGroup`; two volumes asking for different ones cannot both be honoured."""
+    claims = {
+        **_claims(),
+        "logs": {"type": "volume", "params": {"size": "1Gi", "mount_path": "/logs", "fs_group": 20002}},
+    }
+    contract = validate_contract(_write(tmp_path, _with(claims)))
+
+    with pytest.raises(ContractError) as excinfo:
+        check_resources(contract)
+    err = excinfo.value
+    # The first volume to name a group sets it; the one that disagrees is the field to fix.
+    assert "field 'resources.logs.params.fs_group'" in err.error
+    assert "10001" in err.error and "20002" in err.error
+    assert "fsGroup" in err.why
+    assert "fs_group" in err.fix
+
+
+@pytest.mark.parametrize("other", [10001, None], ids=["same-group", "no-group"])
+def test_volumes_naming_one_fs_group_at_most_are_accepted(tmp_path: Path, other: int | None) -> None:
+    params = {"size": "1Gi", "mount_path": "/logs", **({"fs_group": other} if other else {})}
+    claims = {**_claims(), "logs": {"type": "volume", "params": params}}
+
+    check_resources(validate_contract(_write(tmp_path, _with(claims))))
+
+
+@pytest.mark.parametrize("name", ["d", "data", "d" * 31, "a1-b2"])
+def test_a_resource_name_may_be_one_letter_to_thirty_one_ending_alphanumeric(tmp_path: Path, name: str) -> None:
+    validate_contract(_write(tmp_path, _with({name: CLAIMS["data"]})))
+
+
+def test_volumes_mounting_the_same_path_are_refused(tmp_path: Path) -> None:
+    """Kubernetes rejects a container with two mounts at one path; refuse it before any manifest."""
+    claims = {
+        **_claims(),
+        "logs": {"type": "volume", "params": {"size": "1Gi", "mount_path": "/app/data"}},
+    }
+    contract = validate_contract(_write(tmp_path, _with(claims)))
+
+    with pytest.raises(ContractError) as excinfo:
+        check_resources(contract)
+    err = excinfo.value
+    assert "field 'resources.logs.params.mount_path'" in err.error
+    assert "/app/data" in err.error and "'resources.data'" in err.error
+    assert "mount" in err.why
+    assert "mount_path" in err.fix
 
 
 def test_the_admins_auth_level_validates_and_renders_as_forwardauth(tmp_path: Path) -> None:
