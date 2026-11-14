@@ -91,7 +91,27 @@ fi
 echo "key id=${KEY_ID}"
 
 echo
+# The drill revokes the key, so refuse to start where the restore cannot run:
+# the provision freshness guard refuses a checkout behind origin/master.
+git -C "${REPO_ROOT}" fetch -q origin master
+if ! git -C "${REPO_ROOT}" merge-base --is-ancestor origin/master HEAD; then
+  echo "FAIL — this checkout is behind origin/master, so the re-provision in step 4 would be refused."
+  echo "Merge origin/master first. Nothing was revoked."
+  exit 1
+fi
+
+# From here on the node may have no key on the forge until step 5 confirms it.
+RESTORED=0
+on_exit() {
+  if [ "${RESTORED}" -ne 1 ]; then
+    echo
+    echo "${ACE2}'s forge key may be revoked. Restore it with:"
+    echo "  make provision NODE=${ACE2} ENV=staging TAGS=gitea"
+  fi
+}
+
 echo "--- [3/5] revoke it, and retry with no wait (R3: effective in <1s) ---"
+trap on_exit EXIT
 api -o /dev/null -w "DELETE /admin/users/${AGENT}/keys/${KEY_ID} -> %{http_code}\n" \
   -X DELETE "${GITEA_API}/admin/users/${AGENT}/keys/${KEY_ID}"
 after_revoke="$(node_access)"
@@ -105,14 +125,19 @@ echo
 echo "--- [4/5] re-provision to restore it ---"
 # The role re-registers because its idempotence key is the KEY MATERIAL: the
 # node's keypair still exists, the account no longer lists it, so the POST runs.
-(cd "${REPO_ROOT}" && make provision NODE="${ACE2}" ENV=staging TAGS=gitea) \
-  | tail -5
+out="$(cd "${REPO_ROOT}" && make provision NODE="${ACE2}" ENV=staging TAGS=gitea 2>&1)"
+rc=$?
+printf '%s\n' "${out}" | tail -5
+if [ "${rc}" -ne 0 ]; then
+  echo "FAIL — the provision run failed (exit ${rc}); the key is NOT restored."
+  exit 1
+fi
 
 echo
 echo "--- [5/5] access is restored ---"
 restored="$(node_access)"
 echo "${restored}"
 case "${restored}" in
-  *"Hi there, ${AGENT}!"*) echo "PASS — both halves demonstrated" ;;
+  *"Hi there, ${AGENT}!"*) RESTORED=1; echo "PASS — both halves demonstrated" ;;
   *) echo "FAIL — re-provisioning did not restore access."; exit 1 ;;
 esac

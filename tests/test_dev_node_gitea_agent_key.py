@@ -107,3 +107,87 @@ def test_the_removal_loop_tolerates_a_missing_fingerprint() -> None:
     assert "if _gitea_key_fp.rc == 0 else []" in removal["loop"], (
         "with no fingerprint, `stdout.split(' ')[1]` raises before `when` is read"
     )
+
+
+# The two guards below were in test_dev_node_npm_converges.py; they guard the forge
+# key, not npm (ANSIBLE-037 review, F11).
+def _tasks() -> list[dict]:
+    """Every task in the role, including those nested in a block."""
+    flat: list[dict] = []
+    for task in yaml.safe_load(ROLE_TASKS.read_text(encoding="utf-8")):
+        flat.append(task)
+        flat.extend(task.get("block") or [])
+    return flat
+
+
+def _task_named(name: str) -> dict:
+    for task in _tasks():
+        if task.get("name") == name:
+            return task
+    raise AssertionError(f"no task named {name!r}")
+
+
+def test_the_forge_key_is_looked_up_by_fingerprint() -> None:
+    """The forge answers whether the key is registered; the role does not parse a list.
+
+    The previous comparison ran `regex_replace(..., '\\2')` inside Jinja, which
+    reads '\\2' as chr(2). No key ever matched, so every pass after the first
+    POSTed the key again and failed on Gitea's 422 (ace2, 2026-10-01).
+    """
+    lookup = _task_named("Look up this node's key on each account it may be on")
+    assert "/users/{{ item }}/keys?fingerprint=" in lookup["ansible.builtin.uri"]["url"], (
+        "a fingerprint query on /user/keys is not restricted to an owner, so another account's copy would match"
+    )
+    assert lookup["loop"] == ["{{ dev_node_gitea_former_user }}", "{{ dev_node_gitea_user }}"], (
+        "the register step reads results[1] as the agents' account; the loop order is load-bearing"
+    )
+    register = _task_named("Register this node's public key on the agents' account")
+    when = " ".join(register["when"]) if isinstance(register["when"], list) else register["when"]
+    assert "regex_replace" not in when
+    assert "_gitea_keys.results[1].json" in when
+    assert "selectattr('fingerprint'" in when, (
+        "match the fingerprint on the answer too: a forge that ignored the filter "
+        "would return every key, and any key would read as this node's"
+    )
+    assert register["changed_when"] == "_gitea_key_post.status == 201", "a POST that creates a key is a change"
+
+
+def test_the_forge_key_lookup_survives_a_dry_run() -> None:
+    """`--check` skips a `command` task, and the lookup templates its stdout."""
+    lookup = _task_named("Look up this node's key on each account it may be on")
+    assert lookup.get("check_mode") is False
+    assert lookup.get("when") == "_gitea_key_fp.rc == 0"
+
+
+def test_an_empty_credential_skips_loudly() -> None:
+    """A loaded vault without the key must not give a silent, green, access-less node."""
+    tasks = yaml.safe_load(ROLE_TASKS.read_text(encoding="utf-8"))
+    names = [t.get("name") for t in tasks]
+    notice = tasks[names.index("Say the forge block is skipped, and why")]
+    block = tasks[names.index("Configure git access to the private forge")]
+    assert notice["when"] == "dev_node_gitea_admin_password | length == 0"
+    assert block["when"] == "dev_node_gitea_admin_password | length > 0", (
+        "the notice must be the block's exact complement"
+    )
+    assert "SKIPPED" in notice["ansible.builtin.debug"]["msg"]
+    assert "gitea" in notice["tags"] and set(block["tags"]) <= set(notice["tags"]), (
+        "with --tags gitea an untagged notice is skipped, and the node is silent again"
+    )
+    assert names.index("Say the forge block is skipped, and why") < names.index(
+        "Configure git access to the private forge"
+    )
+
+
+def test_an_existing_key_is_recommented_to_its_account() -> None:
+    """`creates:` never revisits a key, so the comment is converged separately."""
+    recomment = _task_named("Re-comment the key with the identity it is registered to")
+    cmd = recomment["ansible.builtin.command"]
+    assert "ssh-keygen -c" in cmd and "{{ dev_node_gitea_user }}@{{ inventory_hostname }}" in cmd
+    assert "_gitea_key_comment.stdout" in recomment["when"], (
+        "re-comment only on a mismatch, or it reports changed every run"
+    )
+    read = _task_named("Read the comment on this node's forge key")
+    assert read["changed_when"] is False and read["check_mode"] is False
+    assert read["failed_when"] == "_gitea_key_comment.rc != 0 and not ansible_check_mode", (
+        "a dry run on a fresh node has no key yet; only a real run may fail here"
+    )
