@@ -264,7 +264,9 @@ To show the prune calls `forget` rather than waiting, `make backup-node NODE=all
 
 On rpi3 and rpi4 the tail starts after the `forget` verdict, but the wait exits before `forget` and `--prune` runs only behind it, so a pack removal there proves `forget` ran.
 
-What the refused packs are: R2 answered `The object is locked by the bucket policy` for packs younger than R that the prune found unreferenced. restic retried for about 15 minutes, logged `unable to remove data/<id> from the repository`, went on, and exited 0. That is the lock doing its job, and it is not the case lesson-628 describes: there a refused *snapshot* delete made `forget` exit 3. A refused *pack* delete leaves an orphan that a later prune removes once the lock lets it, and costs only its bytes until then.
+The nightly runs were forgetting too, not waiting. The snapshots this run forgot are the next ones to age out after the 00:0x nightly, never older ones: on the VPS the nightly ran at 00:02:41Z and this run removed `f0d4f68f` from 2026-10-14 00:03:37Z, 56 seconds inside the nightly's 31 days. ace2 and beelink removed only snapshots from 2026-10-14 01:44 local on.
+
+What the refused packs are: R2 answered `The object is locked by the bucket policy` for unreferenced packs younger than R. restic retried for about 15 minutes, logged `unable to remove data/<id> from the repository`, went on, and exited 0. The retention flags carry `--max-repack-size 0`, so the prune repacks nothing and did not make them: they were orphaned before this run, most likely by ships killed mid-upload during the edge outages (not confirmed). This is not the case lesson-628 describes, where a refused *snapshot* delete made `forget` exit 3. But it recurs: every nightly on those nodes pays the same retry until the packs are older than R, and rc 0 hides it. Filed as #3496.
 
 Caveats:
 - The `forget` evidence comes from a run started by hand. It is the same systemd unit the timer starts, but the nightly journals are not in Loki, and the codified read shows the last 30 lines of the last run only.
