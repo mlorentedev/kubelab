@@ -117,6 +117,17 @@ def test_a_host_whose_apex_is_not_a_declared_zone_is_refused_naming_zones_json(w
     assert "staging.ungranted.test" in message and "zones.json" in message
 
 
+@pytest.mark.parametrize("zone", ["kubelab.live", "shop.kubelab.live", "staging.ungranted.test"])
+def test_a_declared_zone_is_held_to_the_same_shape_and_grant(world: tuple[Path, Path], zone: str) -> None:
+    """The hand-edited list is the likeliest place for a bare apex; it gets no pass for being declared."""
+    registry, snapshots = world
+
+    with pytest.raises(EdgeDnsError) as excinfo:
+        edge_dns.derive_staging_zones([*DECLARED, zone], APEXES, registry=registry, snapshot_dir=snapshots)
+
+    assert zone in str(excinfo.value)
+
+
 @pytest.mark.parametrize("host", ["example-product.test", "shop.example-product.test", "staging.test"])
 def test_a_granted_name_that_is_not_staging_dot_a_domain_never_becomes_a_zone(
     world: tuple[Path, Path], host: str
@@ -197,9 +208,26 @@ def test_a_new_product_adds_its_probe_target_and_removing_it_drops_it(world: tup
 
 
 def test_every_committed_registered_hostname_has_its_apex_probed() -> None:
-    """The guard #3482 asks for, on the committed registry: no registered hostname escapes the probe."""
-    zones = set(edge_dns.acme_probe_zones({"staging": [], "prod": []}, edge_dns.granted_apexes()))
-    for env in ("staging", "prod"):
-        for host in edge_dns.registered_hostnames(env):
-            assert edge_dns.apex_of(host, edge_dns.granted_apexes()) in zones, host
-    assert "imagesensortool.com" in zones
+    """The guard #3482 asks for, on the committed tree: the probe is exactly the registered apexes.
+
+    The expectation is computed here, from the snapshots and ``zones.json`` directly, not through
+    ``registered_hostnames`` or ``apex_of``, so a derivation that narrowed (one product per env,
+    one env) differs from it.
+    """
+    granted = json.loads(edge_dns.DNS_ZONES.read_text(encoding="utf-8"))
+    registry = yaml.safe_load((edge_dns.SNAPSHOT_DIR.parents[1] / "products.yaml").read_text(encoding="utf-8"))
+    expected = set()
+    for env, folder in (("staging", edge_dns.SNAPSHOT_DIR), ("prod", edge_dns.SNAPSHOT_DIR / "prod")):
+        for app in registry["products"]:
+            snapshot = folder / f"{app}.yaml"
+            if not snapshot.exists():
+                continue
+            host = (yaml.safe_load(snapshot.read_text(encoding="utf-8")).get("hostnames") or {}).get(env)
+            if host:
+                expected.add(max((a for a in granted if host == a or host.endswith(f".{a}")), key=len))
+
+    probed = edge_dns.acme_probe_zones({"staging": [], "prod": []}, edge_dns.granted_apexes())
+
+    assert sorted(probed) == sorted(expected)
+    assert len(probed) == len(set(probed))
+    assert "imagesensortool.com" in probed
