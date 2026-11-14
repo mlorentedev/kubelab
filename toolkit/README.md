@@ -131,7 +131,7 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit infra k8s deploy` | Deploy K8s manifests to the cluster. |
 | `toolkit infra k8s dry-run` | Generate manifests and validate with dry-run (no apply). |
 | `toolkit infra k8s fetch-kubeconfig` | Fetch a cluster's kubeconfig with a transport-agnostic server (ADR-052). |
-| `toolkit infra k8s provision-postgres-tenant` | Idempotently provision tenant roles and databases in PostgreSQL (infra.postgres). |
+| `toolkit infra k8s provision-postgres-tenant` | Idempotently provision tenant roles, databases and read-only roles in PostgreSQL (infra.postgres). |
 | `toolkit infra k8s render-apply` | Render RESOLVE_* placeholders (MagicDNS) in a single manifest, then server-side apply. |
 | `toolkit infra k8s restart` | Restart any K8s deployment (rollout restart + wait) on the env's cluster. |
 | `toolkit infra k8s status` | Show K8s resource status for the kubelab namespace. |
@@ -245,6 +245,7 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit tools deploy-shape` | Judge whether a PR is a mechanical staging deploy (DELIVERY-004, #1619). |
 | `toolkit tools lessons-index` | Order each category's lesson rows newest first (by date, then by number within a date, #1912), after refusing a corpus a rewrite would hide. |
 | `toolkit tools mutate` | Run the test unmutated, apply one replacement, run it again, restore the file. |
+| `toolkit tools renovate-dry-run` | Run the pinned Renovate engine over the working tree, extract only. |
 | `toolkit tools review-attestation` | Report whether a PR was actually reviewed, and refuse it if not. |
 | `toolkit tools spec-gate` | Refuse a PR that closes a spec's issue without archiving the spec. |
 | `toolkit tools tests-p50` | Median time `Tests` keeps a pull request waiting, split into suite and runner wait. |

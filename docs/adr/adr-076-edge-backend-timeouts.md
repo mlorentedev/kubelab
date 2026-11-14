@@ -1,7 +1,7 @@
 ---
 id: adr-076-edge-backend-timeouts
 type: adr
-status: proposed
+status: accepted
 created: "2026-11-12"
 owner: manu
 ---
@@ -10,7 +10,7 @@ owner: manu
 
 ## Status
 
-Proposed 2026-11-12, for the owner's decision. Tracks #3076 (OPS-065). The values are chosen from the measurement in `specs/OPS-065-edge-backend-timeouts/verification.md` ("Measurement, prod, 2026-11-12").
+Accepted 2026-11-12 (#3366), option A as proposed. Tracks #3076 (OPS-065). The values are chosen from the measurement in `specs/OPS-065-edge-backend-timeouts/verification.md` ("Measurement, prod, 2026-11-12").
 
 ## Context
 
@@ -30,7 +30,7 @@ A. **A default `responseHeaderTimeout` for every route, with named exceptions.**
 B. **`inFlightReq` per host in the default middleware chain.** It caps how many requests a host may hold, not how long. A stuck backend still holds its share forever, and a legitimate burst is refused.
 C. **Both.**
 
-## Decision (proposed)
+## Decision
 
 1. **Option A, with a default of 60 s.** No route measured in seven days waited longer than that for its headers.
    - 30 s would also have cut nothing measured, but it leaves 5 s over socket.io's default 25 s long-poll interval (Uptime Kuma). Kuma's own setting was not read.

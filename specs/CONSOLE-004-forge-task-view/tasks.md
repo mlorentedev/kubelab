@@ -53,7 +53,7 @@ created: "2026-10-21"
   - [x] ✓ 2026-11-03 Deliver `FORGE_GITHUB_WEBHOOK_SECRET` and `FORGE_GITEA_WEBHOOK_SECRET` through SOPS and `SECRET_CATALOG`, prod only: staging is VPN-only, so no forge reaches it
   - [ ] Register the two webhooks as code
     - [x] ✓ 2026-11-05 GitHub: the App's own hook, `make forge-github-hook` (plan; `APPLY=1` writes, `SECRET=1` resends after a rotation). The events and the Active toggle are the operator's settings step, which the command checks (lesson-714)
-    - [ ] Gitea: the sources now name each declared Gitea repository, so `repository_settings.webhooks` (one hook per declared repository) matches them; what remains is declaring the hook to the API there
+    - [ ] Gitea: declared in `repository_settings.webhooks` (#3420); ticked once the reconcile has written it and a delivery has been read back
 - [x] ✓ 2026-11-02 [AC4] Test: the same delivery twice projects once (`TestSameDeliveryProjectsOnce`, against Postgres)
 - [x] ✓ 2026-11-02 [AC4] Periodic reconcile per source every 10 minutes under the hourly call ceiling, with a guard test that counts calls. The ceiling is per forge since 2026-11-09, when the Gitea reader was wired (see the sources task below)
 - [ ] [AC1] Queue endpoint with the inbox reason (author, requested reviewer, failing CI, waiting on me). `GET /console/queue` serves the open items without reasons since 2026-11-04; the reasons need the operator's login per forge and check-run reads
@@ -67,8 +67,8 @@ created: "2026-10-21"
 ### 2. Access and UI
 
 - [x] [AC3] The console on its own host behind Authelia (`console.kubelab.live`, see "The console" in `proposal.md`); the api serves `/console` only for that host ✓ 2026-11-04
-- [ ] [AC3] Authelia in front of the write routes; 401 without a credential
-- [ ] [AC3] Machine token in SOPS and `SECRET_CATALOG`, accepted on the create write only; test that every other route refuses it
+- [x] ✓ 2026-11-13 [AC3] Authelia in front of the write routes; 401 without a credential (#3425: the write routes live under `/console/issues`, and the pod answers 401 without `Remote-User`)
+- [x] ✓ 2026-11-13 [AC3] Machine token in SOPS and `SECRET_CATALOG`, accepted on the create write only; test that every other route refuses it (#3425: `POST /api/forge/issues` on the api host, because Authelia does not forward `Authorization`; `apps.platform.api.forge_create_token`)
 - [x] [AC1] Queue page, read-only, with each source's freshness visible ✓ 2026-11-04
 - [ ] [AC1] Inbox screen with the reasons, once the queue endpoint carries them
 
@@ -76,7 +76,7 @@ created: "2026-10-21"
 
 - [ ] [AC2] Outbox with an idempotency key; a write is pending until the forge confirms
 - [ ] [AC2] Create (repository chosen by `area:`, `knowledge` fallback), label, assign, close and reopen
-- [ ] [AC2] Test that no merge, review or reviewer-request route exists
+- [x] ✓ 2026-11-13 [AC2] Test that no merge, review or reviewer-request route exists (#3425, read from the engine's routes)
 - [ ] [AC2] Audit row for every write
 
 ### 4. Observability
@@ -84,9 +84,14 @@ created: "2026-10-21"
 - [x] [P] [AC6] Structured log events for freshness, webhook failures and reconcile duration, through Vector to Loki ✓ 2026-11-12 (#3342)
 - [x] [P] [AC6] Projection backlog as a structured event (`forge_projection_backlog`: the deliveries the projector has not marked; not the AC2 outbox, which is the outbound write queue) ✓ 2026-11-13 (#3410)
 - [ ] [AC6] Read-only Postgres role on a counts-only view, a Grafana datasource, and the dashboard (throughput, queue age, time to first review, time with a red CI, items by status, priority and area)
-- [ ] [AC6] The datasource credential reaches Grafana through a Secret (`secureJsonData`, read from env or file), never the plain `grafana-datasources` ConfigMap, and a change to it restarts Grafana (generated name or explicit restart)
+  - [x] ✓ 2026-11-13 (#3419) View `forge_stats` (no title, URL, author, assignee, free-text label or number), role `forge_stats` with `SELECT` on that view only (provisioner `READER_ROLES`), datasource `forge-stats`, dashboard `forge-stats`: throughput, queue age, items by status, priority and area, source freshness. Throughput and queue age run on `updated_at`: the read model keeps no `created_at` or `closed_at`
+  - [ ] Time to first review and time with a red CI: left out until the CI state of AC1's inbox reasons exists in the read model
+  - [ ] Applied to staging and the dashboard read there, by the operator's go (#3419)
+- [x] [AC6] The datasource credential reaches Grafana through a Secret (`secureJsonData`, read from env or file), never the plain `grafana-datasources` ConfigMap, and a change to it restarts Grafana (generated name or explicit restart) ✓ 2026-11-13 (#3419): `secureJsonData.password` is `$FORGE_STATS_DB_PASSWORD`, filled from `grafana-admin` (`forge-stats-db-password`); `grafana-datasources` is a hashed generator, so a datasource change rolls the pod, and a changed Secret restarts Grafana through `apply-secrets`
 - [x] [AC6] Grafana alert for a source not read within the declared bound ✓ 2026-11-12 (#3387): GitHub sources page, Gitea sources (on-demand Beelink) reach the log tier; a source never read since the api started writes no `age_seconds` and is not seen
 - [ ] [AC6] NetworkPolicy rule for Grafana to Postgres (NET-002) and the dashboard shown with no private titles
+  - [x] ✓ 2026-11-13 (#3419) Grafana in `postgres-ingress`; the view has no title column, held by `forge_stats_test.go`
+  - [ ] The dashboard read on staging, by the operator's go (#3419)
 
 ### 5. Operations
 

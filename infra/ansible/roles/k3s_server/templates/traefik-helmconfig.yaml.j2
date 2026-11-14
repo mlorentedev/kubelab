@@ -99,11 +99,13 @@ spec:
       - name: crowdsec-bouncer-traefik
         mountPath: "/etc/traefik/crowdsec"
         type: secret
-{% if k3s_traefik_acme_enabled %}
-    providers:
-      kubernetesCRD:
-        allowCrossNamespace: true
     additionalArguments:
+      # The edge stops waiting for a backend's headers after a bound (ADR-076).
+      # A route that needs longer references a ServersTransport of its own,
+      # declared in `edge.backend_timeouts.exceptions` (common.yaml).
+      - "--serversTransport.forwardingTimeouts.responseHeaderTimeout={{ k3s_traefik_response_header_timeout }}"
+      - "--serversTransport.forwardingTimeouts.dialTimeout={{ k3s_traefik_dial_timeout }}"
+{% if k3s_traefik_acme_enabled %}
       # `api.dashboard` serves the dashboard through `api@internal`, which is
       # reachable only via an IngressRoute -- so it inherits that route's
       # middlewares, Authelia included.
@@ -130,6 +132,9 @@ spec:
       - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
       - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
       - "--entrypoints.web.http.redirections.entryPoint.permanent=true"
+    providers:
+      kubernetesCRD:
+        allowCrossNamespace: true
     env:
       - name: CF_DNS_API_TOKEN
         valueFrom:

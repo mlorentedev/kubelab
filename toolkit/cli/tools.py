@@ -254,6 +254,44 @@ def certs_status(
 
 
 # =============================================================================
+# RENOVATE DRY RUN (#3440)
+# =============================================================================
+
+
+@app.command("renovate-dry-run")
+def renovate_dry_run() -> None:
+    """Run the pinned Renovate engine over the working tree, extract only.
+
+    Prints what each manager extracted. Touches no forge and opens nothing.
+    """
+    import tempfile
+
+    import httpx
+
+    from toolkit.features import renovate_dry_run as dry
+
+    repo = Path.cwd()
+    try:
+        image = dry.engine_image(repo / "infra" / "config" / "values" / "common.yaml")
+    except httpx.HTTPError as e:
+        logger.error(f"cannot read the engine pin from ci-workflows: {e}")
+        raise typer.Exit(1) from e
+    logger.info(f"engine: {image}")
+    base = Path.home() / ".cache" / "kubelab-renovate"
+    base.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=base) as out:
+        try:
+            report = dry.run_extract(repo, Path(out), image)
+        except (RuntimeError, subprocess.TimeoutExpired) as e:
+            logger.error(str(e))
+            raise typer.Exit(1) from e
+        rows = sorted(dry.extracted(report))
+    for manager, package_file, dep, value in rows:
+        print(f"{manager:16} {package_file:40} {dep} {value}")
+    logger.success(f"{len(rows)} dependencies extracted")
+
+
+# =============================================================================
 # SPEC GATE (CI-GATE-009)
 # =============================================================================
 

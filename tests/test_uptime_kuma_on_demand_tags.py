@@ -103,7 +103,6 @@ UNRESOLVED_PAGING = {
     "prod-web-kubelab-live",
     "prod-web-mlorente-dev",
     "services-auth-argo-cd",
-    "services-leaving-denver",
     "services-monitoring-uptime-kuma-prod",
 }
 MUTED_TAGS = set(COMMON["apps"]["services"]["observability"]["uptime_kuma"]["muted_notification_tags"])
