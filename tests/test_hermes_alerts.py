@@ -299,10 +299,10 @@ def test_the_memory_keeps_hashes_not_alert_text(tmp_path) -> None:
 def test_a_corrupt_or_unwritable_memory_never_stops_the_report(tmp_path) -> None:
     script = _script()
     bad = tmp_path / "state.json"
-    bad.write_text("{not json", encoding="utf-8")
+    bad.write_text("{not json", encoding="utf-8", newline="\n")
     assert script.load_seen(bad, NOW) == {}
     blocker = tmp_path / "file"
-    blocker.write_text("x", encoding="utf-8")
+    blocker.write_text("x", encoding="utf-8", newline="\n")
     script.save_seen(blocker / "state" / "x.json", {"a": NOW})  # parent is a file: must not raise
 
 
@@ -361,5 +361,5 @@ def test_two_alerts_that_differ_only_after_the_displayed_text_are_two_alerts() -
 
 def test_a_null_timestamp_in_the_memory_is_unreadable_state(tmp_path) -> None:
     path = tmp_path / "state.json"
-    path.write_text('{"hash": null}', encoding="utf-8")
+    path.write_text('{"hash": null}', encoding="utf-8", newline="\n")
     assert _script().load_seen(path, NOW) == {}

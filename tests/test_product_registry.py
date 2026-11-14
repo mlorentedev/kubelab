@@ -28,7 +28,7 @@ def fixture_registry(monkeypatch: pytest.MonkeyPatch) -> Path:
 
 def _write(tmp_path: Path, body: str) -> Path:
     path = tmp_path / "products.yaml"
-    path.write_text(body, encoding="utf-8")
+    path.write_text(body, encoding="utf-8", newline="\n")
     return path
 
 

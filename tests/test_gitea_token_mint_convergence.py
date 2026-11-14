@@ -98,7 +98,9 @@ def test_each_revoke_reads_the_same_sops_value_and_account_as_its_mint() -> None
     for item in task["loop"]:
         var = re.fullmatch(r"\{\{ (gitea_\w+_token) \| length > 0 \}\}", item["recorded"]).group(1)
         user = re.fullmatch(r"\{\{ (\w+) \}\}", item["user"]).group(1)
-        assert (var, user) == gates[item["name"]], f"{item['name']}: revoke reads {(var, user)}, mint {gates[item['name']]}"
+        assert (var, user) == gates[item["name"]], (
+            f"{item['name']}: revoke reads {(var, user)}, mint {gates[item['name']]}"
+        )
 
 
 def test_the_revoke_skips_a_recorded_token() -> None:
@@ -137,7 +139,7 @@ def test_the_preflight_checks_the_tool_the_record_tasks_run() -> None:
     checked = _tasks()[_index("Assert the controller can record a minted token")]["stat"]["path"]
     assert len(_records()) >= len(_mints()), "the record tasks were not found; the scan no longer matches the role"
     for task in _records():
-        assert task["command"].startswith(f"{checked} "),f"{task['name']}: runs a tool the preflight never checked"
+        assert task["command"].startswith(f"{checked} "), f"{task['name']}: runs a tool the preflight never checked"
 
 
 def test_the_preflight_runs_whenever_a_record_would() -> None:

@@ -396,7 +396,7 @@ class TestFailsClosed:
 
     def test_invalid_json_raises(self, tmp_path: pathlib.Path) -> None:
         bad = tmp_path / "r.json"
-        bad.write_text("{not json", encoding="utf-8")
+        bad.write_text("{not json", encoding="utf-8", newline="\n")
         with pytest.raises(RegistryError):
             load_registry(bad)
 
@@ -421,7 +421,7 @@ class TestFailsClosed:
         configured" — permissive, the one direction this must never fail in.
         """
         bad = tmp_path / "r.json"
-        bad.write_text(json.dumps(payload), encoding="utf-8")
+        bad.write_text(json.dumps(payload), encoding="utf-8", newline="\n")
         with pytest.raises(RegistryError):
             load_registry(bad)
 

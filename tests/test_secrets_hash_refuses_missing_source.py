@@ -38,7 +38,7 @@ class _Vault:
     def __init__(self, directory: Path, decrypted: dict[str, Any]) -> None:
         self.secrets_path = directory
         self.file = directory / f"{ENV}.enc.yaml"
-        self.file.write_text("sops: {}\n", encoding="utf-8")
+        self.file.write_text("sops: {}\n", encoding="utf-8", newline="\n")
         self.decrypted = decrypted
 
     def _decrypt_sops(self, _path: Path) -> dict[str, Any]:

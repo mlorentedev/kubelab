@@ -21,6 +21,7 @@ from pathlib import Path
 import pytest
 
 from tests.test_node_backup_role import _render
+from tests.shells import BASH
 
 TRAILER = "-- PostgreSQL database cluster dump complete"
 SOURCES = {
@@ -55,11 +56,12 @@ def capture(tmp_path: Path):
             node_backup_capture_sentinel=str(sentinel),
         ),
         encoding="utf-8",
+        newline="\n",
     )
     bindir = tmp_path / "bin"
     bindir.mkdir()
     kubectl = bindir / "kubectl"
-    kubectl.write_text(FAKE_KUBECTL, encoding="utf-8")
+    kubectl.write_text(FAKE_KUBECTL, encoding="utf-8", newline="\n")
     kubectl.chmod(kubectl.stat().st_mode | stat.S_IXUSR)
     log = tmp_path / "kubectl.log"
 
@@ -71,7 +73,7 @@ def capture(tmp_path: Path):
             "FAKE_LOG": str(log),
             "TRAILER": TRAILER,
         }
-        return subprocess.run(["bash", str(script)], capture_output=True, text=True, encoding="utf-8", env=env)
+        return subprocess.run([BASH, str(script)], capture_output=True, text=True, encoding="utf-8", env=env)
 
     run.staging = staging  # type: ignore[attr-defined]
     run.sentinel = sentinel  # type: ignore[attr-defined]

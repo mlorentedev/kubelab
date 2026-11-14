@@ -68,7 +68,7 @@ networking:
 @pytest.fixture
 def common_yaml(tmp_path: Path) -> Path:
     p = tmp_path / "common.yaml"
-    p.write_text(_COMMON, encoding="utf-8")
+    p.write_text(_COMMON, encoding="utf-8", newline="\n")
     return p
 
 
@@ -103,6 +103,7 @@ class TestResolveTransport:
             "    apiserver_port: 7443\n"
             "networking:\n  nodes:\n    ace1:\n      tailscale_ip: 100.64.0.11\n",
             encoding="utf-8",
+            newline="\n",
         )
         assert resolve_transport("staging", p).apiserver_port == 7443
 
@@ -113,6 +114,7 @@ class TestResolveTransport:
             "clusters:\n  staging:\n    node: ace1\n    ssh_alias: ace1\n    local_port: 16443\n"
             "networking:\n  nodes:\n    ace1:\n      tailscale_ip: 100.64.0.99\n",
             encoding="utf-8",
+            newline="\n",
         )
         assert resolve_transport("staging", p).target_host == "100.64.0.99"
 
@@ -126,6 +128,7 @@ class TestResolveTransport:
             "clusters:\n  staging:\n    node: ghost\n    ssh_alias: ghost\n    local_port: 16443\n"
             "networking:\n  nodes: {}\n",
             encoding="utf-8",
+            newline="\n",
         )
         with pytest.raises(KeyError, match="ghost"):
             resolve_transport("staging", p)
@@ -159,7 +162,7 @@ networking:
     def test_a_hub_pointed_at_gcp1_resolves(self, tmp_path: Path) -> None:
         """The cutover's first requirement: `clusters.hub.node: gcp1` must resolve."""
         p = tmp_path / "common.yaml"
-        p.write_text(self._GCP_COMMON, encoding="utf-8")
+        p.write_text(self._GCP_COMMON, encoding="utf-8", newline="\n")
         t = resolve_transport("hub", p)
         assert t.kind == "ts-bridge"
         assert t.target_host == "100.64.0.9"
@@ -180,6 +183,7 @@ networking:
             "clusters:\n  hub:\n    node: ghost\n    ssh_alias: ghost\n    local_port: 16445\n"
             "networking:\n  nodes: {}\n",
             encoding="utf-8",
+            newline="\n",
         )
         with pytest.raises(KeyError) as exc:
             resolve_transport("hub", p)
@@ -212,7 +216,7 @@ class TestLocateTsBridge:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         binary = tmp_path / "ts-bridge.exe"
-        binary.write_text("", encoding="utf-8")
+        binary.write_text("", encoding="utf-8", newline="\n")
         monkeypatch.setenv("TS_BRIDGE_BIN", str(binary))
         assert locate_ts_bridge() == binary
 
@@ -275,6 +279,7 @@ class TestResolveSshTunnelParams:
             "clusters:\n  prod:\n    node: vps\n    ssh_alias: vps\n    local_port: 16444\n"
             "networking:\n  vps:\n    public_ip: 1.2.3.4\n  ssh_users:\n    cloud: deployer\n",
             encoding="utf-8",
+            newline="\n",
         )
         with pytest.raises(KeyError, match="mesh address"):
             resolve_ssh_tunnel_params("prod", p)
@@ -296,7 +301,7 @@ class TestTsBridgeTunnel:
 
     def test_yields_pid_and_terminates_on_normal_exit(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         fake_binary = tmp_path / "ts-bridge"
-        fake_binary.write_text("", encoding="utf-8")
+        fake_binary.write_text("", encoding="utf-8", newline="\n")
         monkeypatch.setattr(tc, "locate_ts_bridge", lambda: fake_binary)
         mock_proc = self._mock_proc()
         monkeypatch.setattr(subprocess, "Popen", lambda *a, **kw: mock_proc)
@@ -311,7 +316,7 @@ class TestTsBridgeTunnel:
 
     def test_guaranteed_teardown_when_body_raises(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         fake_binary = tmp_path / "ts-bridge"
-        fake_binary.write_text("", encoding="utf-8")
+        fake_binary.write_text("", encoding="utf-8", newline="\n")
         monkeypatch.setattr(tc, "locate_ts_bridge", lambda: fake_binary)
         mock_proc = self._mock_proc()
         monkeypatch.setattr(subprocess, "Popen", lambda *a, **kw: mock_proc)
@@ -327,7 +332,7 @@ class TestTsBridgeTunnel:
 
     def test_early_exit_raises_before_yielding(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         fake_binary = tmp_path / "ts-bridge"
-        fake_binary.write_text("", encoding="utf-8")
+        fake_binary.write_text("", encoding="utf-8", newline="\n")
         monkeypatch.setattr(tc, "locate_ts_bridge", lambda: fake_binary)
         mock_proc = self._mock_proc()
         mock_proc.poll.return_value = 1  # process exited immediately

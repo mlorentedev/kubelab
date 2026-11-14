@@ -36,6 +36,7 @@ from jinja2 import Environment, StrictUndefined
 
 from tests.node_maintenance_role import COMMON, REPO, render_script, resolve_defaults, tasks
 from toolkit.features import docker_reclaim
+from tests.shells import BASH
 from toolkit.features.docker_reclaim import (
     _RECLAIMABLE_VOLUME,
     ReclaimRefused,
@@ -143,10 +144,10 @@ def _run_docker_section(tmp_path: Path, group_names: list[str], reclaim_rc: int)
     log = tmp_path / "calls.log"
     for tool, rc in (("docker", 0), ("python3", reclaim_rc)):
         stub = tmp_path / tool
-        stub.write_text(f'#!/bin/sh\necho "{tool} $*" >> {log}\nexit {rc}\n', encoding="utf-8")
+        stub.write_text(f'#!/bin/sh\necho "{tool} $*" >> {log}\nexit {rc}\n', encoding="utf-8", newline="\n")
         stub.chmod(0o755)
     result = subprocess.run(
-        ["bash", "-c", f'set -euo pipefail\nFAILURES=""\n{section}\necho "FAILURES=$FAILURES"'],
+        [BASH, "-c", f'set -euo pipefail\nFAILURES=""\n{section}\necho "FAILURES=$FAILURES"'],
         env={**os.environ, "PATH": f"{tmp_path}{os.pathsep}{os.environ['PATH']}"},
         capture_output=True,
         text=True,
@@ -334,11 +335,11 @@ def test_the_shipped_module_reclaims_residue_and_spares_every_declared_volume(tm
     }
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
-    (bin_dir / "docker").write_text(FAKE_DOCKER, encoding="utf-8")
+    (bin_dir / "docker").write_text(FAKE_DOCKER, encoding="utf-8", newline="\n")
     (bin_dir / "docker").chmod(0o755)
-    (tmp_path / "state.json").write_text(json.dumps(state), encoding="utf-8")
+    (tmp_path / "state.json").write_text(json.dumps(state), encoding="utf-8", newline="\n")
     declaration = tmp_path / "declaration.json"
-    declaration.write_text(json.dumps(_shipped_declaration()), encoding="utf-8")
+    declaration.write_text(json.dumps(_shipped_declaration()), encoding="utf-8", newline="\n")
     log = tmp_path / "docker.log"
 
     result = subprocess.run(
@@ -398,10 +399,10 @@ def test_the_run_exits_non_zero_on_disk_pressure_or_a_failed_step(
     """Executes the rendered tail of the timer script against a fake `df`. A
     non-zero exit is what fires `OnFailure=kubelab-notify@`."""
     fake_df = tmp_path / "df"
-    fake_df.write_text(f"#!/bin/sh\necho 'Use%'\necho ' {pcent}%'\n", encoding="utf-8")
+    fake_df.write_text(f"#!/bin/sh\necho 'Use%'\necho ' {pcent}%'\n", encoding="utf-8", newline="\n")
     fake_df.chmod(0o755)
     result = subprocess.run(
-        ["bash", "-c", _script_tail(render_script(CI_HOST))],
+        [BASH, "-c", _script_tail(render_script(CI_HOST))],
         env={**os.environ, "PATH": f"{tmp_path}{os.pathsep}{os.environ['PATH']}", "FAILURES": failures},
         capture_output=True,
         text=True,

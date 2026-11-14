@@ -211,6 +211,7 @@ class TestImageRepositories:
             "  beta:\n    repository: personal/beta\n    forge: gitea\n    receiver: generic\n"
             "    image_registry: gitea.kubelab.live/personal\n",
             encoding="utf-8",
+            newline="\n",
         )
         assert image_repositories(["web", "beta"], registry=path) == {"web": "kubelab-web"}
 
@@ -220,6 +221,7 @@ class TestImageRepositories:
             "products:\n  web:\n    repository: mlorentedev/web\n    forge: github\n    receiver: generic\n"
             f"    image_registry: {platform_registry()}\n    image_name: kubelab-web\n",
             encoding="utf-8",
+            newline="\n",
         )
         assert image_repositories(["web"], registry=path) == {"web": "kubelab-web"}
 

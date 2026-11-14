@@ -38,6 +38,7 @@ from collections.abc import Callable
 
 import pytest
 import yaml
+from tests.shells import BASH
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 
@@ -169,7 +170,7 @@ def _clone_with_remote(tmp_path: pathlib.Path, receiver: Receiver) -> tuple[path
     for rel in STAGED_PATHS + receiver.base_files:
         path = work / rel
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("web: sha-0000000\n", encoding="utf-8")
+        path.write_text("web: sha-0000000\n", encoding="utf-8", newline="\n")
     _git(work, "add", "-A")
     _git(work, "commit", "-m", "base")
     _git(work, "remote", "add", "origin", str(remote))
@@ -180,7 +181,7 @@ def _clone_with_remote(tmp_path: pathlib.Path, receiver: Receiver) -> tuple[path
 def _promote(work: pathlib.Path, tag: str) -> None:
     """Stand in for `toolkit deployment promote`: leave the overlay changed."""
     for rel in STAGED_PATHS:
-        (work / rel).write_text(f"web: {tag}\n", encoding="utf-8")
+        (work / rel).write_text(f"web: {tag}\n", encoding="utf-8", newline="\n")
 
 
 def _run_step(
@@ -206,7 +207,7 @@ def _run_step(
     if not bindir.exists():
         bindir.mkdir()
         stub = bindir / "gh"
-        stub.write_text(_GH_STUB, encoding="utf-8")
+        stub.write_text(_GH_STUB, encoding="utf-8", newline="\n")
         stub.chmod(0o755)
 
     calls = calls_path or (tmp_path / "gh_calls")
@@ -232,7 +233,7 @@ def _run_step(
     # `bash -e`, because that is the shell GitHub Actions uses for `run:`
     # (`bash -e {0}`). Without it this would exercise a different program.
     proc = subprocess.run(  # noqa: S603
-        ["bash", "-e", "-c", receiver.step()["run"]],
+        [BASH, "-e", "-c", receiver.step()["run"]],
         cwd=work,
         env=env,
         capture_output=True,

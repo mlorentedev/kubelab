@@ -153,8 +153,8 @@ def _run_copy(tmp_path: pathlib.Path, printed: str) -> tuple[int, str | None]:
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     received = tmp_path / "received"
-    (bin_dir / "toolkit-stub").write_text(f"#!/bin/sh\nprintf '%s\\n' {printed!r}\n", encoding="utf-8")
-    (bin_dir / "dotf").write_text(f"#!/bin/sh\ncat > {received}\n", encoding="utf-8")
+    (bin_dir / "toolkit-stub").write_text(f"#!/bin/sh\nprintf '%s\\n' {printed!r}\n", encoding="utf-8", newline="\n")
+    (bin_dir / "dotf").write_text(f"#!/bin/sh\ncat > {received}\n", encoding="utf-8", newline="\n")
     for stub in bin_dir.iterdir():
         stub.chmod(0o755)
     result = subprocess.run(

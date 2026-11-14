@@ -21,6 +21,7 @@ import pytest
 import yaml
 
 from tests import sharding
+from tests.shells import BASH
 
 ROOT = Path(__file__).resolve().parents[1]
 UNKNOWN = "tests/test_zz_a_file_the_record_does_not_know.py"
@@ -88,10 +89,12 @@ def test_the_plugin_deselects_other_shards_and_runs_unknown_files(tmp_path: Path
     suite.mkdir()
     names = ["test_a.py", "test_b.py", "test_c.py", "test_d.py", "test_new.py"]
     for name in names:
-        (suite / name).write_text("def test_one():\n    pass\n\ndef test_two():\n    pass\n", encoding="utf-8")
+        (suite / name).write_text(
+            "def test_one():\n    pass\n\ndef test_two():\n    pass\n", encoding="utf-8", newline="\n"
+        )
     record = tmp_path / "durations.json"
     seconds = {f"tests/{n}": s for n, s in zip(names[:4], (9, 5, 4, 1), strict=True)}
-    record.write_text(json.dumps(seconds), encoding="utf-8")
+    record.write_text(json.dumps(seconds), encoding="utf-8", newline="\n")
     ran: list[str] = []
     for index in (1, 2):
         run = subprocess.run(
@@ -129,6 +132,7 @@ def test_stored_durations_are_summed_per_file(tmp_path: Path) -> None:
                 time.sleep(0.05)
         """),
         encoding="utf-8",
+        newline="\n",
     )
     out = tmp_path / "stored.json"
     run = subprocess.run(
@@ -176,10 +180,10 @@ def test_under_xdist_the_heaviest_file_is_dispatched_first(tmp_path: Path) -> No
     """xdist's own reorder (by test count) must not undo the plan's order: measured, not collected."""
     log = tmp_path / "ran.log"
     body = f"def test_{{i}}():\n    open({str(log)!r}, 'a').write(__name__ + '\\n')\n"
-    (tmp_path / "test_heavy.py").write_text(body.format(i=0), encoding="utf-8")
-    (tmp_path / "test_light.py").write_text("".join(body.format(i=i) for i in range(6)), encoding="utf-8")
+    (tmp_path / "test_heavy.py").write_text(body.format(i=0), encoding="utf-8", newline="\n")
+    (tmp_path / "test_light.py").write_text("".join(body.format(i=i) for i in range(6)), encoding="utf-8", newline="\n")
     record = tmp_path / "durations.json"
-    record.write_text(json.dumps({"test_heavy.py": 100, "test_light.py": 1}), encoding="utf-8")
+    record.write_text(json.dumps({"test_heavy.py": 100, "test_light.py": 1}), encoding="utf-8", newline="\n")
     run = subprocess.run(
         [sys.executable, "-m", "pytest", "-c", "/dev/null", "--rootdir", str(tmp_path), "-p", "tests.sharding"]
         + ["-q", "-p", "no:cacheprovider", "-n", "1", "--dist", "loadfile", "--shard=1/1"]
@@ -200,7 +204,7 @@ def test_the_gate_step_exits_non_zero_on_every_result_but_success(result: str, c
     """Runs the step's own script, not a reading of it: the text could be right and the shell wrong."""
     script = _ci()["jobs"]["tests"]["steps"][0]["run"].replace("${{ needs.test-shards.result }}", result)
     assert "${{" not in script, script
-    assert subprocess.run(["bash", "-e", "-c", script], capture_output=True, timeout=30).returncode == code
+    assert subprocess.run([BASH, "-e", "-c", script], capture_output=True, timeout=30).returncode == code
 
 
 def test_the_record_still_knows_most_of_the_suite() -> None:
