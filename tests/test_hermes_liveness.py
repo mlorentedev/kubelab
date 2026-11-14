@@ -74,7 +74,10 @@ def test_notification_hooks_and_recovery_use_the_fleet_fabric() -> None:
     uid = _context()["_agent_stack_agent_uid"]
     assert f"Environment=DOCKER_HOST=unix:///run/user/{uid}/docker.sock" in unit
     assert "NoNewPrivileges=yes" in unit and "ProtectSystem=strict" in unit
-    # A read-only bind of a Unix socket rejects connect(2), not just file writes.
+    # ProtectHome=yes hides /run/user entirely; read-only plus one RW socket
+    # preserves home confinement without hiding the daemon endpoint.
+    assert "ProtectHome=read-only" in unit
+    assert not re.search(r"(?m)^ProtectHome=(yes|true)$", unit)
     assert f"ReadWritePaths=/run/user/{uid}/docker.sock" in unit
 
 
