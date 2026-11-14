@@ -317,7 +317,7 @@ Deployed properties are marked (deployed); the rest are checked from the diff.
 Recorded from the owner, relayed on #3476. "Pending owner objection" marks a
 recommendation taken as the working position until the owner says otherwise.
 
-**Q1. Policy scope: (A), pending owner objection.** Pod-scoped policies in
+**Q1. Policy scope: (A), accepted by the owner.** Pod-scoped policies in
 `kubelab` selecting resume's pods (D7). Rejected: (B) build ADR-067 D5's
 per-product namespaces first, then a namespace default-deny; it is a
 fleet-wide change far larger than this spec, and (A) gives resume the same
@@ -326,7 +326,7 @@ default-deny now.
 **Q3. Backup pre-step: (A), ruled.** Reuse `node_backup`'s `sqlite3 .backup`,
 no `VACUUM INTO` (F3). The per-store copies can be seconds apart; see D11.
 
-**Q4. ADR-061 and the staging twin: (A), pending owner objection.** A narrow
+**Q4. ADR-061 and the staging twin: (A), accepted by the owner.** A narrow
 ADR-061 amendment: a singleton may render in staging when its entry declares
 `staging_state: fixtures`, and the duplication clause accepts it. Rejected:
 (B) classifying resume as `dual`, which misclassifies its prod state to pass a
@@ -362,17 +362,18 @@ contract's own schedule; the owner accepts the shared-budget risk (Risks).
 Rejected: (A) a separate capped key; (C) a suspended staging CronJob; a
 per-env schedule override.
 
-**Q8. Restore verification (ADR-073 D10): (A), pending owner objection.**
+**Q8. Restore verification (ADR-073 D10): (A), accepted by the owner.**
 Deferred to the prod lane, with a restore drill from R2 before real data lands;
 the drill also checks the cross-store consistency named in D11. Rejected: (B)
 requiring it for staging, which holds fixtures only.
 
 ## Open questions (owner)
 
-**Q7. Prod facts (prod cluster unreadable here).** Which node hosts resume in
-prod, and is it `vps`? Is the `resume.kubelab.live` DNS record to be created by
-the prod onboarding PR? #3286 (no pull credential on prod promotion) blocks the
-prod lane; confirm it stays the prod-lane gate.
+None. Q7 was ruled on 2026-11-14:
+
+**Q7 (ruled).** Prod has one K3s node, `vps` (`infra/config/values/prod.yaml`), so resume runs there. The DNS record and every other onboarding step come from kubelab's own tooling, driven by the registry, with no hand edits. Today a product's prod record is hand-written in `infra/terraform/dns/services.json` and held by `tests/test_dns_contract_hostnames.py`. Deriving it from the registry is #3489, a prod-lane precondition. #3286 stays the prod-lane gate.
+
+**Principle (owner, 2026-11-14).** resume is the product that tunes kubelab's onboarding. Every manual step found on this path is a kubelab defect and gets a kubelab ticket. It is not worked around in this spec.
 
 ## Out of scope
 
