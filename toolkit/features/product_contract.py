@@ -50,9 +50,11 @@ Hostname = Annotated[str, StringConstraints(max_length=253, pattern=_HOSTNAME)]
 SecretName = Annotated[str, StringConstraints(max_length=200, pattern=_SECRET_NAME)]
 
 _RESOURCE_NAME = r"^[a-z][a-z0-9-]{0,30}$"
-# A Kubernetes quantity, decimal or binary suffix; no exponent form.
-_QUANTITY = r"^[0-9]+(\.[0-9]+)?(Ki|Mi|Gi|Ti|Pi|Ei|k|M|G|T|P|E)?$"
-_ABSOLUTE_PATH = r"^/[A-Za-z0-9._/-]*$"
+# A positive whole Kubernetes quantity with an optional suffix: no zero, no fraction, no exponent.
+_QUANTITY = r"^[1-9][0-9]*(Ki|Mi|Gi|Ti|Pi|Ei|k|M|G|T|P|E)?$"
+# Absolute, at least one segment, no empty segment and no trailing slash; a segment cannot start
+# with a dot, which rules out `.` and `..`.
+_ABSOLUTE_PATH = r"^(/[A-Za-z0-9_][A-Za-z0-9._-]*)+$"
 # Five cron fields of digits and * / , -; names (MON, JAN) and macros (@daily) are not accepted.
 _CRON = r"^[0-9*/,-]+( [0-9*/,-]+){4}$"
 
@@ -64,7 +66,7 @@ class VolumeParams(BaseModel):
 
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
 
-    size: str = Field(max_length=32, pattern=_QUANTITY, description="Kubernetes quantity, e.g. 1Gi.")
+    size: str = Field(max_length=32, pattern=_QUANTITY, description="Positive whole quantity, e.g. 1Gi.")
     mount_path: str = Field(max_length=256, pattern=_ABSOLUTE_PATH, description="Absolute path in the container.")
     fs_group: int | None = Field(
         default=None,

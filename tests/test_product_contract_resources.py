@@ -84,7 +84,14 @@ def test_the_class_may_be_given_explicitly(tmp_path: Path) -> None:
         (_claims(data__sizee="1Gi"), "resources.data.volume.params.sizee"),
         (_claims(daily__retries=3), "resources.daily.job.params.retries"),
         (_claims(data__size="lots"), "resources.data.volume.params.size"),
+        (_claims(data__size="0"), "resources.data.volume.params.size"),
+        (_claims(data__size="0Gi"), "resources.data.volume.params.size"),
+        (_claims(data__size="0.5Gi"), "resources.data.volume.params.size"),
         (_claims(data__mount_path="app/data"), "resources.data.volume.params.mount_path"),
+        (_claims(data__mount_path="/"), "resources.data.volume.params.mount_path"),
+        (_claims(data__mount_path="/app//data"), "resources.data.volume.params.mount_path"),
+        (_claims(data__mount_path="/app/data/"), "resources.data.volume.params.mount_path"),
+        (_claims(data__mount_path="/app/../etc"), "resources.data.volume.params.mount_path"),
         (_claims(data__fs_group=0), "resources.data.volume.params.fs_group"),
         (_claims(data__fs_group=2**31), "resources.data.volume.params.fs_group"),
         (_claims(data__fs_group="10001"), "resources.data.volume.params.fs_group"),
@@ -108,9 +115,9 @@ def test_a_malformed_claim_is_refused_naming_the_field(tmp_path: Path, resources
 
 
 def test_a_resource_name_declared_twice_is_refused(tmp_path: Path) -> None:
-    path = _write(tmp_path, _with({"data": CLAIMS["data"]}))
-    text = path.read_text(encoding="utf-8")
-    path.write_text(text.replace("resources:\n", "resources:\n  data: {type: volume}\n", 1), encoding="utf-8")
+    head = yaml.safe_dump({k: v for k, v in _with({}).items() if k != "resources"})
+    path = tmp_path / "kubelab.yaml"
+    path.write_text(head + "resources:\n  data: {type: volume}\n  data: {type: job}\n", encoding="utf-8")
 
     with pytest.raises(ContractError, match="'data' is declared twice"):
         validate_contract(path)
