@@ -38,7 +38,7 @@ owner: manu
 - [x] [AC1] Set the default in the `k3s_server` HelmChartConfig ✓ 2026-11-12
 - [x] [AC1] [AC2] Staging: provision, the fixture is cut, an exception holds, `make test-e2e ENV=staging` ✓ 2026-11-13 (verification.md)
 - [x] [AC4] Prod (owner): dry run, apply, VPN check (re-register a node, MagicDNS), `make test-e2e ENV=prod` ✓ 2026-11-14 (verification.md)
-- [ ] [AC4] Lift the Headscale exception, deploy, and re-register a node under the default
+- [x] [AC4] Lift the Headscale exception, deploy, and re-register a node under the default ✓ 2026-11-14 (#3503, verification.md)
 
 ## Closing
 
