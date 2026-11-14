@@ -248,6 +248,28 @@ Found on the way: `backup-verify-destination` and `backup-verify-restic` still p
 
 `make backup-schedule NODE=all ENV=prod` reported `failures in the last 7 days: 0` on all five nodes. **This is not AC3's evidence.** The four migrated nodes are in the wait, which exits 0 without calling `forget`, as the 170 and 194 snapshots above agree. The read belongs on or after 2026-11-14, as the section above says.
 
+## AC3 closed (2026-11-14)
+
+The window counted from 2026-11-07 is over. Read at 2026-11-14 06:28Z, `make backup-schedule NODE=all ENV=prod` reported `node-backup-prune.service failures in the last 7 days: 0` on all five nodes (ace2, beelink, rpi3, rpi4, kubelab-vps). Every node's last nightly prune ran between 00:00 and 00:05 local time on 2026-11-14.
+
+To show the prune calls `forget` rather than waiting, `make backup-node NODE=all ENV=prod PRUNE=1` ran the same unit by hand on 2026-11-14 (06:09Z on the VPS, 06:09Z to 06:24Z on the LAN nodes). Every node logged `Deactivated successfully`, and every node reached `forget`:
+
+| Node | Snapshots forgotten | Packs removed | Refused by the lock |
+|---|---|---|---|
+| ace2 | 7 | 12 | none |
+| beelink | 7 (the 2026-10-14 ones) | 13 | none |
+| kubelab-vps | 2 | 6 | none |
+| rpi3 | not in the 30-line tail | 4 of 4 old packs | 6 young packs |
+| rpi4 | not in the 30-line tail | 15 of 15 old packs | 1 young pack |
+
+On rpi3 and rpi4 the tail starts after the `forget` verdict, but the wait exits before `forget` and `--prune` runs only behind it, so a pack removal there proves `forget` ran.
+
+What the refused packs are: R2 answered `The object is locked by the bucket policy` for packs younger than R that the prune found unreferenced. restic retried for about 15 minutes, logged `unable to remove data/<id> from the repository`, went on, and exited 0. That is the lock doing its job, and it is not the case lesson-628 describes: there a refused *snapshot* delete made `forget` exit 3. A refused *pack* delete leaves an orphan that a later prune removes once the lock lets it, and costs only its bytes until then.
+
+Caveats:
+- The `forget` evidence comes from a run started by hand. It is the same systemd unit the timer starts, but the nightly journals are not in Loki, and the codified read shows the last 30 lines of the last run only.
+- Whether the prune frees space under the lock is read from the watcher's `stored_bytes` per node at its next probe after this run. Before it: fleet 8.61 GB; beelink 4.54, rpi4 2.15, rpi3 0.92, vps 0.54, ace2 0.46.
+
 ## The escrow check (AC5, ahead of PR 5)
 
 2026-10-07, run `make backup-escrow-check ENV=prod` with Bitwarden unlocked. Five of five matched: `KUBELAB_RESTIC_PASSWORD` and the four `KUBELAB_RESTIC_PASSWORD_<NODE>` entries against their SOPS values, by sha256[:12], printing no value. This repeats the hand comparison of 2026-10-03, now as a command. I ran five mutations of `backup_escrow.py`, and each turned a test red. One did so only after the test for a password missing from SOPS was made to assert that the escrow is never queried for it.
