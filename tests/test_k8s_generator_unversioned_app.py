@@ -89,17 +89,40 @@ def test_a_pinned_app_logs_no_warning(context, monkeypatch: pytest.MonkeyPatch) 
     assert not log.warning.call_args_list
 
 
-@pytest.mark.parametrize("env", _ENVS)
-def test_the_committed_overlay_runs_every_registered_app_on_its_pin(env: str) -> None:
-    """The real config: no app lost its Deployment to the new rule, and none is on a mutable tag.
+def _pin(app: str, env: str) -> str | None:
+    """`apps.platform.<app>.version` as the env resolves it: the env's values over common's."""
+    for name in (env, "common"):
+        values = yaml.safe_load((REPO / f"infra/config/values/{name}.yaml").read_text(encoding="utf-8"))
+        version = ((values.get("apps") or {}).get("platform") or {}).get(app, {}).get("version")
+        if version:
+            return str(version)
+    return None
 
-    api and web carry a pin in both envs today. If one ever loses it, this names the app
-    instead of the overlay silently shrinking.
+
+@pytest.mark.parametrize("env", _ENVS)
+def test_the_committed_overlay_runs_each_pinned_app_on_its_pin_and_no_other(env: str) -> None:
+    """The real config: an app with a pin in this env runs on exactly it, one without is absent.
+
+    Registered is not deployed: an app can be pinned in staging alone (imagesensortool was), and
+    its prod overlay must then not carry it. An app that loses its pin, or an overlay that keeps
+    a Deployment for one, is named here instead of the overlay silently changing.
     """
-    docs = list(yaml.safe_load_all((REPO / f"infra/k8s/overlays/{env}/generated/deployments.yaml").read_text(encoding="utf-8")))
-    deployed = {d["metadata"]["name"]: d for d in docs if d and d.get("kind") == "Deployment"}
-    assert set(deployed) >= set(product_registry.platform_apps())
-    for name, doc in deployed.items():
-        for container in doc["spec"]["template"]["spec"]["containers"]:
-            tag = container["image"].rsplit(":", 1)[-1]
-            assert tag not in ("latest", "dev"), f"{env}: {name} runs {container['image']}"
+    path = REPO / f"infra/k8s/overlays/{env}/generated/deployments.yaml"
+    docs = list(yaml.safe_load_all(path.read_text(encoding="utf-8")))
+    images = {
+        d["metadata"]["name"]: [c["image"] for c in d["spec"]["template"]["spec"]["containers"]]
+        for d in docs
+        if d and d.get("kind") == "Deployment"
+    }
+    pinned = {app: _pin(app, env) for app in product_registry.platform_apps() if _pin(app, env)}
+    assert pinned, "no registered app has a pin: the check below would pass on nothing"
+    assert set(pinned) <= set(images), f"{env}: pinned apps with no Deployment: {set(pinned) - set(images)}"
+    registered_unpinned = set(product_registry.platform_apps()) - set(pinned)
+    assert not registered_unpinned & set(images), (
+        f"{env}: an unpinned app has a Deployment: {registered_unpinned & set(images)}"
+    )
+    for app, version in pinned.items():
+        assert all(image.endswith(f":{version}") for image in images[app]), (
+            f"{env}: {app} runs {images[app]}, not {version}"
+        )
+        assert version not in ("latest", "dev")
