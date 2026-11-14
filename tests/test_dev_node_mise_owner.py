@@ -30,6 +30,8 @@ import jinja2
 import pytest
 import yaml
 
+from tests.shells import child_env
+
 REPO = Path(__file__).resolve().parent.parent
 ROLE = REPO / "infra/ansible/roles/dev_node"
 
@@ -157,14 +159,16 @@ def _install(home: Path, version: str) -> None:
     for item in NODE_WRAPPED:
         tool = home / "installs/node" / version / "bin" / item
         tool.parent.mkdir(parents=True, exist_ok=True)
-        tool.write_text(f'#!/bin/sh\necho {item} {version} "$@"\n', encoding="utf-8")
+        tool.write_text(f'#!/bin/sh\necho {item} {version} "$@"\n', encoding="utf-8", newline="\n")
         tool.chmod(0o755)
 
 
 def _run(wrapper: Path, home: Path, *args: str) -> subprocess.CompletedProcess[str]:
     """As a non-interactive SSH session runs it: no mise activation, a bare PATH."""
-    env = {"HOME": str(home), "PATH": "/usr/bin:/bin"}
-    return subprocess.run(["/bin/sh", str(wrapper), *args], env=env, capture_output=True, text=True, check=False)
+    env = child_env({"HOME": str(home), "PATH": "/usr/bin:/bin"})
+    return subprocess.run(
+        ["/bin/sh", str(wrapper), *args], env=env, capture_output=True, text=True, encoding="utf-8", check=False
+    )
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX sh wrappers")
@@ -176,15 +180,16 @@ def test_the_wrapper_follows_a_node_bump_without_a_reprovision(tmp_path: Path) -
     mise.write_text(
         '#!/bin/sh\n[ "$1 $2" = "where node" ] || exit 2\ncat "' + str(home) + '/active"\n',
         encoding="utf-8",
+        newline="\n",
     )
     mise.chmod(0o755)
     wrappers = {}
     for item in NODE_WRAPPED:
         wrappers[item] = tmp_path / f"wrapper-{item}"
-        wrappers[item].write_text(_render_wrapper(item, home), encoding="utf-8")
+        wrappers[item].write_text(_render_wrapper(item, home), encoding="utf-8", newline="\n")
 
     _install(home, "1.0.0")
-    (home / "active").write_text(str(home / "installs/node/1.0.0") + "\n", encoding="utf-8")
+    (home / "active").write_text(str(home / "installs/node/1.0.0") + "\n", encoding="utf-8", newline="\n")
     for item, wrapper in wrappers.items():
         out = _run(wrapper, home, "hi")
         assert (out.returncode, out.stdout.strip()) == (0, f"{item} 1.0.0 hi"), out.stderr
@@ -192,7 +197,7 @@ def test_the_wrapper_follows_a_node_bump_without_a_reprovision(tmp_path: Path) -
     # The converge bumps node and prunes the old tree.
     _install(home, "2.0.0")
     shutil.rmtree(home / "installs/node/1.0.0")
-    (home / "active").write_text(str(home / "installs/node/2.0.0") + "\n", encoding="utf-8")
+    (home / "active").write_text(str(home / "installs/node/2.0.0") + "\n", encoding="utf-8", newline="\n")
     for item, wrapper in wrappers.items():
         out = _run(wrapper, home, "hi")
         assert (out.returncode, out.stdout.strip()) == (0, f"{item} 2.0.0 hi"), out.stderr
@@ -203,10 +208,10 @@ def test_the_wrapper_says_so_when_mise_has_no_node(tmp_path: Path) -> None:
     home = tmp_path / "home"
     (home / ".local/bin").mkdir(parents=True)
     mise = home / ".local/bin/mise"
-    mise.write_text("#!/bin/sh\necho 'mise ERROR node not installed' >&2\nexit 1\n", encoding="utf-8")
+    mise.write_text("#!/bin/sh\necho 'mise ERROR node not installed' >&2\nexit 1\n", encoding="utf-8", newline="\n")
     mise.chmod(0o755)
     wrapper = tmp_path / "wrapper-node"
-    wrapper.write_text(_render_wrapper("node", home), encoding="utf-8")
+    wrapper.write_text(_render_wrapper("node", home), encoding="utf-8", newline="\n")
     out = _run(wrapper, home, "--version")
     assert out.returncode != 0
     assert "no node" in out.stderr, "a caller must see why, not 'No such file or directory'"
