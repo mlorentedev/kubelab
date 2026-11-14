@@ -53,8 +53,12 @@ retries, 60 s start grace). This is deliberately the simple, unauthenticated
 process-health route: `/health/detailed` and Slack/provider readiness are not
 liveness, and no API key enters the healthcheck. The host's
 `agent-stack-hermes-watchdog.service` reads only the resulting Docker health
-through the agent's rootless socket. Its timer waits ten minutes after boot or
-activation and then runs every two minutes.
+through the agent's rootless socket. Its timer waits ten minutes after boot;
+when enabled during an already-running session, `OnUnitActiveSec` makes the
+first run two minutes after activation and every two minutes thereafter.
+Provisioning pauses an existing timer only when a rendered input can recreate
+the gateway, and re-enables it after Docker reports healthy; an unchanged run
+leaves it active and reports no change.
 
 A non-healthy result pages through `kubelab-notify@`; the fleet notifier sends
 one initial page per incident, hourly reminders and a recovery through

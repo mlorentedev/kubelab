@@ -48,7 +48,7 @@ def _task(name: str) -> dict:
 def test_healthcheck_uses_bounded_simple_health_without_credentials() -> None:
     health = _gateway()["healthcheck"]
     command = " ".join(str(part) for part in health["test"])
-    assert health["test"][:2] == ["CMD", "python"]
+    assert health["test"][:2] == ["CMD", "python3"]
     assert "http://127.0.0.1:8642/health" in command
     assert "urllib.request" in command and "timeout=5" in command
     assert "detailed" not in command and "API_SERVER_KEY" not in command
@@ -176,8 +176,33 @@ def test_activation_order_waits_for_gateway_health_before_starting_the_watcher()
     names = [task.get("name") for task in _hermes_tasks()]
     assert names.index("Enable the Hermes liveness timer") > names.index("Verify the Hermes API answers with its key")
     assert names.index("Enable the Hermes liveness timer") > names.index("Verify the gateway is connected to Slack")
+    assert names.index("Enable the Hermes liveness timer") > names.index("Install the Hermes liveness probe")
+    assert names.index("Enable the Hermes liveness timer") > names.index("Install the Hermes liveness units")
+    assert names.index("Enable the Hermes liveness timer") > names.index(
+        "Wait for the Hermes healthcheck to report healthy"
+    )
     timer = _task("Enable the Hermes liveness timer")["ansible.builtin.systemd"]
     assert timer["enabled"] is True and timer["state"] == "started"
+
+
+def test_recreation_pauses_an_existing_timer_without_disabling_it() -> None:
+    names = [task.get("name") for task in _hermes_tasks()]
+    pause_name = "Pause the Hermes liveness timer during gateway recreation"
+    assert names.index(pause_name) < names.index("Start hermes-kubelab")
+    pause = _task(pause_name)
+    assert "_agent_stack_hermes_recreate_expected" in pause["when"]
+    assert pause["ansible.builtin.systemd"]["state"] == "stopped"
+    assert "enabled" not in pause["ansible.builtin.systemd"], "a later provision must re-enable it without drift"
+    assert names.index("Enable the Hermes liveness timer") > names.index(
+        "Wait for the Hermes healthcheck to report healthy"
+    )
+    recreate = _task("Hold whether the rendered inputs will recreate Hermes")["ansible.builtin.set_fact"]
+    expression = str(recreate["_agent_stack_hermes_recreate_expected"])
+    for registered in ("compose", "config", "env_file", "plugins_copy", "ts_env_file", "unbound"):
+        assert registered in expression
+    assert "--force-recreate' if _agent_stack_hermes_recreate_expected" in str(
+        _task("Start hermes-kubelab")["ansible.builtin.command"]
+    )
 
 
 def test_unconfigured_hermes_stops_watching_before_taking_the_gateway_down() -> None:
@@ -188,3 +213,4 @@ def test_unconfigured_hermes_stops_watching_before_taking_the_gateway_down() -> 
     assert disable["ansible.builtin.systemd"]["state"] == "stopped"
     remove = _task("Remove the Hermes liveness units")
     assert remove["ansible.builtin.file"]["state"] == "absent"
+    assert "{{ agent_stack_vault_libexec }}/hermes-liveness.sh" in remove["loop"]
