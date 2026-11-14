@@ -264,6 +264,24 @@ class TestDeploymentMountingAClaim:
         assert pod["containers"][0]["volumeMounts"]  # still mounted
 
 
+class TestConflictingFsGroups:
+    def test_two_volumes_naming_different_groups_are_refused(self, build, snapshots: Path) -> None:
+        """A pod has one `fsGroup`; picking one of two would leave a volume owned by the wrong group."""
+        other = "  logs:\n    type: volume\n    params: {size: 1Gi, mount_path: /logs, fs_group: 20002}\n"
+        (snapshots / "sample.yaml").write_text(_contract() + other, encoding="utf-8")
+
+        with pytest.raises(ValueError, match=r"sample.*fs_group.*10001.*20002"):
+            build()
+
+    def test_two_volumes_naming_the_same_group_are_accepted(self, build, snapshots: Path) -> None:
+        other = "  logs:\n    type: volume\n    params: {size: 1Gi, mount_path: /logs, fs_group: 10001}\n"
+        (snapshots / "sample.yaml").write_text(_contract() + other, encoding="utf-8")
+
+        sample = next(a for a in build()["apps"] if a["name"] == "sample")
+
+        assert sample["fs_group"] == 10001
+
+
 class TestAppWithoutClaims:
     def test_keeps_the_rolling_update_and_no_volume(self, build, tmp_path: Path) -> None:
         deployment = _one(_objects(build(), tmp_path), "Deployment", "api")
