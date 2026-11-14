@@ -20,9 +20,13 @@ The console reads three tables in the API's Postgres tenant
 | `forge_source` | per source: `as_of` (last successful read), reachability | yes |
 | `forge_item` | the open and closed issues and pull requests read | yes |
 | `forge_event` | webhook deliveries, projected or not | no: an unprojected delivery is lost, and the next read covers the change it carried |
-| `console_usage` | one row per operator identity and UTC day the console page was opened (ADR-066 A8) | no: not read model, kept only by the nightly `pg_dumpall` of the VPS backup; never truncate it with the forge tables |
+| `console_usage` | one row per operator identity and UTC day the console was opened (ADR-066 A8): written by the first `GET /console/queue` of the day, which every load of the frontend makes, and by the embedded page while it exists (#3450) | no: not read model, kept only by the nightly `pg_dumpall` of the VPS backup; never truncate it with the forge tables |
 
-Read the A8 gate with `make console-usage ENV=prod`: for each identity, the best window of 14 consecutive UTC days, how many of them have a row, and whether 5 of 14 holds. It fails, rather than reporting no use, when the table cannot be read.
+Read the A8 gate with `make console-usage ENV=prod`: for each identity, the best window of 14 consecutive UTC days, how many of them have a row, and whether 5 of 14 holds. It fails, rather than reporting no use, when the table cannot be read. An open tab polls the queue every minute, so a tab left open across UTC midnight counts as an open of the new day: the gate measures days with the console loaded, not days with someone looking at it.
+
+## What serves the console host
+
+Since ADR-074 D5 the host has two backends behind one Authelia ForwardAuth: `/console/` is the API's, everything else is `apps/console`'s nginx. Both rules belong to the generated IngressRoute `console` (`infra/k8s/overlays/<env>/generated/ingress.yaml`), which exists only in an env that pins `apps.platform.console.version`. Where no console version is pinned, the host is still served: the hand-written `console-embedded` route (`infra/k8s/base/services/console.yaml`, prod host in `overlays/prod/patches.yaml`) sends every path to the API at `priority: 1`, so it loses to any generated rule and serves the embedded page, with `/` redirected to it. If the page is blank after a console deploy, read which rule answers: `kubectl get ingressroute -n kubelab` lists both, and a missing `console` one means the env has no pin. The embedded route and page are deleted together once prod serves the frontend.
 
 ## Rebuild from the forges
 
