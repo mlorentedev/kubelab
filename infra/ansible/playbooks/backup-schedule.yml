@@ -208,12 +208,63 @@
       changed_when: false
       failed_when: ship_locked.rc not in [0, 1]
 
+    - name: Read the ship backups that began and the ones that saved a snapshot over the last seven days
+      # #3496: a pack in no index is one a backup uploaded and never indexed,
+      # because the run ended before restic wrote the index. Under the bucket
+      # lock the prune cannot delete it for 30 days. restic prints the parent
+      # line once the backup phase starts and the saved line at its end, so the
+      # difference counts the runs that can leave such packs. A run that failed
+      # at the probe never printed the first line and uploaded nothing. The
+      # systemd start line is the denominator: runs started with no backup line
+      # at all means the wording no longer matches, not a clean week.
+      check_mode: false
+      ansible.builtin.command:
+        cmd: >-
+          journalctl -u node-backup-ship.service -u node-backup-ship-check.service
+          --since "7 days ago" --output cat --no-pager
+          --grep "^(Starting node-backup-ship|using parent snapshot|no parent snapshot found|snapshot [0-9a-f]+ saved)"
+      register: ship_backups
+      changed_when: false
+      failed_when: ship_backups.rc not in [0, 1]
+
+    - name: Read the weekly check's count of packs in no index
+      # The same packs seen from the other side: `restic check` counts them as
+      # "additional files". Independent of the prune's refused count, so the two
+      # series can be compared.
+      check_mode: false
+      ansible.builtin.shell:
+        cmd: >-
+          set -o pipefail;
+          journalctl -u node-backup-ship-check.service --since "7 days ago" --output cat --no-pager
+          | grep -E 'additional files were found in the repo' | tail -n 1
+      args:
+        executable: /bin/bash
+      register: check_unindexed
+      changed_when: false
+      failed_when: check_unindexed.rc not in [0, 1]
+
     - name: Report the lock's effect on prune and ship
       check_mode: false
+      vars:
+        ship_started: "{{ ship_backups.stdout_lines | select('search', '^Starting node-backup-ship') | list | length }}"
+        ship_saved: "{{ ship_backups.stdout_lines | select('search', ' saved$') | list | length }}"
+        ship_began: >-
+          {{ ship_backups.stdout_lines | select('search', '^(using parent snapshot|no parent snapshot found)')
+             | list | length }}
       ansible.builtin.debug:
         msg: >-
           {{ (prune_refused.stdout | trim) if (prune_refused.stdout | trim)
              else 'node-backup-prune: no refused-delete count in the last 7 days (no run that reached forget since the count shipped)' }};
           node-backup-prune runs in the journal for the last 7 days: {{ prune_runs.stdout_lines | length }};
           node-backup-prune runs that waited instead of forgetting in the last 7 days: {{ prune_waits.stdout_lines | length }};
-          node-backup-ship runs that found the repository locked in the last 7 days: {{ ship_locked.stdout_lines | length }}
+          node-backup-ship runs that found the repository locked in the last 7 days: {{ ship_locked.stdout_lines | length }};
+          {{ ('ship backups: no ship run in what the journal keeps for the last 7 days, not measured')
+             if ship_started | int == 0
+             else ('ship backups: ' ~ ship_started ~ ' runs started and restic printed no backup line,'
+                   ~ ' so the reader no longer matches its wording: not measured')
+             if (ship_began | int + ship_saved | int) == 0
+             else ('ship backups begun / saved a snapshot, of ' ~ ship_started ~ ' runs started in the last 7 days: '
+                   ~ ship_began ~ ' / ' ~ ship_saved
+                   ~ ' (the difference ended after uploading and can leave packs in no index)') }};
+          {{ (check_unindexed.stdout | trim) if (check_unindexed.stdout | trim)
+             else 'weekly check: no count of packs in no index in the last 7 days (none found, or no check ran)' }}
