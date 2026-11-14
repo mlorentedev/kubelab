@@ -4,14 +4,14 @@
     "behavior": "A staging backend that never answers is cut at the declared default bound, and the client gets the edge's error page",
     "verification": "poetry run pytest tests/e2e/test_backend_timeouts.py -m e2e --env staging -v --no-cov --override-ini=addopts= -k default_route",
     "state": "passing",
-    "evidence": "2026-11-13 staging: 504 at 61.29 s, body identical to the edge's 504 page; 2026-11-14 the e2e test passed in staging (verification.md AC1)"
+    "evidence": "2026-11-13 staging: 504 at 61.29 s, body identical to the edge's 504 page; re-run 2026-11-14T07:36Z against staging with master at 8297a058: 2 passed in 136 s (verification.md AC1)"
   },
   {
     "id": "OPS-065-edge-backend-timeouts-f2",
     "behavior": "A route declared as an exception keeps its longer bound",
     "verification": "poetry run pytest tests/e2e/test_backend_timeouts.py -m e2e --env staging -v --no-cov --override-ini=addopts= -k exception_route",
     "state": "passing",
-    "evidence": "2026-11-13 staging: /exception still open at 90.01 s; 2026-11-14 the e2e test passed in staging (verification.md AC2)"
+    "evidence": "2026-11-13 staging: /exception still open at 90.01 s; re-run 2026-11-14T07:36Z against staging with master at 8297a058: 2 passed in 136 s (verification.md AC2)"
   },
   {
     "id": "OPS-065-edge-backend-timeouts-f3",

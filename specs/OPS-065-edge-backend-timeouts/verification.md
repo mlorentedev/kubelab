@@ -69,7 +69,7 @@ What this does not show: routes with no slow request (`api`, `argocd`, `brand-as
 
 - Test suite: `make test` -> 10268 passed, 95 skipped (head of #3446 before its last merge of master)
 - Staging: `make test-e2e ENV=staging` -> 68 passed, 23 skipped (2026-11-13, after the provision). This shows no regression only: no e2e expectation covers the timeout yet (the open AC1/AC2 e2e task), so AC1 and AC2 rest on the direct measurements above
-- Staging, 2026-11-14: `tests/e2e/test_backend_timeouts.py` -> 2 passed in 136 s (the default route answers the edge's 504 page at or after the declared bound; `/exception` is still open 15 s past it). Both read their values from the declarations: the bound from the `k3s_server` role defaults, the host from the fixture. `make mutate` raising the declared bound to 70 s turned the 504 test red (it got the 504 at about 60 s), so it checks the bound, not just the status
+- Staging, 2026-11-14: `tests/e2e/test_backend_timeouts.py` -> 2 passed in 136 s (again at 07:36Z, after the lift, with master at `8297a058`) (the default route answers the edge's 504 page at or after the declared bound; `/exception` is still open 15 s past it). Both read their values from the declarations: the bound from the `k3s_server` role defaults, the host from the fixture. `make mutate` raising the declared bound to 70 s turned the 504 test red (it got the 504 at about 60 s), so it checks the bound, not just the status
 - No regressions in existing test suite: yes. One intermittent unrelated failure seen once and filed as #3445
 
 ## Decisions made during implementation
