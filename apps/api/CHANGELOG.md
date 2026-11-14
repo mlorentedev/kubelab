@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.12.0](https://github.com/mlorentedev/kubelab/compare/api-v1.11.0...api-v1.12.0) (2026-11-14)
+
+
+### Features
+
+* **grafana:** forge statistics from a read-only role on a counts-only view ([#3431](https://github.com/mlorentedev/kubelab/issues/3431)) ([82b3f9d](https://github.com/mlorentedev/kubelab/commit/82b3f9d64ae40b391d451a34b1507bbf97f8fcb7))
+
+
+### Bug Fixes
+
+* **api:** count a console open on the queue route, which every load of the frontend calls ([#3523](https://github.com/mlorentedev/kubelab/issues/3523)) ([20ff5f8](https://github.com/mlorentedev/kubelab/commit/20ff5f885ddf0719eeca80a3ea218d07f2228d9e))
+
 ## [1.11.0](https://github.com/mlorentedev/kubelab/compare/api-v1.10.0...api-v1.11.0) (2026-11-14)
 
 
