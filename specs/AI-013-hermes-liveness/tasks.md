@@ -27,8 +27,8 @@ owner: manu
 - [x] [AC3] Implement any minimal timer/runbook changes required by those tests.
 - [x] [AC4] Add failing configured/unconfigured role-ordering tests.
 - [x] [AC4] Install/start the watcher only after gateway health succeeds; disable/remove it when Hermes is absent.
-- [ ] [AC5] Run focused suites, Ansible parsing, lint/type checks and two provisioning passes when ace2 access is explicitly coordinated.
-- [ ] [AC5] With separate operator approval for the disruptive check, stop the gateway, record one alert, restart it and record recovery; do not power ace2 off merely for a test.
+- [x] [AC5] Run focused suites, Ansible parsing, lint/type checks and provisioning through a final `changed=0` on coordinated ace2 access.
+- [x] [AC5] Operator-approved clean stop/start produced one `ops-log` incident and `recovered … after 1 failed runs`; ace2 was not powered off.
 - [x] Record local evidence and explicit pending live gates in `verification.md`, `features.json` and the Hermes runbook; final live evidence remains to be appended.
 
 ## Closing

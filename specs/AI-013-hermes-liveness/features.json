@@ -3,8 +3,8 @@
     "id": "AI-013-hermes-liveness-f1",
     "behavior": "AC1: a stopped or unhealthy gateway fails the local health contract and the two-minute watcher emits one deduplicated incident through kubelab-notify@ after boot grace.",
     "verification": "poetry run pytest -q tests/test_hermes_liveness.py -k 'healthcheck or notification_hooks or timer_interval'",
-    "state": "pending",
-    "evidence": ""
+    "state": "passing",
+    "evidence": "Clean live stop at 21:22:43Z produced unhealthy, successful notifier and one ops-log incident at 21:22:47.606959Z; restart produced recovery after exactly 1 failed run at 21:23:44.059549Z."
   },
   {
     "id": "AI-013-hermes-liveness-f2",
@@ -31,7 +31,7 @@
     "id": "AI-013-hermes-liveness-f5",
     "behavior": "AC5: provisioning is idempotent, regression tests protect the wiring, and an approved live stop/start records alert and recovery evidence without credentials.",
     "verification": "poetry run pytest -q tests/test_hermes_liveness.py && make lint-ansible",
-    "state": "pending",
-    "evidence": ""
+    "state": "passing",
+    "evidence": "Final suite 10630 passed/96 skipped; Ruff, mypy and 26 playbooks green. Initial pair ended changed=0 and final corrected-head provision changed=0/failed=0. Clean drill produced one incident and recovery after 1 failed run; final gateway healthy, timer active, spool 0."
   }
 ]

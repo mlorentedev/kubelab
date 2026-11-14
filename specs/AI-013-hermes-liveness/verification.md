@@ -11,11 +11,11 @@ owner: manu
 
 ## Evidence
 
-- [ ] **AC1 — detection and delivery:** local contract is green: `test_healthcheck_uses_bounded_simple_health_without_credentials`, `test_notification_hooks_and_recovery_use_the_fleet_fabric`, `test_timer_interval_and_boot_grace_match_the_contract`, and behavioral non-healthy probes pass. **Live gate pending:** provision ace2, stop the gateway, observe one fabric incident and measure the interval.
+- [x] **AC1 — detection and delivery:** local contract is green. In the clean live drill the gateway stopped at `2026-11-14T21:22:43Z`; the probe failed because it was `unhealthy`, `kubelab-notify@` returned success and `ops-log` recorded the incident at `21:22:47.606959Z`. No duplicate page appeared.
 - [x] **AC2 — recovery and semantics:** 19 focused tests pass. The probe accepts only `healthy`; `starting`, `unhealthy`, `missing` and Docker failure return non-zero; invalid container names exit 64 before Docker runs. The simple `/health` check contains no credential, Slack or provider readiness. `OnSuccess=kubelab-notify-recovered@%n.service` is rendered.
 - [x] **AC3 — on-demand silence:** tests prove no `Persistent`/`OnCalendar` directive, no Kuma monitor and no always-on dependency. The timer runs locally after ten minutes of boot/activation grace. **Power-off was not physically exercised**; no external path exists that could emit a page while ace2 is off. The watcher deliberately remains independent of the egress kill switch, so daemon failure cannot disable its own detector.
 - [x] **AC4 — configuration lifecycle:** role-ordering tests prove the timer starts only after API and Slack health checks, and the unconfigured path disables/removes the watcher before Compose teardown. Provisioning waits for Docker health before enabling the timer; the read also runs safely in check mode.
-- [ ] **AC5 — reproducible evidence:** local suite and lint are green. **Live gate pending:** two provisions and an operator-approved stop/start notification exercise. No ace2 power-off will be performed for this spec.
+- [x] **AC5 — reproducible evidence:** local suite and lint are green. Initial provisions measured `changed=5` then `changed=0`; the systemd socket correction measured `changed=1`, and the final post-drill provision measured **`changed=0`, `failed=0`**. In the clean drill, restart reached Docker health at `21:23:43Z`; the probe and recovery notifier returned success and `ops-log` recorded `recovered … after 1 failed runs` at `21:23:44.059549Z`. Failure-to-recovery delivery spanned 56.453 seconds. No ace2 power-off was performed.
 
 ## Test status
 
@@ -23,10 +23,10 @@ owner: manu
 - Focused GREEN: same command → **19 passed** (`/tmp/ai013-green.log`).
 - Neighboring Compose/role/notification suites → **302 passed, 77 skipped** (`/tmp/ai013-focused.log`).
 - Cross-repository hygiene failures from the first full run were corrected: explicit UTF-8, `tests.shells.BASH`, and check-mode-safe Ansible read/wait → **34 passed** (`/tmp/ai013-hygiene.log`).
-- Full suite: `make test` → **10,571 passed, 96 skipped**, 30 warnings, 78% total coverage (`/tmp/ai013-make-test-final.log`).
+- Final full suite after live fixes and master merges: `make test` → **10,630 passed, 96 skipped**, 30 warnings, 78% total coverage (`/tmp/ai013-make-test-live-final.log`).
 - `make lint` → all checks passed; 168 files already formatted. `make type` → no issues in 167 source files. `make lint-ansible` → all 26 playbooks parse.
 - `shellcheck -s bash` and `-s sh`, `bash -n`, `zsh -n`, and `git diff --check` passed.
-- Live manual smoke test: **pending explicit operator approval**. No credential output is required or permitted.
+- Live manual smoke test: operator approved. Clean stop/start produced exactly one failed run, one `ops-log` incident and one recovery; final gateway is `running/healthy`, timer active, both notifiers `Result=success`. No credentials were printed.
 
 ## Decisions made during implementation
 
@@ -35,10 +35,11 @@ owner: manu
 - Liveness uses the simple unauthenticated `/health` route. Authenticated Slack/provider readiness remains a provisioning concern and does not create third-party-outage pages.
 - Docker restart events are not audited. A transient kill repaired by Compose between polls is not a sustained outage; the live drill uses a stopped container.
 - Corrected four newly introduced cross-suite hygiene violations rather than exempting them; no unrelated failure was observed in the final suite.
+- Live verification found that `ProtectHome=yes` hides `/run/user`, so the sandboxed probe could not reach the rootless socket even though the same uid could outside systemd. Regression tests now pin `ProtectHome=read-only` plus `ReadWritePaths=/run/user/<uid>/docker.sock`; the clean post-fix drill passed.
 
 ## Promotion candidates
 
-- [x] Lesson for the repo's `docs/lessons/`? yes: `docs/lessons/observability/lesson-755-an-on-demand-liveness-watchdog-must-be-local-but-independent-of-the-agent-kill-switch.md`.
+- [x] Lesson for the repo's `docs/lessons/`? yes: `docs/lessons/observability/lesson-756-an-on-demand-liveness-watchdog-must-be-local-but-independent-of-the-agent-kill-switch.md`.
 - [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? no: implements the existing ADR-028 on-demand and ADR-044 fabric decisions; no new architecture decision.
 - [x] New pattern candidate for `00_meta/patterns/`? no: one-repo implementation evidence so far; do not promote prematurely.
 

@@ -38,11 +38,11 @@ Compose will mark the gateway healthy only while its unauthenticated, bounded `/
 
 ## Acceptance criteria
 
-- [ ] **AC1 — detection and delivery:** with ace2 running, a stopped or unhealthy gateway fails the local health contract and the two-minute watcher emits one deduplicated incident through `kubelab-notify@` within the next probe/delivery interval, after the declared boot grace period.
-- [ ] **AC2 — recovery and semantics:** a healthy probe exits successfully, failed/missing/starting health fails closed, and recovery uses `kubelab-notify-recovered@`; transient provider/Slack state is not part of the liveness verdict.
-- [ ] **AC3 — on-demand silence:** powering ace2 off cannot page: there is no external monitor, no `Persistent` timer and no always-on dependency on the gateway.
-- [ ] **AC4 — configuration lifecycle:** disabling Hermes disables the watcher and removes its units; enabling Hermes installs and starts the watcher only after the existing gateway health verification succeeds.
-- [ ] **AC5 — reproducible evidence:** provisioning is idempotent (`changed=0` on a second run), focused tests fail if the wiring is removed, and an operator-approved live stop/start exercise records the resulting notification evidence without exposing credentials.
+- [x] **AC1 — detection and delivery:** with ace2 running, a stopped or unhealthy gateway fails the local health contract and the two-minute watcher emits one deduplicated incident through `kubelab-notify@` within the next probe/delivery interval, after the declared boot grace period.
+- [x] **AC2 — recovery and semantics:** a healthy probe exits successfully, failed/missing/starting health fails closed, and recovery uses `kubelab-notify-recovered@`; transient provider/Slack state is not part of the liveness verdict.
+- [x] **AC3 — on-demand silence:** powering ace2 off cannot page: there is no external monitor, no `Persistent` timer and no always-on dependency on the gateway.
+- [x] **AC4 — configuration lifecycle:** disabling Hermes disables the watcher and removes its units; enabling Hermes installs and starts the watcher only after the existing gateway health verification succeeds.
+- [x] **AC5 — reproducible evidence:** provisioning is idempotent (`changed=0` on a second run), focused tests fail if the wiring is removed, and an operator-approved live stop/start exercise records the resulting notification evidence without exposing credentials.
 
 ## References
 

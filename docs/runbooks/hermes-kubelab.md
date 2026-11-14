@@ -60,7 +60,11 @@ A non-healthy result pages through `kubelab-notify@`; the fleet notifier sends
 one initial page per incident, hourly reminders and a recovery through
 `kubelab-notify-recovered@`. A delivery the fabric cannot take stays in its
 spool. Inspect `systemctl status agent-stack-hermes-watchdog.timer` and
-`journalctl -u agent-stack-hermes-watchdog.service` on ace2. A forced validation
+`journalctl -u agent-stack-hermes-watchdog.service` on ace2. A sandboxed
+`permission denied` for the socket must not be fixed with `ProtectHome=yes`
+already present: that setting hides `/run/user`; the unit deliberately uses
+`ProtectHome=read-only` and one `ReadWritePaths` entry for the socket alone.
+A forced validation
 uses `docker stop hermes-kubelab` on the agent's daemon, starts the oneshot to
 prove the page, then starts the gateway and reruns the oneshot to prove
 recovery. Do not use `docker kill` for this check: Compose can restart a
