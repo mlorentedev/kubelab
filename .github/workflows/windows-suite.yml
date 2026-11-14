@@ -15,6 +15,14 @@ on:
   pull_request:
   push:
     branches: [master]
+  # audit: run the declared failures as ordinary tests (--runxfail), so the
+  # report carries every traceback the burn-down needs. Never fails the run.
+  workflow_dispatch:
+    inputs:
+      audit:
+        description: Run the declared failures too and keep their tracebacks
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -53,9 +61,13 @@ jobs:
 
       - name: Full suite
         shell: bash
+        continue-on-error: ${{ inputs.audit == true }}
+        env:
+          AUDIT: ${{ inputs.audit == true && '--runxfail' || '' }}
         run: |
           set -o pipefail
-          poetry run pytest -n auto --dist loadfile -q --tb=short -rfEX \
+          # shellcheck disable=SC2086  # AUDIT is empty or one flag
+          poetry run pytest -n auto --dist loadfile -q --tb=short -rfEX $AUDIT \
             --junitxml=windows-results.xml 2>&1 | tee pytest.log
 
       # Every failure's traceback, the input to the burn-down (#3409).
