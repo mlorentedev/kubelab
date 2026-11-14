@@ -15,3 +15,7 @@
 # Shell scripts run on Linux hosts; a CR breaks the shebang and every `case` pattern
 # (SEC-037's forced command is matched byte for byte).
 *.sh   text eol=lf
+# Plain-text data, as LF on every platform: the watcher targets.txt files ship
+# into ConfigMaps read by /bin/sh, where a CRLF checkout leaves `\r` on each
+# target (#3409).
+*.txt  text eol=lf

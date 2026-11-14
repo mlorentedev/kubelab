@@ -33,7 +33,13 @@ def _tasks() -> list[dict]:
 
 
 def _mise(verb: str) -> dict:
-    (task,) = [t for t in _tasks() if f"mise {verb}" in str(t.get("ansible.builtin.command", ""))]
+    # `mise install --force node@<pin>` is the repair for a broken node (#3477), and
+    # names its one toolchain; tests/test_dev_node_toolchain_repair.py guards it.
+    (task,) = [
+        t
+        for t in _tasks()
+        if f"mise {verb}" in (cmd := str(t.get("ansible.builtin.command", ""))) and "--force" not in cmd
+    ]
     return task
 
 

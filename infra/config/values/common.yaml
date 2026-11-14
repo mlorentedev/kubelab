@@ -859,12 +859,6 @@ edge:
   # entry here, and on an entry no rule uses. `route`/`match` as in `errors.coverage`.
   backend_timeouts:
     exceptions:
-      - route: headscale
-        transport: headscale
-        response_header_timeout: "0s"
-        reason: >-
-          Bootstrap dependency of every node, with no staging route to rehearse on. Lifted
-          once a node re-registers in prod under the default (OPS-065 AC4, ADR-076 D2)
       - route: stuck-backend
         match: /exception
         transport: stuck-backend-exception

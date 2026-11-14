@@ -32,8 +32,9 @@ from tests.test_node_backup_role import _common, _defaults, _plays, _render
 LOCK_DAYS = int(_common()["backup"]["r2"]["lock_retention_days"])
 
 # Stands in for restic. `snapshots.rc`, `unlock.rc` and `forget.rc` in $FAKE_DIR
-# set the exit codes (default 0), and `snapshots` prints `snapshots.json` (an
-# empty list by default). Every call is appended to `calls` with its arguments,
+# set the exit codes (default 0), `snapshots` prints `snapshots.json` (an
+# empty list by default), and `forget` prints `forget.out` to stderr, where
+# restic writes its retry and removal errors. Every call is appended to `calls` with its arguments,
 # the global `--repo` and `--stuck-request-timeout` stripped.
 FAKE_RESTIC = r"""#!/bin/bash
 while [ $# -gt 0 ]; do
@@ -48,7 +49,9 @@ case "$1" in
     cat "$FAKE_DIR/snapshots.json" 2>/dev/null || echo '[]'
     exit "$(cat "$FAKE_DIR/snapshots.rc" 2>/dev/null || echo 0)" ;;
   unlock) exit "$(cat "$FAKE_DIR/unlock.rc" 2>/dev/null || echo 0)" ;;
-  forget) exit "$(cat "$FAKE_DIR/forget.rc" 2>/dev/null || echo 0)" ;;
+  forget)
+    cat "$FAKE_DIR/forget.out" >&2 2>/dev/null
+    exit "$(cat "$FAKE_DIR/forget.rc" 2>/dev/null || echo 0)" ;;
 esac
 exit 0
 """
@@ -89,6 +92,7 @@ def prune(tmp_path: Path):
         snapshots_rc: int = 0,
         unlock_rc: int = 0,
         forget_rc: int = 0,
+        forget_out: str = "",
     ):
         if shipped:
             marker.write_text("a" * 64 + "\n", encoding="utf-8")
@@ -96,6 +100,7 @@ def prune(tmp_path: Path):
         (fake_dir / "snapshots.rc").write_text(f"{snapshots_rc}\n", encoding="utf-8")
         (fake_dir / "unlock.rc").write_text(f"{unlock_rc}\n", encoding="utf-8")
         (fake_dir / "forget.rc").write_text(f"{forget_rc}\n", encoding="utf-8")
+        (fake_dir / "forget.out").write_text(forget_out, encoding="utf-8")
         env = {"PATH": os.environ["PATH"], "FAKE_DIR": str(fake_dir), "TMPDIR": str(scratch)}
         proc = subprocess.run(
             ["bash", str(script)], env=env, capture_output=True, text=True, encoding="utf-8", timeout=30
@@ -194,6 +199,47 @@ def test_the_unit_gets_restic_s_exit_code(prune, rc: int) -> None:
     (a real fault); anything non-zero fails the unit, and `OnFailure=` notifies."""
     proc, _calls = prune(forget_rc=rc)
     assert proc.returncode == rc
+
+
+REFUSED_RUN = """removing 1 old packs
+Remove(<data/117bd07dd4>) returned error, retrying after 4.5s: client.RemoveObject: The object is locked by the bucket policy.
+Remove(<data/117bd07dd4>) failed: client.RemoveObject: The object is locked by the bucket policy.
+unable to remove data/117bd07dd48364e22f42cb878619691d33f9ef04c88434c4003b1ce28e71778b from the repository
+Remove(<data/9d7206723e>) failed: client.RemoveObject: The object is locked by the bucket policy.
+unable to remove data/9d7206723e345dc0fd13aaae67d529d6fcb9cfe9437e93f9e8a5d7fd6e30da0b from the repository
+[14:41] 0.00%  0 / 2 files deleted
+done
+"""
+
+
+@pytest.mark.parametrize("rc", [0, 3])
+def test_it_counts_the_deletes_the_lock_refused_and_keeps_restic_s_exit_code(prune, rc: int) -> None:
+    """#3496: a refused pack delete exits 0, so the count is the only trace of it.
+    Measured shape, from rpi4's prune on 2026-11-14: one `unable to remove` line
+    per pack, after restic's own retries."""
+    proc, _calls = prune(forget_rc=rc, forget_out=REFUSED_RUN)
+    assert proc.returncode == rc
+    assert "node-backup-prune: 2 deletes refused by the bucket lock, 0 failed otherwise" in proc.stdout
+    assert "unable to remove data/117bd07dd4" in proc.stderr + proc.stdout
+
+
+def test_a_delete_that_fails_for_another_reason_is_not_counted_as_the_lock(prune) -> None:
+    """A token that lost delete rights also ends in `unable to remove`; reported
+    as the lock, it would send the operator to wait out a lock that is not there."""
+    out = (
+        "Remove(<data/aa>) failed: client.RemoveObject: Access Denied.\n"
+        "unable to remove data/aa from the repository\n"
+        "Remove(<data/bb>) failed: client.RemoveObject: The object is locked by the bucket policy.\n"
+        "unable to remove data/bb from the repository\n"
+    )
+    proc, _calls = prune(forget_out=out)
+    assert "node-backup-prune: 1 deletes refused by the bucket lock, 1 failed otherwise" in proc.stdout
+
+
+def test_a_clean_prune_reports_zero_refused_deletes(prune) -> None:
+    proc, _calls = prune(forget_out="removing 12 old packs\ndone\n")
+    assert proc.returncode == 0
+    assert "node-backup-prune: 0 deletes refused by the bucket lock, 0 failed otherwise" in proc.stdout
 
 
 def test_a_failed_unlock_fails_before_forget(prune) -> None:

@@ -20,6 +20,7 @@ arrive from `mlorentedev/web` where this Makefile never ran.
 from __future__ import annotations
 
 import pathlib
+import shlex
 import shutil
 import subprocess
 import sys
@@ -48,7 +49,9 @@ STUBBED = ("GH", "POETRY", "TOOLKIT")
 # The one real command the harness lets through: the read-only registry query
 # `promote-prod` validates APP against (IDP-042). It writes nothing, and it is
 # set here rather than left to the Makefile because TOOLKIT is stubbed above.
-PRODUCT_LIST = f"PRODUCT_LIST={sys.executable} -m toolkit.main product list"
+# Make hands the value to a shell unquoted, so a Windows path keeps its `\` only
+# as a quoted, `/`-separated word (#3409).
+PRODUCT_LIST = f"PRODUCT_LIST={shlex.quote(pathlib.Path(sys.executable).as_posix())} -m toolkit.main product list"
 
 pytestmark = pytest.mark.skipif(shutil.which("make") is None, reason="make is not installed")
 

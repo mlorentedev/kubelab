@@ -1,5 +1,5 @@
 ---
-id: lesson-747-a-pin-gated-app-needs-a-fallback-route-until-its-first-pin
+id: lesson-749-a-pin-gated-app-needs-a-fallback-route-until-its-first-pin
 type: lesson
 status: active
 created: "2026-11-14"

@@ -451,7 +451,7 @@ def test_a_refused_reboot_is_tried_again(edge: Edge) -> None:
     assert edge.calls == REBOOT, "the next miss tries again, inside the cap"
 
 
-@pytest.mark.skipif(os.geteuid() == 0, reason="root writes through a read-only mode")
+@pytest.mark.skipif(hasattr(os, "geteuid") and os.geteuid() == 0, reason="root writes through a read-only mode")
 def test_a_reboot_that_cannot_be_marked_is_held(edge: Edge) -> None:
     """Without the marker the boot that follows would not know it was for the radio, and
     the ladder would reboot again at its next miss: no marker, no reboot."""
