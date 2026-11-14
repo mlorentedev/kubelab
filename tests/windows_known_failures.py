@@ -6,9 +6,10 @@ a failure outside the list and reports a listed test that passes as XPASS. The
 list can therefore only shrink: a new test that breaks on Windows is red, and a
 fixed one shows up for removal.
 
-An entry that names a test or file which no longer exists is an error, not a
-no-op: a renamed test would otherwise drop out of the list unnoticed and the
-list would stop describing anything.
+An entry that names a test or file which no longer exists fails
+`test_every_entry_names_a_collected_test` on Windows: a renamed test would
+otherwise drop out of the list unnoticed and the list would stop describing
+anything.
 """
 
 from __future__ import annotations
@@ -46,26 +47,29 @@ def _matches(entry: str, nodeid: str) -> bool:
     return nodeid == entry if "::" in entry else nodeid.split("::", 1)[0] == entry
 
 
-def apply(items: list[pytest.Item], entries: dict[str, str], root: Path) -> list[str]:
-    """Mark every listed item xfail and return the entries that name nothing.
-
-    An entry is judged only when this run could have seen it: its file is missing,
-    or its file was collected and no item in it matches. A run of a subset of the
-    suite leaves the other files' entries alone.
-    """
-    collected = {item.nodeid.split("::", 1)[0] for item in items}
-    used: set[str] = set()
+def apply(items: list[pytest.Item], entries: dict[str, str]) -> None:
+    """Mark every listed item xfail with its entry's reason."""
     for item in items:
         for entry, reason in entries.items():
             if _matches(entry, item.nodeid):
                 item.add_marker(pytest.mark.xfail(reason=f"Windows ({reason})", strict=False))
-                used.add(entry)
                 break
-    stale = []
+
+
+def stale(entries: dict[str, str], nodeids: list[str], root: Path) -> list[str]:
+    """The entries that name nothing.
+
+    An entry is judged only when this run could have seen it: its file is missing,
+    or its file was collected and no test in it matches. A run of a subset of the
+    suite leaves the other files' entries alone.
+    """
+    ids = set(nodeids)
+    collected = {nodeid.split("::", 1)[0] for nodeid in nodeids}
+    found = []
     for entry in entries:
         path = entry.split("::", 1)[0]
-        if entry in used:
+        if entry in (ids if "::" in entry else collected):
             continue
         if not (root / path).exists() or path in collected:
-            stale.append(entry)
-    return stale
+            found.append(entry)
+    return found

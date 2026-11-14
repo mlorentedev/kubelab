@@ -292,15 +292,10 @@ def sops_can_decrypt() -> bool:
 
 
 def _mark_windows_known_failures(items: list[pytest.Item]) -> None:
-    """Mark the declared Windows failures xfail; refuse an entry that names nothing (#3409)."""
+    """Mark the declared Windows failures xfail (#3409)."""
     from tests import windows_known_failures as known
 
-    root = Path(__file__).resolve().parents[1]
-    stale = known.apply(items, known.parse(known.LIST.read_text(encoding="utf-8")), root)
-    if stale:
-        raise pytest.UsageError(
-            f"{known.LIST.name} lists tests that do not exist (renamed or removed?):\n" + "\n".join(stale)
-        )
+    known.apply(items, known.parse(known.LIST.read_text(encoding="utf-8")))
 
 
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:

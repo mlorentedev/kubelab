@@ -47,11 +47,23 @@ jobs:
       - name: Install project and dev deps
         run: poetry install
 
+      - name: Record the checkout's line endings
+        shell: bash
+        run: git config --get core.autocrlf || echo "core.autocrlf unset"
+
       - name: Full suite
         shell: bash
         run: |
           set -o pipefail
-          poetry run pytest -n auto --dist loadfile -q --tb=line -rfEX 2>&1 | tee pytest.log
+          poetry run pytest -n auto --dist loadfile -q --tb=short -rfEX \
+            --junitxml=windows-results.xml 2>&1 | tee pytest.log
+
+      # Every failure's traceback, the input to the burn-down (#3409).
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        if: always()
+        with:
+          name: windows-results
+          path: windows-results.xml
 
       - name: Report declared failures that now pass
         if: always()

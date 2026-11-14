@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from typing import Any, cast
 
@@ -68,7 +69,8 @@ def test_listed_tests_and_whole_files_are_marked_xfail_and_nothing_else(tmp_path
         "tests/test_b.py::test_any",
         "tests/test_b.py::TestK::test_other",
     )
-    assert known.apply(items, known.parse(LIST), _tree(tmp_path)) == []
+    known.apply(items, known.parse(LIST))
+    assert known.stale(known.parse(LIST), [i.nodeid for i in items], _tree(tmp_path)) == []
     marked = {cast(_Item, i).nodeid: cast(_Item, i).markers for i in items}
     assert not marked["tests/test_a.py::test_three"]
     for nodeid in set(marked) - {"tests/test_a.py::test_three"}:
@@ -79,19 +81,19 @@ def test_listed_tests_and_whole_files_are_marked_xfail_and_nothing_else(tmp_path
 
 
 def test_an_entry_that_names_nothing_in_a_collected_file_is_stale(tmp_path: Path) -> None:
-    items = _items("tests/test_a.py::test_one_renamed", "tests/test_b.py::test_any")
-    stale = known.apply(items, known.parse(LIST), _tree(tmp_path))
+    nodeids = ["tests/test_a.py::test_one_renamed", "tests/test_b.py::test_any"]
+    stale = known.stale(known.parse(LIST), nodeids, _tree(tmp_path))
     assert stale == ["tests/test_a.py::test_one", "tests/test_a.py::test_two[x-y]"]
 
 
 def test_an_entry_for_a_missing_file_is_stale_even_when_not_collected(tmp_path: Path) -> None:
     root = _tree(tmp_path)
     (root / "tests" / "test_b.py").unlink()
-    assert known.apply(_items("tests/test_c.py::test_x"), known.parse(LIST), root) == ["tests/test_b.py"]
+    assert known.stale(known.parse(LIST), ["tests/test_c.py::test_x"], root) == ["tests/test_b.py"]
 
 
 def test_a_subset_run_leaves_other_files_entries_alone(tmp_path: Path) -> None:
-    assert known.apply(_items("tests/test_c.py::test_x"), known.parse(LIST), _tree(tmp_path)) == []
+    assert known.stale(known.parse(LIST), ["tests/test_c.py::test_x"], _tree(tmp_path)) == []
 
 
 def test_the_committed_list_parses_and_every_file_it_names_exists() -> None:
@@ -99,3 +101,15 @@ def test_the_committed_list_parses_and_every_file_it_names_exists() -> None:
     assert entries, "an empty list would make the Windows job pass on nothing"
     missing = sorted({e.split("::", 1)[0] for e in entries if not (REPO / e.split("::", 1)[0]).exists()})
     assert not missing, f"{known.LIST.name} names files that do not exist: {missing}"
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="the list describes the Windows collection")
+def test_every_entry_names_a_collected_test(request: pytest.FixtureRequest) -> None:
+    """A renamed or removed test must leave the list too, or the list stops describing anything.
+
+    Under `--dist loadfile` each worker collects the whole suite, so the session's
+    items are the full collection; a subset run judges only the files it collected.
+    """
+    nodeids = [item.nodeid for item in request.session.items]
+    stale = known.stale(known.parse(known.LIST.read_text(encoding="utf-8")), nodeids, REPO)
+    assert not stale, f"{known.LIST.name} lists tests that do not exist (renamed or removed?):\n" + "\n".join(stale)
