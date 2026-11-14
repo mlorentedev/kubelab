@@ -60,7 +60,11 @@ def _render(overlay: str) -> list[dict[str, Any]]:
 def _rules(docs: list[dict[str, Any]]) -> list[tuple[str, str, set[str]]]:
     """(IngressRoute name, match, the serversTransport names its services reference)."""
     return [
-        (d["metadata"]["name"], rule["match"], {s["serversTransport"] for s in rule.get("services", []) if s.get("serversTransport")})
+        (
+            d["metadata"]["name"],
+            rule["match"],
+            {s["serversTransport"] for s in rule.get("services", []) if s.get("serversTransport")},
+        )
         for d in docs
         if d["kind"] == "IngressRoute"
         for rule in d["spec"].get("routes", [])
@@ -127,6 +131,10 @@ def test_every_exception_is_used_and_says_why() -> None:
     assert all(e.get("reason", "").strip() for e in EXCEPTIONS), "an exception without a reason is a hole"
 
 
-def test_headscale_is_an_exception_until_a_node_re_registers_under_the_default() -> None:
-    """ADR-076 D2: lifted by OPS-065 AC4, never silently."""
-    assert any(e["route"] == "headscale" for e in EXCEPTIONS)
+def test_headscale_runs_under_the_default_since_a_node_re_registered_through_it() -> None:
+    """ADR-076 D2: the exception was lifted by OPS-065 AC4. Bringing it back is a new decision, recorded there."""
+    assert not any(e["route"] == "headscale" for e in EXCEPTIONS)
+    rules = [(r, ns) for r, _, ns in _rules(_render("prod")) if r == "headscale"]
+    assert rules, "prod renders no headscale IngressRoute: this test no longer checks the route it is named for"
+    names = {n for _, ns in rules for n in ns}
+    assert not names, f"the headscale route still references a transport of its own: {sorted(names)}"

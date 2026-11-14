@@ -30,7 +30,7 @@
   {
     "id": "EDGE-001-f5",
     "behavior": "AC5: the receiver regenerates and stages edge.json with the snapshot",
-    "verification": "poetry run pytest -q tests/test_product_image_receiver_workflow.py -k edge_manifest tests/test_receiver_pr_step.py",
+    "verification": "poetry run pytest -q tests/test_product_image_receiver_workflow.py::test_the_edge_manifest_follows_the_snapshot_into_the_same_pr tests/test_receiver_pr_step.py",
     "state": "pending",
     "evidence": ""
   },

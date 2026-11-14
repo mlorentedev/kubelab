@@ -130,11 +130,11 @@ def render_text(
 def render_staging_zones(text: str, zones: Sequence[str]) -> str:
     """Replace the ``STAGING_ZONE_BLOCKS`` line of ``text`` with one forward block per zone.
 
-    The zones are ``networking.staging_zones``: a product's staging zone is one line there, and
-    the pod-side forward to the RPi4 resolver follows from it. Each block keeps the marker's
-    indentation and the ``RESOLVE_RPI4_TAILSCALE_IP`` placeholder for ``render_text``. Fail-closed:
-    no zones, a zone that is not a lowercase FQDN, or a manifest without the marker raises
-    :class:`RenderError`, so a block never lands half-rendered or not at all.
+    The zones are ``infra/config/products/edge.json`` (EDGE-001): the platform's declared zones
+    plus each registered product's, and the pod-side forward to the RPi4 resolver follows from it.
+    Each block keeps the marker's indentation and the ``RESOLVE_RPI4_TAILSCALE_IP`` placeholder
+    for ``render_text``. Fail-closed: no zones, a zone that is not a lowercase FQDN, or a manifest
+    without the marker raises :class:`RenderError`, so a block never lands half-rendered or not at all.
     """
     bad = [zone for zone in zones if not _ZONE_RE.match(zone)]
     if not zones or bad:
