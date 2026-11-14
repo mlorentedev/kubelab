@@ -33,7 +33,7 @@ REPO = Path(__file__).resolve().parent.parent
 ROLE = REPO / "infra/ansible/roles/dev_node"
 
 WRAPPED = ["node", "npm", "npx", "claude"]
-MISE_NODE_BIN = "/home/manu/.local/share/mise/installs/node/24.19.0/bin"
+MISE_NODE_BIN = "/home/manu/.local/share/mise/installs/node/24.22.1/bin"
 LOCAL_BIN = "/home/manu/.local/bin"
 DEFAULTS = ROLE / "defaults/main.yml"
 
