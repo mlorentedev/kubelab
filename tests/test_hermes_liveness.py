@@ -74,6 +74,8 @@ def test_notification_hooks_and_recovery_use_the_fleet_fabric() -> None:
     uid = _context()["_agent_stack_agent_uid"]
     assert f"Environment=DOCKER_HOST=unix:///run/user/{uid}/docker.sock" in unit
     assert "NoNewPrivileges=yes" in unit and "ProtectSystem=strict" in unit
+    # A read-only bind of a Unix socket rejects connect(2), not just file writes.
+    assert f"ReadWritePaths=/run/user/{uid}/docker.sock" in unit
 
 
 def test_unexpected_agent_manager_death_cannot_disable_its_own_detector() -> None:

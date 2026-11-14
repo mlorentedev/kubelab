@@ -18,6 +18,9 @@ TimeoutStartSec=30s
 NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=strict
+# connect(2) to a Unix socket is refused through a read-only bind too. Expose
+# exactly that socket, not the daemon's directory or the rest of the filesystem.
+ReadWritePaths=/run/user/{{ _agent_stack_agent_uid }}/docker.sock
 ProtectHome=yes
 RestrictSUIDSGID=yes
 LockPersonality=yes
