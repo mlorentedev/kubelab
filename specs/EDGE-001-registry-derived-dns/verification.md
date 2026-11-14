@@ -26,13 +26,13 @@ owner: manu
 
 ## Decisions made during implementation
 
-- Goldens render from a frozen manifest, so onboarding a product never needs a fixture edit (lesson-748).
+- Goldens render from a frozen manifest, so onboarding a product never needs a fixture edit (lesson-749).
 - The rendered Corefile header still names `networking.staging_zones`, kept for the zero diff; #3511 tracks it.
 - The derivation repeats D8's `staging.<domain>` shape check: it reads snapshots directly, and a bare apex would capture prod for VPN clients.
 
 ## Promotion candidates
 
-- [x] Lesson for the repo's `docs/lessons/`? yes: docs/lessons/networking-dns/lesson-748-a-golden-render-of-live-data-turns-every-onboarding-into-a-hand-edit.md
+- [x] Lesson for the repo's `docs/lessons/`? yes: docs/lessons/networking-dns/lesson-749-a-golden-render-of-live-data-turns-every-onboarding-into-a-hand-edit.md
 - [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? no: the grant rule is an amendment to ADR-067 (line 91), recorded there; slice B needs ADR-073, out of scope
 - [x] New pattern candidate for `00_meta/patterns/`? no: one project so far
 

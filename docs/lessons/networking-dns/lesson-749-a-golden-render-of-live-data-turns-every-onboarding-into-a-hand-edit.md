@@ -1,5 +1,5 @@
 ---
-id: lesson-748-a-golden-render-of-live-data-turns-every-onboarding-into-a-hand-edit
+id: lesson-749-a-golden-render-of-live-data-turns-every-onboarding-into-a-hand-edit
 type: lesson
 status: active
 created: "2026-11-14"
