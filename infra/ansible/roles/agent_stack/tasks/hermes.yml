@@ -146,6 +146,20 @@
         - "{{ agent_stack_hermes_home }}/cache/documents"
         - "{{ agent_stack_hermes_home }}/workspace"
 
+    # These sections are rendered from apps.services.ai.nan.models. Silently
+    # dropping an operator-supplied override would make the SSOT lie.
+    - name: Reject ported overrides of role-owned NaN sections
+      ansible.builtin.assert:
+        that:
+          - agent_stack_hermes.agent_config.auxiliary is not defined
+          - agent_stack_hermes.agent_config.stt is not defined
+          - agent_stack_hermes.agent_config.tts is not defined
+          - agent_stack_hermes.agent_config.image_gen is not defined
+        fail_msg: >-
+          Move NaN capability declarations to apps.services.ai.nan.models;
+          auxiliary/stt/tts/image_gen are role-owned. Add an explicit template
+          merge before introducing any non-NaN override.
+
     - name: Render the hermes-kubelab env file
       ansible.builtin.template:
         src: hermes.env.j2

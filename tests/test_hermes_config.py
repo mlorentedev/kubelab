@@ -209,6 +209,13 @@ def test_the_quota_guarded_nan_provider_is_enabled_and_mounted_read_only() -> No
     assert "{{" not in mount
 
 
+def test_ported_capability_overrides_fail_instead_of_being_discarded() -> None:
+    [task] = [t for t in _tasks() if t.get("name") == "Reject ported overrides of role-owned NaN sections"]
+    conditions = task["ansible.builtin.assert"]["that"]
+    for section in ("auxiliary", "stt", "tts", "image_gen"):
+        assert any(f"agent_config.{section} is not defined" in condition for condition in conditions)
+
+
 def test_every_provision_reads_the_nan_provider_through_the_live_registry() -> None:
     [task] = [t for t in _tasks() if t.get("name") == "Read the NaN image provider through the live registry"]
     assert "get_provider('nan')" in str(task["ansible.builtin.command"])

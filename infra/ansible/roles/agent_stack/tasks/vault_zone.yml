@@ -7,6 +7,17 @@
 # a token only systemd reads.
 # =============================================================================
 
+- name: Check the gateway identity fits the subordinate ranges
+  ansible.builtin.assert:
+    that:
+      - agent_stack_agent_subid_start | int > 0
+      - agent_stack_agent_subid_count | int >= _agent_stack_hermes_uid | int
+      - agent_stack_agent_subid_count | int >= _agent_stack_hermes_gid | int
+    fail_msg: >-
+      Container UID/GID {{ _agent_stack_hermes_uid }}:{{ _agent_stack_hermes_gid }}
+      does not fit the declared subordinate range
+      {{ agent_stack_agent_subid_start }}:{{ agent_stack_agent_subid_count }}.
+
 - name: Create the directories of the vault sync and its hooks
   ansible.builtin.file:
     path: "{{ item }}"
@@ -148,14 +159,15 @@
         recurse: true
       register: _agent_stack_vault_zone_objects
 
-    # The host-side analyzer owns curator inputs. Everything else in the zone is the
-    # gateway's, and must use the effective subuid rather than literal host uid 10000.
+    # Only these two trees are gateway-writable. Session records, zone docs and
+    # curator inputs keep their existing owners instead of gaining sandbox write.
     - name: Select the vault-zone objects the gateway owns
       ansible.builtin.set_fact:
         _agent_stack_vault_gateway_objects: >-
           {{ _agent_stack_vault_zone_objects.files
-             | rejectattr('path', 'match',
-                          '^' ~ ((agent_stack_vault_clone ~ '/' ~ agent_stack_vault_zone ~ '/curator') | regex_escape) ~ '(/|$)')
+             | selectattr('path', 'match',
+                          '^' ~ ((agent_stack_vault_clone ~ '/' ~ agent_stack_vault_zone ~ '/') | regex_escape)
+                          ~ '(memories|proposals)(/|$)')
              | list }}
 
     - name: Decide whether shared vault files need a stopped-writer repair
@@ -199,7 +211,7 @@
     - name: Stop sandboxes before repairing shared vault files
       ansible.builtin.shell:
         cmd: >-
-          ids=$(docker ps -aq --filter label=hermes-agent=1);
+          ids=$(docker ps -q --filter label=hermes-agent=1);
           if [ -n "$ids" ]; then docker rm -f $ids; fi
       become: true
       become_user: "{{ agent_stack_agent_user }}"
@@ -257,13 +269,12 @@
         path: "{{ item.path }}"
         owner: "{{ _agent_stack_hermes_host_uid }}"
         group: "{{ _agent_stack_hermes_host_gid }}"
+        follow: false
       loop: "{{ _agent_stack_vault_gateway_objects }}"
       when:
+        - _agent_stack_vault_repair_needed | bool
         - not ansible_check_mode
         - item.path not in (_agent_stack_vault_memory_locks.files | map(attribute='path') | list)
-        - >-
-          item.path is not match(
-            '^' ~ ((agent_stack_vault_clone ~ '/' ~ agent_stack_vault_zone ~ '/curator') | regex_escape) ~ '(/|$)')
 
     - name: Enable the vault sync timer
       ansible.builtin.systemd:

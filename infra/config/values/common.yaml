@@ -2575,9 +2575,9 @@ apps:
           proxy_port: 1055
           memory_limit: 128m
           cpu_limit: 0.5
-        # ADR-068 D7: scheduled and delegated work uses the lower-cost legacy
-        # `unmetered` role. The key name is historical: NaN now meters all chat
-        # models from one credit pool (per-model free quotas ended 2026-11).
+        # ADR-068 D7: the key is PR-Agent's, so scheduled and delegated work runs
+        # on a model that spends no NaN credits; only an interactive turn draws
+        # from the shared credit pool.
         models:
           default: deepseek-v4-flash
           unmetered: qwen3.6

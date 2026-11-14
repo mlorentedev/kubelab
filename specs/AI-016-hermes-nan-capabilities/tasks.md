@@ -50,11 +50,11 @@ owner: manu
 
 ## Closing
 
-- [ ] Every acceptance criterion is covered by tests and a non-vacuous `features.json` command.
-- [ ] Diff is within scope and production executable LOC is reported in the PR.
-- [ ] `verification.md` filled with observed evidence; no unproven Slack or idempotency claim.
-- [ ] Independent adversarial review proposed (`dotf spec review AI-016-hermes-nan-capabilities`) before archive; do not self-review or archive from this implementing session.
-- [ ] Draft PR opened while iterating, marked ready only when checks and live evidence are complete; no auto-merge or force-push.
+- [x] Every acceptance criterion is covered by tests and a non-vacuous `features.json` command.
+- [x] Diff is within scope and production executable LOC is reported in the PR.
+- [x] `verification.md` filled with observed evidence; no unproven Slack or idempotency claim.
+- [x] Independent adversarial review proposed (`dotf spec review AI-016-hermes-nan-capabilities`) before archive; do not self-review or archive from this implementing session.
+- [x] Draft PR opened while iterating, marked ready only when checks and live evidence are complete; no auto-merge or force-push.
 - [ ] `dotf pr triage-queue` rerun and the new PR's checks/review output dispositioned before completion is claimed.
 - [ ] Session ends with `/handoff`.
 

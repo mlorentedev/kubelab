@@ -39,6 +39,13 @@ def test_host_ownership_is_derived_from_the_rootless_subordinate_ranges() -> Non
     assert int(resolved["_agent_stack_hermes_host_gid"]) == int(resolved["agent_stack_agent_subid_start"]) + 9999
 
 
+def test_the_gateway_identity_must_fit_the_subordinate_ranges() -> None:
+    task = _named(VAULT_TASKS, "Check the gateway identity fits the subordinate ranges")
+    conditions = task["ansible.builtin.assert"]["that"]
+    assert any("agent_stack_agent_subid_count | int >= _agent_stack_hermes_uid | int" in c for c in conditions)
+    assert any("agent_stack_agent_subid_count | int >= _agent_stack_hermes_gid | int" in c for c in conditions)
+
+
 def test_the_vault_root_allows_traverse_without_allowing_a_listing() -> None:
     task = _named(VAULT_TASKS, "Create the vault clone's directory")
     assert task["ansible.builtin.file"]["mode"] == "0711"
@@ -55,14 +62,20 @@ def test_the_zone_and_memories_have_one_effective_owner_and_no_sticky_bit() -> N
         assert spec["mode"] == "0755"
 
 
-def test_existing_zone_files_are_reclaimed_without_touching_curator_inputs() -> None:
+def test_reclaim_is_limited_to_gateway_writable_trees_and_stopped_drift() -> None:
+    select = _named(VAULT_TASKS, "Select the vault-zone objects the gateway owns")
+    selection = str(select["ansible.builtin.set_fact"])
+    assert "memories|proposals" in selection
+    assert "curator" not in selection, "restrict positively instead of denying only one sensitive tree"
+
     task = _named(VAULT_TASKS, "Reclaim existing vault-zone ownership")
     spec = task["ansible.builtin.file"]
     assert spec["path"] == "{{ item.path }}"
     assert spec["owner"] == "{{ _agent_stack_hermes_host_uid }}"
     assert spec["group"] == "{{ _agent_stack_hermes_host_gid }}"
+    assert spec["follow"] is False
     assert "mode" not in spec, "memory files stay 0600; the namespace-aware sync reads them"
-    assert any("curator" in condition for condition in task["when"])
+    assert any("_agent_stack_vault_repair_needed" in condition for condition in task["when"])
 
 
 def test_deleted_locks_are_not_reclaimed_after_they_are_removed() -> None:
@@ -71,6 +84,13 @@ def test_deleted_locks_are_not_reclaimed_after_they_are_removed() -> None:
         "item.path not in" in condition and "_agent_stack_vault_memory_locks" in condition
         for condition in task["when"]
     ), "the pre-cleanup inventory includes locks that no longer exist by this task"
+
+
+def test_repair_stops_running_sandboxes_without_deleting_stopped_workspaces() -> None:
+    task = _named(VAULT_TASKS, "Stop sandboxes before repairing shared vault files")
+    command = task["ansible.builtin.shell"]["cmd"]
+    assert "docker ps -q" in command
+    assert "docker ps -aq" not in command
 
 
 def test_stale_locks_are_removed_only_after_writers_stop() -> None:

@@ -32,6 +32,6 @@
     "behavior": "Agent-stack regression tests and repository lint/tests pass, the second provision reports changed=0, and runbook and verification documents contain observed evidence and sibling follow-ups.",
     "verification": "make test && make lint && make lint-ansible && git diff --check",
     "state": "passing",
-    "evidence": "10457 passed and 96 skipped; Ruff/format and 26 playbook parses passed; final provisions changed=2 then changed=0 with failed=0; health, runbook and follow-ups recorded."
+    "evidence": "10460 passed and 96 skipped; Ruff/format and 26 playbook parses passed; post-review final provisions both changed=0 with failed=0; independent PASS-WITH-GAPS dispositions, health, runbook and follow-ups recorded."
   }
 ]
