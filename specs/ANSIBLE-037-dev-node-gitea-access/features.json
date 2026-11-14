@@ -1,8 +1,8 @@
 [
   {
     "id": "ANSIBLE-037-dev-node-gitea-access-f1",
-    "behavior": "A fresh `make provision NODE=ace2 ENV=staging` (untagged) leaves ace2 able to clone and push to a Gitea repository with no manual step, and a second untagged run reports changed=0",
-    "verification": "make provision NODE=ace2 ENV=staging 2>&1 | grep -E '^ace2 .*changed=0 .*failed=0' && bash specs/ANSIBLE-037-dev-node-gitea-access/ac4_revocation_probe.sh",
+    "behavior": "`make provision NODE=ace2 ENV=staging` leaves ace2 able to clone and push to a Gitea repository with no manual step. Idempotence is measured on the role's forge block (`TAGS=gitea`), whose second run reports changed=0; an untagged run reports failed=0, and its whole-play changed=0 depends on #3534 (poetry reinstalls on every run), which is outside this spec",
+    "verification": "make provision NODE=ace2 ENV=staging TAGS=gitea 2>&1 | grep -E '^ace2 +: ok=[1-9][0-9]* +changed=0 +unreachable=0 +failed=0' && bash specs/ANSIBLE-037-dev-node-gitea-access/ac1_clone_push_probe.sh",
     "state": "pending",
     "evidence": ""
   },
