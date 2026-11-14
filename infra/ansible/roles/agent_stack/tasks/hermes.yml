@@ -86,6 +86,32 @@
         path: "{{ agent_stack_hermes_compose }}"
       register: _agent_stack_hermes_prior
 
+    - name: Disable the Hermes liveness timer
+      ansible.builtin.systemd:
+        name: agent-stack-hermes-watchdog.timer
+        enabled: false
+        state: stopped
+        daemon_reload: true
+      register: _agent_stack_hermes_watchdog_disabled
+      failed_when: >-
+        _agent_stack_hermes_watchdog_disabled is failed
+        and 'Could not find' not in (_agent_stack_hermes_watchdog_disabled.msg | default(''))
+      when: not ansible_check_mode
+
+    - name: Remove the Hermes liveness units
+      ansible.builtin.file:
+        path: "/etc/systemd/system/{{ item }}"
+        state: absent
+      loop:
+        - agent-stack-hermes-watchdog.timer
+        - agent-stack-hermes-watchdog.service
+      register: _agent_stack_hermes_watchdog_removed
+
+    - name: Reload systemd after removing the Hermes liveness units
+      ansible.builtin.systemd:
+        daemon_reload: true
+      when: _agent_stack_hermes_watchdog_removed is changed and not ansible_check_mode
+
     - name: Take the previous hermes-kubelab down
       ansible.builtin.command: >-
         docker compose -p {{ agent_stack_hermes_project }} -f {{ agent_stack_hermes_compose }} down
@@ -753,3 +779,49 @@
     # changes nothing on the node.
     - name: Prove the fallback
       ansible.builtin.import_tasks: hermes_fallback_probe.yml
+
+    # The probe is root's and reads only the rootless daemon's health verdict.
+    # It starts after the gateway checks so provisioning cannot page on startup.
+    - name: Install the Hermes liveness probe
+      ansible.builtin.copy:
+        src: hermes-liveness.sh
+        dest: "{{ agent_stack_vault_libexec }}/hermes-liveness.sh"
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Install the Hermes liveness units
+      ansible.builtin.template:
+        src: "agent-stack-hermes-watchdog.{{ item }}.j2"
+        dest: "/etc/systemd/system/agent-stack-hermes-watchdog.{{ item }}"
+        owner: root
+        group: root
+        mode: "0644"
+      loop: [service, timer]
+      register: _agent_stack_hermes_watchdog_units
+
+    - name: Wait for the Hermes healthcheck to report healthy
+      ansible.builtin.command:
+        argv:
+          - docker
+          - inspect
+          - --format
+          - "{% raw %}{{.State.Health.Status}}{% endraw %}"
+          - hermes-kubelab
+      become_user: "{{ agent_stack_agent_user }}"
+      environment: "{{ agent_stack_agent_daemon_env }}"
+      register: _agent_stack_hermes_docker_health
+      until: _agent_stack_hermes_docker_health.stdout == 'healthy' or ansible_check_mode
+      retries: 24
+      delay: 5
+      changed_when: false
+      check_mode: false
+      ignore_errors: "{{ ansible_check_mode }}"
+
+    - name: Enable the Hermes liveness timer
+      ansible.builtin.systemd:
+        name: agent-stack-hermes-watchdog.timer
+        enabled: true
+        state: started
+        daemon_reload: "{{ _agent_stack_hermes_watchdog_units is changed }}"
+      when: not ansible_check_mode

@@ -1,0 +1,37 @@
+[
+  {
+    "id": "AI-013-hermes-liveness-f1",
+    "behavior": "AC1: a stopped or unhealthy gateway fails the local health contract and the two-minute watcher emits one deduplicated incident through kubelab-notify@ after boot grace.",
+    "verification": "poetry run pytest -q tests/test_hermes_liveness.py -k 'healthcheck or notification_hooks or timer_interval'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "AI-013-hermes-liveness-f2",
+    "behavior": "AC2: healthy succeeds; starting, unhealthy, missing and Docker errors fail closed; recovery uses kubelab-notify-recovered@ and ignores provider readiness.",
+    "verification": "poetry run pytest -q tests/test_hermes_liveness.py -k 'probe or recovery or simple_health'",
+    "state": "passing",
+    "evidence": "19 focused tests passed: only healthy succeeds; starting/unhealthy/missing/Docker failures fail closed; invalid names exit 64 before Docker; recovery hook is rendered; simple health excludes provider readiness."
+  },
+  {
+    "id": "AI-013-hermes-liveness-f3",
+    "behavior": "AC3: a powered-off ace2 cannot page because there is no external monitor, persistent timer or always-on dependency.",
+    "verification": "poetry run pytest -q tests/test_hermes_liveness.py -k 'on_demand or boot_grace or external_monitor'",
+    "state": "passing",
+    "evidence": "Tests prove no Persistent/OnCalendar directive, Kuma monitor or egress dependency; ten-minute local boot grace and two-minute cadence are rendered. Power-off was not physically exercised; no external notification path exists."
+  },
+  {
+    "id": "AI-013-hermes-liveness-f4",
+    "behavior": "AC4: disabling Hermes disables and removes the watcher; enabling it starts the watcher only after gateway health verification.",
+    "verification": "poetry run pytest -q tests/test_hermes_liveness.py -k 'unconfigured or activation_order'",
+    "state": "passing",
+    "evidence": "Role tests prove unconfigured teardown precedes Compose shutdown and timer activation follows API/Slack health plus Docker healthy. All 26 playbooks parse; dry-run read/wait contracts pass."
+  },
+  {
+    "id": "AI-013-hermes-liveness-f5",
+    "behavior": "AC5: provisioning is idempotent, regression tests protect the wiring, and an approved live stop/start records alert and recovery evidence without credentials.",
+    "verification": "poetry run pytest -q tests/test_hermes_liveness.py && make lint-ansible",
+    "state": "pending",
+    "evidence": ""
+  }
+]

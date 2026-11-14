@@ -23,6 +23,7 @@ owner: manu
 | tailscale sidecar (`tag:hermes`) | same rootless daemon, userspace mode | same | `/var/lib/hermes-kubelab/tailscale` (node key) |
 | tailnet and private-network refusal for the agent's uid (new connections only, #2161) | root | `agent-stack-egress.service`, `RequiredBy=user@<uid>` | `/opt/agent-stack/agent-egress.nft` |
 | bridge wait before the agent's manager | root | `agent-stack-hermes-bind.service`, `WantedBy=user@<uid>` | none |
+| gateway liveness | uid `hermes-kubelab`, local rootless Docker read | `agent-stack-hermes-watchdog.timer`: 10 min boot grace, then every 2 min | no state; uses the fleet notify spool |
 | vault sync (ADR-068 D4, amended) | uid `hermes-kubelab`, token from systemd | `hermes-kubelab-vault-sync.timer`: 2 min after boot, then every 15 min | clone `/var/lib/hermes-kubelab/vault`; token `/opt/agent-stack/vault-token` (root, 0600) |
 | vault mirror (spec AI-009 AC9) | root, token from systemd, the agent's home inaccessible | `agent-stack-vault-mirror.timer`, at the sync's interval | `/opt/agent-stack/vault-mirror` (`git/` history, `tree/` notes) |
 | MCP bridge (mcpo, the vault read-only) | system Docker, uid 65534, read-only root, no published port | Open WebUI's Compose project | none; mounts `vault-mirror/tree` read-only, key in `/opt/agent-stack/mcp-bridge.env` (0600) |
@@ -44,6 +45,32 @@ delays the agent by up to 120 s and no more). To check the firewall by hand:
 `sudo ufw status | grep 8642` shows the one allow rule, and a refused attempt
 from another network logs `[UFW BLOCK] ... DPT=8642` in `journalctl -k`
 (lesson-542). Every provision runs both probes.
+
+## Gateway liveness
+
+Compose checks `GET 127.0.0.1:8642/health` every 30 s (10 s timeout, three
+retries, 60 s start grace). This is deliberately the simple, unauthenticated
+process-health route: `/health/detailed` and Slack/provider readiness are not
+liveness, and no API key enters the healthcheck. The host's
+`agent-stack-hermes-watchdog.service` reads only the resulting Docker health
+through the agent's rootless socket. Its timer waits ten minutes after boot or
+activation and then runs every two minutes.
+
+A non-healthy result pages through `kubelab-notify@`; the fleet notifier sends
+one initial page per incident, hourly reminders and a recovery through
+`kubelab-notify-recovered@`. A delivery the fabric cannot take stays in its
+spool. Inspect `systemctl status agent-stack-hermes-watchdog.timer` and
+`journalctl -u agent-stack-hermes-watchdog.service` on ace2. A forced validation
+uses `docker stop hermes-kubelab` on the agent's daemon, starts the oneshot to
+prove the page, then starts the gateway and reruns the oneshot to prove
+recovery. Do not use `docker kill` for this check: Compose can restart a
+transient kill between polls, which is intentionally not an incident.
+
+There is no Kuma monitor, `Persistent` timer or always-on dependency. Powering
+ace2 off therefore pages nobody. The watcher also stays independent of
+`agent-stack-egress.service`: an unexpected daemon/egress death must still
+fail and page rather than disable its own detector. For an intentional silent
+kill-switch stop, stop the watcher timer first as shown below.
 
 ## Models
 
@@ -172,8 +199,11 @@ at the edge's downlink, and the budget.
 
 - **Open WebUI**: `sudo systemctl stop agent-stack-webui.service`. A provision
   starts it again.
-- **hermes-kubelab, everything the agent runs**: `sudo systemctl stop
-  agent-stack-egress.service`. The agent's user manager requires that unit, so
+- **hermes-kubelab, everything the agent runs**: for an intentional silent
+  stop, first `sudo systemctl stop agent-stack-hermes-watchdog.timer`, then
+  `sudo systemctl stop agent-stack-egress.service`. Without that first step the
+  independent liveness watcher reports the stopped gateway on a running node.
+  The agent's user manager requires the egress unit, so
   systemd stops `user@<uid>.service` with it, and the rootless daemon and every
   container on it go down. This is the kill switch: it removes the agent and
   the rule that confines it together, never one without the other. The vault

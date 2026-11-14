@@ -1,0 +1,25 @@
+# {{ ansible_managed }}
+[Unit]
+Description=hermes-kubelab local gateway liveness (AI-013)
+Wants=network-online.target
+After=network-online.target
+# The existing fabric deduplicates repeated failures and spools an undelivered page.
+OnFailure=kubelab-notify@%n.service
+OnSuccess=kubelab-notify-recovered@%n.service
+
+[Service]
+Type=oneshot
+User={{ agent_stack_agent_user }}
+Group={{ agent_stack_agent_user }}
+Environment=DOCKER_HOST=unix:///run/user/{{ _agent_stack_agent_uid }}/docker.sock
+Environment=DOCKER_CONFIG=/tmp/hermes-liveness-docker
+ExecStart={{ agent_stack_vault_libexec }}/hermes-liveness.sh hermes-kubelab
+TimeoutStartSec=30s
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+StandardOutput=journal
+StandardError=journal
