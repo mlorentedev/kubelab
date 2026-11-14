@@ -291,6 +291,18 @@ def sops_can_decrypt() -> bool:
         return False
 
 
+def _mark_windows_known_failures(items: list[pytest.Item]) -> None:
+    """Mark the declared Windows failures xfail; refuse an entry that names nothing (#3409)."""
+    from tests import windows_known_failures as known
+
+    root = Path(__file__).resolve().parents[1]
+    stale = known.apply(items, known.parse(known.LIST.read_text(encoding="utf-8")), root)
+    if stale:
+        raise pytest.UsageError(
+            f"{known.LIST.name} lists tests that do not exist (renamed or removed?):\n" + "\n".join(stale)
+        )
+
+
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     """Skip tests needing real SOPS material when it cannot be decrypted.
 
@@ -307,6 +319,8 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     decision, not a test-plumbing one, and is deliberately left to a human
     (SEC-022 removed the CI recipient, so no CI key opens these files).
     """
+    if sys.platform == "win32":
+        _mark_windows_known_failures(items)
     if sops_can_decrypt():
         return
     skip = pytest.mark.skip(

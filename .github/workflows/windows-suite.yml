@@ -1,0 +1,66 @@
+# The full test suite on Windows (#3409). The operator's workstation runs
+# Windows (ADR-052), and until this job nothing ran the suite there, so tests
+# that fail on it kept landing.
+#
+# tests/windows_known_failures.txt declares what fails today, by cause; conftest
+# marks those tests xfail on Windows. So this job fails on a failure outside that
+# list, and lists a declared test that now passes as XPASS: remove it from the
+# file. The list can only shrink.
+#
+# Not a required check: a red run here says a change broke Windows, which the
+# author fixes or declares, and does not block a merge.
+name: Windows suite
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-suite-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  suite:
+    name: Full suite (Windows)
+    # GitHub-hosted: ADR-030's self-hosted runner is Linux-only.
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - name: Allow long paths
+        run: git config --system core.longpaths true
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7
+        with:
+          python-version: '3.12'
+
+      - name: Install Poetry
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "poetry>=1.8,<2.0"
+
+      - name: Install project and dev deps
+        run: poetry install
+
+      - name: Full suite
+        shell: bash
+        run: |
+          set -o pipefail
+          poetry run pytest -n auto --dist loadfile -q --tb=line -rfEX 2>&1 | tee pytest.log
+
+      - name: Report declared failures that now pass
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '### Declared Windows failures that now pass'
+            echo 'Remove these from `tests/windows_known_failures.txt`:'
+            echo '```'
+            grep -E '^XPASS ' pytest.log || echo '(none)'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
