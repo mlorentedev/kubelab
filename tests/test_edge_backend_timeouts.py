@@ -134,5 +134,7 @@ def test_every_exception_is_used_and_says_why() -> None:
 def test_headscale_runs_under_the_default_since_a_node_re_registered_through_it() -> None:
     """ADR-076 D2: the exception was lifted by OPS-065 AC4. Bringing it back is a new decision, recorded there."""
     assert not any(e["route"] == "headscale" for e in EXCEPTIONS)
-    names = {n for r, _, ns in _rules(_render("prod")) if r == "headscale" for n in ns}
+    rules = [(r, ns) for r, _, ns in _rules(_render("prod")) if r == "headscale"]
+    assert rules, "prod renders no headscale IngressRoute: this test no longer checks the route it is named for"
+    names = {n for _, ns in rules for n in ns}
     assert not names, f"the headscale route still references a transport of its own: {sorted(names)}"
