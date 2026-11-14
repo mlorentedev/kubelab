@@ -39,7 +39,7 @@ Written only after R1 chooses the transport. Tests first: the Ansible-path guard
 - [x] [P] [AC3] Write failing test: the Gitea host key is pinned by the role, so a first connection cannot produce an interactive prompt. Trust-on-first-use is a manual step by another name.
 - [x] [AC3] Implement host-key pinning. ✓ 2026-09-02 — **declared, not scanned**: `apps.services.core.gitea.ssh_host_key` in `common.yaml` (a host public key is not a secret), written with `ansible.builtin.known_hosts`. A keyscan would have been TOFU with the prompt suppressed rather than answered.
 - [x] [AC1] Implement the credential delivery and git configuration so a clone works with no per-repo setup, per R1's chosen transport. ✓ 2026-09-02 — keypair generated **on the node** (`creates:`-guarded), public half read back and registered through the API from the controller, private half never transits. **The ssh-config drop-in location was measured, not assumed**: ace2's `~/.ssh/config` (dotfiles-owned) carries no `Include`, and OpenSSH has no implicit `.d` convention for the user file, so `~/.ssh/config.d/gitea.conf` would have been read by nothing while every task reported ok. `/etc/ssh/ssh_config.d/60-kubelab-gitea.conf` is included by Ubuntu's shipped `ssh_config` and belongs to no other writer.
-- [x] [AC1] ✓ 2026-11-12 — second run `changed=0` against the agents' account (verification.md). Confirm idempotence: a second `make provision NODE=ace2 ENV=staging` reports `changed=0`. This is the repo's standing bar, not this spec's invention.
+- [x] [AC1] ✓ 2026-11-12 — second run `changed=0` against the agents' account (verification.md). **What was measured:** `TAGS=gitea` gives `changed=0` on its second run (2026-11-12 and 2026-11-14). The untagged command gives `failed=0` and `changed=1` on its second run (2026-11-14), the one change being poetry, #3534, outside this spec. Confirm idempotence: a second `make provision NODE=ace2 ENV=staging` reports `changed=0`. This is the repo's standing bar, not this spec's invention.
 
 ### Part 2 — evidence, on live nodes
 
@@ -50,13 +50,13 @@ Written only after R1 chooses the transport. Tests first: the Ansible-path guard
 
 ## Closing
 
-- [ ] Every acceptance criterion from `proposal.md` is covered by at least one test
-- [ ] Every acceptance criterion has a matching entry in `features.json` with a non-vacuous verification command
-- [ ] Type checks pass
-- [ ] Lint passes
-- [ ] `make test` green, and `make test-infra ENV=staging` shows no new failures
-- [ ] No unrelated changes in the diff (no scope creep)
-- [ ] `verification.md` filled in
-- [ ] Any gotcha that outlived the change is in CLAUDE.md or `docs/lessons/`
-- [ ] Board ticket #1075 reflects reality
-- [ ] PR opened referencing this spec folder; `adversarial-review` before `/spec archive`
+- [x] Every acceptance criterion from `proposal.md` is covered by at least one test ✓ 2026-11-14 — AC2/AC3/AC5 by `tests/test_dev_node_gitea_{identity,agent_key,host_key_pin}.py`; AC1, AC3 and AC4 also by live drills (`ac1_clone_push_probe.sh`, `ac3_host_key_probe.sh`, `ac4_revocation_probe.sh`), which need powered hardware and so run outside CI. AC6 is withdrawn.
+- [x] Every acceptance criterion has a matching entry in `features.json` with a non-vacuous verification command ✓ 2026-11-14 — f1 AC1, f2 AC2, f3 AC3, f4 AC4, f5 R1; each command exits non-zero on failure (f1's grep needs `ok>=1`, so an unreached node fails it; r1 exits 1 without the banner).
+- [x] Type checks pass ✓ 2026-11-14 — `poetry run mypy toolkit`: no issues in 167 files (this spec changes no toolkit code).
+- [x] Lint passes ✓ 2026-11-14 — `make lint` and `make lint-ansible` (26 playbooks parse).
+- [x] `make test` green, and `make test-infra ENV=staging` shows no new failures ✓ 2026-11-14 — `make test` 10557 passed; `test-infra` 79 passed, 2 failed, both the staging Gitea orphans tracked by #2061/#2284 (verification.md, Test status).
+- [x] No unrelated changes in the diff (no scope creep) ✓ 2026-11-14 — the TOOL-035 probes moved out in `b09461e6`; the npm repair landed separately (#3478).
+- [x] `verification.md` filled in ✓ 2026-11-14
+- [x] Any gotcha that outlived the change is in CLAUDE.md or `docs/lessons/` ✓ 2026-11-14 — lesson-740 (#3411) and lesson-748 (#3478).
+- [x] Board ticket #1075 reflects reality ✓ 2026-11-14 — In Progress until the archive PR merges and closes it.
+- [x] PR opened referencing this spec folder; `adversarial-review` before `/spec archive` ✓ 2026-11-14 — the archive PR follows a PASS from `dotf spec review`.

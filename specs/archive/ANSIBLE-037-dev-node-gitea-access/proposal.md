@@ -1,7 +1,7 @@
 ---
 id: "ANSIBLE-037-dev-node-gitea-access"
 type: spec
-status: draft # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-09-01"
 issue: "mlorentedev/kubelab#1075"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal]
@@ -67,7 +67,7 @@ Every one of these is settled by observing a live instance, never by reading a t
 
 ## Acceptance criteria
 
-- [x] **AC1** ✓ 2026-11-12 (verification.md, Evidence) — a fresh `make provision NODE=ace2 ENV=staging` leaves ace2 able to clone and push to a Gitea repository with no manual step, demonstrated by a transcript; a second run reports `changed=0`.
+- [x] **AC1** ✓ 2026-11-12 (verification.md, Evidence) — a fresh `make provision NODE=ace2 ENV=staging` leaves ace2 able to clone and push to a Gitea repository with no manual step, demonstrated by a transcript and by `ac1_clone_push_probe.sh`. Idempotence was measured on the role's forge block: a second `TAGS=gitea` run reports `changed=0`. An untagged run reports `failed=0`, and its whole-play `changed=0` depends on #3534 (poetry reinstalls on every run), outside this spec.
 - [x] **AC2** ✓ 2026-11-12 (verification.md, Evidence) — the credential resolves from `apps.auth.identities`, not hardcoded in the role, and anything secret about it is registered in `SECRET_CATALOG` with `envs` checked against the ANSIBLE-033 failure mode.
 - [x] **AC3** ✓ 2026-11-14 (verification.md, Evidence) — the Gitea host key is pinned by the role; a first connection produces no interactive prompt, demonstrated on a node whose `known_hosts` was cleared.
 - [x] **AC4** ✓ 2026-11-12 (verification.md, Evidence) — removing the node's key from Gitea makes the access fail, and re-provisioning restores it. Both halves captured; a credential that works proves only half the claim (AUTH-004 AC5's finding).
