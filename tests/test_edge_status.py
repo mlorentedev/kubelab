@@ -206,7 +206,7 @@ def test_no_resolver_answering_is_dead(edge: Edge) -> None:
     assert "resolver" in _report(result)["uplink"]
 
 
-@pytest.mark.skipif(os.geteuid() == 0, reason="root reads a file whatever its mode")
+@pytest.mark.skipif(hasattr(os, "geteuid") and os.geteuid() == 0, reason="root reads a file whatever its mode")
 @pytest.mark.parametrize("unreadable", ["file", "directory"])
 def test_a_lease_it_cannot_read_is_unknown_not_dead(edge: Edge, unreadable: str) -> None:
     """networkd writes its leases world-readable. A lease this user cannot read says
