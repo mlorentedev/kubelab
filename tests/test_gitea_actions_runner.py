@@ -129,6 +129,9 @@ def _template_vars(runner: dict) -> dict:
         act_runner_log_retention_days=runner["log_retention_days"],
         act_runner_artifact_retention_days=runner["artifact_retention_days"],
         act_runner_run_retention_days=runner["run_retention_days"],
+        act_runner_zombie_task_timeout=runner["zombie_task_timeout"],
+        act_runner_endless_task_timeout=runner["endless_task_timeout"],
+        act_runner_abandoned_job_timeout=runner["abandoned_job_timeout"],
         docker_dns_servers=common["networking"]["tailnet_first_resolvers"],
         gitea_dns_servers=common["networking"]["public_resolvers"],
     )
@@ -164,6 +167,7 @@ def _config() -> dict:
             act_runner_shutdown_timeout=runner["shutdown_timeout"],
             act_runner_workdir_cleanup_age=runner["workdir_cleanup_age"],
             act_runner_idle_cleanup_interval=runner["idle_cleanup_interval"],
+            act_runner_job_timeout=runner["job_timeout"],
         )
     )
 
@@ -624,3 +628,39 @@ def test_idle_cleanup_is_enabled_and_matches_the_reaper_window() -> None:
     assert _seconds(runner_cfg["workdir_cleanup_age"]) == reaper_seconds, (
         "the runner's sweep and the node_maintenance reaper must agree on when a volume is stale"
     )
+
+
+def test_every_bound_on_a_running_job_is_declared_and_ordered() -> None:
+    """#3079: a job held a runner slot for hours, and no setting in git said for how long.
+
+    Four bounds end a job, one in the runner and three crons in Gitea, and every one of
+    them was inherited. They are declared at the defaults the pinned versions ship
+    (gitea/runner 4.1.0 `config.go`, Gitea 1.27.3 `modules/setting/actions.go`), so an
+    image bump can no longer move them unseen. The order is the property that matters:
+
+    - zombie < job: Gitea fails a task whose state has not been UPDATED for this long, so
+      it catches a runner that died, and must not fire on a job that is merely long.
+    - job <= endless: the runner cancels the job itself, with a log line saying why,
+      before Gitea's cron (every 30m, on STARTED time) fails it from outside.
+    - abandoned >= 24h: a job WAITING for a runner survives the node being off
+      overnight; the Beelink is on-demand (ADR-028).
+    """
+    runner = _ssot()
+    env = _gitea_env()
+    assert _config()["runner"]["timeout"] == runner["job_timeout"]
+    for key in ("zombie_task_timeout", "endless_task_timeout", "abandoned_job_timeout"):
+        assert env[f"GITEA__actions__{key.upper()}"] == runner[key], f"{key} is declared but not rendered"
+    zombie, job, endless, abandoned = (
+        _seconds(runner[k])
+        for k in ("zombie_task_timeout", "job_timeout", "endless_task_timeout", "abandoned_job_timeout")
+    )
+    assert zombie < job, "the zombie sweep would fail a job that is long but alive"
+    assert job <= endless, "Gitea would fail the job from outside before the runner cancels it"
+    assert abandoned >= 24 * 3600, "a job queued overnight would be dropped while the node is off"
+
+
+def _gitea_env() -> dict:
+    """The Gitea service's environment, as rendered."""
+    services = _render()["services"]
+    gitea = next(svc for name, svc in services.items() if "GITEA__actions__ENABLED" in (svc.get("environment") or {}))
+    return gitea["environment"]

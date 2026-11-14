@@ -7,9 +7,11 @@
 # read out of the image itself -- not from memory -- so the key names are the
 # ones this version actually parses.
 #
-# Only the keys that differ from the shipped defaults are set. Everything else
-# is deliberately absent so an upgrade inherits the project's choices rather
-# than a snapshot of them frozen here.
+# Mostly the keys that differ from the shipped defaults. Everything else is
+# deliberately absent so an upgrade inherits the project's choices rather than a
+# snapshot of them frozen here. The exception is a key another setting is ordered
+# against (`timeout`, against Gitea's ENDLESS_TASK_TIMEOUT): an inherited value
+# could move on an upgrade and break the order with no diff to review.
 
 log:
   level: info
@@ -43,6 +45,10 @@ runner:
   # switches the whole sweep off, so both are declared rather than inherited.
   workdir_cleanup_age: {{ act_runner_workdir_cleanup_age }}
   idle_cleanup_interval: {{ act_runner_idle_cleanup_interval }}
+  # #3079. How long one job may run before the runner cancels it. Equal to the shipped
+  # default, declared so it is read here and ordered against Gitea's
+  # ENDLESS_TASK_TIMEOUT by a test, rather than inherited from whatever image is pinned.
+  timeout: {{ act_runner_job_timeout }}
 
 cache:
   # actions/cache support. On by default in act_runner, and left on: the whole
