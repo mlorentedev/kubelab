@@ -35,11 +35,14 @@ Characterization first, so the live-edge zero diff is pinned before anything mov
 - [x] [P] [AC4] Failing test in `tests/test_acme_token_scope.py`: `acme_probe_zones(env_configs, registry)` includes the apex of each registered product hostname per env, and a registered hostname's apex missing from the probe set fails. Then implement and wire it into `cli/secrets.py`. Expected: PASS.
 - [x] [AC5] Receiver: run `toolkit sync edge-dns` after render and `git add infra/config/products/edge.json`; add a static test asserting both. Expected: PASS.
 - [x] Docs: `docs/runbooks/headscale-setup.md` §6.1, the `coredns-custom.yaml` comment, CLAUDE.md gotcha, the ADR-067 line 91 amendment, the IDP-053 D8 note and the monitors.json description.
-- [ ] [AC6] `make mutate` on one derivation line, red; `make test` in full; `make validate-sync` for both envs.
+- [x] [AC6] `make mutate` on one derivation line, red; `make test` in full; `make validate-sync` for both envs. ✓ 2026-11-14
+- [x] [AC3] The derivation refuses a host that is not `staging.<domain>` (a bare apex would capture prod for VPN clients); mutant red. ✓ 2026-11-14
 
 ## Implementation (PR 2: #3489)
 
 - [ ] Derive `prod_records` into `edge.json`; Terraform `local.records` reads it; the coredns hairpin reads it; web's apex record moves; `proxied` defaults to false; the guard is inverted. Owner runs `make tf-dns-plan`: no changes.
+- [ ] `tests/test_dns_contract_hostnames.py` reads prod hostnames from the staging snapshots (`contracts/*.yaml`), not `contracts/prod/`, which is what prod deploys; PR 2 replaces that guard, so it reads the prod snapshots there.
+- [ ] #3511: the rendered Corefile header still names `networking.staging_zones` (kept for the AC2 zero diff).
 
 ## Closing
 

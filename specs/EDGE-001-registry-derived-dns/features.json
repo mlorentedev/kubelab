@@ -8,7 +8,7 @@
   },
   {
     "id": "EDGE-001-f2",
-    "behavior": "AC2: Corefile, Pi-hole forwarding, Headscale split and hairpin render byte-identical to master's for today's zones",
+    "behavior": "AC2: Corefile and Pi-hole forwarding render byte-identical to master's, the Headscale split item for item, the hairpin as equal YAML data",
     "verification": "poetry run pytest -q tests/test_edge_dns_zero_diff.py tests/test_headscale_runbook_compose.py",
     "state": "pending",
     "evidence": ""

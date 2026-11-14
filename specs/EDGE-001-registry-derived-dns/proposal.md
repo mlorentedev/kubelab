@@ -52,7 +52,7 @@ The product-image receiver regenerates the manifest in the same bot PR, so a new
 ## Acceptance criteria
 
 - [ ] AC1: `edge.json` is generated from the registry, the snapshots, `zones.json` and the declared platform zones. `make validate-sync ENV=staging` and `ENV=prod` exit 0 with `staging.imagesensortool.com` removed from `common.yaml`, and fail when the manifest is edited by hand.
-- [ ] AC2: Zero diff. The rendered Corefile, `pihole-forwarding.conf`, Headscale split DNS and hairpin blocks are byte-identical to master's for today's zones, and the owner's `make deploy TARGET=vps ENV=prod CHECK=1` and `TARGET=dns ENV=staging CHECK=1` report `changed=0`.
+- [ ] AC2: Zero diff. The rendered Corefile and `pihole-forwarding.conf` are byte-identical to master's for today's zones, the Headscale split list is identical item for item, and the hairpin blocks parse to the same YAML data (their comments may differ), and the owner's `make deploy TARGET=vps ENV=prod CHECK=1` and `TARGET=dns ENV=staging CHECK=1` report `changed=0`.
 - [ ] AC3: A fixture product with a staging hostname on a new declared apex yields its zone and its probe target; removing it removes both. A hostname whose apex is not in `zones.json` is refused at render and at derivation, naming `zones.json`.
 - [ ] AC4: `acme-token-scope` probes the apex of every registered product hostname per env. A test fails when one is not probed. The owner's `make acme-token-scope` lists `imagesensortool.com` with records 200 and settings 403.
 - [ ] AC5: The receiver regenerates and commits `edge.json` with the snapshot.
