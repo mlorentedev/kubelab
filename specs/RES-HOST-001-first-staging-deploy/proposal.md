@@ -84,7 +84,7 @@ for. See Q1.
 **F2. FQDN egress is not possible on this CNI (decision 4).** Plain
 `NetworkPolicy` has no hostname rules, and the k3s embedded controller adds
 none. The narrowest honest rule is in D7. HTTP-only (port 80) job boards fail
-by construction. See Q2.
+by construction. See Q2 (ruled).
 
 **F3. The `VACUUM INTO` pre-step is redundant (decision 7).** `node_backup`'s
 capture script (`infra/ansible/roles/node_backup/templates/node-backup-capture.sh.j2`)
@@ -159,13 +159,11 @@ render time), relying on local-path's 0777 (owner ruling 2026-11-04).
 `backoffLimit: 2`, `restartPolicy: Never`. The CronJob pod uses the app's image,
 ConfigMap, `<app>-secrets` (when mapped), pull Secret and the named volume.
 Co-location comes from the local-path PV's node affinity, with no pod affinity
-(owner ruling Q1(A), 2026-10-22). The contract holds one `schedule`; a
-registry entry may override it per env (`schedules: {<env>: {<job>: <cron>}}`),
-platform-side like `egress:`, so staging can run less often than prod (Q6
-mitigation) without a second contract.
-Rejected for the override: env-keyed schedules inside the contract (the
-contract describes the product, not where it runs; ADR-067 keeps env facts on
-the platform side).
+(owner ruling Q1(A), 2026-10-22). The contract holds one `schedule`, and every
+env runs it, staging included (owner ruling, 2026-11-14).
+Rejected: a per-env schedule override on the registry entry, and a suspended
+staging CronJob with a one-off run (the owner accepts staging's spend at the
+contract's schedule; see Risks).
 Rejected: a shell line in `kubelab.yaml` instead of `resume daily` (#2366
 status; https://gitea.kubelab.live/personal/resume/issues/777).
 
@@ -307,12 +305,12 @@ Deployed properties are marked (deployed); the rest are checked from the diff.
 - The first egress restriction in the cluster may surface missing egress rules
   only resume needs (for example a provider that serves over a non-443 port).
 - Staging uses the prod LLM key (Q6 = B), so staging spend draws on prod's
-  provider budget, and a runaway staging job can exhaust it for prod.
-  Mitigation: the staging CronJob runs at low frequency (for example weekly),
-  set by a per-env schedule override on the registry entry (D4), and staging's acceptance run (AC12) is a single
-  Job created from the CronJob. The no-success alert window follows the staging
-  schedule (period plus 2 hours), so a weekly staging job does not alert daily. The key is shared, so a leak from staging is a prod leak; it is
-  mapped only into `resume-secrets` and never into the ConfigMap (slice H test).
+  provider budget, and a runaway staging job can exhaust it for prod. Staging
+  runs the contract's own schedule; the owner accepts this risk ("there is
+  margin", 2026-11-14). What bounds a single run is the job's
+  `activeDeadlineSeconds` and `concurrencyPolicy: Forbid` (D4). The key is
+  shared, so a leak from staging is a prod leak; it is mapped only into
+  `resume-secrets` and never into the ConfigMap (slice H test).
 
 ## Owner rulings
 
@@ -340,9 +338,29 @@ as https://gitea.kubelab.live/personal/resume/issues/810. Rejected: an init
 container copying fixtures from the image (platform code for a product
 concern); `kubectl cp` (a manual operation).
 
-**Q6. Staging LLM key: (B), ruled.** Staging uses the prod key. Risk and
-mitigation are under Risks. Rejected: (A) a separate capped key; (C) a
-suspended staging CronJob.
+**Q2. Egress rule: (A), ruled.** `public-https`: TCP 443 to anything outside
+the private, carrier-grade NAT and link-local ranges (`10.0.0.0/8`,
+`172.16.0.0/12`, `192.168.0.0/16`, `100.64.0.0/10`, `169.254.0.0/16` in
+`except`), plus `dns` and `notify` (D7). Threat model:
+- Closed: lateral movement. A compromised resume pod cannot open connections to
+  cluster services, node addresses, the home LAN, the Tailscale/Headscale mesh
+  (`100.64.0.0/10`) or cloud metadata (`169.254.0.0/16`), except DNS and n8n's
+  webhook port.
+- Not closed: exfiltration to a host of the attacker's choosing on the public
+  internet over 443. The policy cannot tell a job board from any other public
+  address.
+- Known cost: HTTP-only (port 80) job boards are unreachable.
+
+Upgrade path: (B), an egress proxy with a domain allowlist, if exfiltration
+becomes part of the threat model or a domain allowlist becomes a requirement.
+(C) a CNI with FQDN policy is the alternative at the cluster level. Rejected
+now: (B) adds an always-on component and a new failure mode; (C) swaps the CNI
+for one product.
+
+**Q6. Staging LLM key: (B), ruled.** Staging uses the prod key and runs the
+contract's own schedule; the owner accepts the shared-budget risk (Risks).
+Rejected: (A) a separate capped key; (C) a suspended staging CronJob; a
+per-env schedule override.
 
 **Q8. Restore verification (ADR-073 D10): (A), pending owner objection.**
 Deferred to the prod lane, with a restore drill from R2 before real data lands;
@@ -350,14 +368,6 @@ the drill also checks the cross-store consistency named in D11. Rejected: (B)
 requiring it for staging, which holds fixtures only.
 
 ## Open questions (owner)
-
-**Q2. Egress rule.** (A) `public-https`: TCP 443 to anything outside the
-private, carrier-grade NAT and link-local ranges (`10.0.0.0/8`,
-`172.16.0.0/12`, `192.168.0.0/16`, `100.64.0.0/10`, `169.254.0.0/16` in
-`except`). (B) An egress proxy with a domain allowlist. (C) A CNI with FQDN
-policy. **Recommend (A)**, the leading option; record that HTTP-only boards
-are unreachable and that (B) is the path if a domain allowlist becomes a
-requirement.
 
 **Q7. Prod facts (prod cluster unreadable here).** Which node hosts resume in
 prod, and is it `vps`? Is the `resume.kubelab.live` DNS record to be created by
@@ -372,8 +382,9 @@ the receiver trigger (IDP-053 S7); #3447; NET-002 for other workloads.
 
 ## Revisit when
 
-- The cluster moves to a CNI with FQDN policy: replace `public-https` with a
-  domain allowlist.
+- The cluster moves to a CNI with FQDN policy, or exfiltration to a public
+  host enters the threat model: replace `public-https` with a domain allowlist
+  (CNI rule or egress proxy; Q2).
 - A second product declares a `volume` on a multi-node cluster: revisit D5 and
   the absence of pod affinity.
 - ADR-067 D5 namespaces are built: move the policies to a namespace default-deny.

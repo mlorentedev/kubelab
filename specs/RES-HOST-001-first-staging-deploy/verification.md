@@ -44,11 +44,11 @@ credential; its digest check reports only match or mismatch.
 | Q | Owner answer | Date | Spec change |
 |---|---|---|---|
 | Q1 | (A), pending owner objection | 2026-11-14 | none, D7 stands |
-| Q2 | open; (A) leading | | |
+| Q2 | (A) ruled, `100.64.0.0/10` in except | 2026-11-14 | threat model and upgrade path recorded; step E6 |
 | Q3 | (A) ruled | 2026-11-14 | D11: per-store copies, restore drill checks the set |
 | Q4 | (A), pending owner objection | 2026-11-14 | none |
 | Q5 | (A) ruled, https://gitea.kubelab.live/personal/resume/issues/810 | 2026-11-14 | slice I depends on it |
-| Q6 | (B) ruled | 2026-11-14 | risk recorded; per-env schedule override (D4, step C2b) |
+| Q6 | (B) ruled; staging runs the contract's schedule | 2026-11-14 | shared-budget risk recorded as accepted |
 | Q7 | open | | |
 | Q8 | (A), pending owner objection | 2026-11-14 | none |
 
