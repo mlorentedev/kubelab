@@ -22,6 +22,7 @@ import yaml
 
 from tests.test_coredns_prod_zone_targets import COMMON, ROLE, _role_vars
 from tests.test_runbook_hostnames_are_published import _routed_in_staging
+from toolkit.features.edge_dns import staging_zones
 
 # The role's own `staging_domain`, rendered against common.yaml as Ansible does.
 APEX = jinja2.Template(
@@ -33,7 +34,7 @@ def _render(section: str) -> str:
     env = jinja2.Environment(undefined=jinja2.StrictUndefined)
     variables = _role_vars()
     variables["staging_domain"] = APEX
-    variables["staging_zones"] = yaml.safe_load(COMMON.read_text(encoding="utf-8"))["networking"]["staging_zones"]
+    variables["staging_zones"] = staging_zones()  # the effective list the role reads (EDGE-001)
     return env.from_string(section).render(**variables)
 
 
@@ -75,7 +76,7 @@ def _unrouted(zone: str, hosts: list[str]) -> list[str]:
 
 def test_every_staging_zone_is_read() -> None:
     zones = _explicit_hosts(_staging_section())
-    assert set(zones) == set(yaml.safe_load(COMMON.read_text(encoding="utf-8"))["networking"]["staging_zones"]) | {APEX}
+    assert set(zones) == set(staging_zones()) | {APEX}
 
 
 def test_every_explicit_staging_host_is_its_zone_apex_or_routed() -> None:

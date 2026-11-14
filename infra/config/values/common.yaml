@@ -121,12 +121,15 @@ networking:
   - "172.16.0.0/12"
   - "192.168.0.0/16"
   - "100.64.0.0/10"      # Tailscale VPN
-  # Staging DNS zones — resolved via Headscale split DNS → RPi4 CoreDNS → K3s
-  # Add new domains here; deploy-vps, Corefile, and Pi-hole all consume this list.
+  # The platform's own staging DNS zones (Headscale split DNS → RPi4 CoreDNS → K3s).
+  # A product's zone is NOT added here: `toolkit sync edge-dns` derives it from the
+  # product registry and the contract snapshots, inside a zone granted in
+  # infra/terraform/dns/zones.json, and writes the effective list to
+  # infra/config/products/edge.json, which deploy-vps, the Corefile, Pi-hole and the
+  # pod-side hairpin read (EDGE-001).
   staging_zones:
   - "staging.kubelab.live"
   - "staging.mlorente.dev"
-  - "staging.imagesensortool.com"
   # VPN-only services — Headscale extra_records for direct access via Tailscale IP.
   # Consumed by deploy-vps playbook → Headscale config.yaml template.
   vpn_extra_records:

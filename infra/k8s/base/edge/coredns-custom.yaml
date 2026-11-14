@@ -7,8 +7,9 @@
 #
 # Solution: forward staging zones to RPi4 CoreDNS (100.64.0.10) which is
 # already the authoritative resolver for staging domains. The `STAGING_ZONE_BLOCKS`
-# line below stands for one forward block per entry of `networking.staging_zones`
-# (common.yaml): a product's staging zone is declared once, there (IDP-053 D8,
+# line below stands for one forward block per effective staging zone, read from
+# infra/config/products/edge.json: the platform's zones plus each registered
+# product's, derived by `toolkit sync edge-dns` (EDGE-001, IDP-053 D8,
 # k8s_render.render_staging_zones). Apply this file only through the toolkit.
 #
 # Prod zones (kubelab.live, mlorente.dev) are rewritten to Traefik's ClusterIP.
