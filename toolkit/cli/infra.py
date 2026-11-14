@@ -1614,30 +1614,43 @@ def k8s_apply_secrets(
 @k8s_app.command("provision-postgres-tenant")
 def k8s_provision_postgres_tenant(
     env: Annotated[str, typer.Option("--env", "-e", help="Target environment")] = "staging",
-    tenant: Annotated[str | None, typer.Option("--tenant", "-t", help="One tenant; omit for all of them")] = None,
+    tenant: Annotated[
+        str | None, typer.Option("--tenant", "-t", help="One tenant or reader role; omit for all of them")
+    ] = None,
     dry_run: Annotated[
         bool, typer.Option("--dry-run", help="Check tenant and secret resolve; apply nothing, show no SQL")
     ] = False,
 ) -> None:
-    """Idempotently provision tenant roles and databases in PostgreSQL (infra.postgres)."""
+    """Idempotently provision tenant roles, databases and read-only roles in PostgreSQL (infra.postgres)."""
     import subprocess
 
     from toolkit.features.configuration import ConfigurationManager
-    from toolkit.features.postgres_provisioner import TENANT_PASSWORD_PATHS, build_provision_sql
+    from toolkit.features.postgres_provisioner import (
+        READER_ROLES,
+        ROLE_PASSWORD_PATHS,
+        TENANT_PASSWORD_PATHS,
+        build_provision_sql,
+        build_reader_sql,
+    )
 
-    if tenant is not None and tenant not in TENANT_PASSWORD_PATHS:
-        logger.error(f"Unknown tenant {tenant}. Declared: {', '.join(sorted(TENANT_PASSWORD_PATHS))}")
+    if tenant is not None and tenant not in ROLE_PASSWORD_PATHS:
+        logger.error(f"Unknown tenant {tenant}. Declared: {', '.join(sorted(ROLE_PASSWORD_PATHS))}")
         raise typer.Exit(1)
 
     cfg = ConfigurationManager(env=env)
-    for name in [tenant] if tenant else sorted(TENANT_PASSWORD_PATHS):
-        key_path = TENANT_PASSWORD_PATHS[name]
+    # Tenants first: a reader's database is one a tenant owns.
+    for name in [tenant] if tenant else [*sorted(TENANT_PASSWORD_PATHS), *sorted(READER_ROLES)]:
+        key_path = ROLE_PASSWORD_PATHS[name]
         password = cfg.get_secret_by_path(key_path)
         if not password:
             logger.error(f"Missing secret {key_path} in SOPS for {env} — cannot provision tenant")
             raise typer.Exit(1)
 
-        sql = build_provision_sql(username=name, password=password, database=name)
+        if name in READER_ROLES:
+            reader = READER_ROLES[name]
+            sql = build_reader_sql(username=name, password=password, database=reader.database, views=reader.views)
+        else:
+            sql = build_provision_sql(username=name, password=password, database=name)
 
         if dry_run:
             logger.info(f"Generated SQL for tenant {name} (not shown: it holds the password)")
