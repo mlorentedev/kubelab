@@ -19,11 +19,23 @@ class KumaUnavailableError(RuntimeError):
     """Uptime Kuma could not be asked; distinct from "nothing is down"."""
 
 
+def _flat_beats(beats: list[Any]) -> list[dict[str, Any]]:
+    """The beats, with any history the client nested as one element spread back out.
+
+    uptime-kuma-api 1.2.1 appends a monitor's `heartbeatList` as a single element
+    when a live `heartbeat` for it arrived first, instead of extending (#3458).
+    """
+    flat: list[dict[str, Any]] = []
+    for beat in beats:
+        flat.extend(beat if isinstance(beat, list) else [beat])
+    return flat
+
+
 def down_monitors(monitors: list[dict[str, Any]], heartbeats: dict[int, list[dict[str, Any]]]) -> list[dict[str, str]]:
     """Active monitors whose newest heartbeat is DOWN, with that beat's message and time."""
     down = []
     for monitor in monitors:
-        beats = heartbeats.get(monitor["id"]) or []
+        beats = _flat_beats(heartbeats.get(monitor["id"]) or [])
         if not monitor.get("active") or not beats:
             continue
         latest = max(beats, key=lambda beat: beat.get("time") or "")
