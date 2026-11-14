@@ -24,6 +24,7 @@ import os
 import shutil
 import stat
 import subprocess
+import sys
 from pathlib import Path
 
 HOOK = Path(__file__).resolve().parents[1] / ".github/hooks/pre-push.sh"
@@ -31,6 +32,7 @@ HOOK = Path(__file__).resolve().parents[1] / ".github/hooks/pre-push.sh"
 #: Absolute, because the tests below narrow PATH to a directory holding only a
 #: fake `gh` — "bash" would not resolve through it either.
 BASH = shutil.which("bash") or "/bin/bash"
+# A shebang cannot carry the spaces of Git for Windows' bash path; that bash maps /bin/bash to itself.
 
 ZERO = "0" * 40
 SHA = "a" * 40
@@ -46,7 +48,7 @@ def _fake_gh(tmp_path: Path, body: str) -> Path:
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir(exist_ok=True)
     gh = bin_dir / "gh"
-    gh.write_text(f"#!{BASH}\n{body}\n", encoding="utf-8", newline="\n")
+    gh.write_text(f"#!{'/bin/bash' if sys.platform == 'win32' else BASH}\n{body}\n", encoding="utf-8", newline="\n")
     gh.chmod(gh.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
     return bin_dir
 
@@ -79,7 +81,9 @@ def _run(bin_dir: Path | None, stdin: str = RECREATE) -> subprocess.CompletedPro
     # bash itself is invoked by ABSOLUTE path for the same reason: with PATH
     # narrowed this far, resolving "bash" through it fails too.
     env["PATH"] = str(bin_dir) if bin_dir else ""
-    return subprocess.run([BASH, "-c", script], input=stdin, capture_output=True, text=True, encoding="utf-8", env=env)
+    # stdin as bytes: text mode would send \r\n on Windows, and the guard would read `sha\r`.
+    proc = subprocess.run([BASH, "-c", script], input=stdin.encode(), capture_output=True, env=env)
+    return subprocess.CompletedProcess(proc.args, proc.returncode, proc.stdout.decode(), proc.stderr.decode())
 
 
 def test_the_hook_exists_and_defines_the_guard() -> None:
@@ -185,7 +189,7 @@ def _fake_poetry(tmp_path: Path, body: str) -> Path:
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir(exist_ok=True)
     poetry = bin_dir / "poetry"
-    poetry.write_text(f"#!{BASH}\n{body}\n", encoding="utf-8", newline="\n")
+    poetry.write_text(f"#!{'/bin/bash' if sys.platform == 'win32' else BASH}\n{body}\n", encoding="utf-8", newline="\n")
     poetry.chmod(poetry.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
     return bin_dir
 
