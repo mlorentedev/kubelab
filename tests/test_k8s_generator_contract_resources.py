@@ -23,6 +23,7 @@ from toolkit.core.templating import create_renderer
 from toolkit.features import generator_k8s, product_registry
 from toolkit.features.generator_k8s import K8sGenerator
 from toolkit.features.k8s_secrets import pull_secret_name
+from toolkit.features.product_contract import ContractError
 
 REPO = Path(__file__).resolve().parent.parent
 HOST = "gitea.kubelab.live"
@@ -187,6 +188,24 @@ class TestVolumeClaim:
         assert pvc["spec"]["resources"]["requests"]["storage"] == "5Gi"
 
 
+class TestPvcIsNeverPruned:
+    """A claim the contract stops declaring must leave its PVC behind, not delete the data with it."""
+
+    PRUNE = "argocd.argoproj.io/sync-options"
+
+    def test_the_pvc_opts_out_of_argo_pruning(self, build, tmp_path: Path) -> None:
+        pvc = _one(_objects(build(), tmp_path), "PersistentVolumeClaim", "sample-data")
+
+        assert pvc["metadata"]["annotations"] == {self.PRUNE: "Prune=false"}
+
+    def test_no_other_generated_object_carries_it(self, build, tmp_path: Path) -> None:
+        """Prune=false on a Deployment or CronJob would leave it running after its claim is removed."""
+        objects = _objects(build(), tmp_path)
+
+        carrying = [o["kind"] for o in objects if self.PRUNE in o["metadata"].get("annotations", {})]
+        assert carrying == ["PersistentVolumeClaim"]
+
+
 class TestCronJob:
     def _job(self, build, tmp_path: Path, secrets: bool = False) -> dict[str, Any]:
         return _one(_objects(build(secrets=secrets), tmp_path), "CronJob", "sample-daily")
@@ -270,7 +289,7 @@ class TestConflictingFsGroups:
         other = "  logs:\n    type: volume\n    params: {size: 1Gi, mount_path: /logs, fs_group: 20002}\n"
         (snapshots / "sample.yaml").write_text(_contract() + other, encoding="utf-8")
 
-        with pytest.raises(ValueError, match=r"sample.*fs_group.*10001.*20002"):
+        with pytest.raises(ContractError, match=r"fs_group.*10001.*20002"):
             build()
 
     def test_two_volumes_naming_the_same_group_are_accepted(self, build, snapshots: Path) -> None:

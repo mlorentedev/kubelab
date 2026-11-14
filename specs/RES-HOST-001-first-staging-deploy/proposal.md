@@ -153,6 +153,14 @@ optional `fs_group` (int, 1..2^31-1; 10001 for resume). Renders one PVC
 Rejected for `fs_group`: deriving it from the image (needs a registry read at
 render time), relying on local-path's 0777 (owner ruling 2026-11-04).
 
+Note (2026-11-14, owner ruling): every generated PVC carries
+`argocd.argoproj.io/sync-options: Prune=false`, and no other generated object does.
+A contract that stops declaring a volume leaves its PVC, and the data on it, in
+place; removing one is an explicit, ticketed IaC change, never a side effect of a
+sync. A pod has one `fsGroup`, so `check_resources` refuses a contract whose
+volumes name different `fs_group` values (a `ContractError`, raised by the render
+and by the generator alike).
+
 **D4. `job` params:** `schedule` (5-field cron), `command` (argv list),
 `volume` (name of a declared volume claim), optional `active_deadline_seconds`
 (default 3600). The renderer fixes `concurrencyPolicy: Forbid`,

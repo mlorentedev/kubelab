@@ -135,6 +135,31 @@ def test_a_job_must_mount_a_declared_volume_claim(tmp_path: Path, volume: str) -
     assert "data" in err.fix
 
 
+def test_volumes_naming_different_fs_groups_are_refused(tmp_path: Path) -> None:
+    """A pod has one `fsGroup`; two volumes asking for different ones cannot both be honoured."""
+    claims = {
+        **_claims(),
+        "logs": {"type": "volume", "params": {"size": "1Gi", "mount_path": "/logs", "fs_group": 20002}},
+    }
+    contract = validate_contract(_write(tmp_path, _with(claims)))
+
+    with pytest.raises(ContractError) as excinfo:
+        check_resources(contract)
+    err = excinfo.value
+    assert "field 'resources'" in err.error
+    assert "10001" in err.error and "20002" in err.error
+    assert "fsGroup" in err.why
+    assert "fs_group" in err.fix
+
+
+@pytest.mark.parametrize("other", [10001, None], ids=["same-group", "no-group"])
+def test_volumes_naming_one_fs_group_at_most_are_accepted(tmp_path: Path, other: int | None) -> None:
+    params = {"size": "1Gi", "mount_path": "/logs", **({"fs_group": other} if other else {})}
+    claims = {**_claims(), "logs": {"type": "volume", "params": params}}
+
+    check_resources(validate_contract(_write(tmp_path, _with(claims))))
+
+
 def test_the_admins_auth_level_validates_and_renders_as_forwardauth(tmp_path: Path) -> None:
     data = yaml.safe_load(FIXTURE.read_text(encoding="utf-8"))
     data["auth"] = "forwardauth-admins"

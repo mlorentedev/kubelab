@@ -122,10 +122,11 @@ def staging_hostname_for(prod: str) -> str:
 
 
 def check_resources(contract: Contract) -> None:
-    """Refuse a job claim whose ``volume`` names no volume claim in the same contract (RES-HOST-001 B2).
+    """Refuse claims that only conflict as a set (RES-HOST-001 B2, C).
 
-    The schema checks each claim alone; whether one claim names another is only known with the whole
-    mapping in hand, so it is checked here, before any manifest is rendered.
+    The schema checks each claim alone. That a job's ``volume`` names a volume claim, and that the
+    volume claims agree on one ``fs_group``, are only known with the whole mapping in hand, so they
+    are checked here, before any manifest is rendered.
     """
     volumes = sorted(name for name, claim in contract.resources.items() if claim.type == "volume")
     for name, claim in contract.resources.items():
@@ -138,6 +139,20 @@ def check_resources(contract: Contract) -> None:
                 "an unknown name would render a CronJob whose pod can never start.",
                 f"set it to a declared volume claim (declared: {declared}), or add that volume under resources.",
             )
+    groups = sorted(
+        {
+            claim.params.fs_group
+            for claim in contract.resources.values()
+            if claim.type == "volume" and claim.params.fs_group
+        }
+    )
+    if len(groups) > 1:
+        raise ContractError(
+            f"field 'resources': volume claims name different fs_group values ({', '.join(map(str, groups))})",
+            "every pod that mounts the claims has a single fsGroup, so two volumes asking for different "
+            "groups cannot both be honoured and one would be owned by the wrong group.",
+            "give the volume claims the same fs_group, or declare it on one of them only.",
+        )
 
 
 def _staging_refusal(host: str, reason: str, fix: str) -> ContractError:

@@ -10,6 +10,7 @@ from toolkit.features.configuration import ConfigurationManager
 from toolkit.features.generator_base import BaseGenerator
 from toolkit.features.k8s_secrets import SECRET_DEFINITIONS, pull_secret_name
 from toolkit.features.product_contract import JobClaim, VolumeClaim, validate_contract
+from toolkit.features.product_guards import check_resources
 from toolkit.features.product_registry import product
 from toolkit.features.product_render import SNAPSHOT_DIR, snapshot_path
 
@@ -304,7 +305,7 @@ class K8sGenerator(BaseGenerator):
                     "extra_routes": self._build_extra_routes(env_vars, component),
                     "volumes": volumes,
                     "jobs": jobs,
-                    "fs_group": self._fs_group(component, volumes),
+                    "fs_group": self._fs_group(volumes),
                 }
             )
 
@@ -330,7 +331,10 @@ class K8sGenerator(BaseGenerator):
         path = snapshot_path(component, env, self.snapshot_dir)
         if not path.exists():
             return [], []
-        resources = validate_contract(path).resources
+        contract = validate_contract(path)
+        # The set-wide rules (a job's volume exists, one fs_group); the schema cannot see them.
+        check_resources(contract)
+        resources = contract.resources
         volumes = {
             name: {
                 "name": name,
@@ -356,15 +360,9 @@ class K8sGenerator(BaseGenerator):
         return list(volumes.values()), jobs
 
     @staticmethod
-    def _fs_group(component: str, volumes: list[dict[str, Any]]) -> int | None:
-        """The one group every volume of the pod is owned by, or None when no claim names one.
-
-        A pod has a single ``fsGroup``; two volumes asking for different ones cannot both be honoured.
-        """
-        groups = {v["fs_group"] for v in volumes if v["fs_group"]}
-        if len(groups) > 1:
-            raise ValueError(f"{component}: volume claims name different fs_group values {sorted(groups)}")
-        return groups.pop() if groups else None
+    def _fs_group(volumes: list[dict[str, Any]]) -> int | None:
+        """The group the pod's volumes are owned by; ``check_resources`` has ruled out two different ones."""
+        return next((v["fs_group"] for v in volumes if v["fs_group"]), None)
 
     def _build_migrations(self, env_vars: dict[str, str]) -> dict[str, Any]:
         """The API's Atlas migration directory, with a hash of everything the Job renders from.

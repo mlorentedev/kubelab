@@ -17,6 +17,10 @@ metadata:
     app.kubernetes.io/name: {{ app.name }}
     app.kubernetes.io/part-of: kubelab
     app.kubernetes.io/managed-by: toolkit
+  annotations:
+    # A claim the contract stops declaring leaves its PVC, and the data on it, in place;
+    # deleting a volume is an explicit, ticketed change, never a side effect of a sync.
+    argocd.argoproj.io/sync-options: Prune=false
 spec:
   accessModes:
     - ReadWriteOnce
