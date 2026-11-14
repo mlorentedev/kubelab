@@ -16,6 +16,6 @@ tags: [kubelab, process-method, console, docker, nginx, pr-3443]
 
 **Solution**: `USER 101` moved before `RUN nginx -t && rm -f /tmp/nginx.pid`, so the check runs as the runtime user and leaves nothing behind. `tests/test_console_image_runs.py` builds the image and starts it as its own user, in the Deployment's shape and with a read-only root plus tmpfs, and asserts `/` answers. Measured red on the old Dockerfile (the pid error above) and green on the new one; the tmpfs variant passes on both, which is why the plain run is the one that matters.
 
-**Rule**: A build step that runs as root and executes the service's own binary writes state the runtime user inherits. Run such checks as the runtime user, and test an image by starting it as that user in the shape the cluster runs it, never by reading its Dockerfile or its config. A comment that says the pod will mask a defect is a claim to test against the generated manifest.
+**Rule**: A build step that runs as root and executes the service's own binary writes state the runtime user inherits. Run such checks as the runtime user, and test an image by starting it as that user in the shape the cluster runs it, never by reading its Dockerfile or its config. A comment that says the pod will mask a defect is a claim to test against the generated manifest. The generator half, a `securityContext` and a `/tmp` volume for custom apps, is #3545.
 
 **Tags**: `#docker` `#nginx` `#pr-3443`
