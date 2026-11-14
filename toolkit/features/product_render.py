@@ -31,6 +31,7 @@ from ruamel.yaml import YAML
 
 from toolkit.config.settings import PROJECT_ROOT
 from toolkit.features.declared_domains import VALUES_DIR
+from toolkit.features.edge_dns import DNS_ZONES, granted_apexes
 from toolkit.features.product_contract import Contract, ContractError
 from toolkit.features.product_guards import (
     check_resources,
@@ -96,12 +97,14 @@ def rendered(
     mapping: Mapping[str, Callable[[Contract, str], Any]] = CONTRACT_KEYS,
     *,
     values_dir: Path = VALUES_DIR,
+    dns_zones: Path = DNS_ZONES,
 ) -> dict[str, Any]:
     """The contract-owned keys of ``apps.platform.<app>`` for ``env``."""
     refuse_oidc_at_render(contract, app)
-    # One contract, one convention: refused for either env, against the zones ``values_dir`` lists (D8).
     check_resources(contract)
-    check_staging_hostname(contract, staging_zones(values_dir))
+    # One contract, one convention: refused for either env, against the zones ``values_dir`` declares and
+    # the Cloudflare zones ``dns_zones`` grants (D8, EDGE-001).
+    check_staging_hostname(contract, staging_zones(values_dir), granted_apexes(dns_zones))
     # Before any key is derived: a product with no hostname for ``env`` renders nothing for it.
     _hostname(contract, env)
     return {key: derive(contract, env) for key, derive in mapping.items()}
