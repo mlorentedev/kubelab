@@ -228,7 +228,7 @@ class TestSecretsSetJson:
         """A pin, not new behaviour: `set_secret` already passed json.dumps(value) to sops, which
         is what makes --json work. Replacing it with str(value) would store a Python repr."""
         sops_file = tmp_path / "prod.enc.yaml"
-        sops_file.write_text("sops: {}\n", encoding="utf-8")
+        sops_file.write_text("sops: {}\n", encoding="utf-8", newline="\n")
         mgr = SecretsManager.__new__(SecretsManager)
         cm = MagicMock()
         cm.secrets_path = tmp_path
@@ -249,7 +249,7 @@ class TestSecretsSetJson:
         mgr.project_root = tmp_path
         secrets_dir = tmp_path / "infra" / "config" / "secrets"
         secrets_dir.mkdir(parents=True)
-        (secrets_dir / "prod.enc.yaml").write_text("sops: {}\n", encoding="utf-8")
+        (secrets_dir / "prod.enc.yaml").write_text("sops: {}\n", encoding="utf-8", newline="\n")
         decrypted = MagicMock(returncode=0, stdout=yaml.safe_dump({"apps": {"x": {"k": stored}}}))
         with patch("subprocess.run", return_value=decrypted):
             assert mgr.show_secret("prod", "apps.x.k") == shown

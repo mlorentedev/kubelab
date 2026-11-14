@@ -27,6 +27,7 @@ import subprocess
 
 import pytest
 import yaml
+from tests.shells import BASH
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 
@@ -82,7 +83,7 @@ def history(tmp_path: pathlib.Path) -> tuple[pathlib.Path, list[str]]:
     _git(work, "config", "user.email", "test@example.invalid")
     shas = []
     for n in range(3):
-        (work / "f").write_text(f"{n}\n", encoding="utf-8")
+        (work / "f").write_text(f"{n}\n", encoding="utf-8", newline="\n")
         _git(work, "add", "f")
         _git(work, "commit", "-m", f"c{n}")
         shas.append(_git(work, "rev-parse", "HEAD"))
@@ -99,7 +100,7 @@ def _run(
     bindir = tmp_path / "bin"
     bindir.mkdir(exist_ok=True)
     stub = bindir / "poetry"
-    stub.write_text(_POETRY_STUB, encoding="utf-8")
+    stub.write_text(_POETRY_STUB, encoding="utf-8", newline="\n")
     stub.chmod(0o755)
     calls = tmp_path / "poetry_calls"
     calls.touch()
@@ -116,7 +117,7 @@ def _run(
     }
     # `bash -e`, the shell GitHub Actions uses for `run:`.
     proc = subprocess.run(  # noqa: S603
-        ["bash", "-e", "-c", _step("promote")["run"]],
+        [BASH, "-e", "-c", _step("promote")["run"]],
         cwd=work,
         env=env,
         capture_output=True,

@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 
 from tests.host_clients import denied
+from tests.shells import BASH
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -48,10 +49,10 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
         ["sudo", "-u", "deployer", "kubectl", "get", "pods"],
         ["timeout", "-s", "KILL", "5", "ssh", "host", "true"],
         ["sh", "-c", "kubectl get pods | head -1"],
-        ["bash", "-ec", "kubectl delete secret x"],
-        ["bash", "-lc", "ssh host true"],
+        [BASH, "-ec", "kubectl delete secret x"],
+        [BASH, "-lc", "ssh host true"],
         ["sh", "-e", "-c", "kubectl get pods"],
-        ["bash", "-o", "pipefail", "-c", "kubectl get pods | wc -l"],
+        [BASH, "-o", "pipefail", "-c", "kubectl get pods | wc -l"],
         "kubectl get pods",
         "set -e; ssh host true",
     ],
@@ -69,8 +70,8 @@ def test_a_cluster_or_host_client_is_denied(args) -> None:
         ["helm", "template", "argocd", "argo/argo-cd"],
         ["helm", "lint", "chart"],
         ["sh", "-c", "kubectl kustomize infra/k8s/overlays/staging"],
-        ["bash", "-ec", "echo ok"],
-        ["bash", "scripts/kubectl-free.sh"],
+        [BASH, "-ec", "echo ok"],
+        [BASH, "scripts/kubectl-free.sh"],
         ["git", "rev-parse", "HEAD"],
         ["sops", "-d", "secrets/staging.enc.yaml"],
         ["docker", "run", "--rm", "timberio/vector"],
@@ -100,7 +101,7 @@ def _child_pytest(tmp_path: Path, body: str) -> subprocess.CompletedProcess:
     stubs = tmp_path / "bin"
     stubs.mkdir()
     for client in ("kubectl", "ssh"):
-        (stubs / client).write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        (stubs / client).write_text("#!/bin/sh\nexit 0\n", encoding="utf-8", newline="\n")
         (stubs / client).chmod(0o755)
     env = {k: v for k, v in os.environ.items() if k != "KUBELAB_HOST_CLIENT_REPORT"}
     env["PATH"] = f"{stubs}{os.pathsep}{env.get('PATH', '')}"
@@ -108,7 +109,7 @@ def _child_pytest(tmp_path: Path, body: str) -> subprocess.CompletedProcess:
     # written into tests/ is read, mid-write or already gone, by the scanners that
     # walk tests/ on other xdist workers (#3111).
     target = tmp_path / "test_barrier_probe.py"
-    target.write_text(textwrap.dedent(body), encoding="utf-8")
+    target.write_text(textwrap.dedent(body), encoding="utf-8", newline="\n")
     return subprocess.run(
         [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "--no-cov"]
         + ["-p", "tests.conftest", str(target)],

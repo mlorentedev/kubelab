@@ -32,12 +32,12 @@ def test_a_lesson_early_in_a_large_index_is_found(tmp_path: Path) -> None:
     names = [f"lesson-{number}-{SLUG}.md" for number in range(1, LESSONS + 1)]
     rows = []
     for number, name in enumerate(names, 1):
-        (category / name).write_text("# lesson\n", encoding="utf-8")
+        (category / name).write_text("# lesson\n", encoding="utf-8", newline="\n")
         rows.append(f"| {number} | [lesson]({name}) | 2026-10-30 |")
     (category / "_index.md").write_text(
-        "| # | Lesson | Date |\n|---|---|---|\n" + "\n".join(rows) + "\n", encoding="utf-8"
+        "| # | Lesson | Date |\n|---|---|---|\n" + "\n".join(rows) + "\n", encoding="utf-8", newline="\n"
     )
-    (tmp_path / "docs/lessons/_index.md").write_text("[category](category/_index.md)\n", encoding="utf-8")
+    (tmp_path / "docs/lessons/_index.md").write_text("[category](category/_index.md)\n", encoding="utf-8", newline="\n")
     # What the script pipes is the index's link targets, not its rows.
     assert len("\n".join(names)) > 2 * PIPE_BUFFER
 

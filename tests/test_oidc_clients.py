@@ -273,7 +273,7 @@ def test_authelia_config_hash_changes_on_a_client_only_change(tmp_path: Path) ->
     shutil.copytree(PROJECT_ROOT / "infra/k8s", tmp_path / "infra/k8s")
     before, _ = _authelia(_kustomize(tmp_path, "prod"))
     clients_path = tmp_path / "infra/k8s/overlays/prod/authelia-config" / oidc_clients.CLIENTS_FILE_NAME
-    clients_path.write_text(clients_path.read_text(encoding="utf-8") + "# changed\n", encoding="utf-8")
+    clients_path.write_text(clients_path.read_text(encoding="utf-8") + "# changed\n", encoding="utf-8", newline="\n")
     after, _ = _authelia(_kustomize(tmp_path, "prod"))
 
     assert before["metadata"]["name"] != after["metadata"]["name"]

@@ -19,7 +19,9 @@ runner = CliRunner()
 
 def _invalid(tmp_path: Path) -> Path:
     path = tmp_path / "kubelab.yaml"
-    path.write_text(FIXTURE.read_text(encoding="utf-8").replace("port: 8080", "port: 0"), encoding="utf-8")
+    path.write_text(
+        FIXTURE.read_text(encoding="utf-8").replace("port: 8080", "port: 0"), encoding="utf-8", newline="\n"
+    )
     return path
 
 

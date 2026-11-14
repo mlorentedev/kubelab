@@ -39,7 +39,10 @@ AUTHELIA = {
 @cache
 def _rendered(env: str) -> str:
     out = subprocess.run(
-        ["kubectl", "kustomize", str(ROOT / "infra/k8s/overlays" / env)], capture_output=True, text=True, encoding="utf-8"
+        ["kubectl", "kustomize", str(ROOT / "infra/k8s/overlays" / env)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
     )
     assert out.returncode == 0, out.stderr
     return out.stdout

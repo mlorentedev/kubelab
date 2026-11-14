@@ -93,14 +93,16 @@ class TestTheScanCatchesAForgeImage:
     def test_a_container_image_on_the_forge_is_found(self, tmp_path: Path, hosts: set[str], forge: str) -> None:
         image = f"{forge}/personal/beta:sha-0123456789ab"
         (tmp_path / "deploy.yaml").write_text(
-            f"spec:\n  template:\n    spec:\n      containers:\n        - image: {image}\n", encoding="utf-8"
+            f"spec:\n  template:\n    spec:\n      containers:\n        - image: {image}\n",
+            encoding="utf-8",
+            newline="\n",
         )
 
         assert on_forge(prod_overlay_images(tmp_path), hosts) == [f"deploy.yaml: {image}"]
 
     def test_a_kustomize_rename_to_the_forge_is_found(self, tmp_path: Path, hosts: set[str], forge: str) -> None:
         (tmp_path / "kustomization.yaml").write_text(
-            f"images:\n  - name: x\n    newName: {forge}/personal/x\n", encoding="utf-8"
+            f"images:\n  - name: x\n    newName: {forge}/personal/x\n", encoding="utf-8", newline="\n"
         )
 
         assert on_forge(prod_overlay_images(tmp_path), hosts) == [f"kustomization.yaml: {forge}/personal/x"]
@@ -111,6 +113,7 @@ class TestTheScanCatchesAForgeImage:
             "products:\n  beta:\n    repository: personal/beta\n    forge: gitea\n    receiver: generic\n"
             "    image_registry: registry.example.test/personal\n    events: {staging: beta-image-published}\n",
             encoding="utf-8",
+            newline="\n",
         )
         common = {"apps": {"services": {"core": {"gitea": {"domain": "gitea.kubelab.live"}}}}}
 

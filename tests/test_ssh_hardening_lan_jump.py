@@ -168,7 +168,7 @@ def test_sshd_itself_allows_the_forward_to_the_declared_nodes_only(tmp_path: Pat
     networking = _networking()
     jump = _inventory_hosts(networking)[networking["nodes"][JUMP_KEY]["hostname"]]
     config = tmp_path / "sshd_config"
-    config.write_text(_render(jump), encoding="utf-8")
+    config.write_text(_render(jump), encoding="utf-8", newline="\n")
     host_key = tmp_path / "host_key"
     subprocess.run([keygen, "-q", "-t", "ed25519", "-N", "", "-f", str(host_key)], check=True)
 

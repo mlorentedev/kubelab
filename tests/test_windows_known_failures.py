@@ -39,7 +39,7 @@ def _items(*nodeids: str) -> list[pytest.Item]:
 def _tree(tmp_path: Path) -> Path:
     for name in ("test_a.py", "test_b.py", "test_c.py"):
         (tmp_path / "tests").mkdir(exist_ok=True)
-        (tmp_path / "tests" / name).write_text("", encoding="utf-8")
+        (tmp_path / "tests" / name).write_text("", encoding="utf-8", newline="\n")
     return tmp_path
 
 

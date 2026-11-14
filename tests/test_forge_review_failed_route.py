@@ -49,7 +49,9 @@ def _policy(env: str) -> dict[str, Any]:
 
 def _grafana_env(env: str) -> list[dict[str, Any]]:
     deployment = next(
-        d for d in _kustomize(f"infra/k8s/overlays/{env}") if d.get("kind") == "Deployment" and d["metadata"]["name"] == "grafana"
+        d
+        for d in _kustomize(f"infra/k8s/overlays/{env}")
+        if d.get("kind") == "Deployment" and d["metadata"]["name"] == "grafana"
     )
     env_list: list[dict[str, Any]] = deployment["spec"]["template"]["spec"]["containers"][0]["env"]
     return env_list
