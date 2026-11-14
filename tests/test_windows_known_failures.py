@@ -108,8 +108,10 @@ def test_every_entry_names_a_collected_test(request: pytest.FixtureRequest) -> N
     """A renamed or removed test must leave the list too, or the list stops describing anything.
 
     Under `--dist loadfile` each worker collects the whole suite, so the session's
-    items are the full collection; a subset run judges only the files it collected.
+    items are the full collection; a subset run judges only the files it collected,
+    and a test `-k`/`-m` deselected still counts as collected.
     """
     nodeids = [item.nodeid for item in request.session.items]
+    nodeids += request.config.stash.get(known.DESELECTED, [])
     stale = known.stale(known.parse(known.LIST.read_text(encoding="utf-8")), nodeids, REPO)
     assert not stale, f"{known.LIST.name} lists tests that do not exist (renamed or removed?):\n" + "\n".join(stale)

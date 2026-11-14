@@ -328,6 +328,14 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
             item.add_marker(skip)
 
 
+def pytest_deselected(items: list[pytest.Item]) -> None:
+    """Remember what `-k`/`-m` deselected: those tests exist, so their list entries are not stale."""
+    from tests import windows_known_failures as known
+
+    if items:
+        items[0].config.stash.setdefault(known.DESELECTED, []).extend(item.nodeid for item in items)
+
+
 def pytest_addoption(parser: pytest.Parser) -> None:
     """Add custom CLI options for all tests."""
     parser.addoption(

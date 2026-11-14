@@ -20,6 +20,8 @@ from pathlib import Path
 import pytest
 
 LIST = Path(__file__).with_name("windows_known_failures.txt")
+# Node ids `-k`/`-m` deselected: collected, so they exist, but absent from session.items.
+DESELECTED = pytest.StashKey[list[str]]()
 _SECTION = re.compile(r"^\[(?P<key>[a-z0-9-]+)\]\s+(?P<reason>\S.*)$")
 
 
