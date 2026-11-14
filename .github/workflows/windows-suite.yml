@@ -27,11 +27,11 @@ on:
 permissions:
   contents: read
 
-# The event is part of the key: a push to master would otherwise cancel an audit
-# dispatched on master seconds earlier, and the audit is the run the burn-down
-# needs (#3409).
+# The event and the audit flag are part of the key: a push to master, or a plain
+# dispatch, would otherwise cancel an audit started on master seconds earlier,
+# and the audit is the run the burn-down needs (#3409).
 concurrency:
-  group: windows-suite-${{ github.ref }}-${{ github.event_name }}
+  group: windows-suite-${{ github.ref }}-${{ github.event_name }}-${{ inputs.audit || false }}
   cancel-in-progress: true
 
 jobs:
