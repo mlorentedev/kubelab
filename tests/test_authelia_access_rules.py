@@ -210,3 +210,109 @@ def test_regulation_bans_no_address_while_the_client_address_is_masqueraded(over
 
 def test_the_dev_regulation_bans_no_address(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "ip" not in _dev_config(monkeypatch).get("regulation", {}).get("modes", ["user"])
+
+
+# --------------------------------------------------------------------------
+# `auth: forwardauth-admins` (RES-HOST-001 D8). It renders like `forwardauth`;
+# what limits it to admins is the host's Authelia rule, added by hand at
+# onboarding. So every rule naming such a host must say exactly `group:admins`:
+# a missing subject would let any logged-in user through. Until a product
+# declares it, the real-repo check has nothing to judge, so the pure function is
+# exercised on fixtures below, and the onboarding PR adds a pinned case.
+# --------------------------------------------------------------------------
+
+ADMINS = ["group:admins"]
+#: A rule that bypasses never evaluates its subject, so only these policies can limit a host to admins.
+LOGIN_POLICIES = frozenset({"one_factor", "two_factor"})
+
+
+def _subjects(rule: dict) -> list:
+    subject = rule.get("subject")
+    return subject if isinstance(subject, list) else ([] if subject is None else [subject])
+
+
+def admins_rule_problems(access: dict, hosts: set[str]) -> list[str]:
+    """One problem per admins-only host with no rule, or a rule that names any subject but `group:admins`
+    or a policy that does not ask for a login (`bypass` ignores the subject)."""
+    problems = []
+    for host in sorted(hosts):
+        rules = [rule for rule in access.get("rules", []) if host in _domains(rule)]
+        if not rules:
+            problems.append(f"{host}: no rule names it")
+        problems += [f"{host}: rule subject {_subjects(rule)} is not {ADMINS}" for rule in rules if _subjects(rule) != ADMINS]
+        problems += [
+            f"{host}: rule policy {rule.get('policy')!r} does not ask for a login"
+            for rule in rules
+            if rule.get("policy") not in LOGIN_POLICIES
+        ]
+    return problems
+
+
+def _admins_hosts(env: str) -> set[str]:
+    """Hosts in ``env`` of every registered product whose contract snapshot declares forwardauth-admins."""
+    from toolkit.features.product_guards import apps_declaring
+    from toolkit.features.product_render import snapshot_path
+
+    hosts = set()
+    for app in apps_declaring(env):
+        path = snapshot_path(app, env)
+        if not path.exists():  # an in-tree product has no snapshot
+            continue
+        contract = yaml.safe_load(path.read_text(encoding="utf-8"))
+        if contract.get("auth") == "forwardauth-admins":
+            hosts.add(contract["hostnames"][env])
+    return hosts
+
+
+@pytest.mark.parametrize("overlay", OVERLAYS)
+def test_every_admins_only_host_has_a_rule_for_the_admins_group_alone(overlay: str) -> None:
+    problems = admins_rule_problems(_access_control(_render(overlay)), _admins_hosts(overlay))
+    assert not problems, f"{overlay}: " + "; ".join(problems)
+
+
+_ADMINS_RULE = {"domain": ["shop.staging.kubelab.live"], "policy": "one_factor", "subject": ["group:admins"]}
+
+
+@pytest.mark.parametrize(
+    ("rules", "expected"),
+    [
+        ([_ADMINS_RULE], []),
+        ([{**_ADMINS_RULE, "subject": "group:admins"}], []),
+        ([], ["shop.staging.kubelab.live: no rule names it"]),
+        (
+            [{k: v for k, v in _ADMINS_RULE.items() if k != "subject"}],
+            ["shop.staging.kubelab.live: rule subject [] is not ['group:admins']"],
+        ),
+        (
+            [{**_ADMINS_RULE, "subject": ["group:admins", "group:dev"]}],
+            ["shop.staging.kubelab.live: rule subject ['group:admins', 'group:dev'] is not ['group:admins']"],
+        ),
+        (
+            [_ADMINS_RULE, {**_ADMINS_RULE, "subject": ["user:guest"]}],
+            ["shop.staging.kubelab.live: rule subject ['user:guest'] is not ['group:admins']"],
+        ),
+        ([{**_ADMINS_RULE, "policy": "two_factor"}], []),
+        (
+            [{**_ADMINS_RULE, "policy": "bypass"}],
+            ["shop.staging.kubelab.live: rule policy 'bypass' does not ask for a login"],
+        ),
+    ],
+    ids=["list", "string", "no-rule", "no-subject", "extra-group", "second-rule-other-subject", "two-factor", "bypass"],
+)
+def test_the_admins_rule_check_judges_each_shape(rules: list[dict], expected: list[str]) -> None:
+    assert admins_rule_problems({"rules": rules}, {"shop.staging.kubelab.live"}) == expected
+
+
+def test_admins_hosts_reads_the_auth_level_from_each_lane_snapshot(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from toolkit.features import product_guards, product_render
+
+    levels = {"shop": "forwardauth-admins", "blog": "forwardauth"}
+    for app in levels:
+        snapshot = {"auth": levels[app], "hostnames": {"staging": f"{app}.staging.kubelab.live"}}
+        (tmp_path / f"{app}.yaml").write_text(yaml.safe_dump(snapshot), encoding="utf-8")
+    monkeypatch.setattr(product_guards, "apps_declaring", lambda env: ("shop", "blog", "api", "gone"))
+    monkeypatch.setattr(product_render, "snapshot_path", lambda app, env: tmp_path / f"{app}.yaml")
+
+    assert _admins_hosts("staging") == {"shop.staging.kubelab.live"}
