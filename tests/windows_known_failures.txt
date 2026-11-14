@@ -322,6 +322,8 @@ tests/test_terraform_runner.py::test_the_rendered_tfvars_exists_while_terraform_
 
 [docker] Linux container images, which a Windows Docker host cannot run
 tests/test_agent_stack_mcp_bridge.py::test_dependabot_watches_the_base_image_and_the_server
+tests/test_console_image_runs.py::test_the_image_starts_as_its_own_user_and_serves_the_page[as-the-deployment-runs-it]
+tests/test_console_image_runs.py::test_the_image_starts_as_its_own_user_and_serves_the_page[read-only-root-with-a-tmpfs]
 tests/test_coredns_pihole_cache.py::test_the_flush_serves_a_moved_record_without_restarting_pihole
 tests/test_edge_alerting_rules.py::test_a_dead_uplink_takes_both_targets_down
 tests/test_edge_alerting_rules.py::test_a_stopped_rpi3_fires_while_the_edge_still_answers
