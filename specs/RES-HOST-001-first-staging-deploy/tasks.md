@@ -32,7 +32,7 @@ excluding regenerated schema and snapshot files.
 | D [P] | `forwardauth-admins` render and Authelia subject test | ~100 | agent | B |
 | E | Generated NetworkPolicy pair, egress profiles, n8n reciprocal | ~200 | owner | C |
 | F [P] | D8 hostname amendment | ~60 | agent | none |
-| G | No-success alert rule and its `EXEMPT` entry | ~150 | owner | C, resume's success marker (G) |
+| G | No-success alert rule and its `EXEMPT` entry | ~150 | owner | C, and resume's success marker (resume issue 777) |
 | H | resume secrets: catalog entries and `resume-secrets` mapping | ~60 | owner (sets values) | none |
 | I | resume onboarding (registry entry, snapshot, values, Authelia rule) | ~100 + data | owner | B to H, resume issue 810 shipped |
 | J | First staging promote and runbook | ~120 (docs) | owner runs | I |
@@ -110,7 +110,8 @@ excluding regenerated schema and snapshot files.
   `auth_level: one_factor` and group `admins`.
 - [ ] [AC7] Test in `tests/test_authelia_access_rules.py`: every host of a
   `forwardauth-admins` product has a rule whose subject is exactly
-  `group:admins` (vacuous until I).
+  `group:admins`. It holds nothing until I adds the first such product; I
+  re-runs it and adds a non-vacuous case.
 
 ## E. NetworkPolicy (owner)
 
@@ -184,6 +185,9 @@ excluding regenerated schema and snapshot files.
   issue must ship in a published image before step J.
 - [ ] ADR-061 classification entry.
 - [ ] Staging Authelia rule with `subject: group:admins`.
+- [ ] Re-run slice D's Authelia test and add a case pinned to
+  `resume.staging.kubelab.live`, so it fails if that host's rule is missing or
+  names another group.
 - [ ] Portal tile and the e2e expectation for the new host.
 
 ## J. First staging deploy (owner runs)
