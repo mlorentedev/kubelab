@@ -450,7 +450,9 @@ class AnsibleGenerator(BaseGenerator):
             "---\n"
         )
         output_path.write_text(
-            header + yaml.dump(inventory, default_flow_style=False, sort_keys=False), encoding="utf-8"
+            header + yaml.dump(inventory, default_flow_style=False, sort_keys=False),
+            encoding="utf-8",
+            newline="\n",
         )
         logger.info(f"  Inventory: {output_path} ({len(host_names)} hosts, {len(children)} groups)")
 

@@ -391,7 +391,7 @@ def review_attestation(
 
     if state_file is not None:
         try:
-            state_file.write_text(f"{verdict.state}\n", encoding="utf-8")
+            state_file.write_text(f"{verdict.state}\n", encoding="utf-8", newline="\n")
         except OSError as exc:
             # The caller reads the state from this file. A verdict it cannot read
             # is no verdict, and exit 1 would claim one ("not reviewed").
@@ -442,7 +442,7 @@ def deploy_shape_cmd(
         shape = ds.evaluate(pr, repo, ds.GhApi(), decl, admitted)
     if out is not None:
         try:
-            out.write_text(json.dumps(shape.as_dict()) + "\n", encoding="utf-8")
+            out.write_text(json.dumps(shape.as_dict()) + "\n", encoding="utf-8", newline="\n")
         except OSError as exc:
             logger.error(f"deploy-shape: cannot write {out}: {exc}")
             raise typer.Exit(2) from exc
@@ -502,7 +502,7 @@ def deploy_merge_cmd(
     decisions = [dm.judge(pr["number"], repo, api, decl, admitted, required, paused=paused) for pr in open_prs]
     try:
         payload = {"enabled": enabled, "paused": paused, "decisions": [d.as_dict() for d in decisions]}
-        out.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+        out.write_text(json.dumps(payload) + "\n", encoding="utf-8", newline="\n")
     except OSError as exc:
         logger.error(f"deploy-merge: cannot write {out}: {exc}")
         raise typer.Exit(2) from exc
@@ -704,7 +704,7 @@ def cli_reference(
         logger.success(f"{readme}: command table matches the command tree")
         return
     if write:
-        readme.write_text(wanted, encoding="utf-8")
+        readme.write_text(wanted, encoding="utf-8", newline="\n")
         logger.success(f"{readme}: command table rewritten from the command tree")
     else:
         logger.error(f"{readme}: command table differs from the command tree — run with --write")

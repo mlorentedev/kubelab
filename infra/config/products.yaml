@@ -34,3 +34,14 @@ products:
     events:
       staging: web-image-published
       prod: web-release-published
+  imagesensortool:
+    repository: personal/imagesensortool
+    forge: gitea
+    receiver: generic
+    image_registry: gitea.kubelab.live/personal
+    private: true
+    pull_credential:
+      username: mentor
+      secret: apps.services.core.gitea.registry_pull_token
+    events:
+      staging: imagesensortool-image-published
