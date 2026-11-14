@@ -145,4 +145,5 @@ def test_the_runbook_numbers_its_headings_once() -> None:
     text = RUNBOOK.read_text(encoding="utf-8")
     numbers = re.findall(r"^### (\d+\.\d+) ", text, re.M)
     assert numbers, "the pattern stopped matching the headings"
-    assert len(numbers) == len(set(numbers)), f"repeated heading numbers: {sorted(n for n in set(numbers) if numbers.count(n) > 1)}"
+    repeated = sorted(n for n in set(numbers) if numbers.count(n) > 1)
+    assert not repeated, f"repeated heading numbers: {repeated}"
