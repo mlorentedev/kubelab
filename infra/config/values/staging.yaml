@@ -64,6 +64,8 @@ apps:
       version: sha-bbb4c929d205
 
   # Third-party services
+    console:
+      version: sha-7df897b
   services:
     core:
       vikunja:
