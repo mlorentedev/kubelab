@@ -156,7 +156,7 @@ spec:
     spec:
       containers:
         - name: console
-          image: docker.io/mlorentedev/kubelab-console:sha-309bdf9
+          image: docker.io/mlorentedev/kubelab-console:sha-a07adfd
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
