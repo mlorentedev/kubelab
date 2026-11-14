@@ -96,7 +96,7 @@ def test_the_committed_overlay_runs_every_registered_app_on_its_pin(env: str) ->
     api and web carry a pin in both envs today. If one ever loses it, this names the app
     instead of the overlay silently shrinking.
     """
-    docs = list(yaml.safe_load_all((REPO / f"infra/k8s/overlays/{env}/generated/deployments.yaml").read_text("utf-8")))
+    docs = list(yaml.safe_load_all((REPO / f"infra/k8s/overlays/{env}/generated/deployments.yaml").read_text(encoding="utf-8")))
     deployed = {d["metadata"]["name"]: d for d in docs if d and d.get("kind") == "Deployment"}
     assert set(deployed) >= set(product_registry.platform_apps())
     for name, doc in deployed.items():
