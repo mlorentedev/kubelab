@@ -182,3 +182,6 @@ def test_an_existing_key_is_recommented_to_its_account() -> None:
     )
     read = _task_named("Read the comment on this node's forge key")
     assert read["changed_when"] is False and read["check_mode"] is False
+    assert read["failed_when"] == "_gitea_key_comment.rc != 0 and not ansible_check_mode", (
+        "a dry run on a fresh node has no key yet; only a real run may fail here"
+    )

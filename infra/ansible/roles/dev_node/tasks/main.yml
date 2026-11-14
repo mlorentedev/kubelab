@@ -570,7 +570,10 @@
       ansible.builtin.command: ssh-keygen -lf {{ dev_node_gitea_key_path }}.pub
       register: _gitea_key_comment
       changed_when: false
+      # Same reason as the fingerprint read below: on a fresh node in check mode
+      # the key does not exist yet, so a failure is only fatal in a real run.
       check_mode: false
+      failed_when: _gitea_key_comment.rc != 0 and not ansible_check_mode
       become: true
       become_user: "{{ dev_node_user }}"
 
