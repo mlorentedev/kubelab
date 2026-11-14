@@ -27,7 +27,7 @@ products:
 @pytest.fixture
 def registry(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
     path = tmp_path / "products.yaml"
-    path.write_text(_REGISTRY, encoding="utf-8")
+    path.write_text(_REGISTRY, encoding="utf-8", newline="\n")
     monkeypatch.setattr(product_registry, "registry_path", lambda: path)
     return path
 
@@ -52,7 +52,7 @@ def test_registering_the_app_is_the_whole_switch(registry: Path, monkeypatch: py
     """Same command, same checkout: only the registry file changes, and the answer follows it."""
     assert _ask("console").stdout.strip() == "false"
     other = registry.parent / "registered.yaml"
-    other.write_text(_REGISTRY + "  console:\n    forge: in-tree\n", encoding="utf-8")
+    other.write_text(_REGISTRY + "  console:\n    forge: in-tree\n", encoding="utf-8", newline="\n")
     monkeypatch.setattr(product_registry, "registry_path", lambda: other)
     assert _ask("console").stdout.strip() == "true"
 
@@ -60,7 +60,7 @@ def test_registering_the_app_is_the_whole_switch(registry: Path, monkeypatch: py
 def test_a_registry_that_cannot_be_read_fails_instead_of_answering_false(
     registry: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    registry.write_text("products: [not, a, mapping]\n", encoding="utf-8")
+    registry.write_text("products: [not, a, mapping]\n", encoding="utf-8", newline="\n")
     result = _ask("api")
     assert result.exit_code == 1
     assert "false" not in result.stdout
