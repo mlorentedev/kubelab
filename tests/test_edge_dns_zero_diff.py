@@ -31,7 +31,7 @@ FROZEN_ZONES = ["staging.kubelab.live", "staging.mlorente.dev", "staging.imagese
 @pytest.fixture
 def manifest(tmp_path: Path) -> Path:
     path = tmp_path / "edge.json"
-    path.write_text(json.dumps({"staging_zones": FROZEN_ZONES}), encoding="utf-8")
+    path.write_text(json.dumps({"staging_zones": FROZEN_ZONES}), encoding="utf-8", newline="\n")
     return path
 
 
@@ -66,7 +66,9 @@ def test_headscale_split_dns_is_identical_to_the_golden_copy(manifest: Path) -> 
 def test_every_consumer_follows_the_manifest(rendered, tmp_path: Path) -> None:
     """A zone in the manifest reaches every consumer: none of them reads a list of its own."""
     path = tmp_path / "edge.json"
-    path.write_text(json.dumps({"staging_zones": [*FROZEN_ZONES, "staging.example-product.test"]}), encoding="utf-8")
+    path.write_text(
+        json.dumps({"staging_zones": [*FROZEN_ZONES, "staging.example-product.test"]}), encoding="utf-8", newline="\n"
+    )
 
     assert "staging.example-product.test" in str(rendered(path))
 

@@ -119,7 +119,11 @@ def test_the_committed_zones_include_web_and_the_wildcard() -> None:
 
 def _dns_zones(tmp_path: Path, apexes: list[str]) -> Path:
     path = tmp_path / "zones.json"
-    path.write_text(json.dumps({apex: {"key": apex.split(".")[0], "records": []} for apex in apexes}), encoding="utf-8")
+    path.write_text(
+        json.dumps({apex: {"key": apex.split(".")[0], "records": []} for apex in apexes}),
+        encoding="utf-8",
+        newline="\n",
+    )
     return path
 
 

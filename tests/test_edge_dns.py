@@ -27,14 +27,14 @@ APEXES = ["kubelab.live", "mlorente.dev", "imagesensortool.com", "example-produc
 def _registry(tmp_path: Path, products: dict[str, Any], name: str = "products.yaml") -> Path:
     # A new file per version: load_registry caches by path.
     path = tmp_path / name
-    path.write_text(yaml.safe_dump({"products": products}, sort_keys=False), encoding="utf-8")
+    path.write_text(yaml.safe_dump({"products": products}, sort_keys=False), encoding="utf-8", newline="\n")
     return path
 
 
 def _snapshot(snapshots: Path, app: str, staging: str, prod: str | None = None) -> None:
     snapshots.mkdir(parents=True, exist_ok=True)
     hostnames = {"staging": staging} | ({"prod": prod} if prod else {})
-    (snapshots / f"{app}.yaml").write_text(yaml.safe_dump({"hostnames": hostnames}), encoding="utf-8")
+    (snapshots / f"{app}.yaml").write_text(yaml.safe_dump({"hostnames": hostnames}), encoding="utf-8", newline="\n")
 
 
 def _remote(app: str, *, prod: bool = False) -> dict[str, Any]:
