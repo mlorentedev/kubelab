@@ -154,6 +154,8 @@ class TestApplySecretsEnvScoping:
             "SECRET_DEFINITIONS",
             [SecretMapping(name="pr-agent-secrets", keys={"OPENAI__KEY": "MISSING"}, envs=("prod",))],
         )
+        # The committed registry's pull Secret is not what these tests measure (IDP-053 S3b).
+        monkeypatch.setattr(ks, "pull_secret_mappings", lambda registry: [])
         monkeypatch.setattr(ks, "delete_retired_secrets", lambda env, dry_run: True)
         monkeypatch.setattr(ks, "restart_consumers", lambda changed, **k: True)
         attempted: list[str] = []
@@ -179,6 +181,8 @@ class TestApplySecretsEnvScoping:
             "SECRET_DEFINITIONS",
             [SecretMapping(name="pr-agent-secrets", keys={"OPENAI__KEY": "MISSING"}, envs=("prod",))],
         )
+        # The committed registry's pull Secret is not what these tests measure (IDP-053 S3b).
+        monkeypatch.setattr(ks, "pull_secret_mappings", lambda registry: [])
         monkeypatch.setattr(ks, "delete_retired_secrets", lambda env, dry_run: True)
         monkeypatch.setattr(ks, "restart_consumers", lambda changed, **k: True)
         attempted: list[str] = []

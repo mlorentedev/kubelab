@@ -492,6 +492,8 @@ dns:
         - 100.64.0.10
       staging.mlorente.dev:
         - 100.64.0.10
+      staging.imagesensortool.com:
+        - 100.64.0.10
 ```
 
 `100.64.0.10` is RPi4 (Pi-hole on port 53, forwarding to CoreDNS). To add or remove a zone, edit `networking.staging_zones` and run `make deploy TARGET=vps ENV=prod`; the role restarts Headscale because `config.yaml` changed. Do not edit `/opt/headscale/config/config.yaml` on the VPS. Keep zones under `staging.`: a broad `kubelab.live` zone sends prod lookups to RPi4 (2026-03-03 entry in "Last tested").

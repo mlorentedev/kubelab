@@ -53,6 +53,15 @@ apps:
       enable_homelabs: false
       enable_contact: false
       version: sha-9475b33
+    imagesensortool:
+      domain: staging.imagesensortool.com
+      site_domain: staging.imagesensortool.com
+      site_url: https://staging.imagesensortool.com
+      default_port: 8080
+      health_path: /healthz
+      enable_auth: false
+      auth_level: bypass
+      version: sha-bbb4c929d205
 
   # Third-party services
   services:
