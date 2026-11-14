@@ -2,6 +2,9 @@
 # Source: infra/ansible/roles/coredns/templates/Corefile.j2
 
 # --- Staging zones (from networking.staging_zones in common.yaml) ---
+{# The loop reads the effective list in infra/config/products/edge.json (EDGE-001):
+   the platform's zones in networking.staging_zones plus each registered product's.
+   The rendered header above is kept verbatim so the switch changed no deployed byte. #}
 
 {{ staging_domain }} {
     # The apex only: the template below answers every name under it with the same

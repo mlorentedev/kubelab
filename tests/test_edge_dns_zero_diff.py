@@ -20,6 +20,7 @@ import json
 from pathlib import Path
 
 import pytest
+import yaml
 
 from tests import edge_dns_render as render
 
@@ -39,11 +40,16 @@ def manifest(tmp_path: Path) -> Path:
     [
         ("Corefile", render.rendered_corefile),
         ("pihole-forwarding.conf", render.rendered_pihole_forwarding),
-        ("coredns-custom.yaml", render.rendered_hairpin),
     ],
 )
 def test_the_rendered_file_is_byte_identical_to_the_golden_copy(fixture: str, rendered, manifest: Path) -> None:
     assert rendered(manifest) == (FIXTURES / fixture).read_text(encoding="utf-8")
+
+
+def test_the_hairpin_configmap_data_is_identical_to_the_golden_copy(manifest: Path) -> None:
+    """Compared as the object the cluster stores: a manifest's comments never reach it."""
+    golden = yaml.safe_load((FIXTURES / "coredns-custom.yaml").read_text(encoding="utf-8"))
+    assert yaml.safe_load(render.rendered_hairpin(manifest)) == golden
 
 
 def test_headscale_split_dns_is_identical_to_the_golden_copy(manifest: Path) -> None:
