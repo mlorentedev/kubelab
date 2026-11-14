@@ -63,12 +63,21 @@ def apex_of(host: str, apexes: Iterable[str]) -> str | None:
 def staging_zone_for(host: str, declared: Sequence[str], apexes: Iterable[str]) -> str | None:
     """The split-DNS zone ``host`` needs, None when a declared zone already serves it.
 
-    Raises ``EdgeDnsError`` for a host the edge cannot serve: one whose apex is not
-    a zone in ``zones.json``. Shape rules (``staging.`` prefix, one label under the
-    wildcard) are D8's, checked at render; this is the grant.
+    Raises ``EdgeDnsError`` for a host the edge cannot serve: one that is not
+    ``staging.<domain>``, or whose apex is not a zone in ``zones.json``. D8 checks
+    the same shape at render; it is repeated here because the derivation reads
+    snapshots directly, and a bare apex as a split-DNS zone would send every VPN
+    client's prod lookups for that domain to the edge.
     """
     if any(_under(host, zone) and host != zone for zone in declared) or host in declared:
         return None
+    if not (host.startswith("staging.") and "." in host.removeprefix("staging.")):
+        raise EdgeDnsError(
+            f"staging hostname '{host}' is not staging.<domain>",
+            "a product's own split-DNS zone is the hostname itself; any other shape would capture names "
+            "outside staging, a bare apex all of prod's, for every VPN client (EDGE-001, IDP-053 D8).",
+            f"name it staging.<product domain>, or <label>.{WILDCARD_ZONE}",
+        )
     if apex_of(host, apexes) is None:
         raise EdgeDnsError(
             f"staging hostname '{host}' is in no Cloudflare zone the platform declares",

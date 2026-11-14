@@ -117,6 +117,22 @@ def test_a_host_whose_apex_is_not_a_declared_zone_is_refused_naming_zones_json(w
     assert "staging.ungranted.test" in message and "zones.json" in message
 
 
+@pytest.mark.parametrize("host", ["example-product.test", "shop.example-product.test", "staging.test"])
+def test_a_granted_name_that_is_not_staging_dot_a_domain_never_becomes_a_zone(
+    world: tuple[Path, Path], host: str
+) -> None:
+    """A bare apex as a split-DNS zone would send every VPN client's prod lookups for it to the edge."""
+    registry, snapshots = world
+    products = yaml.safe_load(registry.read_text(encoding="utf-8"))["products"]
+    _snapshot(snapshots, "shop", host)
+    _registry(registry.parent, products | {"shop": _remote("shop")})
+
+    with pytest.raises(EdgeDnsError) as excinfo:
+        edge_dns.derive_staging_zones(DECLARED, [*APEXES, "test"], registry=registry, snapshot_dir=snapshots)
+
+    assert host in str(excinfo.value) and "staging." in str(excinfo.value)
+
+
 @pytest.mark.parametrize(
     ("host", "apex"),
     [
