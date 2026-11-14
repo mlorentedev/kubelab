@@ -298,6 +298,9 @@ jobs:
           set -euo pipefail
           $TOOLKIT product render --contract "infra/config/products/contracts/${APP}.yaml" --app "$APP" \
             --env staging --write
+          # The edge's zones follow the snapshot: a new staging hostname arrives in
+          # this PR with its split-DNS zone, inside a zone zones.json grants (EDGE-001).
+          $TOOLKIT sync edge-dns
           $TOOLKIT deployment promote --env staging --app "$APP" --version "$TAG"
 
       - name: Show what the dry run would offer
@@ -318,7 +321,7 @@ jobs:
           git config user.name "kubelab-bot"
           git config user.email "bot@kubelab.live"
           git add infra/config/values/staging.yaml infra/k8s/overlays/staging/ \
-            "infra/config/products/contracts/${APP}.yaml"
+            "infra/config/products/contracts/${APP}.yaml" infra/config/products/edge.json
           if git diff --staged --quiet; then
             echo "No staging changes to promote (${APP} already at ${TAG})"; exit 0
           fi

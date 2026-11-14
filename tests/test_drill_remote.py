@@ -17,6 +17,7 @@ import yaml
 from typer.testing import CliRunner
 
 from tests.test_gitea_drill import _Fake as _GiteaFake
+from tests.test_gitea_drill import _host_side
 from tests.test_gitea_drill import _Live as _GiteaLive
 from tests.test_headscale_drill import IMAGE, STAGING, _Fake
 from toolkit.cli.backup import app
@@ -307,7 +308,7 @@ def test_a_real_gitea_restore_on_the_host_writes_no_injected_value_to_disk(tmp_p
     def run(argv, *, env=None):
         # The root-run wipe empties the tree before rmtree sees it, so read it here too.
         if argv[:3] == ["docker", "run", "--rm"]:
-            scan(Path(argv[argv.index("-v") + 1].split(":")[0]))
+            scan(Path(_host_side(argv[argv.index("-v") + 1])))
         return fake(argv, env=env)
 
     monkeypatch.setattr(gitea_drill, "_default_run", run)
