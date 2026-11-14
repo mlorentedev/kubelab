@@ -15,27 +15,12 @@ spec:
     requests:
       storage: 1Gi
 ---
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: grafana-datasources
-  namespace: kubelab
-  labels:
-    app.kubernetes.io/name: grafana
-    app.kubernetes.io/component: observability
-    app.kubernetes.io/part-of: kubelab
-data:
-  datasources.yaml: |
-    apiVersion: 1
-    datasources:
-      - name: Loki
-        type: loki
-        uid: loki
-        access: proxy
-        url: http://loki:3100
-        isDefault: true
-        editable: false
----
+# `grafana-datasources` is NOT here: it is generated from
+# `services/grafana-datasources/datasources.yaml` by the `configMapGenerator` in
+# base/kustomization.yaml, so that changing a datasource appends a new content hash and
+# rolls the Deployment. Grafana reads datasource provisioning once, at start, so an
+# unhashed ConfigMap would change while the running pod kept the old set and Argo CD
+# reported Synced (#1446). The credential is not in it either way: see the env below.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -126,6 +111,17 @@ spec:
                 secretKeyRef:
                   name: grafana-admin
                   key: n8n-webhook-secret
+                  optional: true
+            # The password of the read-only `forge_stats` role (CONSOLE-004 AC6), expanded by
+            # Grafana into the datasource's `secureJsonData`, so it never rests in a ConfigMap.
+            # `optional` for the same reason as above: the key arrives with `apply-secrets`,
+            # and without it only that datasource fails to connect. A change restarts Grafana
+            # through `apply-secrets` (#1804), which finds it by this reference.
+            - name: FORGE_STATS_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-admin
+                  key: forge-stats-db-password
                   optional: true
           volumeMounts:
             - name: data

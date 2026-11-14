@@ -118,6 +118,33 @@ keeps one public name.
 The installation tokens the API mints from the App key last one hour and are
 renewed by the API; nothing to rotate.
 
+## Statistics in Grafana
+
+The "Forge statistics" dashboard (`forge-stats`) reads the `forge_stats` view of the
+read model through the Postgres role `forge_stats`, which holds `SELECT` on that view
+and nothing else (not the tables, not `console_usage`). The view carries no title, URL,
+author, assignee, free-text label or issue number; `store/forge_stats_test.go` lists the
+columns it may have. Source names (`owner/repo`) are in it, for the freshness panel.
+
+- **Order on a new environment:** write the password, `make provision-postgres-tenant
+  ENV=<env>` (creates the role; grants the view if the migration already ran), deploy
+  (the migration grants it if the role already exists), `make apply-secrets ENV=<env>`
+  (delivers `forge-stats-db-password` to `grafana-admin` and restarts Grafana). Either
+  order of the first two ends with the grant in place. The password is
+  `apps.platform.api.forge_stats_db_password` in `staging.enc.yaml` and `prod.enc.yaml`;
+  `provision-postgres-tenant` fails when it is missing, so a deploy does not pass
+  without it.
+- **Rotate:** `toolkit secrets rotate apps.platform.api.forge_stats_db_password --env <env>`,
+  commit, then `make provision-postgres-tenant ENV=<env> TENANT=forge_stats` and
+  `make apply-secrets ENV=<env>`. The two must both run: the role holds the old password
+  until the first, and Grafana sends it until the second.
+- **Read it:** Grafana's "Forge stats" datasource, "Test" button. A failure there with
+  Grafana otherwise up is this role, its password or the `postgres-ingress` rule.
+- **Not shown yet:** time to first review and time with a red CI wait for the CI state
+  of the inbox reasons (AC1). Throughput and queue age are approximations: the read
+  model keeps no `created_at` or `closed_at`, so they use `updated_at` and say so in
+  each panel's description.
+
 ## Read the events
 
 The API writes one JSON line per forge event, with a stable `event` field, next

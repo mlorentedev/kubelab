@@ -1958,6 +1958,23 @@ apps:
         log_retention_days: 30
         artifact_retention_days: 14
         run_retention_days: 30
+        # #3079. The four bounds on a job, declared at the defaults the pinned versions
+        # ship (gitea/runner 4.1.0, Gitea 1.27.3) so an image bump cannot move them
+        # unseen; ADR-065 D3, declared rather than remembered. Go durations.
+        # `timeout` is the runner's own `runner.timeout`: it cancels the job and
+        # logs why. The other three are crons inside Gitea:
+        #   zombie   fails a Running task whose state was not UPDATED for this long
+        #            (a dead runner), checked every 5m;
+        #   endless  fails a Running task STARTED this long ago, checked every 30m, so
+        #            it must not undercut `timeout` or Gitea fails the job first;
+        #   abandoned cancels a job still WAITING for a runner, checked every 6h. Not
+        #            lowered: the Beelink is on-demand (ADR-028), and a job queued
+        #            while it is off must survive the night.
+        # tests/test_gitea_actions_runner.py asserts zombie < timeout <= endless.
+        timeout: 3h
+        zombie_task_timeout: 10m
+        endless_task_timeout: 3h
+        abandoned_job_timeout: 24h
         resources:
           # The DAEMON's limits. Job containers are bounded by `container_options`
           # above; this bounds only the process that orchestrates them.
