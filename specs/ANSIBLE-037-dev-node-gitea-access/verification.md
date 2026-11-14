@@ -97,7 +97,7 @@ Measured 2026-11-12 against the agents' account (D1 as amended, #1075), from the
 - Test suite: `make test` (2026-11-13) -> `10303 passed, 95 skipped`, coverage 78%. The spec's own guards: `poetry run pytest tests/test_dev_node_gitea_host_key_pin.py tests/test_dev_node_gitea_agent_key.py tests/test_dev_node_gitea_identity.py tests/test_dev_node_npm_converges.py -q` -> `19 passed`.
 - Manual smoke test: the AC1, AC3 and AC4 runs under Evidence, on powered hardware.
 - No regressions in existing test suite: yes.
-- **AC1 on an untagged provision: blocked, not measured.** `make provision NODE=ace2 ENV=staging`, twice on 2026-11-13, fails both times at `Install global agent CLI tools via mise node npm`, before the gitea block: run 1 `ok=135 changed=3 failed=1`, run 2 `ok=134 changed=0 failed=1`. ace2's pinned node lost its `npm` to an interrupted `npm update --global` on 2026-10-31, and the role does not detect it: #3477 (ANSIBLE-090). The `changed=0` of run 2 is therefore not convergence evidence. AC1 stands on the `TAGS=gitea` runs above.
+- **AC1 on an untagged provision** (2026-11-14, `make provision NODE=ace2 ENV=staging`, twice, both at master `19cd3474`). Run 1 `ok=382 changed=4 failed=0`; run 2 `ok=382 changed=1 failed=0`. No task in the gitea block reported a change in either run. Run 1 changed the apt cache, the dotfiles checkout and its bootstrap (both follow the dotfiles repository, which moves on its own), and poetry. Run 2's one change is poetry, which `dev_node` reinstalls on every pass: #3534 (ANSIBLE-091), outside this spec. The first untagged attempts on 2026-11-13 failed before the gitea block, at the npm task, because ace2's pinned node had lost its npm. #3477 fixed that (#3478).
 
 ## Decisions made during implementation
 
