@@ -203,20 +203,22 @@
     # the toolchain in it works. An interrupted `npm update --global` leaves npm,
     # npx, corepack and yarn moved aside under temporary names, with the directory
     # intact (ace2, 2026-10-31, #3477), and the next task then calls an npm that
-    # is not there. Check that entry point, and reinstall the pinned node alone.
+    # is not there. Check the entry points this role runs (npm here, npx through
+    # its /usr/local/bin wrapper), and reinstall the pinned node alone.
     # A reinstall empties lib/node_modules: the npm task below restores the agent
     # CLIs, and the dotfiles bootstrap further down restores what dotfiles add.
-    - name: Check the pinned node still has its npm
+    - name: Check the pinned node still has its npm and npx
       ansible.builtin.stat:
-        path: "{{ dev_node_home }}/.local/share/mise/installs/node/{{ dev_node_toolchains.node }}/bin/npm"
-      register: _mise_node_npm
+        path: "{{ dev_node_home }}/.local/share/mise/installs/node/{{ dev_node_toolchains.node }}/bin/{{ item }}"
+      loop: [npm, npx]
+      register: _mise_node_bins
       check_mode: false
       tags: [dev_node, mise, agents]
 
-    - name: Reinstall the pinned node when its npm is gone
+    - name: Reinstall the pinned node when its npm or npx is gone
       ansible.builtin.command:
         cmd: "{{ dev_node_home }}/.local/bin/mise install --force node@{{ dev_node_toolchains.node }}"
-      when: not _mise_node_npm.stat.exists
+      when: _mise_node_bins.results | rejectattr('stat.exists') | list | length > 0
       tags: [dev_node, mise, agents]
 
     # --- Agent CLI tooling (Claude Code, etc.) ---

@@ -19,7 +19,7 @@ import yaml
 
 REPO = Path(__file__).resolve().parent.parent
 ROLE_TASKS = REPO / "infra/ansible/roles/dev_node/tasks/main.yml"
-NPM = "{{ dev_node_home }}/.local/share/mise/installs/node/{{ dev_node_toolchains.node }}/bin/npm"
+BIN = "{{ dev_node_home }}/.local/share/mise/installs/node/{{ dev_node_toolchains.node }}/bin/{{ item }}"
 
 
 def _tasks() -> list[dict]:
@@ -43,7 +43,7 @@ def _module(task: dict, name: str) -> dict:
 
 
 def _stat_index() -> int:
-    return _index(lambda t: _module(t, "ansible.builtin.stat").get("path") == NPM)
+    return _index(lambda t: _module(t, "ansible.builtin.stat").get("path") == BIN)
 
 
 def _repair_index() -> int:
@@ -54,9 +54,10 @@ def _npm_install_index() -> int:
     return _index(lambda t: t.get("loop") == "{{ dev_node_global_agent_npm_packages }}")
 
 
-def test_the_role_checks_the_npm_the_next_task_runs() -> None:
+def test_the_role_checks_the_node_entry_points_it_runs() -> None:
     stat = _tasks()[_stat_index()]
-    assert stat.get("register") == "_mise_node_npm"
+    assert stat.get("loop") == ["npm", "npx"], "npm runs the next task; npx is wrapped into /usr/local/bin"
+    assert stat.get("register") == "_mise_node_bins"
     assert stat.get("check_mode") is False, "a dry run must still see a broken toolchain"
 
 
@@ -65,7 +66,7 @@ def test_a_missing_npm_forces_a_reinstall_of_the_pinned_node() -> None:
     assert repair["ansible.builtin.command"]["cmd"] == (
         "{{ dev_node_home }}/.local/bin/mise install --force node@{{ dev_node_toolchains.node }}"
     ), "reinstall the pinned version only; a bare `--force` would rebuild every toolchain"
-    assert repair.get("when") == "not _mise_node_npm.stat.exists"
+    assert repair.get("when") == "_mise_node_bins.results | rejectattr('stat.exists') | list | length > 0"
 
 
 def test_the_repair_runs_before_anything_uses_npm() -> None:
