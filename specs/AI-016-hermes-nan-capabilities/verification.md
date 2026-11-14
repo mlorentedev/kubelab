@@ -74,7 +74,7 @@ Post-review focused ownership/config/vault tests: **112 passed, 1 skipped**. Two
 
 ## Promotion candidates
 
-- [x] Lesson for the repo's `docs/lessons/`? no: the two new operational diagnostics and their exact repairs are retained in `docs/runbooks/hermes-kubelab.md`; no separate reusable lesson is needed beyond that runbook.
+- [x] Lesson for the repo's `docs/lessons/`? yes: `docs/lessons/containers-docker/lesson-749-a-nested-writable-bind-mount-still-needs-traverse-permission-on-every-parent.md`.
 - [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? no: this implements ADR-068 and existing NaN/vault boundaries without changing architecture.
 - [x] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. no: all evidence and fixes are currently specific to this Hermes/v0.22.1 deployment.
 
