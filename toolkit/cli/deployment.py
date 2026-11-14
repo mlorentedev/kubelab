@@ -73,15 +73,27 @@ def image_tag(
         str,
         typer.Option("--app", "-a", help="A registered product (see infra/config/products.yaml)"),
     ],
+    allow_unpinned: Annotated[
+        bool,
+        typer.Option(
+            "--allow-unpinned",
+            help="Print nothing and succeed when the app has no pin at all (a first promotion). "
+            "A pin that is not an immutable sha still fails.",
+        ),
+    ] = False,
 ) -> None:
     """
     Print the immutable ``sha-<short>`` tag pinned for a platform app (ADR-056 build-once).
 
     Resolves ``apps.platform.<app>.version`` from ``values/<env>.yaml`` — the staging-
     validated digest release.yml re-tags as the prod semver (never a rebuild). Prints the
-    bare tag to stdout for CI capture; errors (exit 1) if the pin is absent or not a sha.
+    bare tag to stdout for CI capture; errors (exit 1) if the pin is absent or not a sha. With
+    ``--allow-unpinned`` an absent pin prints nothing and succeeds (a first promotion).
     """
     try:
+        if allow_unpinned and promotion.read_pinned_version(env, app_name) is None:
+            typer.echo("")
+            return
         typer.echo(promotion.resolve_image_sha(env, app_name))
     except Exception as e:
         logger.error(MESSAGES.ERROR_FAILED_WITH_REASON.format("Resolve image tag", str(e)))
