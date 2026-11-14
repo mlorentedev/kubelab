@@ -18,6 +18,8 @@ tags: [kubelab, toolkit-tooling, windows, testing]
 
 lesson-727 had already recorded the WSL launcher, and `test_check_lessons.py` worked around it at one call. The other 25 test files kept the bare name, because a lesson does not reach code that is written later. The tests now take the shell from `tests.shells.BASH`. `tests/test_shells.py` fails on any call that passes a bare `"bash"` as its argv, and the LF guard covers `tests/` as well as `toolkit/`.
 
-**Rule**: On Windows, pass a shell to a subprocess by its full path, taken from `shutil.which`, never as a bare name. Pin `newline="\n"` on every text write whose bytes matter. Before marking a test platform-only, measure it with the suspected mechanism removed: a classification made by reading the code is a hypothesis. A gotcha that has already been fixed at one call site needs a guard that covers every call site, or it comes back at the next one.
+A third mechanism of the same shape showed up in the audit run with every declared failure: a test that starts a child with a minimal `env={"PATH": ...}` drops `SYSTEMROOT`, and a Python child on Windows then exits 1 before it runs a line, with nothing on stdout. The tests now build such an environment through `tests.shells.child_env`, and `tests/test_shells.py` fails on a minimal env dict outside it.
 
-**Tags**: `#windows` `#testing` `#issue-3409` `#issue-3480`
+**Rule**: On Windows, pass a shell to a subprocess by its full path, taken from `shutil.which`, never as a bare name. Pin `newline="\n"` on every text write whose bytes matter. A child environment built from scratch must carry `SYSTEMROOT` on Windows. Before marking a test platform-only, measure it with the suspected mechanism removed: a classification made by reading the code is a hypothesis. A gotcha that has already been fixed at one call site needs a guard that covers every call site, or it comes back at the next one.
+
+**Tags**: `#windows` `#testing` `#issue-3409` `#issue-3480` `#systemroot`
