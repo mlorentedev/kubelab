@@ -1,0 +1,94 @@
+{#
+  The NetworkPolicy pair of a product that claims `resources:` (RES-HOST-001 D7). Both select the
+  Deployment and the CronJob pods by the name label, so the job is as boxed in as the web pod.
+  A pod selected by a policy of each type is default-deny in that direction: the egress rules are
+  the registry entry's profiles and nothing else, and an entry with none denies all egress.
+
+  Not closed: exfiltration to a public host over 443. A policy cannot tell a job board from any
+  other public address; an egress proxy with a domain allowlist is the upgrade path.
+#}
+{% for app in apps if app.volumes or app.jobs %}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ app.name }}-ingress
+  namespace: {{ namespace }}
+  labels:
+    app.kubernetes.io/name: {{ app.name }}
+    app.kubernetes.io/part-of: kubelab
+    app.kubernetes.io/managed-by: toolkit
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ app.name }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+      ports:
+        - protocol: TCP
+          port: {{ app.port }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ app.name }}-egress
+  namespace: {{ namespace }}
+  labels:
+    app.kubernetes.io/name: {{ app.name }}
+    app.kubernetes.io/part-of: kubelab
+    app.kubernetes.io/managed-by: toolkit
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ app.name }}
+  policyTypes:
+    - Egress
+{% if app.egress %}
+  egress:
+{% for profile in app.egress %}
+{% if profile == "dns" %}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+{% elif profile == "public-https" %}
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 100.64.0.0/10
+              - 169.254.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443
+{% elif profile == "notify" %}
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: n8n
+      ports:
+        - protocol: TCP
+          port: 5678
+{% endif %}
+{% endfor %}
+{% endif %}
+{% endfor %}

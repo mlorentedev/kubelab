@@ -307,6 +307,51 @@ class TestRegistryFields:
             product_registry.load_registry(path)
 
 
+_EGRESS_ENTRY = """\
+products:
+  beta:
+    repository: personal/beta
+    forge: gitea
+    receiver: generic
+    egress: {egress}
+"""
+
+
+class TestEgressProfiles:
+    """RES-HOST-001 D7: a product's egress is named by its registry entry, never by its contract."""
+
+    def test_defaults_to_no_profile(self) -> None:
+        assert product_registry.load_registry().products["web"].egress == []
+
+    def test_the_three_profiles_parse_in_the_order_written(self, tmp_path: Path) -> None:
+        body = _EGRESS_ENTRY.format(egress="[notify, dns, public-https]")
+
+        entry = product_registry.load_registry(_write(tmp_path, body)).products["beta"]
+
+        assert entry.egress == ["notify", "dns", "public-https"]
+
+    def test_an_unknown_profile_is_refused_naming_it_and_the_known_ones(self, tmp_path: Path) -> None:
+        body = _EGRESS_ENTRY.format(egress="[dns, allow-all]")
+
+        with pytest.raises(RegistryError) as excinfo:
+            product_registry.load_registry(_write(tmp_path, body))
+
+        message = str(excinfo.value)
+        assert "ERROR: egress profile 'allow-all' is not defined" in message
+        assert "WHY:" in message and "FIX:" in message
+        assert "dns, notify, public-https" in message
+
+    def test_a_profile_named_twice_is_refused(self, tmp_path: Path) -> None:
+        with pytest.raises(RegistryError, match="dns.*twice"):
+            product_registry.load_registry(_write(tmp_path, _EGRESS_ENTRY.format(egress="[dns, dns]")))
+
+    def test_an_in_tree_entry_cannot_name_egress(self, tmp_path: Path) -> None:
+        body = "products:\n  api:\n    forge: in-tree\n    egress: [dns]\n"
+
+        with pytest.raises(RegistryError, match="remove egress"):
+            product_registry.load_registry(_write(tmp_path, body))
+
+
 class TestPrivateEntryRefusals:
     """A private image is unpullable without a registry to pull from and a credential to pull with (D6)."""
 

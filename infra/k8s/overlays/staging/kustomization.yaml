@@ -11,6 +11,7 @@ resources:
   - generated/ingress.yaml
   - generated/hooks.yaml
   - generated/claims.yaml
+  - generated/networkpolicies.yaml
   - generated/migrations.yaml
   - redirect-kubelab.yaml
   - traefik-dashboard.yaml

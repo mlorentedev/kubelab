@@ -76,6 +76,7 @@ class K8sGenerator(BaseGenerator):
         ("ingress.yaml.j2", "ingress.yaml"),
         ("hooks.yaml.j2", "hooks.yaml"),
         ("claims.yaml.j2", "claims.yaml"),
+        ("networkpolicies.yaml.j2", "networkpolicies.yaml"),
     ]
 
     # Where each env's contract snapshots live; a class attribute so a test can point it at a fixture tree.
@@ -303,6 +304,7 @@ class K8sGenerator(BaseGenerator):
                     "resources": app_resources,
                     "middlewares": middlewares,
                     "extra_routes": self._build_extra_routes(env_vars, component),
+                    "egress": list(entry.egress),
                     "volumes": volumes,
                     "jobs": jobs,
                     "fs_group": self._fs_group(volumes),
