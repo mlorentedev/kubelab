@@ -26,6 +26,8 @@
 products:
   api:
     forge: in-tree
+  console:
+    forge: in-tree
   web:
     repository: mlorentedev/web
     forge: github

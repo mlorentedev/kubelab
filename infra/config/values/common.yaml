@@ -1183,6 +1183,22 @@ apps:
       enable_homelabs: true
       enable_contact: true
 
+    # The forge console frontend (ADR-074 D5, #3443): Astro static + React islands behind
+    # nginx, on the host `infra.forge.console_domain` (derived into `domain`, never declared
+    # twice). `/console/` stays the api's, and Authelia guards the whole host. No `version`
+    # here or in staging/prod until the first build is promoted: an app with no pin in an
+    # env is not deployed there (#3456).
+    console:
+      name: console
+      image_name: kubelab-console
+      default_port: 8080
+      health_path: /
+      enable_auth: true
+      auth_level: one_factor
+      extra_routes:
+      - path_prefix: /console/
+        service: api
+
     # Staging-only static site (IDP-053): its image lives on the Gitea registry the
     # product's entry names, so only the repository name is declared here. The rest
     # (domain, site_*, version) is staging.yaml's, rendered from the contract.

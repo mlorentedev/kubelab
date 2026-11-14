@@ -1,14 +1,21 @@
-# The forge console (CONSOLE-004): its own host, guarded whole by Authelia, served by
-# the api binary. The host is `infra.forge.console_domain` in common.yaml (staging
+# The forge console's EMBEDDED page (CONSOLE-004): its own host, guarded whole by Authelia,
+# served by the api binary. The host is `infra.forge.console_domain` in common.yaml (staging
 # override in staging.yaml); the prod domain is patched in overlays/prod/patches.yaml.
 # The api answers /console only for this host, so the public api host never serves it.
+#
+# TRANSITIONAL (ADR-074 D5, #3443). The frontend is `apps/console`, an app the generator
+# routes itself (`console`, in overlays/<env>/generated/ingress.yaml): `/console/` to the api
+# and everything else to nginx. That route exists only in an env that pins a console version,
+# so this one stays as the fallback: `priority: 1` loses to every generated rule on the host
+# and serves exactly what the host served before the frontend (the page, and `/` redirected
+# to it) wherever no frontend is deployed. The PR that deletes the embedded page deletes this.
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
-  name: console
+  name: console-embedded
   namespace: kubelab
   labels:
-    app.kubernetes.io/name: console
+    app.kubernetes.io/name: console-embedded
     app.kubernetes.io/part-of: kubelab
 spec:
   entryPoints:
@@ -16,6 +23,7 @@ spec:
   routes:
     - match: Host(`console.staging.kubelab.live`)
       kind: Rule
+      priority: 1
       middlewares:
         - name: secure-headers
         - name: rate-limit
