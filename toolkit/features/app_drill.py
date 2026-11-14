@@ -269,7 +269,7 @@ def _prove_authelia(box: _Scratch) -> bool:
     # password nobody ever sees. Its hash is made here, never committed.
     users = {"users": {"drill": {"displayname": "drill", "email": "drill@drill.invalid"}}}
     users["users"]["drill"]["password"] = PasswordHasher().hash(secrets.token_hex(16))
-    (box.secrets / "users.yml").write_text(yaml.safe_dump(users), encoding="utf-8")
+    (box.secrets / "users.yml").write_text(yaml.safe_dump(users), encoding="utf-8", newline="\n")
     config = {
         "server": {"address": "tcp://127.0.0.1:9091/"},
         "authentication_backend": {"file": {"path": f"{SECRETS}/users.yml", "watch": False}},
@@ -279,7 +279,7 @@ def _prove_authelia(box: _Scratch) -> bool:
         "notifier": {"filesystem": {"filename": f"{box.app.mount}/drill-notification.txt"}},
         "ntp": {"disable_startup_check": True},
     }
-    (box.secrets / "config.yml").write_text(yaml.safe_dump(config), encoding="utf-8")
+    (box.secrets / "config.yml").write_text(yaml.safe_dump(config), encoding="utf-8", newline="\n")
 
     # Idle first, so the key is checked by the CLI before the server can refuse it.
     if not box.start("--entrypoint", "sleep", box.image, "infinity"):

@@ -65,7 +65,7 @@ def run_mutation_tests() -> None:
 
         # Apply mutant
         mutated_code = original_code.replace(orig, mutated, 1)
-        TARGET_FILE.write_text(mutated_code, encoding="utf-8")
+        TARGET_FILE.write_text(mutated_code, encoding="utf-8", newline="\n")
 
         # Run test suite
         res = subprocess.run(TEST_COMMAND, capture_output=True, text=True, encoding="utf-8")
@@ -78,7 +78,7 @@ def run_mutation_tests() -> None:
             print(f"[{i}/{total_mutants}] SURVIVED (DEFECT): {desc}")
 
     # Restore original file
-    TARGET_FILE.write_text(original_code, encoding="utf-8")
+    TARGET_FILE.write_text(original_code, encoding="utf-8", newline="\n")
 
     mutation_score = (killed / total_mutants) * 100
     print("\n================ Mutation Testing Results ================")

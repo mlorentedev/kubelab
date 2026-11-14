@@ -221,7 +221,7 @@ def write_watcher_targets(project_root: Path, config: dict[str, Any]) -> bool:
     if target.exists() and target.read_text(encoding="utf-8") == rendered:
         return False
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(rendered, encoding="utf-8")
+    target.write_text(rendered, encoding="utf-8", newline="\n")
     return True
 
 
@@ -276,7 +276,7 @@ def write_edge_watcher_targets(project_root: Path, config: dict[str, Any]) -> bo
     if target.exists() and target.read_text(encoding="utf-8") == rendered:
         return False
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(rendered, encoding="utf-8")
+    target.write_text(rendered, encoding="utf-8", newline="\n")
     return True
 
 

@@ -51,5 +51,5 @@ def sync(config: Mapping[str, Any], terraform_dir: Path) -> bool:
     content = render(config)
     if target.is_file() and target.read_text(encoding="utf-8") == content:
         return False
-    target.write_text(content, encoding="utf-8")
+    target.write_text(content, encoding="utf-8", newline="\n")
     return True

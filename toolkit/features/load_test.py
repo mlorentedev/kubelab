@@ -26,6 +26,7 @@ import secrets
 import shlex
 import shutil
 import subprocess
+import sys
 import tempfile
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
@@ -384,7 +385,13 @@ class Lab:
         when the step ends, failed or not. A master that does not open leaves the readers on direct
         connections: with `ControlMaster=no`, ssh connects directly when the socket is missing or stale
         (checked against ace1, both cases exit 0).
+
+        Win32 OpenSSH has no ControlMaster, and Windows has no /tmp: there the readers connect
+        directly, the documented fallback, at a handshake per sample.
         """
+        if sys.platform == "win32":
+            yield ()
+            return
         control = tempfile.mkdtemp(prefix="lt-", dir="/tmp")  # a unix socket path caps near 104 bytes on macOS
         path = ("-o", f"ControlPath={control}/%C")
         try:
