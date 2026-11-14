@@ -1,5 +1,5 @@
 ---
-id: lesson-746-a-version-directory-says-a-toolchain-was-installed-not-that-it-runs
+id: lesson-748-a-version-directory-says-a-toolchain-was-installed-not-that-it-runs
 type: lesson
 status: active
 created: "2026-11-13"
