@@ -627,6 +627,7 @@ def _runtime_facts(lab: Lab, image: str) -> dict[str, Any]:
             n: lab.ssh(n, "lscpu | sed -n 's/^Model name: *//p'").strip() for n in (lab.target_node, lab.generator)
         },
         "workloads": {w: {"image": c["image"], "resources": c.get("resources", {})} for w, c in images.items()},
+        "target_nic": tl.parse_nic(lab.ssh(lab.target_node, tl.NIC_COMMAND)),
     }
 
 

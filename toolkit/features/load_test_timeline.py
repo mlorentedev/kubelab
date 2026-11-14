@@ -92,8 +92,19 @@ def _sections(text: str) -> list[str]:
     return ["\n".join(part) for part in parts]
 
 
+def _net_rx(text: str) -> dict[str, int] | None:
+    """The NET_RX row of /proc/softirqs per CPU, named as /proc/stat names them (#3375)."""
+    lines = text.splitlines()
+    names = [name.lower() for name in lines[0].split()] if lines else []
+    for line in lines[1:]:
+        fields = line.split()
+        if fields and fields[0] == "NET_RX:":
+            return dict(zip(names, (int(n) for n in fields[1:]), strict=False))
+    return None
+
+
 def parse_node(text: str) -> dict[str, Any]:
-    stat, conntrack, edge, workload = _sections(text)
+    stat, conntrack, edge, workload, *rest = _sections(text)
     cpus = {
         fields[0]: [int(x) for x in fields[1:]]
         for fields in (line.split() for line in stat.splitlines())
@@ -106,6 +117,7 @@ def parse_node(text: str) -> dict[str, Any]:
         "conntrack": int(conntrack.strip()) if conntrack.strip() else None,
         "edge_usec": _usage_usec(edge),
         "workload_usec": _usage_usec(workload),
+        "net_rx": _net_rx(rest[0]) if rest else None,
     }
 
 
@@ -127,7 +139,8 @@ def node_command(edge_uid: str, workload_uid: str) -> str:
     sep = SEPARATOR.strip()
     return (
         f"cat /proc/stat; echo {sep}; cat /proc/sys/net/netfilter/nf_conntrack_count 2>/dev/null; echo {sep}; "
-        f"cat {paths[0]} 2>/dev/null; echo {sep}; cat {paths[1]} 2>/dev/null; true"
+        f"cat {paths[0]} 2>/dev/null; echo {sep}; cat {paths[1]} 2>/dev/null; echo {sep}; "
+        f"cat /proc/softirqs 2>/dev/null; true"
     )
 
 
@@ -186,6 +199,7 @@ def _node_row(a: dict[str, Any], b: dict[str, Any]) -> dict[str, Any]:
         row["max_cpu_softirq_pct"] = round(shares[name][1], 1)
     else:
         row["max_cpu_busy_pct"] = 0.0
+    row |= _net_rx_row(a.get("net_rx"), b.get("net_rx"))
     # The cgroups divide by the wall time the kernel counted between the two reads, not by the
     # sampler's stamps: those are taken before an ssh read that a saturated node answers 3 to 8 s
     # late, by varying amounts, which put 5.56 cores of Traefik on a 4-core node (#3295).
@@ -200,6 +214,21 @@ def _node_row(a: dict[str, Any], b: dict[str, Any]) -> dict[str, Any]:
         # zero. It is not clamped: a negative figure is that skew, and a 0.0 then means zero.
         row["other_cores"] = round(row["node_cores"] - sum(cores.values()), 2)
     return row
+
+
+def _net_rx_row(a: dict[str, int] | None, b: dict[str, int] | None) -> dict[str, Any]:
+    """The CPU that ran most of the receive softirqs between two reads, and its share of them.
+
+    A single receive queue with no RPS puts every one on the CPU its interrupt lands on (#3375).
+    """
+    if not a or not b:
+        return {}
+    delta = {n: b[n] - a[n] for n in b if n in a}
+    total = sum(delta.values())
+    if total <= 0:
+        return {}
+    name = max(delta, key=lambda n: delta[n])
+    return {"net_rx_cpu": name, "net_rx_share_pct": round(100 * delta[name] / total, 1)}
 
 
 def interval(a: dict[str, Any], b: dict[str, Any], start: float) -> dict[str, Any]:
@@ -254,3 +283,36 @@ def sample_timeline(
         sleep(max(tick - clock(), 0.0))  # the reads' own time comes out of the wait, so rows keep the interval
         samples.append(_take(readers, clock))
     return [interval(a, b, start) for a, b in zip(samples, samples[1:], strict=False)]
+
+
+# The receive path of the node's default-route interface, read once per run (#3375): how many receive
+# queues it has, where each queue's packets are steered (RPS mask, 0 = off), and on which CPU each of
+# its interrupts is actually delivered. effective_affinity_list is where the kernel put it, which can be
+# one CPU of a wider smp_affinity_list.
+NIC_COMMAND = (
+    "i=$(ip route show default | awk '{print $5; exit}'); echo \"iface=$i\"; "
+    'echo "driver=$(basename "$(readlink /sys/class/net/$i/device/driver)")"; '
+    'for q in /sys/class/net/$i/queues/rx-*; do echo "rps ${q##*/}=$(cat $q/rps_cpus)"; done; '
+    'for n in $(awk -v i="$i" \'$NF ~ i {sub(":", "", $1); print $1}\' /proc/interrupts); do '
+    'echo "irq $n=$(cat /proc/irq/$n/effective_affinity_list 2>/dev/null || cat /proc/irq/$n/smp_affinity_list)"; '
+    "done"
+)
+
+
+def parse_nic(text: str) -> dict[str, Any]:
+    """NIC_COMMAND's lines as the run's receive-path facts."""
+    facts: dict[str, Any] = {"rps_cpus": {}, "irq_cpus": {}}
+    for line in text.splitlines():
+        key, sep, value = line.partition("=")
+        if not sep:
+            continue
+        kind, _, name = key.partition(" ")
+        if "*" in name:
+            continue  # a glob that matched nothing, not a queue or vector
+        if kind == "rps":
+            facts["rps_cpus"][name] = value.strip()
+        elif kind == "irq":
+            facts["irq_cpus"][name] = value.strip()
+        elif kind in ("iface", "driver"):
+            facts[kind] = value.strip()
+    return facts
