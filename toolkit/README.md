@@ -86,6 +86,7 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit deployment` | High-level deployment orchestration (setup, deploy, rollback). |
 | `toolkit deployment image-tag` | Print the immutable ``sha-<short>`` tag pinned for a platform app (ADR-056 build-once). |
 | `toolkit deployment promote` | Promote an app to an immutable image tag (ADR-046 D6). |
+| `toolkit deployment registered` | Print ``true`` when the app is in the product registry, ``false`` when it is not. |
 | `toolkit info` | Show toolkit information and configuration. |
 | `toolkit infra` | Infrastructure deployment and status commands |
 | `toolkit infra ansible` | Ansible management commands |
