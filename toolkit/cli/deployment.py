@@ -6,7 +6,7 @@ import typer
 
 from toolkit.config.constants import MESSAGES
 from toolkit.core.logging import logger
-from toolkit.features import promotion
+from toolkit.features import product_registry, promotion
 from toolkit.features.validation import (
     validate_environment_config,
 )
@@ -60,6 +60,26 @@ def promote(
         logger.success(MESSAGES.SUCCESS_COMPLETED.format(f"Promote {target} to {version}"))
     except Exception as e:
         logger.error(MESSAGES.ERROR_FAILED_WITH_REASON.format("Promote", str(e)))
+        raise typer.Exit(1) from None
+
+
+@app.command(name="registered")
+def registered(
+    app_name: Annotated[
+        str,
+        typer.Option("--app", "-a", help="A product name, as it would appear in infra/config/products.yaml"),
+    ],
+) -> None:
+    """
+    Print ``true`` when the app is in the product registry, ``false`` when it is not.
+
+    CI asks this before promoting: an app the registry does not carry yet is not a failure but
+    nothing to promote. A registry that cannot be read exits 1, so that is never read as "no".
+    """
+    try:
+        typer.echo("true" if app_name in product_registry.platform_apps() else "false")
+    except product_registry.RegistryError as e:
+        logger.error(str(e))
         raise typer.Exit(1) from None
 
 

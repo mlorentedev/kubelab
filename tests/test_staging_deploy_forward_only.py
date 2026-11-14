@@ -43,6 +43,7 @@ _JOBS = {"api": "open-pr", "console": "open-pr-console"}
 # step asks for `--allow-unpinned`, as the real command is.
 _POETRY_STUB = """#!/usr/bin/env bash
 case "$*" in
+  *"deployment registered --app $STUB_APP"*) printf '%s\\n' "${STUB_REGISTERED:-true}" ;;
   *"deployment image-tag --env staging --app $STUB_APP"*)
     if [ -z "$STUB_PIN" ] && [[ "$*" != *"--allow-unpinned"* ]]; then exit 1; fi
     printf '%s\\n' "$STUB_PIN" ;;
@@ -107,7 +108,13 @@ def _tag(sha: str) -> str:
 
 
 def _run(
-    app: str, tmp_path: pathlib.Path, work: pathlib.Path, pin: str, built: str, app_built: str = "success"
+    app: str,
+    tmp_path: pathlib.Path,
+    work: pathlib.Path,
+    pin: str,
+    built: str,
+    app_built: str = "success",
+    registered: str = "true",
 ) -> tuple[subprocess.CompletedProcess, list[str]]:
     bindir = tmp_path / "bin"
     bindir.mkdir(exist_ok=True)
@@ -127,6 +134,7 @@ def _run(
         "SHA": _tag(built),
         f"{app.upper()}_BUILT": app_built,
         "STUB_APP": app,
+        "STUB_REGISTERED": registered,
     }
     # `bash -e`, the shell GitHub Actions uses for `run:`.
     proc = subprocess.run(  # noqa: S603
@@ -207,5 +215,30 @@ def test_an_app_with_no_pin_yet_is_a_first_promotion(
     """
     work, shas = history
     proc, calls = _run(app, tmp_path, work, pin="", built=shas[2])
+    assert proc.returncode == 0, proc.stderr
+    assert calls == [f"run toolkit deployment promote --env staging --app {app} --version {_tag(shas[2])}"]
+
+
+@_needs_bash
+def test_an_app_the_registry_does_not_carry_yet_is_a_green_notice(
+    app: str, tmp_path: pathlib.Path, history: tuple[pathlib.Path, list[str]]
+) -> None:
+    """Between this lane landing and the PR that registers the app, a push under its path must not
+    red master. The step stops green with a notice, promotes nothing, and the next step finds no
+    change to open a PR for."""
+    work, shas = history
+    proc, calls = _run(app, tmp_path, work, pin="", built=shas[2], registered="false")
+    assert proc.returncode == 0, proc.stderr
+    assert calls == []
+    assert f"::notice::{app} is not in infra/config/products.yaml yet" in proc.stdout
+
+
+@_needs_bash
+def test_a_registered_app_still_promotes_when_the_registry_says_so(
+    app: str, tmp_path: pathlib.Path, history: tuple[pathlib.Path, list[str]]
+) -> None:
+    """The other side: registering the app is all it takes, with nothing else touched."""
+    work, shas = history
+    proc, calls = _run(app, tmp_path, work, pin="", built=shas[2], registered="true")
     assert proc.returncode == 0, proc.stderr
     assert calls == [f"run toolkit deployment promote --env staging --app {app} --version {_tag(shas[2])}"]

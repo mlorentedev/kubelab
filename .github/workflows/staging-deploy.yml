@@ -157,6 +157,16 @@ jobs:
         run: |
           if [ "$API_BUILT" != "success" ]; then exit 0; fi
 
+          # A product the registry does not carry has no image name or Deployment to
+          # promote into, and `promote` refuses it. That is the state between this lane
+          # landing and the PR that registers the app: say so and stop, green. The registry
+          # decides (never a branch or a name here), and one that cannot be read fails the step.
+          REGISTERED=$(poetry run toolkit deployment registered --app api)
+          if [ "$REGISTERED" != "true" ]; then
+            echo "::notice::api is not in infra/config/products.yaml yet; nothing to promote"
+            exit 0
+          fi
+
           # `--allow-unpinned`: an app with no pin at all is a first promotion, which no
           # earlier build can precede. Only an ABSENT pin is tolerated; a malformed one fails.
           CURRENT=$(poetry run toolkit deployment image-tag --env staging --app api --allow-unpinned)
@@ -275,6 +285,16 @@ jobs:
           CONSOLE_BUILT: ${{ needs.build-console.result }}
         run: |
           if [ "$CONSOLE_BUILT" != "success" ]; then exit 0; fi
+
+          # A product the registry does not carry has no image name or Deployment to
+          # promote into, and `promote` refuses it. That is the state between this lane
+          # landing and the PR that registers the app: say so and stop, green. The registry
+          # decides (never a branch or a name here), and one that cannot be read fails the step.
+          REGISTERED=$(poetry run toolkit deployment registered --app console)
+          if [ "$REGISTERED" != "true" ]; then
+            echo "::notice::console is not in infra/config/products.yaml yet; nothing to promote"
+            exit 0
+          fi
 
           # `--allow-unpinned`: an app with no pin at all is a first promotion, which no
           # earlier build can precede. Only an ABSENT pin is tolerated; a malformed one fails.
