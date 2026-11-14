@@ -117,7 +117,7 @@ def harness(tmp_path: pathlib.Path) -> Any:
 
     def build(*, existing: tuple[str, ...], prohibited: bool) -> None:
         rows = "".join(f"{i}\\t{name}\\t{name}@example.test\\n" for i, name in enumerate(existing, start=2))
-        (bin_dir / "wget").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        (bin_dir / "wget").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8", newline="\n")
         (bin_dir / "su").write_text(
             f"""#!/bin/sh
 cmd="$3"
@@ -129,6 +129,7 @@ case "$cmd" in
 esac
 """,
             encoding="utf-8",
+            newline="\n",
         )
         (bin_dir / "curl").write_text(
             f"""#!/bin/sh
@@ -139,12 +140,13 @@ case "$*" in
 esac
 """,
             encoding="utf-8",
+            newline="\n",
         )
         for stub in ("wget", "su", "curl"):
             (bin_dir / stub).chmod(0o755)
 
     marker = tmp_path / "state"
-    marker.write_text("", encoding="utf-8")
+    marker.write_text("", encoding="utf-8", newline="\n")
 
     def run(**extra: str) -> subprocess.CompletedProcess[str]:
         env = {

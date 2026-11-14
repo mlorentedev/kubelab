@@ -147,14 +147,21 @@ func Register(r *gin.Engine, deps Deps, domain func() string, usage Usage) {
 		recordUsage(c, usage)
 		c.Data(http.StatusOK, "text/html; charset=utf-8", consolePage)
 	})
-	g.GET("/queue", func(c *gin.Context) { queueHandler(c, deps) })
+	// The frontend (apps/console) is served by nginx, so the page's own handler no longer sees
+	// an open: every load of it calls the queue, and the queue is where an open is counted
+	// (#3450). One row per identity per day, so the minute poll of an open tab writes the same
+	// row. The page route above keeps counting until the embedded page is deleted.
+	g.GET("/queue", func(c *gin.Context) {
+		recordUsage(c, usage)
+		queueHandler(c, deps)
+	})
 	registerWrites(g)
 	// The bare host opens the page until apps/console serves `/` (ADR-074 D5). A 302,
 	// not a 301: browsers keep a 301 indefinitely, and `/` will become the frontend's.
 	r.GET("/", onlyHost(domain), func(c *gin.Context) { c.Redirect(http.StatusFound, "/console/") })
 }
 
-// recordUsage counts the page open for the identity Authelia names in Remote-User. A request
+// recordUsage counts an open of the console for the identity Authelia names in Remote-User. A request
 // that names none is not counted: the host check alone can be satisfied from inside the
 // cluster, and only a request that came through Authelia carries the header. A failed write
 // is logged and never fails the page.

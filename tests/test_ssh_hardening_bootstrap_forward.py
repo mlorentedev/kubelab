@@ -157,7 +157,7 @@ def test_sshd_itself_limits_each_user_to_what_was_declared(tmp_path: Path) -> No
         pytest.skip("no sshd/ssh-keygen: what sshd allows the bootstrap user was NOT checked")
 
     config = tmp_path / "sshd_config"
-    config.write_text(_render(_vps(transitional_users=["deployer"])), encoding="utf-8")
+    config.write_text(_render(_vps(transitional_users=["deployer"])), encoding="utf-8", newline="\n")
     host_key = tmp_path / "host_key"
     subprocess.run([keygen, "-q", "-t", "ed25519", "-N", "", "-f", str(host_key)], check=True)
 

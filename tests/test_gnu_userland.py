@@ -40,7 +40,7 @@ def test_a_gnu_timeout_already_on_path_is_accepted(tmp_path, monkeypatch) -> Non
 
     for tool in conftest.GNU_TOOLS:
         fake = tmp_path / tool
-        fake.write_text(f"#!/bin/sh\necho '{tool} (GNU coreutils) 9.5'\n", encoding="utf-8")
+        fake.write_text(f"#!/bin/sh\necho '{tool} (GNU coreutils) 9.5'\n", encoding="utf-8", newline="\n")
         fake.chmod(0o755)
     monkeypatch.setattr(conftest.sys, "platform", "darwin")
     monkeypatch.setattr(conftest, "GNU_COREUTILS", (tmp_path / "absent",))
@@ -58,7 +58,7 @@ def test_a_gnu_timeout_alone_is_not_enough(tmp_path, monkeypatch) -> None:
     # PATH is the fakes only: on Linux /usr/bin/chown is GNU and would pass this.
     for tool, version in (("timeout", "timeout (GNU coreutils) 9.5"), ("chown", "usage: chown"), ("base64", "usage")):
         fake = tmp_path / tool
-        fake.write_text(f"#!/bin/sh\necho '{version}'\n", encoding="utf-8")
+        fake.write_text(f"#!/bin/sh\necho '{version}'\n", encoding="utf-8", newline="\n")
         fake.chmod(0o755)
     monkeypatch.setattr(conftest.sys, "platform", "darwin")
     monkeypatch.setattr(conftest, "GNU_COREUTILS", (tmp_path / "absent",))
@@ -78,7 +78,7 @@ def test_gnubin_is_prepended_when_path_is_bsd(tmp_path, monkeypatch) -> None:
     for tool in conftest.GNU_TOOLS:
         for directory, output in ((gnubin, f"{tool} (GNU coreutils) 9.5"), (bsd, f"usage: {tool}")):
             fake = directory / tool
-            fake.write_text(f"#!/bin/sh\necho '{output}'\n", encoding="utf-8")
+            fake.write_text(f"#!/bin/sh\necho '{output}'\n", encoding="utf-8", newline="\n")
             fake.chmod(0o755)
     monkeypatch.setattr(conftest.sys, "platform", "darwin")
     monkeypatch.setattr(conftest, "GNU_COREUTILS", (gnubin,))
@@ -109,7 +109,7 @@ def test_a_minimal_harness_path_keeps_the_gnu_tools_on_macos(tmp_path, monkeypat
     gnubin = tmp_path / "gnubin"
     gnubin.mkdir()
     for tool in conftest.GNU_TOOLS:
-        (gnubin / tool).write_text("#!/bin/sh\n", encoding="utf-8")
+        (gnubin / tool).write_text("#!/bin/sh\n", encoding="utf-8", newline="\n")
         (gnubin / tool).chmod(0o755)
     monkeypatch.setenv("PATH", str(gnubin))
     monkeypatch.setattr(conftest.sys, "platform", "darwin")

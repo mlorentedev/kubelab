@@ -315,6 +315,8 @@
         # refreshes (the key's rotate note says so). The two share its rate limit.
         # Empty means no model backend.
         agent_stack_nan_api_key: "{{ gitea_secrets.apps.services.automation.pr_agent.nan_api_key | default('') }}"
+        # One measured capability catalog for Open WebUI and Hermes (AI-016).
+        agent_stack_nan_models: "{{ config.apps.services.ai.nan.models }}"
         agent_stack_agent_user: "{{ config.apps.services.ai.hermes_kubelab.user }}"
         agent_stack_agent_probe_image: "{{ config.apps.services.ai.hermes_kubelab.probe.image }}"
         # The agent never reaches the tailnet as ace2 (lesson-525): both

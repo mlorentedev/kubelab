@@ -21,6 +21,7 @@ from jinja2 import StrictUndefined
 
 from tests.ansible_jinja import ansible_env
 from tests.test_image_pull_budget import _behind_the_edge, _networking, _nodes, _plays, _roles, _task_list
+from tests.shells import BASH
 
 REPO = Path(__file__).resolve().parents[1]
 INCLUDE = REPO / "infra/ansible/playbooks/_includes/apt-upgrade.yml"
@@ -138,7 +139,7 @@ def _estimate(apt: str) -> subprocess.CompletedProcess:
     real = "apt-get -qq --print-uris dist-upgrade"
     assert real in shell
     return subprocess.run(
-        ["bash", "-c", shell.replace(real, apt)], capture_output=True, text=True, encoding="utf-8", check=False
+        [BASH, "-c", shell.replace(real, apt)], capture_output=True, text=True, encoding="utf-8", check=False
     )
 
 

@@ -60,7 +60,7 @@ def _notifier(tmp_path: Path, ref: dict[str, str] | None = None) -> N8nImportSpe
         ],
         "connections": {},
     }
-    (tmp_path / "gitea-notifier.json").write_text(json.dumps(doc), encoding="utf-8")
+    (tmp_path / "gitea-notifier.json").write_text(json.dumps(doc), encoding="utf-8", newline="\n")
     return N8nImportSpec(
         workflow_path=Path("gitea-notifier.json"),
         secret_key_path="apps.services.automation.notify.webhook_secret",

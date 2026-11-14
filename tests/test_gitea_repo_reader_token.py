@@ -46,7 +46,9 @@ def test_the_grant_reads_repositories_and_nothing_else() -> None:
     declared = yaml.safe_load(COMMON.read_text(encoding="utf-8"))["apps"]["services"]["core"]["gitea"]["token_scopes"]
     grant = {s.strip() for s in declared["repo_reader"].split(",") if s.strip()}
 
-    assert grant == {"read:repository"}, f"the repo-reader grant is {sorted(grant)}, the decided scope is read:repository"
+    assert grant == {"read:repository"}, (
+        f"the repo-reader grant is {sorted(grant)}, the decided scope is read:repository"
+    )
     assert grant == set(REPO_READER_SCOPES), "the constant and the declared grant must be one decision"
     assert all(s.startswith("read:") for s in grant), "the reader must not hold any write scope"
     assert "write:issue" in REVIEWER_SCOPES and "write:issue" not in grant, "it must not inherit the reviewer's write"
@@ -56,7 +58,9 @@ def test_it_is_rotatable_on_the_reviewer_account_under_its_own_name() -> None:
     reader = ROTATABLE_TOKENS["repo_reader"]
     others = [t for label, t in ROTATABLE_TOKENS.items() if label != "repo_reader"]
 
-    assert reader.identity == ROTATABLE_TOKENS["reviewer"].identity, "D2: the reviewer's account, one token per consumer"
+    assert reader.identity == ROTATABLE_TOKENS["reviewer"].identity, (
+        "D2: the reviewer's account, one token per consumer"
+    )
     assert reader.token_name not in {t.token_name for t in others}, "Gitea refuses two tokens of one name on an account"
     assert reader.secret_key == READER_TOKEN_KEY
     assert reader.secret_key not in {t.secret_key for t in others}, "a shared key would make one rotation clear another"
@@ -102,14 +106,17 @@ def test_it_is_recorded_over_stdin_under_its_own_key() -> None:
     assert task.get("no_log") is True
     assert f"toolkit secrets set {READER_TOKEN_KEY}" in task["command"]
     assert "--stdin" in task["command"]
-    assert task.get("when") == "gitea_reviewer_user | length > 0 and not gitea_repo_reader_token", "the record must run exactly when the mint ran"
+    assert task.get("when") == "gitea_reviewer_user | length > 0 and not gitea_repo_reader_token", (
+        "the record must run exactly when the mint ran"
+    )
 
 
 def test_a_stale_unrecorded_token_is_revoked_so_the_mint_can_reuse_the_name() -> None:
     """Without this entry a half-failed run leaves a live token under the name the mint needs."""
     stale = next(
-        t for t in yaml.safe_load((ROLE / "tasks/main.yml").read_text(encoding="utf-8")) if
-        isinstance(t, dict) and t.get("name") == "Revoke a named token that Gitea holds and SOPS does not"
+        t
+        for t in yaml.safe_load((ROLE / "tasks/main.yml").read_text(encoding="utf-8"))
+        if isinstance(t, dict) and t.get("name") == "Revoke a named token that Gitea holds and SOPS does not"
     )
     named = {item["name"]: item["recorded"] for item in stale["loop"]}
 
@@ -128,7 +135,11 @@ def test_a_reader_minted_wider_than_declared_reads_as_drift() -> None:
 
     listing = [
         {"id": 1, "name": ROTATABLE_TOKENS["reviewer"].token_name, "scopes": ["write:issue", "read:repository"]},
-        {"id": 3, "name": ROTATABLE_TOKENS["repo_reader"].token_name, "scopes": ["read:repository", "write:repository"]},
+        {
+            "id": 3,
+            "name": ROTATABLE_TOKENS["repo_reader"].token_name,
+            "scopes": ["read:repository", "write:repository"],
+        },
     ]
 
     result = check_token_scopes("repo_reader", "read:repository", listing)

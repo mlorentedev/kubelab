@@ -144,7 +144,9 @@ def test_a_staging_only_product_declares_only_the_staging_lane() -> None:
 def test_a_remote_product_with_no_event_declares_no_lane(tmp_path: Path) -> None:
     registry = tmp_path / "products.yaml"
     registry.write_text(
-        "products:\n  idle:\n    forge: github\n    repository: o/idle\n    receiver: generic\n", encoding="utf-8"
+        "products:\n  idle:\n    forge: github\n    repository: o/idle\n    receiver: generic\n",
+        encoding="utf-8",
+        newline="\n",
     )
 
     assert declared_envs(load_registry(registry).products["idle"]) == ()
@@ -181,13 +183,13 @@ def test_validate_registered_reads_the_lanes_from_the_registry_entry(tmp_path: P
     path = tmp_path / "kubelab.yaml"
     contract = yaml.safe_load(FIXTURE.read_text(encoding="utf-8"))
     contract.update(image="docker.io/mlorentedev/third", hostnames={"staging": "staging.third-app.dev"})
-    path.write_text(yaml.safe_dump(contract), encoding="utf-8")
+    path.write_text(yaml.safe_dump(contract), encoding="utf-8", newline="\n")
 
     assert validate_registered(path, "third", FIXTURE_REGISTRY).hostnames.prod is None
 
     # web declares events.prod, so the same shape of contract is refused for it.
     contract.update(image=WEB_IMAGE, hostnames={"staging": "staging.web-app.dev"})
-    path.write_text(yaml.safe_dump(contract), encoding="utf-8")
+    path.write_text(yaml.safe_dump(contract), encoding="utf-8", newline="\n")
     with pytest.raises(ContractError) as excinfo:
         validate_registered(path, "web", FIXTURE_REGISTRY)
     assert "hostnames.prod" in excinfo.value.error
@@ -199,7 +201,7 @@ def test_a_contract_naming_the_registrys_own_repository_is_refused(tmp_path: Pat
     data = yaml.safe_load(FIXTURE.read_text(encoding="utf-8"))
     data[key] = "mlorentedev/web"
     path = tmp_path / "kubelab.yaml"
-    path.write_text(yaml.safe_dump(data), encoding="utf-8")
+    path.write_text(yaml.safe_dump(data), encoding="utf-8", newline="\n")
 
     with pytest.raises(ContractError) as excinfo:
         validate_against_platform(path, "web", image_for=_web_image)
@@ -256,7 +258,7 @@ def test_webs_real_contract_passes_against_the_real_registry() -> None:
 def test_the_registry_override_is_what_web_must_declare(tmp_path: Path) -> None:
     """Q7: without the override the rule yields .../web; the contract must carry the override's name."""
     path = tmp_path / "kubelab.yaml"
-    path.write_text(FIXTURE.read_text(encoding="utf-8").replace("kubelab-web", "web"), encoding="utf-8")
+    path.write_text(FIXTURE.read_text(encoding="utf-8").replace("kubelab-web", "web"), encoding="utf-8", newline="\n")
 
     with pytest.raises(ContractError) as excinfo:
         validate_registered(path, "web", REGISTRY)

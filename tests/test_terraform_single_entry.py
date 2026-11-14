@@ -131,7 +131,7 @@ def test_no_toolkit_module_spawns_terraform_but_the_runner() -> None:
 def test_the_scan_sees_every_way_to_build_the_command(tmp_path: Path, source: str) -> None:
     """The shapes a call-argument match alone missed (review of #2236)."""
     module = tmp_path / "probe.py"
-    module.write_text(source + "\n", encoding="utf-8")
+    module.write_text(source + "\n", encoding="utf-8", newline="\n")
     assert _terraform_spawns(module), source
 
 
@@ -141,7 +141,7 @@ def test_the_scan_sees_every_way_to_build_the_command(tmp_path: Path, source: st
 )
 def test_the_scan_leaves_names_and_prose_alone(tmp_path: Path, source: str) -> None:
     module = tmp_path / "probe.py"
-    module.write_text(source + "\n", encoding="utf-8")
+    module.write_text(source + "\n", encoding="utf-8", newline="\n")
     assert not _terraform_spawns(module), source
 
 
@@ -187,6 +187,7 @@ def test_the_text_scan_sees_a_workflow_step_and_skips_a_comment(tmp_path: Path) 
         "      - run: /usr/bin/terraform -chdir=x plan\n"
         "      - run: terraform fmt -check -recursive infra/terraform\n",
         encoding="utf-8",
+        newline="\n",
     )
     assert [hit.split(":")[0] for hit in _text_spawns(workflow)] == ["2", "3"]
 

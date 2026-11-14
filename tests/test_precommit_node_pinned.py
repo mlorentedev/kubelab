@@ -43,7 +43,9 @@ def test_renovate_manager_reads_the_pin():
         m.group("currentValue")
         for pattern in manager["matchStrings"]
         # Renovate uses RE2's `(?<name>)`; Python needs `(?P<name>)`.
-        for m in re.finditer(re.sub(r"\(\?<([a-zA-Z]\w*)>", r"(?P<\1>", pattern), PRE_COMMIT.read_text(encoding="utf-8"))
+        for m in re.finditer(
+            re.sub(r"\(\?<([a-zA-Z]\w*)>", r"(?P<\1>", pattern), PRE_COMMIT.read_text(encoding="utf-8")
+        )
     ]
     assert found == [_node_pin()]
 

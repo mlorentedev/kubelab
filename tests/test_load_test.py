@@ -439,10 +439,10 @@ class TestResultsDirectory:
         now = datetime(2026, 11, 4, 7, 9, tzinfo=timezone.utc)
         first = _load_test_result_base(tmp_path, now, "0e224c0f")
         assert first == tmp_path / "2026-11-04-0e224c0f"
-        first.with_suffix(".json").write_text("{}", encoding="utf-8")
+        first.with_suffix(".json").write_text("{}", encoding="utf-8", newline="\n")
         second = _load_test_result_base(tmp_path, now, "0e224c0f")
         assert second == tmp_path / "2026-11-04-0e224c0f-2"
-        second.with_suffix(".md").write_text("", encoding="utf-8")
+        second.with_suffix(".md").write_text("", encoding="utf-8", newline="\n")
         assert _load_test_result_base(tmp_path, now, "0e224c0f") == tmp_path / "2026-11-04-0e224c0f-3"
 
 

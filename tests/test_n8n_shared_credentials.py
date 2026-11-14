@@ -217,7 +217,7 @@ def _mailer(tmp_path: Path, name: str, workflow_id: str, ref: dict[str, str] | N
         "nodes": [{"name": "Mail", "type": "n8n-nodes-base.emailSend", "credentials": {"smtp": ref}}],
         "connections": {},
     }
-    (tmp_path / f"{name}.json").write_text(json.dumps(doc), encoding="utf-8")
+    (tmp_path / f"{name}.json").write_text(json.dumps(doc), encoding="utf-8", newline="\n")
     return N8nImportSpec(workflow_path=Path(f"{name}.json"), envs=frozenset({"prod"}))
 
 

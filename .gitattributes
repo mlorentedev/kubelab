@@ -1,3 +1,15 @@
+# Every text file is LF in the index and in every checkout, on every platform
+# (#3490). Git still detects binaries (a NUL in the first 8000 bytes) and leaves
+# them alone. Before this rule, endings were pinned one extension at a time, so
+# a .conf, .service, .py or extensionless script came out CRLF on a Windows
+# checkout and reached a Linux node or a byte comparison with `\r` in it.
+# The per-extension rules below are redundant with this one and stay for the
+# incident each of them records.
+# A file that must keep CRLF on purpose (a .bat, a CRLF test fixture) needs its
+# own rule after this one: `<path> text eol=crlf`, or `<path> -text` to leave
+# its bytes untouched.
+* text=auto eol=lf
+
 # Line-ending policy: keep YAML (including SOPS-encrypted *.enc.yaml) as LF on
 # every platform. Windows core.autocrlf=true would otherwise check these out as
 # CRLF, which breaks yamllint ("wrong new line character") and churns diffs.

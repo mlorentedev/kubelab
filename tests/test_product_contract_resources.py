@@ -38,7 +38,7 @@ def _with(resources: Any) -> dict[str, Any]:
 
 def _write(tmp_path: Path, data: dict[str, Any]) -> Path:
     path = tmp_path / "kubelab.yaml"
-    path.write_text(yaml.safe_dump(data), encoding="utf-8")
+    path.write_text(yaml.safe_dump(data), encoding="utf-8", newline="\n")
     return path
 
 
@@ -117,7 +117,7 @@ def test_a_malformed_claim_is_refused_naming_the_field(tmp_path: Path, resources
 def test_a_resource_name_declared_twice_is_refused(tmp_path: Path) -> None:
     head = yaml.safe_dump({k: v for k, v in _with({}).items() if k != "resources"})
     path = tmp_path / "kubelab.yaml"
-    path.write_text(head + "resources:\n  data: {type: volume}\n  data: {type: job}\n", encoding="utf-8")
+    path.write_text(head + "resources:\n  data: {type: volume}\n  data: {type: job}\n", encoding="utf-8", newline="\n")
 
     with pytest.raises(ContractError, match="'data' is declared twice"):
         validate_contract(path)

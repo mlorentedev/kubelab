@@ -38,7 +38,11 @@ CONSUMERS = [
         r"^VIKUNJA_AUTH_OPENID_PROVIDERS_AUTHELIA_CLIENTID=(\S+)$",
     ),
     ("argocd.domain", "infra/helm/argocd/values.yaml", r"^\s+clientID:\s*(\S+)$"),
-    ("apps.services.core.gitea.domain", "infra/ansible/roles/beelink_services/files/gitea-bootstrap.sh", r"--key (\S+)"),
+    (
+        "apps.services.core.gitea.domain",
+        "infra/ansible/roles/beelink_services/files/gitea-bootstrap.sh",
+        r"--key (\S+)",
+    ),
     (
         "apps.services.ai.open_webui.domain",
         "infra/ansible/playbooks/provision-ace2.yml",

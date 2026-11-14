@@ -33,6 +33,7 @@ import yaml
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
 from toolkit.features.generator_ansible import AnsibleGenerator
+from tests.shells import BASH
 
 REPO = Path(__file__).resolve().parent.parent
 ROLE = REPO / "infra/ansible/roles/node_backup"
@@ -354,7 +355,7 @@ def _capture(tmp_path: Path, source: dict[str, object], shims: dict[str, str] | 
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     for name, body in {"sqlite3": FAKE_SQLITE3, **(shims or {})}.items():
-        (bin_dir / name).write_text(body, encoding="utf-8")
+        (bin_dir / name).write_text(body, encoding="utf-8", newline="\n")
         (bin_dir / name).chmod(0o755)
     staging = tmp_path / "staging"
     script = tmp_path / "capture.sh"
@@ -368,11 +369,12 @@ def _capture(tmp_path: Path, source: dict[str, object], shims: dict[str, str] | 
             node_backup_capture_sentinel=str(staging / ".capture-complete"),
         ),
         encoding="utf-8",
+        newline="\n",
     )
     env = {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}"}
     # A bound, so a capture that loops fails the test instead of hanging the suite.
     result = subprocess.run(
-        ["bash", str(script)], env=env, capture_output=True, text=True, encoding="utf-8", check=False, timeout=60
+        [BASH, str(script)], env=env, capture_output=True, text=True, encoding="utf-8", check=False, timeout=60
     )
     assert result.returncode == 0, result.stderr
     assert (staging / ".capture-complete").exists()
@@ -386,7 +388,7 @@ def _files(root: Path) -> dict[str, str]:
 def _tree(tmp_path: Path, files: dict[str, str]) -> None:
     for name, content in files.items():
         (tmp_path / "src" / name).parent.mkdir(parents=True, exist_ok=True)
-        (tmp_path / "src" / name).write_text(content, encoding="utf-8")
+        (tmp_path / "src" / name).write_text(content, encoding="utf-8", newline="\n")
 
 
 def test_a_database_in_a_subdirectory_keeps_its_snapshot(tmp_path: Path) -> None:
@@ -1424,7 +1426,7 @@ def test_every_rendered_unit_passes_systemd_analyze_verify(tmp_path):
         "node-backup-capture.service": "[Service]\nType=oneshot\nExecStart=/bin/true\n",
     }
     for name, text in units.items():
-        (tmp_path / name).write_text(text, encoding="utf-8")
+        (tmp_path / name).write_text(text, encoding="utf-8", newline="\n")
     # Every unit the role renders; the capture unit is only a stub for `Wants=`.
     targets = [str(tmp_path / n) for n in units if n != "node-backup-capture.service"]
     proc = subprocess.run(

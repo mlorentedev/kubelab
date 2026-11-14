@@ -211,8 +211,8 @@ def test_the_files_are_read_oldest_first_through_their_compression(tmp_path: Pat
     """logrotate keeps kern.log.1 plain and gzips the older ones; a boot can span them."""
     with gzip.open(tmp_path / "kern.log.2.gz", "wt", encoding="utf-8") as old:
         old.write(PREVIOUS_BOOT[0] + "\n")
-    (tmp_path / "kern.log.1").write_text(PREVIOUS_BOOT[1] + "\n", encoding="utf-8")
-    (tmp_path / "kern.log").write_text("\n".join(THIS_BOOT) + "\n", encoding="utf-8")
+    (tmp_path / "kern.log.1").write_text(PREVIOUS_BOOT[1] + "\n", encoding="utf-8", newline="\n")
+    (tmp_path / "kern.log").write_text("\n".join(THIS_BOOT) + "\n", encoding="utf-8", newline="\n")
     assert _run_log_command(tmp_path) == [*PREVIOUS_BOOT[:2], *THIS_BOOT]
 
 
@@ -230,7 +230,7 @@ def test_a_file_zcat_cannot_read_is_marked_in_the_lines(tmp_path: Path) -> None:
 
     whole = gzip.compress((PREVIOUS_BOOT[0] + "\n").encode())
     (tmp_path / "kern.log.2.gz").write_bytes(whole[: len(whole) // 2])
-    (tmp_path / "kern.log").write_text("\n".join(THIS_BOOT) + "\n", encoding="utf-8")
+    (tmp_path / "kern.log").write_text("\n".join(THIS_BOOT) + "\n", encoding="utf-8", newline="\n")
     lines = _run_log_command(tmp_path)
     assert f"{READ_FAILED}{tmp_path / 'kern.log.2.gz'}" in lines
     assert lines[-len(THIS_BOOT) :] == THIS_BOOT
@@ -242,12 +242,12 @@ def test_a_reset_in_the_file_reaches_the_verdict_through_the_pipeline(tmp_path: 
     from toolkit.features.edge_soak import read
 
     dropped = _line("30T02:00:00.000000", DISCONNECT)
-    (tmp_path / "kern.log.1").write_text("\n".join(PREVIOUS_BOOT) + "\n", encoding="utf-8")
-    (tmp_path / "kern.log").write_text("\n".join([*THIS_BOOT, dropped]) + "\n", encoding="utf-8")
+    (tmp_path / "kern.log.1").write_text("\n".join(PREVIOUS_BOOT) + "\n", encoding="utf-8", newline="\n")
+    (tmp_path / "kern.log").write_text("\n".join([*THIS_BOOT, dropped]) + "\n", encoding="utf-8", newline="\n")
     reading = read(_output(_run_log_command(tmp_path), uptime=50 * HOUR))
     assert (reading.code, reading.resets, len(reading.lps)) == (FAILED, [dropped], 1)
     reprobed = _line("30T02:00:03.000000", PROBE)
-    (tmp_path / "kern.log").write_text("\n".join([*THIS_BOOT, reprobed]) + "\n", encoding="utf-8")
+    (tmp_path / "kern.log").write_text("\n".join([*THIS_BOOT, reprobed]) + "\n", encoding="utf-8", newline="\n")
     assert read(_output(_run_log_command(tmp_path), uptime=50 * HOUR)).resets == [reprobed]
 
 
@@ -255,7 +255,7 @@ def test_only_the_lines_the_reading_uses_are_sent(tmp_path: Path) -> None:
     noise = _line("30T01:00:00.000000", "[UFW BLOCK] IN=eth0 OUT= SRC=192.0.2.1 DST=192.0.2.2")
     driver = _line("29T22:05:39.905110", "usbcore: registered new interface driver rtw_8822bu")
     (tmp_path / "kern.log").write_text(
-        "\n".join([THIS_BOOT[0], noise, driver, *THIS_BOOT[1:]]) + "\n", encoding="utf-8"
+        "\n".join([THIS_BOOT[0], noise, driver, *THIS_BOOT[1:]]) + "\n", encoding="utf-8", newline="\n"
     )
     assert _run_log_command(tmp_path) == THIS_BOOT
 

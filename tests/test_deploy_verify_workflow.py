@@ -18,6 +18,7 @@ import pytest
 import yaml
 
 from toolkit.features import delivery_health
+from tests.shells import BASH
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 WORKFLOW = REPO_ROOT / ".github/workflows/deploy-verify.yml"
@@ -95,7 +96,7 @@ def test_the_status_step_is_red_only_on_failure_or_error(wf: dict, state: str, r
         "DESCRIPTION": "one or more synchronization tasks are not valid",
         "RUNBOOK": "https://example.invalid/runbook",
     }
-    done = subprocess.run(["bash", "-e", "-c", step["run"]], env=env, capture_output=True, text=True, encoding="utf-8")
+    done = subprocess.run([BASH, "-e", "-c", step["run"]], env=env, capture_output=True, text=True, encoding="utf-8")
     assert (done.returncode != 0) is red, done.stdout + done.stderr
     if red:
         assert "one or more synchronization tasks are not valid" in done.stdout
@@ -123,7 +124,7 @@ def test_no_line_of_the_status_can_begin_a_workflow_command(wf: dict, state: str
         "DESCRIPTION": HOSTILE,
         "RUNBOOK": "https://example.invalid/runbook",
     }
-    done = subprocess.run(["bash", "-e", "-c", step["run"]], env=env, capture_output=True, encoding="utf-8")
+    done = subprocess.run([BASH, "-e", "-c", step["run"]], env=env, capture_output=True, encoding="utf-8")
     commands = [line for line in done.stdout.splitlines() if line.startswith("::")]
     # The step's own annotation is the only command it may emit, and only when red.
     assert [c.split("::", 2)[1].split(" ")[0] for c in commands] == (["error"] if state == "failure" else [])

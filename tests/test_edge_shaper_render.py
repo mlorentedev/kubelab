@@ -186,9 +186,11 @@ def test_the_unit_passes_systemd_analyze_verify(tmp_path: Path) -> None:
     for binary in ("/usr/sbin/tc", "/usr/sbin/ip"):
         if not Path(binary).exists():
             pytest.skip(f"{binary} is not installed")
-    (tmp_path / UNIT).write_text(_render(), encoding="utf-8")
+    (tmp_path / UNIT).write_text(_render(), encoding="utf-8", newline="\n")
     for notifier in ("kubelab-notify@.service", "kubelab-notify-recovered@.service"):
-        (tmp_path / notifier).write_text("[Service]\nType=oneshot\nExecStart=/bin/true\n", encoding="utf-8")
+        (tmp_path / notifier).write_text(
+            "[Service]\nType=oneshot\nExecStart=/bin/true\n", encoding="utf-8", newline="\n"
+        )
     proc = subprocess.run(
         ["systemd-analyze", "verify", "--man=no", str(tmp_path / UNIT)],
         capture_output=True,

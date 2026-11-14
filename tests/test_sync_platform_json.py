@@ -155,7 +155,7 @@ class TestPlatformManifestDriftGate:
         # 3. Check fails when mutated
         data = json.loads(target_file.read_text(encoding="utf-8"))
         data["cluster"]["name"] = "Drifted Cluster Name"
-        target_file.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        target_file.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8", newline="\n")
 
         rc_drift = platform_manifest.sync(output_path=target_file, check=True)
         assert rc_drift == 1
@@ -169,7 +169,7 @@ class TestPlatformManifestEdgeCases:
 
     def test_provenance_content_hash(self, tmp_path: Path) -> None:
         fake_cfg = tmp_path / "common.yaml"
-        fake_cfg.write_text("k3s: {version: 'v1.34.4'}\n", encoding="utf-8")
+        fake_cfg.write_text("k3s: {version: 'v1.34.4'}\n", encoding="utf-8", newline="\n")
 
         source_hash = platform_manifest.compute_source_hash(fake_cfg)
         assert len(source_hash) == 40
@@ -284,6 +284,7 @@ apps:
     core: {gitea: {health_path: /api/healthz}, headscale: {health_path: /health}}
 """,
             encoding="utf-8",
+            newline="\n",
         )
 
         manifest = platform_manifest.generate_manifest(config_path=mock_yaml)
@@ -307,7 +308,7 @@ apps:
 
     def test_drift_gate_across_simulated_commit_boundary(self, tmp_path: Path) -> None:
         mock_yaml = tmp_path / "common.yaml"
-        mock_yaml.write_text("k3s: {version: 'v1.34.4'}\n" + _DECLARED_APPS, encoding="utf-8")
+        mock_yaml.write_text("k3s: {version: 'v1.34.4'}\n" + _DECLARED_APPS, encoding="utf-8", newline="\n")
         target_json = tmp_path / "platform.json"
 
         # 1. First sync generates manifest
@@ -328,7 +329,7 @@ apps:
         assert target_json.read_text(encoding="utf-8") == initial_content
 
         # 4. Modify SSOT file
-        mock_yaml.write_text("k3s: {version: 'v1.35.0'}\n" + _DECLARED_APPS, encoding="utf-8")
+        mock_yaml.write_text("k3s: {version: 'v1.35.0'}\n" + _DECLARED_APPS, encoding="utf-8", newline="\n")
 
         # 5. Drift check must now fail
         assert platform_manifest.sync(output_path=target_json, check=True, config_path=mock_yaml) == 1
@@ -366,6 +367,7 @@ clusters: {}
 """
             + _DECLARED_APPS,
             encoding="utf-8",
+            newline="\n",
         )
         manifest = platform_manifest.generate_manifest(config_path=mock_yaml)
         vps = next(n for n in manifest["nodes"] if n["id"] == "vps")
@@ -397,7 +399,7 @@ clusters: {}
 
     def test_invalid_yaml_root_raises_value_error(self, tmp_path: Path) -> None:
         invalid_yaml = tmp_path / "invalid.yaml"
-        invalid_yaml.write_text("- item1\n- item2\n", encoding="utf-8")
+        invalid_yaml.write_text("- item1\n- item2\n", encoding="utf-8", newline="\n")
         with pytest.raises(ValueError, match="Invalid configuration format.*expected root mapping/dict"):
             platform_manifest.generate_manifest(config_path=invalid_yaml)
 
@@ -422,9 +424,9 @@ clusters: {}
         gate unfixable by the very command that would repair it.
         """
         source = tmp_path / "common.yaml"
-        source.write_text("project_name: kubelab\n", encoding="utf-8")
+        source.write_text("project_name: kubelab\n", encoding="utf-8", newline="\n")
         target = tmp_path / "platform.json"
-        target.write_text("{ this is not json", encoding="utf-8")
+        target.write_text("{ this is not json", encoding="utf-8", newline="\n")
 
         generated_at, source_hash = platform_manifest._get_provenance(source, target)
 
@@ -434,7 +436,7 @@ clusters: {}
     def test_a_version_already_prefixed_is_not_prefixed_twice(self, tmp_path: Path) -> None:
         """`K3s K3s v1.34.4` is the bug this branch exists to prevent."""
         mock_yaml = tmp_path / "prefixed.yaml"
-        mock_yaml.write_text('k3s:\n  version: "K3s v9.9.9"\n' + _DECLARED_APPS, encoding="utf-8")
+        mock_yaml.write_text('k3s:\n  version: "K3s v9.9.9"\n' + _DECLARED_APPS, encoding="utf-8", newline="\n")
 
         manifest = platform_manifest.generate_manifest(config_path=mock_yaml)
 

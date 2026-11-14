@@ -90,7 +90,7 @@ def _fake_tools(root: Path) -> dict[str, str]:
     bin_dir.mkdir()
     for tool in ("netplan", "systemctl"):
         path = bin_dir / tool
-        path.write_text(f'#!/bin/sh\necho "{tool} $*" >>"{root}/calls"\n', encoding="utf-8")
+        path.write_text(f'#!/bin/sh\necho "{tool} $*" >>"{root}/calls"\n', encoding="utf-8", newline="\n")
         path.chmod(0o755)
     return {
         **os.environ,
@@ -104,10 +104,10 @@ def test_restore_puts_back_exactly_what_the_backup_held(tmp_path: Path) -> None:
     env = _fake_tools(tmp_path)
     netplan = tmp_path / "netplan"
     netplan.mkdir()
-    (netplan / "00-installer-config.yaml").write_text("old", encoding="utf-8")
+    (netplan / "00-installer-config.yaml").write_text("old", encoding="utf-8", newline="\n")
     subprocess.run([SCRIPT, "backup"], env=env, check=True)
     (netplan / "00-installer-config.yaml").unlink()
-    (netplan / "50-cloud-init.yaml").write_text("new", encoding="utf-8")
+    (netplan / "50-cloud-init.yaml").write_text("new", encoding="utf-8", newline="\n")
 
     subprocess.run([SCRIPT, "restore"], env=env, check=True)
 
@@ -119,7 +119,7 @@ def test_restore_without_a_backup_leaves_the_netplan_alone(tmp_path: Path) -> No
     env = _fake_tools(tmp_path)
     netplan = tmp_path / "netplan"
     netplan.mkdir()
-    (netplan / "50-cloud-init.yaml").write_text("new", encoding="utf-8")
+    (netplan / "50-cloud-init.yaml").write_text("new", encoding="utf-8", newline="\n")
     (tmp_path / "backup").mkdir()
 
     assert subprocess.run([SCRIPT, "restore"], env=env, check=False, capture_output=True).returncode != 0

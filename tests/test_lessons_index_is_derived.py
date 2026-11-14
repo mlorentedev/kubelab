@@ -41,6 +41,7 @@ def _tree(root: pathlib.Path, categories: dict[str, int]) -> pathlib.Path:
         "# Lessons\n\nOne file per lesson. Open a category for its list.\n\n"
         "| Category | Scope |\n|---|---|\n" + rows + "\n",
         encoding="utf-8",
+        newline="\n",
     )
     n = 100
     for slug, declared in categories.items():
@@ -50,7 +51,7 @@ def _tree(root: pathlib.Path, categories: dict[str, int]) -> pathlib.Path:
         for _ in range(declared):
             n += 1
             fname = f"lesson-{n}-a-lesson.md"
-            (cat / fname).write_text("---\nid: x\n---\nbody\n", encoding="utf-8")
+            (cat / fname).write_text("---\nid: x\n---\nbody\n", encoding="utf-8", newline="\n")
             # One fixed date across the fixture, so the order within it comes
             # from the number alone.
             lines.append(f"| {n} | [A lesson]({fname}) | 2026-01-01 |")
@@ -59,6 +60,7 @@ def _tree(root: pathlib.Path, categories: dict[str, int]) -> pathlib.Path:
             f"# {slug}\n\nNewest first. Back to [all categories](../_index.md).\n\n"
             "| # | Lesson | Date |\n|---|---|---|\n" + "\n".join(lines) + "\n",
             encoding="utf-8",
+            newline="\n",
         )
     return root
 
@@ -78,7 +80,7 @@ class TestTheDeriverActuallyDerives:
         longer merge two stale copies of one number into a wrong one.
         """
         root = _tree(tmp_path / "lessons", {"alpha": 3, "beta": 2})
-        (root / "alpha" / "lesson-900-arrived.md").write_text("---\nid: x\n---\n", encoding="utf-8")
+        (root / "alpha" / "lesson-900-arrived.md").write_text("---\nid: x\n---\n", encoding="utf-8", newline="\n")
         index = root / "alpha" / "_index.md"
         _set_rows(index, ["| 900 | [Arrived](lesson-900-arrived.md) | 2026-02-01 |", *_rows(index)])
         assert lessons_index.reconcile(root) == []
@@ -106,7 +108,7 @@ def _rows(index: pathlib.Path) -> list[str]:
 
 def _set_rows(index: pathlib.Path, rows: list[str]) -> None:
     head = [line for line in index.read_text(encoding="utf-8").splitlines() if not lessons_index.LESSON_ROW.match(line)]
-    index.write_text("\n".join(head + rows) + "\n", encoding="utf-8")
+    index.write_text("\n".join(head + rows) + "\n", encoding="utf-8", newline="\n")
 
 
 def _reverse_rows(index: pathlib.Path) -> None:
@@ -146,7 +148,7 @@ class TestTheRowsAreOrderedNotHandPlaced:
         root = _tree(tmp_path / "lessons", {"alpha": 2})
         index = root / "alpha" / "_index.md"
         _set_rows(index, list(reversed(_rows(index))))
-        index.write_text(index.read_text(encoding="utf-8").rstrip("\n"), encoding="utf-8")
+        index.write_text(index.read_text(encoding="utf-8").rstrip("\n"), encoding="utf-8", newline="\n")
         lessons_index.reconcile(root, apply=True)
         assert len(_rows(index)) == 2
 
@@ -287,18 +289,20 @@ def _repo_with_lessons(tmp_path: pathlib.Path, names: dict[str, list[str]]) -> p
         (lessons / category).mkdir(parents=True, exist_ok=True)
         rows = []
         for fname in files:
-            (lessons / category / fname).write_text("---\nid: x\n---\nbody\n", encoding="utf-8")
+            (lessons / category / fname).write_text("---\nid: x\n---\nbody\n", encoding="utf-8", newline="\n")
             number = lessons_index.LESSON_NAME.match(fname).group("number")  # type: ignore[union-attr]
             rows.append(f"| {number} | [A lesson]({fname}) | 2026-01-01 |")
         rows.sort(key=lambda r: int(r.split("|")[1]), reverse=True)  # newest first, so the fixture is clean
         (lessons / category / "_index.md").write_text(
             f"# {category}\n\nNewest first.\n\n| # | Lesson | Date |\n|---|---|---|\n" + "\n".join(rows) + "\n",
             encoding="utf-8",
+            newline="\n",
         )
     rows = "\n".join(f"| [{c}]({c}/_index.md) | Scope |" for c in names)
     (lessons / "_index.md").write_text(
         "# Lessons\n\nOne file per lesson. Open a category.\n\n| Category | Scope |\n|---|---|\n" + rows + "\n",
         encoding="utf-8",
+        newline="\n",
     )
     _git(repo, "init", "-q", "-b", "main")
     _git(repo, "config", "user.email", "t@example.com")
@@ -372,7 +376,7 @@ def _conflicted(index: pathlib.Path) -> None:
         "| 9 | [Theirs](lesson-9-theirs.md) | 2026-01-02 |\n",
         ">" * 7 + " theirs\n",
     ]
-    index.write_text("".join(lines), encoding="utf-8")
+    index.write_text("".join(lines), encoding="utf-8", newline="\n")
 
 
 class TestAnUnfinishedMergeIsRefused:
@@ -413,6 +417,7 @@ class TestAnUnfinishedMergeIsRefused:
         top.write_text(
             top.read_text(encoding="utf-8") + "<" * 7 + " HEAD\n" + "=" * 7 + "\n" + ">" * 7 + " theirs\n",
             encoding="utf-8",
+            newline="\n",
         )
 
         assert lessons_index.unmerged_indexes(lessons) == {"_index.md": [8, 9, 10]}
@@ -421,7 +426,7 @@ class TestAnUnfinishedMergeIsRefused:
         lessons = _repo_with_lessons(tmp_path, {"alpha": ["lesson-1-one.md"]})
         nested = lessons / "alpha" / "group" / "_index.md"
         nested.parent.mkdir()
-        nested.write_text("<" * 7 + " HEAD\n", encoding="utf-8")
+        nested.write_text("<" * 7 + " HEAD\n", encoding="utf-8", newline="\n")
 
         assert lessons_index.unmerged_indexes(lessons) == {"alpha/group/_index.md": [1]}
 
@@ -477,7 +482,9 @@ class TestALessonThatHeadHasAndTheTreeDoesNotIsRefused:
         who renumbers straight to `--no-verify`."""
         lessons = _repo_with_lessons(tmp_path, {"alpha": ["lesson-439-a-mock.md"]})
         (lessons / "alpha" / "lesson-439-a-mock.md").unlink()
-        (lessons / "alpha" / "lesson-440-a-mock.md").write_text("---\nid: x\n---\nbody\n", encoding="utf-8")
+        (lessons / "alpha" / "lesson-440-a-mock.md").write_text(
+            "---\nid: x\n---\nbody\n", encoding="utf-8", newline="\n"
+        )
         assert lessons_index.removed_lessons(lessons) == []
 
     def test_a_retitle_is_not_a_removal(self, tmp_path: pathlib.Path) -> None:
@@ -489,7 +496,9 @@ class TestALessonThatHeadHasAndTheTreeDoesNotIsRefused:
         """
         lessons = _repo_with_lessons(tmp_path, {"alpha": ["lesson-487-a-false-title.md"]})
         (lessons / "alpha" / "lesson-487-a-false-title.md").unlink()
-        (lessons / "alpha" / "lesson-487-a-true-title.md").write_text("---\nid: x\n---\nbody\n", encoding="utf-8")
+        (lessons / "alpha" / "lesson-487-a-true-title.md").write_text(
+            "---\nid: x\n---\nbody\n", encoding="utf-8", newline="\n"
+        )
         assert lessons_index.removed_lessons(lessons) == []
 
     def test_an_untouched_file_sharing_the_number_does_not_excuse_a_deletion(self, tmp_path: pathlib.Path) -> None:

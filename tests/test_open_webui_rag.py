@@ -11,7 +11,8 @@ from tests.test_agent_stack_role import _common, _context, _env
 
 
 def _rag() -> dict:
-    return _common()["apps"]["services"]["ai"]["open_webui"]["rag"]
+    ai = _common()["apps"]["services"]["ai"]
+    return {**ai["open_webui"]["rag"], **ai["nan"]["models"]}
 
 
 def test_embeddings_come_from_nan_so_no_local_model_loads() -> None:

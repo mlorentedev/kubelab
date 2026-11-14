@@ -113,6 +113,7 @@ def test_loader_refuses_overlap(tmp_path: Path) -> None:
         "stays:\n  7:\n    priority: P1\n"
         "parked:\n  - 7\n",
         encoding="utf-8",
+        newline="\n",
     )
     with pytest.raises(sw.RegistryError, match=r"both stays and parked: \[7\]"):
         sw.load_registry(path)
@@ -120,7 +121,7 @@ def test_loader_refuses_overlap(tmp_path: Path) -> None:
 
 def test_loader_requires_status_and_priority_field_names(tmp_path: Path) -> None:
     path = tmp_path / "r.yaml"
-    path.write_text("project: {owner: o, number: 1, repo: o/r}\n", encoding="utf-8")
+    path.write_text("project: {owner: o, number: 1, repo: o/r}\n", encoding="utf-8", newline="\n")
     with pytest.raises(sw.RegistryError, match="status_field"):
         sw.load_registry(path)
 
@@ -141,7 +142,7 @@ _HEAD = "project: {owner: o, number: 1, repo: o/r}\nstatus_field: Status\npriori
 )
 def test_loader_names_what_is_wrong(tmp_path: Path, body: str, match: str) -> None:
     path = tmp_path / "r.yaml"
-    path.write_text(body, encoding="utf-8")
+    path.write_text(body, encoding="utf-8", newline="\n")
     with pytest.raises(sw.RegistryError, match=match):
         sw.load_registry(path)
 
@@ -153,7 +154,7 @@ def test_loader_refuses_a_missing_file(tmp_path: Path) -> None:
 
 def test_loader_reads_a_stays_entry_without_a_priority_as_none(tmp_path: Path) -> None:
     path = tmp_path / "r.yaml"
-    path.write_text(_HEAD + "stays:\n  5:\n  6: P2\n  7: {priority: P1}\n", encoding="utf-8")
+    path.write_text(_HEAD + "stays:\n  5:\n  6: P2\n  7: {priority: P1}\n", encoding="utf-8", newline="\n")
     reg = sw.load_registry(path)
     assert reg.stays == {5: None, 6: None, 7: "P1"}
     assert (reg.status_field, reg.priority_field) == ("Status", "Priority")

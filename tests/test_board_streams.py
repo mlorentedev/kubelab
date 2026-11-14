@@ -99,6 +99,7 @@ def test_loader_refuses_a_prefix_in_two_streams(tmp_path: Path) -> None:
         "project: {owner: o, number: 1, repo: o/r}\nfield: Stream\n"
         "streams:\n  - {name: A, prefixes: [X]}\n  - {name: B, prefixes: [X]}\n",
         encoding="utf-8",
+        newline="\n",
     )
     with pytest.raises(bs.RegistryError, match="prefix X"):
         bs.load_registry(path)
@@ -110,6 +111,7 @@ def test_loader_refuses_an_override_to_an_unknown_stream(tmp_path: Path) -> None
         "project: {owner: o, number: 1, repo: o/r}\nfield: Stream\n"
         "streams:\n  - {name: A, prefixes: [X]}\noverrides:\n  12: Nope\n",
         encoding="utf-8",
+        newline="\n",
     )
     with pytest.raises(bs.RegistryError, match="#12"):
         bs.load_registry(path)
@@ -128,6 +130,7 @@ def test_loader_refuses_a_child_under_two_parents(tmp_path: Path) -> None:
         "project: {owner: o, number: 1, repo: o/r}\nfield: Stream\n"
         "streams:\n  - {name: A, prefixes: [X]}\nparts:\n  10: [1, 2]\n  20: [2]\n",
         encoding="utf-8",
+        newline="\n",
     )
     with pytest.raises(bs.RegistryError, match="#2 is listed under both #10 and #20"):
         bs.load_registry(path)
@@ -192,6 +195,7 @@ def test_loader_refuses_a_repo_that_is_not_owner_slash_name(tmp_path: Path) -> N
         'project: {owner: o, number: 1, repo: "o/r\\") { evil }"}\nfield: Stream\n'
         "streams:\n  - {name: A, prefixes: [X]}\n",
         encoding="utf-8",
+        newline="\n",
     )
     with pytest.raises(bs.RegistryError, match="owner/name"):
         bs.load_registry(path)

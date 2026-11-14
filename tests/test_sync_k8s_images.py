@@ -111,8 +111,8 @@ class TestProdOnlyImages:
     def test_main_writes_both_the_base_and_prod_kustomizations(self, tmp_path: Path, monkeypatch) -> None:
         base_kustomization = tmp_path / "base.yaml"
         prod_kustomization = tmp_path / "prod.yaml"
-        base_kustomization.write_text("kind: Kustomization\n", encoding="utf-8")
-        prod_kustomization.write_text("kind: Kustomization\n", encoding="utf-8")
+        base_kustomization.write_text("kind: Kustomization\n", encoding="utf-8", newline="\n")
+        prod_kustomization.write_text("kind: Kustomization\n", encoding="utf-8", newline="\n")
         common_yaml = tmp_path / "common.yaml"
         common_yaml.write_text(
             yaml.safe_dump(
@@ -128,6 +128,7 @@ class TestProdOnlyImages:
                 }
             ),
             encoding="utf-8",
+            newline="\n",
         )
         monkeypatch.setattr(sync_k8s_images, "COMMON_YAML", common_yaml)
         monkeypatch.setattr(sync_k8s_images, "KUSTOMIZATION", base_kustomization)
