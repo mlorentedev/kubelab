@@ -239,7 +239,9 @@ def admins_rule_problems(access: dict, hosts: set[str]) -> list[str]:
         rules = [rule for rule in access.get("rules", []) if host in _domains(rule)]
         if not rules:
             problems.append(f"{host}: no rule names it")
-        problems += [f"{host}: rule subject {_subjects(rule)} is not {ADMINS}" for rule in rules if _subjects(rule) != ADMINS]
+        problems += [
+            f"{host}: rule subject {_subjects(rule)} is not {ADMINS}" for rule in rules if _subjects(rule) != ADMINS
+        ]
         problems += [
             f"{host}: rule policy {rule.get('policy')!r} does not ask for a login"
             for rule in rules
@@ -311,7 +313,7 @@ def test_admins_hosts_reads_the_auth_level_from_each_lane_snapshot(
     levels = {"shop": "forwardauth-admins", "blog": "forwardauth"}
     for app in levels:
         snapshot = {"auth": levels[app], "hostnames": {"staging": f"{app}.staging.kubelab.live"}}
-        (tmp_path / f"{app}.yaml").write_text(yaml.safe_dump(snapshot), encoding="utf-8")
+        (tmp_path / f"{app}.yaml").write_text(yaml.safe_dump(snapshot), encoding="utf-8", newline="\n")
     monkeypatch.setattr(product_guards, "apps_declaring", lambda env: ("shop", "blog", "api", "gone"))
     monkeypatch.setattr(product_render, "snapshot_path", lambda app, env: tmp_path / f"{app}.yaml")
 

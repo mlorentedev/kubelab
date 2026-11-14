@@ -130,8 +130,8 @@ def _stateful_services(manifests: list[pathlib.Path] | None = None) -> dict[str,
     """Map owning service -> its claim names, discovered from the manifests.
 
     The owning service is the claim's `app.kubernetes.io/name` label when it has one,
-    else the file stem: `services/crowdsec.yaml` owns both `crowdsec-db` and `crowdsec-config`. Deriving it from the PVC's own name
-    would be wrong — `crowdsec-db` would resolve to a `crowdsec-db` service that
+    else the file stem: `services/crowdsec.yaml` owns both `crowdsec-db` and `crowdsec-config`.
+    Deriving it from the PVC's own name would be wrong — `crowdsec-db` would resolve to a `crowdsec-db` service that
     does not exist, and the two PVCs would split into two phantom services.
     """
     owned: dict[str, list[str]] = {}
@@ -510,14 +510,15 @@ spec:
 
 def test_a_labelled_claim_is_attributed_to_its_label_not_its_file(tmp_path: pathlib.Path) -> None:
     manifest = tmp_path / "claims.yaml"
-    manifest.write_text(_LABELLED_PVC, encoding="utf-8")
+    manifest.write_text(_LABELLED_PVC, encoding="utf-8", newline="\n")
 
     assert _stateful_services([manifest]) == {"shop": ["shop-data"]}
 
 
 def test_an_unlabelled_claim_still_falls_back_to_its_file_stem(tmp_path: pathlib.Path) -> None:
     manifest = tmp_path / "widget.yaml"
-    manifest.write_text(_LABELLED_PVC.replace("  labels:\n    app.kubernetes.io/name: shop\n", ""), encoding="utf-8")
+    unlabelled = _LABELLED_PVC.replace("  labels:\n    app.kubernetes.io/name: shop\n", "")
+    manifest.write_text(unlabelled, encoding="utf-8", newline="\n")
 
     assert _stateful_services([manifest]) == {"widget": ["shop-data"]}
 
