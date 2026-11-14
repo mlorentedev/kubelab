@@ -62,10 +62,10 @@ apps:
       enable_auth: false
       auth_level: bypass
       version: sha-bbb4c929d205
-
-  # Third-party services
     console:
       version: sha-7df897b
+
+  # Third-party services
   services:
     core:
       vikunja:

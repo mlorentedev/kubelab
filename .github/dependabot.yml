@@ -149,7 +149,7 @@ updates:
   # attributes a commit to a package by path and releases every package with a `fix` in ONE pull
   # request; the job re-tags the staging-validated digest, so a release cut with no pin would fail
   # with a `console-vX.Y.Z` tag and no image behind it. tests/test_console_image.py holds the
-  # pairing: the prefix is `chore` until the pin exists.
+  # pairing: the prefix was `chore` until the pin existed.
   - package-ecosystem: "docker"
     directory: "/apps/console"
     schedule:
