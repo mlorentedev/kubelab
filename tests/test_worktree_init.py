@@ -75,7 +75,7 @@ def _run(
 ) -> tuple[list[str], subprocess.CompletedProcess[str]]:
     script, log = _fake_poetry(tmp_path, lock_is_fresh=lock_is_fresh, venv=venv, install_rc=install_rc)
     done = subprocess.run(
-        ["make", "--no-print-directory", "worktree-init", f"POETRY={script}", f"WORKTREE_VENV={tmp_path / '.venv'}"],
+        ["make", "--no-print-directory", "worktree-init", f"POETRY={script.as_posix()}", f"WORKTREE_VENV={(tmp_path / '.venv').as_posix()}"],
         cwd=REPO,
         check=False,
         capture_output=True,
@@ -125,7 +125,7 @@ def test_the_venv_is_installed_in_the_worktree(tmp_path: pathlib.Path) -> None:
     )
     fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
     done = subprocess.run(
-        ["make", "--no-print-directory", "worktree-init", f"POETRY={fake}", f"WORKTREE_VENV={tmp_path / '.venv'}"],
+        ["make", "--no-print-directory", "worktree-init", f"POETRY={fake.as_posix()}", f"WORKTREE_VENV={(tmp_path / '.venv').as_posix()}"],
         cwd=REPO,
         check=False,
         capture_output=True,
@@ -147,7 +147,7 @@ def test_an_install_that_leaves_no_toolkit_in_the_worktree_fails(tmp_path: pathl
     fake.write_text('#!/bin/sh\ncase "$*" in "env info"*) exit 1;; esac\nexit 0\n', encoding="utf-8", newline="\n")
     fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
     done = subprocess.run(
-        ["make", "--no-print-directory", "worktree-init", f"POETRY={fake}", f"WORKTREE_VENV={tmp_path / '.venv'}"],
+        ["make", "--no-print-directory", "worktree-init", f"POETRY={fake.as_posix()}", f"WORKTREE_VENV={(tmp_path / '.venv').as_posix()}"],
         cwd=REPO,
         check=False,
         capture_output=True,
@@ -201,8 +201,8 @@ class TestRelocatedVenv:
                 "make",
                 "--no-print-directory",
                 "worktree-init",
-                f"POETRY={fake}",
-                f"WORKTREE_VENV={tmp_path / 'wt' / '.venv'}",
+                f"POETRY={fake.as_posix()}",
+                f"WORKTREE_VENV={(tmp_path / 'wt' / '.venv').as_posix()}",
             ],
             cwd=REPO,
             check=False,
@@ -228,7 +228,7 @@ class TestRelocatedVenv:
         )
         fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
         done = subprocess.run(
-            ["make", "--no-print-directory", "worktree-init", f"POETRY={fake}"],
+            ["make", "--no-print-directory", "worktree-init", f"POETRY={fake.as_posix()}"],
             cwd=REPO,
             check=False,
             capture_output=True,
@@ -273,7 +273,7 @@ class TestRelocatedVenv:
         _venv(cache.parent / "x", shebang_dir=cache).rename(cache)
         fake, _ = _fake_poetry(tmp_path, lock_is_fresh=True, venv=cache, builds=False)
         done = subprocess.run(
-            ["make", "--no-print-directory", "worktree-init", f"POETRY={fake}", f"WORKTREE_VENV={tmp_path / '.venv'}"],
+            ["make", "--no-print-directory", "worktree-init", f"POETRY={fake.as_posix()}", f"WORKTREE_VENV={(tmp_path / '.venv').as_posix()}"],
             cwd=REPO,
             check=False,
             capture_output=True,

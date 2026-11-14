@@ -57,7 +57,7 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
-printf '%s %s %s\\n' "$method" "$url" "$body" >> {calls}
+printf '%s %s %s\\n' "$method" "$url" "$body" >> {calls.as_posix()}
 [ -n "${{STUB_PATCH_FAILS:-}}" ] && [ "$method" = PATCH ] && exit 22
 [ "$method" = GET ] && printf '{{"id":%s,"prohibit_login":false}}' "${{STUB_USER_ID-7}}"
 exit 0
@@ -72,7 +72,7 @@ exit 0
     def run(**extra: str) -> subprocess.CompletedProcess[str]:
         env = {
             **os.environ,
-            "PATH": f"{bin_dir}:{os.environ['PATH']}",
+            "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
             "GITEA_ADMIN_USER": "operator",
             "GITEA_ADMIN_PASSWORD": "pw",
             "GITEA_ADMIN_EMAIL": "ops@example.test",
