@@ -33,7 +33,7 @@ owner: manu
 - [x] [AC3] Write the failing coverage test: every route has the default or a declared exception, and every exception matches a route ✓ 2026-11-12 (`tests/test_edge_backend_timeouts.py`)
 - [x] [AC2] [AC3] Declare the exceptions in `common.yaml` (`edge.backend_timeouts.exceptions`) ✓ 2026-11-12. Both routes that use one are hand-written overlay manifests, not generated, so the test holds each `ServersTransport` and its reference to the declaration instead of a generator emitting them
 - [x] [AC1] Write the stuck-backend fixture for staging ✓ 2026-11-12 (#3415)
-- [ ] [AC1] [AC2] e2e expectations: the default route answers the edge's 504 near the bound, `/exception` is still open past it
+- [x] [AC1] [AC2] e2e expectations: the default route answers the edge's 504 near the bound, `/exception` is still open past it ✓ 2026-11-14 (`tests/e2e/test_backend_timeouts.py`)
 - [x] Spoke RBAC writes `serverstransports` (#3422), then `make register-spoke ENV=staging` and `ENV=prod`; `can-i create serverstransports.traefik.io` answers `yes` in both ✓ 2026-11-12 (lesson-743)
 - [x] [AC1] Set the default in the `k3s_server` HelmChartConfig ✓ 2026-11-12
 - [x] [AC1] [AC2] Staging: provision, the fixture is cut, an exception holds, `make test-e2e ENV=staging` ✓ 2026-11-13 (verification.md)
