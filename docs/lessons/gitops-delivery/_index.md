@@ -4,6 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 752 | [A guard that pairs a file with the pin makes the bot's first deploy PR red, and the bot's branch is not the place to fix it](lesson-752-a-guard-that-pairs-a-file-with-a-pin-makes-the-bots-first-deploy-pr-red.md) | 2026-11-14 |
 | 751 | [Registering an app that is deployed only with a pin leaves its host unrouted until the first pin, so what the host served before has to keep serving](lesson-751-a-pin-gated-app-needs-a-fallback-route-until-its-first-pin.md) | 2026-11-14 |
 | 743 | [A new kind in the overlays reaches Argo CD only after `register-spoke` runs in both envs](lesson-743-a-new-kind-reaches-argo-cd-only-after-register-spoke.md) | 2026-11-12 |
 | 735 | [An api release re-tags whatever staging pins, so a release merged before its staging deploy ships the previous build](lesson-735-a-release-retags-whatever-staging-pins.md) | 2026-11-11 |
