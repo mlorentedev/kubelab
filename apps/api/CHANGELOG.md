@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.11.0](https://github.com/mlorentedev/kubelab/compare/api-v1.10.0...api-v1.11.0) (2026-11-14)
+
+
+### Features
+
+* **api:** guard the console write routes and accept the machine token on the create only ([#3426](https://github.com/mlorentedev/kubelab/issues/3426)) ([f293060](https://github.com/mlorentedev/kubelab/commit/f293060dd6d8f49ff555c1390188cdd87aa1a7e8))
+
 ## [1.10.0](https://github.com/mlorentedev/kubelab/compare/api-v1.9.0...api-v1.10.0) (2026-11-13)
 
 

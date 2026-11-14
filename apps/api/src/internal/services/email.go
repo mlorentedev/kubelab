@@ -27,19 +27,19 @@ func SendResourceEmail(options models.ResourceEmailOptions) (bool, error) {
 
 	// Configure email headers
 	headers := make(map[string]string)
-	headers["From"] = conf.Email.From
-	headers["Reply-To"] = conf.Site.Mail
+	headers["From"] = settings().Email.From
+	headers["Reply-To"] = settings().Site.Mail
 	headers["To"] = options.Email
 	headers["Subject"] = fmt.Sprintf("Tu %s", options.ResourceTitle)
 	headers["MIME-Version"] = "1.0"
 	headers["Content-Type"] = "text/html; charset=UTF-8"
 	headers["Precedence"] = "bulk"
 	headers["X-Auto-Response-Suppress"] = "All"
-	headers["X-Site-Origin"] = conf.Site.Title
-	headers["Message-ID"] = fmt.Sprintf("<%s@%s>", generateUniqueID(), conf.Site.Domain)
-	headers["Return-Path"] = conf.Email.User
+	headers["X-Site-Origin"] = settings().Site.Title
+	headers["Message-ID"] = fmt.Sprintf("<%s@%s>", generateUniqueID(), settings().Site.Domain)
+	headers["Return-Path"] = settings().Email.User
 	headers["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
-	headers["List-Unsubscribe"] = fmt.Sprintf("<%s/unsubscribe>", conf.Site.URL)
+	headers["List-Unsubscribe"] = fmt.Sprintf("<%s/unsubscribe>", settings().Site.URL)
 
 	// Build complete message
 	message := ""
@@ -49,11 +49,11 @@ func SendResourceEmail(options models.ResourceEmailOptions) (bool, error) {
 	message += "\r\n" + htmlBody
 
 	// Send email
-	auth := smtp.PlainAuth("", conf.Email.User, conf.Email.Pass, conf.Email.Host)
+	auth := smtp.PlainAuth("", settings().Email.User, settings().Email.Pass, settings().Email.Host)
 	err := smtp.SendMail(
-		fmt.Sprintf("%s:%s", conf.Email.Host, conf.Email.Port),
+		fmt.Sprintf("%s:%s", settings().Email.Host, settings().Email.Port),
 		auth,
-		conf.Email.User,
+		settings().Email.User,
 		[]string{options.Email},
 		[]byte(message),
 	)

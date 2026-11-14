@@ -101,3 +101,12 @@ def test_the_sync_writes_the_file_and_a_second_run_changes_nothing(tmp_path: Pat
     assert tb.sync(CONFIG, tmp_path) is True
     assert (tmp_path / tb.BACKEND_FILE).read_text(encoding="utf-8") == tb.render(CONFIG)
     assert tb.sync(CONFIG, tmp_path) is False
+
+
+def test_a_crlf_copy_of_the_render_is_rewritten_as_lf(tmp_path: Path) -> None:
+    """A Windows checkout's CRLF copy reads equal as text; it must still be rewritten (#3480)."""
+    tb.sync(CONFIG, tmp_path)
+    target = tmp_path / tb.BACKEND_FILE
+    target.write_bytes(target.read_bytes().replace(b"\n", b"\r\n"))
+    assert tb.sync(CONFIG, tmp_path) is True
+    assert b"\r" not in target.read_bytes()

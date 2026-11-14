@@ -126,6 +126,7 @@ networking:
   staging_zones:
   - "staging.kubelab.live"
   - "staging.mlorente.dev"
+  - "staging.imagesensortool.com"
   # VPN-only services — Headscale extra_records for direct access via Tailscale IP.
   # Consumed by deploy-vps playbook → Headscale config.yaml template.
   vpn_extra_records:
@@ -1182,6 +1183,12 @@ apps:
       enable_homelabs: true
       enable_contact: true
 
+    # Staging-only static site (IDP-053): its image lives on the Gitea registry the
+    # product's entry names, so only the repository name is declared here. The rest
+    # (domain, site_*, version) is staging.yaml's, rendered from the contract.
+    imagesensortool:
+      image_name: imagesensortool
+
     # portfolio: removed — renamed to web (WEB-001, 2026-03-15)
     # blog: removed — killed (2026-03-15)
     # wiki: removed — integrated in toolkit as `kubelab docs` (see B1/TOOLKIT-008)
@@ -1591,6 +1598,29 @@ apps:
               failure, but only a review proves delivery. Confirm by consequence:
               push to an open pull request and check for a review comment from the
               reviewer account (`apps.auth.identities.reviewer`).
+          # The forge console's receiver (CONSOLE-004, #3420). Declared whole and
+          # pinned to the api's prod domain by a committed test, like n8n's above:
+          # the forge is a singleton. Without it the console still converges, but
+          # only on the ten-minute reconcile. The receiver drops a delivery about a
+          # repository its source declaration does not name, so a hook on every
+          # repository is harmless.
+          - url: https://api.kubelab.live/api/forge/webhooks/gitea
+            content_type: json
+            type: gitea
+            # A FLOOR read from the projector (`ItemFromEvent`): Gitea expands both
+            # families into sub-events (label, assign, milestone, sync...), and the
+            # projector marks any type it does not read as projected.
+            events:
+              - issues
+              - pull_request
+            branch_filter: "*"
+            active: true
+            secret_key: apps.platform.api.forge_gitea_webhook_secret
+            verify_hint: >-
+              The receiver answers 401 to a bad signature and Gitea records it.
+              Confirm by consequence: edit an issue title in a declared repository
+              and check the console shows it within seconds, or read
+              `forge_webhook_failure` in Loki (docs/runbooks/forge-console-operations.md).
         # Who may still push straight to the default branch of a repository that
         # lists `writers:` (AUTH-024 AC2, #3148). Keys of `apps.auth.identities`; the
         # reconciler protects that branch with a push whitelist of exactly these.
@@ -1928,6 +1958,23 @@ apps:
         log_retention_days: 30
         artifact_retention_days: 14
         run_retention_days: 30
+        # #3079. The four bounds on a job, declared at the defaults the pinned versions
+        # ship (gitea/runner 4.1.0, Gitea 1.27.3) so an image bump cannot move them
+        # unseen; ADR-065 D3, declared rather than remembered. Go durations.
+        # `timeout` is the runner's own `runner.timeout`: it cancels the job and
+        # logs why. The other three are crons inside Gitea:
+        #   zombie   fails a Running task whose state was not UPDATED for this long
+        #            (a dead runner), checked every 5m;
+        #   endless  fails a Running task STARTED this long ago, checked every 30m, so
+        #            it must not undercut `timeout` or Gitea fails the job first;
+        #   abandoned cancels a job still WAITING for a runner, checked every 6h. Not
+        #            lowered: the Beelink is on-demand (ADR-028), and a job queued
+        #            while it is off must survive the night.
+        # tests/test_gitea_actions_runner.py asserts zombie < timeout <= endless.
+        timeout: 3h
+        zombie_task_timeout: 10m
+        endless_task_timeout: 3h
+        abandoned_job_timeout: 24h
         resources:
           # The DAEMON's limits. Job containers are bounded by `container_options`
           # above; this bounds only the process that orchestrates them.

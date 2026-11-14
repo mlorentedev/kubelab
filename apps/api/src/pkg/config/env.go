@@ -44,6 +44,7 @@ type Config struct {
 		GiteaWebhookSecret   string // empty rejects every delivery
 		Sources              string // forge:owner/repo, comma separated; empty reads nothing
 		ConsoleDomain        string // the console's own host; empty serves the console nowhere
+		CreateToken          string // the machine token for the create write; empty accepts nobody
 	}
 	Email struct {
 		Host   string
@@ -124,6 +125,7 @@ func populateConfig() (*Config, error) {
 	cfg.Forge.GiteaWebhookSecret = os.Getenv("FORGE_GITEA_WEBHOOK_SECRET")
 	cfg.Forge.Sources = os.Getenv("INFRA_FORGE_SOURCES")
 	cfg.Forge.ConsoleDomain = os.Getenv("INFRA_FORGE_CONSOLE_DOMAIN")
+	cfg.Forge.CreateToken = os.Getenv("FORGE_CREATE_TOKEN")
 
 	// Validate configuration
 	if err := validateConfig(cfg); err != nil {

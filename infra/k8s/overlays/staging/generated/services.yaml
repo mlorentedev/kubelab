@@ -36,3 +36,22 @@ spec:
       port: 8080
       targetPort: http
       protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: imagesensortool
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: imagesensortool
+    app.kubernetes.io/part-of: kubelab
+    app.kubernetes.io/managed-by: toolkit
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: imagesensortool
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP

@@ -17,6 +17,9 @@ from __future__ import annotations
 
 import json
 import re
+import socket
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -238,6 +241,8 @@ def _fake_runner(down_ips: frozenset[str] = frozenset(), blocked: frozenset[str]
         joined = " ".join(cmd)
         if cmd[-1] == "true":  # ssh reachability check
             return 1 if any(ip in joined for ip in down_ips) else 0
+        if cmd[0] == sys.executable:  # the controller connects from Python: argv ends dst, port, timeout
+            return 1 if f"{cmd[-3]}:{cmd[-2]}" in blocked else 0
         m = re.search(r"/dev/tcp/([\d.]+)/(\d+)", joined)
         if m and f"{m.group(1)}:{m.group(2)}" in blocked:
             return 1
@@ -393,3 +398,17 @@ class TestHealthcheckAsksTheServer:
             text = source.read_text(encoding="utf-8")
             assert 'test: ["CMD", "headscale", "health"]' in text, source
             assert '"headscale", "version"' not in text, source
+
+
+class TestControllerProbeArgv:
+    """The controller's probe runs on the operator's workstation, so it must not need `timeout` or bash (#3480)."""
+
+    def test_it_connects_to_an_open_port_and_fails_on_a_closed_one(self) -> None:
+        from toolkit.scripts.headscale_probe import _controller_probe_argv
+
+        with socket.socket() as server:
+            server.bind(("127.0.0.1", 0))
+            server.listen()
+            port = server.getsockname()[1]
+            assert subprocess.run(_controller_probe_argv("127.0.0.1", port), capture_output=True).returncode == 0
+        assert subprocess.run(_controller_probe_argv("127.0.0.1", port), capture_output=True).returncode != 0

@@ -30,6 +30,7 @@ from toolkit.features.k8s_secrets import (
 
 TOKEN = "fake-pull-token-do-not-leak"  # noqa: S105 - a test value
 HOST = "gitea.kubelab.live"
+REPO = Path(__file__).resolve().parents[1]
 ENTRY = """\
   {name}:
     repository: personal/{name}
@@ -76,9 +77,22 @@ class TestMappingFromTheRegistry:
     def test_a_registry_with_no_private_entry_adds_no_secret(self, tmp_path: Path) -> None:
         assert pull_secret_mappings(_registry(tmp_path)) == []
 
-    def test_the_committed_registry_adds_no_secret_so_the_applied_set_is_unchanged(self) -> None:
-        assert pull_secret_mappings(product_registry.load_registry()) == []
-        assert not [m for m in ks._definitions_for_env("prod", ks.SECRET_DEFINITIONS) if m.name.startswith("pull-")]
+    def test_the_committed_registry_adds_one_gitea_secret_in_the_envs_its_token_is_catalogued_for(self) -> None:
+        """IDP-053 S3b: imagesensortool is the one private entry. Its Secret follows the token's catalog envs
+        (staging and prod, S2c), so prod applies it too although only staging has a consumer; that consumer is
+        pinned by `test_every_committed_deployment_is_byte_identical`."""
+        (mapping,) = pull_secret_mappings(product_registry.load_registry())
+
+        assert mapping.name == pull_secret_name(HOST)
+        assert mapping.envs == ("staging", "prod")
+
+    def test_the_committed_pull_login_is_the_reviewer_account_the_token_is_minted_for(self) -> None:
+        """`username` is a copy of `apps.auth.identities.reviewer`; a rename there would ship a dead login."""
+        common = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
+        credential = product_registry.load_registry().products["imagesensortool"].pull_credential
+
+        assert credential is not None
+        assert credential.username == common["apps"]["auth"]["identities"]["reviewer"]
 
     def test_the_token_is_read_from_the_variable_the_catalog_key_flattens_to(self, tmp_path: Path) -> None:
         (mapping,) = pull_secret_mappings(_registry(tmp_path, _entry(secret="ghcr.pull_token", host="ghcr.io")))
@@ -314,7 +328,7 @@ products:
 
     @pytest.mark.parametrize("env", ["staging", "prod"])
     def test_every_committed_deployment_is_byte_identical(self, env: str, tmp_path: Path) -> None:
-        """The committed registry has no private entry, so the rendered bytes must not move.
+        """The committed files are what the template renders, and only imagesensortool pulls with a Secret.
 
         Compared with the file committed before this change, not with a second render of the new
         template: `make validate-sync` would pass on a template that changed both.
@@ -330,4 +344,9 @@ products:
         committed = generator.project_root / f"infra/k8s/overlays/{env}/generated/deployments.yaml"
 
         assert out.read_bytes() == committed.read_bytes()
-        assert b"imagePullSecrets" not in committed.read_bytes()
+        pulls = [
+            d["metadata"]["name"]
+            for d in yaml.safe_load_all(committed.read_text(encoding="utf-8"))
+            if d and d["spec"]["template"]["spec"].get("imagePullSecrets")
+        ]
+        assert pulls == (["imagesensortool"] if env == "staging" else [])
