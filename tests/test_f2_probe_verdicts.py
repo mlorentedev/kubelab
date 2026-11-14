@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 from tests.shells import BASH
+from tests.shells import child_env
 
 REPO = Path(__file__).resolve().parents[1]
 PROBE = REPO / "specs/archive/ANSIBLE-033-dev-node-credentials/probes/f2-private-repo-flow.sh"
@@ -30,12 +31,14 @@ def _verdict(tmp_path: Path, gh_stderr: str) -> str:
     (bin_dir / "gh").write_text(GH_STUB, encoding="utf-8", newline="\n")
     (bin_dir / "gh").chmod(0o755)
     result = tmp_path / "result"
-    env = {
-        "PATH": f"{bin_dir}:/usr/bin:/bin",
-        "GH_STDERR": gh_stderr,
-        "F2_RESULT": str(result),
-        "F2_WORK": str(tmp_path / "work"),
-    }
+    env = child_env(
+        {
+            "PATH": f"{bin_dir}:/usr/bin:/bin",
+            "GH_STDERR": gh_stderr,
+            "F2_RESULT": str(result),
+            "F2_WORK": str(tmp_path / "work"),
+        }
+    )
     subprocess.run(
         [BASH, str(PROBE)], env=env, capture_output=True, text=True, encoding="utf-8", timeout=30, check=False
     )

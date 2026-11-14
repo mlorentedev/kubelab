@@ -18,6 +18,7 @@ from pathlib import Path
 import pytest
 
 from toolkit.core.logging import logger
+from tests.shells import child_env
 
 
 @pytest.mark.parametrize("method", ["info", "success", "warning", "error", "section", "subsection"])
@@ -61,7 +62,7 @@ def test_stdout_is_one_json_object_when_building_the_settings_warns(tmp_path: Pa
     result = subprocess.run(  # noqa: S603
         [sys.executable, "-c", script],
         cwd=tmp_path,
-        env={"PATH": str(Path(sys.executable).parent)},
+        env=child_env({"PATH": str(Path(sys.executable).parent)}),
         capture_output=True,
         text=True,
         encoding="utf-8",

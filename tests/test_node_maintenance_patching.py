@@ -15,6 +15,7 @@ import subprocess
 import jinja2
 import yaml
 from tests.shells import BASH
+from tests.shells import child_env
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 ROLE = REPO / "infra/ansible/roles/node_maintenance"
@@ -357,7 +358,9 @@ def _run_hold_block(
     for name, body in (("apt-mark", APT_MARK_STUB), ("dpkg-query", DPKG_QUERY_STUB)):
         (bin_dir / name).write_text(body, encoding="utf-8", newline="\n")
         (bin_dir / name).chmod(0o755)
-    env = {"PATH": f"{bin_dir}:/usr/bin:/bin", "FAIL_HOLD": " ".join(fail_hold), "SHOWHOLD": " ".join(held_before)}
+    env = child_env(
+        {"PATH": f"{bin_dir}:/usr/bin:/bin", "FAIL_HOLD": " ".join(fail_hold), "SHOWHOLD": " ".join(held_before)}
+    )
     env.update({f"STATE_{pkg.replace('.', '_').replace('-', '_')}": st for pkg, st in states.items()})
 
     out = subprocess.run(

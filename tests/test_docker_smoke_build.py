@@ -29,6 +29,7 @@ import yaml
 from tests.ansible_jinja import ansible_env, task_runs
 from tests.conftest import system_path
 from tests.shells import BASH
+from tests.shells import child_env
 
 REPO = Path(__file__).resolve().parents[1]
 ROLE = REPO / "infra/ansible/roles/docker"
@@ -99,11 +100,13 @@ def _run(tmp_path: Path, behaviour: str, script: str) -> subprocess.CompletedPro
         .from_string(script)
         .render(docker_smoke_build_image=DEFAULTS["docker_smoke_build_image"], docker_smoke_build_timeout_seconds=2)
     )
-    env = {
-        "PATH": system_path(bin_dir),
-        "DOCKERFILE": str(tmp_path / "Dockerfile"),
-        "ARGS": str(tmp_path / "args"),
-    }
+    env = child_env(
+        {
+            "PATH": system_path(bin_dir),
+            "DOCKERFILE": str(tmp_path / "Dockerfile"),
+            "ARGS": str(tmp_path / "args"),
+        }
+    )
     return subprocess.run(
         [BASH, "-c", rendered],
         env=env,
