@@ -16,6 +16,10 @@ from pathlib import Path
 
 import pytest
 
+# The provider runs inside the Linux Hermes gateway and deliberately uses
+# POSIX fcntl for cross-process claims. Do not fake that lock on Windows.
+pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="NaN image quota uses Linux gateway fcntl")
+
 PLUGIN = Path(__file__).resolve().parent.parent / "infra/ansible/roles/agent_stack/files/hermes-plugins/nan/__init__.py"
 
 
