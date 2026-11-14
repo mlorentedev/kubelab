@@ -288,8 +288,6 @@ tests/test_worktree_init.py::test_a_fresh_lock_is_left_alone
 tests/test_worktree_init.py::test_a_stale_lock_is_regenerated_before_install
 
 [crlf] CRLF: compares bytes of a file the Windows checkout wrote with \r\n
-tests/test_edge_watcher_manifest.py::test_runs_the_committed_probe_against_the_committed_targets[prod]
-tests/test_edge_watcher_manifest.py::test_runs_the_committed_probe_against_the_committed_targets[staging]
 tests/test_image_pull_secret.py::TestTheDeploymentCarriesThePullSecret::test_every_committed_deployment_is_byte_identical[prod]
 tests/test_image_pull_secret.py::TestTheDeploymentCarriesThePullSecret::test_every_committed_deployment_is_byte_identical[staging]
 tests/test_mutate.py::test_a_baseline_that_collects_nothing_says_so_and_names_the_marker
@@ -302,8 +300,6 @@ tests/test_mutate.py::test_the_file_is_byte_identical_after_every_run[1]
 tests/test_mutate.py::test_the_file_is_byte_identical_after_every_run[2]
 tests/test_mutate.py::test_the_file_is_byte_identical_after_every_run[5]
 tests/test_mutate.py::test_the_file_is_restored_when_the_test_runner_raises
-tests/test_r2_backup_watcher_manifest.py::test_runs_the_committed_probe_against_the_committed_targets[prod]
-tests/test_r2_backup_watcher_manifest.py::test_runs_the_committed_probe_against_the_committed_targets[staging]
 
 [perm] POSIX file modes, which NTFS does not keep
 tests/test_hermes_curator_judge.py::test_a_draft_is_never_replaced
