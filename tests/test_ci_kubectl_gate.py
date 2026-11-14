@@ -45,7 +45,7 @@ def _child_pytest(tmp_path: Path, *, ci: bool) -> subprocess.CompletedProcess:
     if ci:
         env["CI"] = "true"
     target = tmp_path / "test_kubectl_gate_probe.py"
-    target.write_text(textwrap.dedent(PROBE), encoding="utf-8")
+    target.write_text(textwrap.dedent(PROBE), encoding="utf-8", newline="\n")
     return subprocess.run(
         [
             sys.executable,

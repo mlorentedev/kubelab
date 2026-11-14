@@ -82,7 +82,7 @@ def harness(tmp_path: Path):
     bin_dir.mkdir()
     calls = tmp_path / "calls.log"
 
-    (bin_dir / "wget").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    (bin_dir / "wget").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8", newline="\n")
 
     # `su git -c "<command>"`. Dispatch on the command text, record every call,
     # and answer as a Gitea with the admin user and the Authelia source already
@@ -100,6 +100,7 @@ case "$cmd" in
 esac
 """,
         encoding="utf-8",
+        newline="\n",
     )
     for stub in ("wget", "su"):
         (bin_dir / stub).chmod(0o755)
@@ -145,7 +146,7 @@ def test_a_converged_run_reports_no_change(harness):
     `changed_when` reads exactly those two words out of stdout, so this is the
     difference between a provision that restarts the forge and one that does not.
     """
-    harness.marker.write_text(_expected_hash() + "\n", encoding="utf-8")
+    harness.marker.write_text(_expected_hash() + "\n", encoding="utf-8", newline="\n")
 
     result = harness.run()
 
@@ -166,7 +167,7 @@ def test_the_write_still_happens_on_a_converged_run(harness):
     applied to Gitea directly, and the write is what reconciles the fields Gitea
     will accept. Only the report is conditional.
     """
-    harness.marker.write_text(_expected_hash() + "\n", encoding="utf-8")
+    harness.marker.write_text(_expected_hash() + "\n", encoding="utf-8", newline="\n")
 
     harness.run()
 
@@ -194,7 +195,7 @@ def test_a_rotated_secret_still_reports_a_change(harness):
     marker holds the OLD secret; the new one must be seen and announced, so the
     handler fires and the running process picks it up.
     """
-    harness.marker.write_text(_expected_hash(secret="the-previous-secret") + "\n", encoding="utf-8")
+    harness.marker.write_text(_expected_hash(secret="the-previous-secret") + "\n", encoding="utf-8", newline="\n")
 
     result = harness.run()
 
@@ -208,7 +209,7 @@ def test_a_rotated_secret_still_reports_a_change(harness):
 def test_a_changed_discovery_url_also_reports_a_change(harness):
     """The marker covers the whole configuration, not the secret alone."""
     harness.marker.write_text(
-        _expected_hash(discovery="https://old.example.test/.well-known/x") + "\n", encoding="utf-8"
+        _expected_hash(discovery="https://old.example.test/.well-known/x") + "\n", encoding="utf-8", newline="\n"
     )
 
     assert "Updated" in harness.run().stdout
@@ -222,7 +223,7 @@ def test_a_failed_write_does_not_record_success(harness):
     subsequent provision, which is strictly worse than the noise this ticket
     removes.
     """
-    harness.marker.write_text(_expected_hash(secret="the-previous-secret") + "\n", encoding="utf-8")
+    harness.marker.write_text(_expected_hash(secret="the-previous-secret") + "\n", encoding="utf-8", newline="\n")
     stale = harness.marker.read_text(encoding="utf-8")
 
     result = harness.run(STUB_UPDATE_FAILS="1")
@@ -315,7 +316,7 @@ def test_the_group_mapping_is_part_of_the_recorded_state(harness):
     provision after adding it reports "already matches": the flags are stored,
     Gitea ignores them, and the provision reports success.
     """
-    harness.marker.write_text(_expected_hash(groups=()) + "\n", encoding="utf-8")
+    harness.marker.write_text(_expected_hash(groups=()) + "\n", encoding="utf-8", newline="\n")
 
     assert "Updated" in harness.run().stdout, (
         "the group mapping is not in the recorded state; adding or changing it would "
@@ -333,7 +334,7 @@ def test_both_writes_carry_the_group_mapping(harness, verb):
     """
     if verb == "add-oauth":
         stub = (harness.tmp / "bin" / "su").read_text(encoding="utf-8").replace("7\\tauthelia", "7\\tgithub")
-        (harness.tmp / "bin" / "su").write_text(stub, encoding="utf-8")
+        (harness.tmp / "bin" / "su").write_text(stub, encoding="utf-8", newline="\n")
     harness.run()
     calls = [c for c in harness.calls.read_text(encoding="utf-8").splitlines() if verb in c]
     assert calls, f"the script never ran {verb}; the harness is not driving this path"

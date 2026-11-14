@@ -146,7 +146,7 @@ def test_udev_accepts_the_rendered_rule(kind: str, tmp_path: Path) -> None:
     if probe.returncode != 0:
         pytest.skip("udevadm has no verify verb (systemd < 254)")
     rules = tmp_path / "90-rendered.rules"
-    rules.write_text(_rule(kind), encoding="utf-8")
+    rules.write_text(_rule(kind), encoding="utf-8", newline="\n")
     proc = subprocess.run(
         ["udevadm", "verify", "--resolve-names=never", str(rules)],
         capture_output=True,

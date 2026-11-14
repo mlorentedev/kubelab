@@ -34,6 +34,7 @@ import zipfile
 
 import pytest
 import yaml
+from tests.shells import BASH
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 REVIEWER = REPO_ROOT / ".github/workflows/pr-agent.yml"
@@ -398,7 +399,7 @@ def _run_resolve(tmp_path: pathlib.Path, **scenario: str) -> tuple[dict[str, str
     bindir = tmp_path / "bin"
     bindir.mkdir()
     stub = bindir / "gh"
-    stub.write_text(_GH_STUB, encoding="utf-8")
+    stub.write_text(_GH_STUB, encoding="utf-8", newline="\n")
     stub.chmod(0o755)
     output = tmp_path / "github_output"
     output.touch()
@@ -439,7 +440,7 @@ def _run_resolve(tmp_path: pathlib.Path, **scenario: str) -> tuple[dict[str, str
         **scenario,
     }
     proc = subprocess.run(  # noqa: S603
-        ["bash", "-c", step["run"]],
+        [BASH, "-c", step["run"]],
         cwd=tmp_path,
         env=env,
         capture_output=True,

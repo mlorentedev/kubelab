@@ -326,14 +326,16 @@ def test_the_sync_skips_the_gateways_unreadable_plumbing_in_the_memories(tmp_pat
     ]
     ignore = tmp_path / "vault-ignore"
     assert patterns and all("/memories/" in entry for entry in patterns), "anchored to the memories, not the clone"
-    ignore.write_text("\n".join(patterns).replace("{{ agent_stack_vault_zone }}", "zone") + "\n", encoding="utf-8")
+    ignore.write_text(
+        "\n".join(patterns).replace("{{ agent_stack_vault_zone }}", "zone") + "\n", encoding="utf-8", newline="\n"
+    )
 
     repo = tmp_path / "clone"
     memories = repo / "zone" / "memories"
     memories.mkdir(parents=True)
-    (memories / "MEMORY.md").write_text("a fact\n", encoding="utf-8")
+    (memories / "MEMORY.md").write_text("a fact\n", encoding="utf-8", newline="\n")
     for name in ("MEMORY.md.lock", ".mem_abc123"):
-        (memories / name).write_text("", encoding="utf-8")
+        (memories / name).write_text("", encoding="utf-8", newline="\n")
         (memories / name).chmod(0o000)
     env = {**os.environ, "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1"}
     subprocess.run(["git", "init", "-q", str(repo)], check=True, env=env)

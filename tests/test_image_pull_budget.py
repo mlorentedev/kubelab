@@ -613,7 +613,7 @@ def test_the_run_guard_reads_the_image_however_the_command_is_written():
 def _write(root: Path, files: dict[str, str]) -> Path:
     for name, text in files.items():
         (root / name).parent.mkdir(parents=True, exist_ok=True)
-        (root / name).write_text(text, encoding="utf-8")
+        (root / name).write_text(text, encoding="utf-8", newline="\n")
     return root
 
 
@@ -1048,7 +1048,7 @@ def test_a_role_task_includes_vars_from_the_role(tmp_path, monkeypatch):
     role = tmp_path / "edge"
     (role / "tasks").mkdir(parents=True)
     (role / "vars").mkdir()
-    (role / "vars" / "pull.yml").write_text("docker_max_download_attempts: 5\n", encoding="utf-8")
+    (role / "vars" / "pull.yml").write_text("docker_max_download_attempts: 5\n", encoding="utf-8", newline="\n")
     monkeypatch.setitem(globals(), "ROLES", tmp_path)
     assert _vars_file_keys(role / "tasks", "pull.yml") == {"docker_max_download_attempts"}
     assert _vars_file_keys(role / "tasks", "absent.yml") == EDGE_VARS

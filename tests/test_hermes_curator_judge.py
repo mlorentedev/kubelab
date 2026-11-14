@@ -53,7 +53,7 @@ def _zone(tmp_path: Path, candidates: list[dict]) -> Path:
     zone = tmp_path / "zone"
     (zone / "curator").mkdir(parents=True)
     (zone / "curator" / "candidates.json").write_text(
-        json.dumps({"corpus_files": 9, "units": 40, "candidates": candidates}), encoding="utf-8"
+        json.dumps({"corpus_files": 9, "units": 40, "candidates": candidates}), encoding="utf-8", newline="\n"
     )
     return zone
 
@@ -74,7 +74,7 @@ def _record(
 def _output(tmp_path: Path, record: str, job: str = "abc123", name: str = "2026-10-19_08-20-11.md") -> Path:
     directory = tmp_path / "home" / "cron" / "output" / job
     directory.mkdir(parents=True, exist_ok=True)
-    (directory / name).write_text(record, encoding="utf-8")
+    (directory / name).write_text(record, encoding="utf-8", newline="\n")
     return tmp_path / "home" / "cron" / "output"
 
 
@@ -109,7 +109,7 @@ def test_the_judge_sees_a_list_that_fits_what_hermes_injects(tmp_path: Path) -> 
 def test_a_candidate_that_already_has_a_proposal_is_not_judged_again(tmp_path: Path) -> None:
     zone = _zone(tmp_path, [_candidate(CID), _candidate(OTHER)])
     (zone / "proposals").mkdir()
-    (zone / "proposals" / f"{CID}.md").write_text("done", encoding="utf-8")
+    (zone / "proposals" / f"{CID}.md").write_text("done", encoding="utf-8", newline="\n")
     ids = [c["id"] for c in json.loads(_load(JUDGE_INPUT).report(zone))["candidates"]]
     assert ids == [OTHER]
 
@@ -175,7 +175,7 @@ def test_a_verdict_for_an_id_the_analyzer_did_not_produce_is_ignored(tmp_path: P
 def test_a_draft_is_never_replaced(tmp_path: Path) -> None:
     zone = _zone(tmp_path, [_candidate()])
     (zone / "proposals").mkdir()
-    (zone / "proposals" / f"{CID}.md").write_text("triaged by a human", encoding="utf-8")
+    (zone / "proposals" / f"{CID}.md").write_text("triaged by a human", encoding="utf-8", newline="\n")
     output = _output(tmp_path, _record(json.dumps({"verdicts": [_verdict()]})))
     assert _load(EMIT).emit(output, zone) == []
     assert (zone / "proposals" / f"{CID}.md").read_text(encoding="utf-8") == "triaged by a human"

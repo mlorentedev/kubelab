@@ -651,8 +651,7 @@ def test_every_bound_on_a_running_job_is_declared_and_ordered() -> None:
     for key in ("zombie_task_timeout", "endless_task_timeout", "abandoned_job_timeout"):
         assert env[f"GITEA__actions__{key.upper()}"] == runner[key], f"{key} is declared but not rendered"
     zombie, job, endless, abandoned = (
-        _seconds(runner[k])
-        for k in ("zombie_task_timeout", "timeout", "endless_task_timeout", "abandoned_job_timeout")
+        _seconds(runner[k]) for k in ("zombie_task_timeout", "timeout", "endless_task_timeout", "abandoned_job_timeout")
     )
     assert zombie < job, "the zombie sweep would fail a job that is long but alive"
     assert job <= endless, "Gitea would fail the job from outside before the runner cancels it"

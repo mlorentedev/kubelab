@@ -57,6 +57,7 @@ def test_the_dist_mode_keeps_a_files_tests_on_one_worker_in_order(tmp_path: Path
                     fh.write(f"{{os.environ['PYTEST_XDIST_WORKER']}} {{case}}\\n")
         """),
         encoding="utf-8",
+        newline="\n",
     )
     run = subprocess.run(
         [sys.executable, "-m", "pytest", "-c", "/dev/null", "-q", "-p", "no:cacheprovider"]

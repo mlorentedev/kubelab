@@ -30,6 +30,7 @@ from pathlib import Path
 import pytest
 
 from tests.test_node_backup_role import _defaults, _render
+from tests.shells import BASH
 
 EXISTING_ID = "a" * 64
 NEW_ID = "b" * 64
@@ -121,11 +122,11 @@ def node(tmp_path: Path, request: pytest.FixtureRequest):
     fake_dir = tmp_path / "fake"
     fake_dir.mkdir()
     restic = tmp_path / "restic"
-    restic.write_text(FAKE_RESTIC, encoding="utf-8")
+    restic.write_text(FAKE_RESTIC, encoding="utf-8", newline="\n")
     restic.chmod(0o755)
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
-    (bin_dir / "date").write_text(FAKE_DATE, encoding="utf-8")
+    (bin_dir / "date").write_text(FAKE_DATE, encoding="utf-8", newline="\n")
     (bin_dir / "date").chmod(0o755)
 
     staging = tmp_path / "staging"
@@ -137,7 +138,7 @@ def node(tmp_path: Path, request: pytest.FixtureRequest):
     creds = {}
     for name in ("password", "access", "secret"):
         creds[name] = tmp_path / f"cred-{name}"
-        creds[name].write_text("dummy\n", encoding="utf-8")
+        creds[name].write_text("dummy\n", encoding="utf-8", newline="\n")
 
     state = tmp_path / "state"
     state.mkdir()
@@ -165,6 +166,7 @@ def node(tmp_path: Path, request: pytest.FixtureRequest):
             **group_override,
         ),
         encoding="utf-8",
+        newline="\n",
     )
 
     def run(
@@ -180,18 +182,18 @@ def node(tmp_path: Path, request: pytest.FixtureRequest):
     ):
         if stale_lock:
             (fake_dir / "stale-lock").touch()
-        (fake_dir / "snapshots.rc").write_text(f"{snapshots_rc}\n", encoding="utf-8")
-        (fake_dir / "forget.rc").write_text(f"{forget_rc}\n", encoding="utf-8")
-        (fake_dir / "check.rc").write_text(f"{check_rc}\n", encoding="utf-8")
-        (fake_dir / "id").write_text(f"{repo_id}\n", encoding="utf-8")
+        (fake_dir / "snapshots.rc").write_text(f"{snapshots_rc}\n", encoding="utf-8", newline="\n")
+        (fake_dir / "forget.rc").write_text(f"{forget_rc}\n", encoding="utf-8", newline="\n")
+        (fake_dir / "check.rc").write_text(f"{check_rc}\n", encoding="utf-8", newline="\n")
+        (fake_dir / "id").write_text(f"{repo_id}\n", encoding="utf-8", newline="\n")
         calls_file = fake_dir / "calls"
         earlier = len(calls_file.read_text(encoding="utf-8").splitlines()) if calls_file.exists() else 0
         if recorded is not None:
-            marker.write_text(f"{recorded}\n", encoding="utf-8")
+            marker.write_text(f"{recorded}\n", encoding="utf-8", newline="\n")
         env = {"PATH": f"{bin_dir}:{os.environ['PATH']}", "FAKE_DIR": str(fake_dir), "NEW_ID": NEW_ID}
         if now is not None:
             env["FAKE_NOW"] = str(now)
-        argv = ["bash", str(script)] + (["--check"] if check else [])
+        argv = [BASH, str(script)] + (["--check"] if check else [])
         proc = subprocess.run(argv, env=env, capture_output=True, text=True, encoding="utf-8", timeout=30)
         calls = (fake_dir / "calls").read_text(encoding="utf-8").splitlines() if (fake_dir / "calls").exists() else []
         # `verbs` accumulates across runs (a test may assert on a sequence);

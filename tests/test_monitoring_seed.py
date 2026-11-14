@@ -183,7 +183,7 @@ class TestExportNeverDropsADeclaredMonitor:
     def _export(tmp_path, monkeypatch, live_keys: list[str]) -> str:
         path = tmp_path / monitoring.EXPORT_DIR / monitoring.MONITORS_FILE
         path.parent.mkdir(parents=True)
-        path.write_text('[{"key": "a"}, {"key": "b"}]', encoding="utf-8")
+        path.write_text('[{"key": "a"}, {"key": "b"}]', encoding="utf-8", newline="\n")
         api = MagicMock()
         api.get_monitors.return_value = [
             {"type": "http", "name": key, "description": embed_key("", key)} for key in live_keys
@@ -201,7 +201,7 @@ class TestExportNeverDropsADeclaredMonitor:
 
     def test_a_seed_entry_with_no_key_is_not_a_crash(self, tmp_path) -> None:
         seed = tmp_path / "monitors.json"
-        seed.write_text('[{"name": "hand-made"}, {"key": "a"}]', encoding="utf-8")
+        seed.write_text('[{"name": "hand-made"}, {"key": "a"}]', encoding="utf-8", newline="\n")
         assert monitoring._keys_the_export_would_drop([{"key": "a"}], seed) == []
 
     def test_a_monitor_new_on_the_instance_is_still_exported(self, tmp_path, monkeypatch) -> None:

@@ -101,7 +101,11 @@ HUB = "docker.io/mlorentedev"
 
 def _hub_answers(monkeypatch: pytest.MonkeyPatch, status: int | Exception) -> MagicMock:
     """Make the Docker Hub tags API answer with one status (or raise), recording the call."""
-    get = MagicMock(side_effect=status) if isinstance(status, Exception) else MagicMock(return_value=httpx.Response(status))
+    get = (
+        MagicMock(side_effect=status)
+        if isinstance(status, Exception)
+        else MagicMock(return_value=httpx.Response(status))
+    )
     monkeypatch.setattr(registry.httpx, "get", get)
     return get
 

@@ -37,6 +37,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
+from tests.shells import BASH
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 ROUTE = REPO_ROOT / "scripts" / "pr-agent-route.sh"
@@ -134,13 +135,13 @@ class Route:
         self.stdin_log = tmp_path / "stdin.log"
         self.summary = tmp_path / "summary"
         self.pool = tmp_path / "pool.json"
-        self.pool.write_text(json.dumps(FIXTURE_POOL), encoding="utf-8")
+        self.pool.write_text(json.dumps(FIXTURE_POOL), encoding="utf-8", newline="\n")
         bindir = tmp_path / "bin"
         bindir.mkdir()
         curl = bindir / "curl"
-        curl.write_text(FAKE_CURL, encoding="utf-8")
+        curl.write_text(FAKE_CURL, encoding="utf-8", newline="\n")
         curl.chmod(0o755)
-        self.argv_log.write_text("", encoding="utf-8")
+        self.argv_log.write_text("", encoding="utf-8", newline="\n")
         self.env = {k: v for k, v in os.environ.items() if k not in ROUTE_VARS}
         self.env.update(
             PATH=f"{bindir}{os.pathsep}{os.environ['PATH']}",
@@ -159,7 +160,7 @@ class Route:
         return self.execute(self.out, overrides)
 
     def execute(self, out: Path, overrides: dict[str, str | None]) -> subprocess.CompletedProcess[str]:
-        out.write_text("", encoding="utf-8")
+        out.write_text("", encoding="utf-8", newline="\n")
         merged: dict[str, str] = dict(self.env)
         for name, value in overrides.items():
             if value is None:
@@ -182,7 +183,7 @@ class Route:
         return match.group(1) if match else ""
 
     def reset_argv(self) -> None:
-        self.argv_log.write_text("", encoding="utf-8")
+        self.argv_log.write_text("", encoding="utf-8", newline="\n")
 
     def every_point(self, total: int, **overrides: str | None) -> dict[str, int]:
         """How many points of [0, total) draw each reviewer."""
@@ -238,7 +239,7 @@ def test_an_anthropic_member_with_no_declared_effort_runs_at_medium(route: Route
     pool = json.loads(json.dumps(FIXTURE_POOL))
     for member in pool["pool"]:
         member.get("pr_agent", {}).pop("reasoning_effort", None)
-    route.pool.write_text(json.dumps(pool), encoding="utf-8")
+    route.pool.write_text(json.dumps(pool), encoding="utf-8", newline="\n")
     proc = route.run(PR_AGENT_DRAW="0")
     assert proc.returncode == 0, _output(proc)
     assert route.get("anthropic_model") == HAIKU
@@ -406,7 +407,7 @@ def test_provider_nan_and_nan_only_never_take_the_risk_route(route: Route) -> No
 def test_a_pool_naming_an_anthropic_model_outside_the_allowlist_fails_before_any_probe(route: Route) -> None:
     pool = json.loads(route.pool.read_text(encoding="utf-8"))
     pool["pool"][3]["pr_agent"]["model"] = "anthropic/claude-opus-5-5"
-    route.pool.write_text(json.dumps(pool), encoding="utf-8")
+    route.pool.write_text(json.dumps(pool), encoding="utf-8", newline="\n")
     proc = route.run(PR_AGENT_DRAW="0")
     assert proc.returncode == 1, _output(proc)
     assert _in_order(_output(proc), "::error::", "anthropic/claude-opus-5-5", "allowlist"), _output(proc)
@@ -561,15 +562,15 @@ def test_the_job_summary_names_the_member_drawn_the_risk_route_and_the_second_at
     summary = route.summary.read_text(encoding="utf-8")
     assert f"Drawn to review first: `{HAIKU}`" in summary
     assert "nothing is published: nan." in summary
-    route.summary.write_text("", encoding="utf-8")
+    route.summary.write_text("", encoding="utf-8", newline="\n")
     route.run(GITHUB_STEP_SUMMARY=str(route.summary), PR_LABELS='["deep-review"]')
     assert f"Routed by risk (the deep-review label) to `{SONNET}`" in route.summary.read_text(encoding="utf-8")
 
 
 def test_it_runs_under_bash_e_as_a_workflow_step_does(route: Route) -> None:
-    route.out.write_text("", encoding="utf-8")
+    route.out.write_text("", encoding="utf-8", newline="\n")
     proc = subprocess.run(  # noqa: S603
-        ["bash", "-e", str(ROUTE), "--output", str(route.out)],
+        [BASH, "-e", str(ROUTE), "--output", str(route.out)],
         env=route.env,
         stdin=subprocess.DEVNULL,
         capture_output=True,
@@ -663,6 +664,7 @@ class RealRoute:
                 }
             ),
             encoding="utf-8",
+            newline="\n",
         )
         self.env = {k: v for k, v in os.environ.items() if k not in ROUTE_VARS}
         self.env.update(
@@ -677,7 +679,7 @@ class RealRoute:
         )
 
     def run(self, **overrides: str) -> subprocess.CompletedProcess[str]:
-        self.out.write_text("", encoding="utf-8")
+        self.out.write_text("", encoding="utf-8", newline="\n")
         return subprocess.run(  # noqa: S603
             [str(ROUTE), "--output", str(self.out)],
             env={**self.env, **overrides},
