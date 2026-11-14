@@ -153,6 +153,14 @@ optional `fs_group` (int, 1..2^31-1; 10001 for resume). Renders one PVC
 Rejected for `fs_group`: deriving it from the image (needs a registry read at
 render time), relying on local-path's 0777 (owner ruling 2026-11-04).
 
+Note (2026-11-14, owner ruling): every generated PVC carries
+`argocd.argoproj.io/sync-options: Prune=false`, and no other generated object does.
+A contract that stops declaring a volume leaves its PVC, and the data on it, in
+place; removing one is an explicit, ticketed IaC change, never a side effect of a
+sync. A pod has one `fsGroup`, so `check_resources` refuses a contract whose
+volumes name different `fs_group` values (a `ContractError`, raised by the render
+and by the generator alike).
+
 **D4. `job` params:** `schedule` (5-field cron), `command` (argv list),
 `volume` (name of a declared volume claim), optional `active_deadline_seconds`
 (default 3600). The renderer fixes `concurrencyPolicy: Forbid`,
@@ -166,6 +174,16 @@ staging CronJob with a one-off run (the owner accepts staging's spend at the
 contract's schedule; see Risks).
 Rejected: a shell line in `kubelab.yaml` instead of `resume daily` (#2366
 status; https://gitea.kubelab.live/personal/resume/issues/777).
+
+Note (2026-11-14): the CronJob pod template carries `app.kubernetes.io/name: <app>`
+(the NetworkPolicies of slice E and the ADR-061 gate key on it) plus
+`app.kubernetes.io/component: cronjob`. The Service selects pods by the name label
+alone, and a job pod with no readiness probe is Ready while it runs, so each daily run
+would have sent Service traffic to a pod with nothing listening (502s). Only for an app
+that declares a job, the Deployment pod template therefore gains `component: app` and
+the Service selector adds it; the Deployment's `matchLabels` stay as they are, since
+they are immutable. An app with no job renders as before. The CronJob also sets
+`timeZone: Etc/UTC`, because the contract states its schedule in UTC.
 
 **D5. A Deployment that mounts a volume claim uses `strategy: Recreate`.**
 Today's template is `RollingUpdate`, `maxUnavailable: 0`, `maxSurge: 1`; a surge

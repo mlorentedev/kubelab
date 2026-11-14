@@ -49,7 +49,8 @@ _SECRET_NAME = r"^[a-z0-9_]+(\.[a-z0-9_]+)*$"
 Hostname = Annotated[str, StringConstraints(max_length=253, pattern=_HOSTNAME)]
 SecretName = Annotated[str, StringConstraints(max_length=200, pattern=_SECRET_NAME)]
 
-_RESOURCE_NAME = r"^[a-z][a-z0-9-]{0,30}$"
+# A letter first and an alphanumeric last, so `<app>-<name>` is a valid object name; 31 characters at most.
+_RESOURCE_NAME = r"^[a-z]([a-z0-9-]{0,29}[a-z0-9])?$"
 # A positive whole Kubernetes quantity with an optional suffix: no zero, no fraction, no exponent.
 _QUANTITY = r"^[1-9][0-9]*(Ki|Mi|Gi|Ti|Pi|Ei|k|M|G|T|P|E)?$"
 # Absolute, at least one segment, no empty segment and no trailing slash; a segment cannot start
