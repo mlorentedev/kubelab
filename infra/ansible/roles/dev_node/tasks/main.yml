@@ -253,8 +253,9 @@
     #
     # After the bootstrap, not before: setup-linux.sh runs `dotf tools sync`, which
     # is what installs node on a fresh node. `mise where` exits non-zero when no
-    # config pins node or the pinned one is not installed, which fails the play at
-    # the task that explains it rather than at an npm path that does not exist.
+    # config pins node or the pinned one is not installed: that is a state to read,
+    # and the task after it fails the play with the cause instead of at an npm path
+    # that does not exist.
     - name: Resolve the node install mise has active
       ansible.builtin.command:
         cmd: "{{ dev_node_home }}/.local/bin/mise where node"
@@ -262,9 +263,23 @@
         chdir: "{{ dev_node_home }}"
       register: _dev_node_node_where
       changed_when: false
+      failed_when: false
       # A read: --check would skip it and hand the next tasks an empty stdout.
       check_mode: false
       # orca: the wrapper loop below carries that tag and reads this result.
+      tags: [dev_node, mise, agents, orca]
+
+    - name: Require a node that mise can name
+      ansible.builtin.assert:
+        that: _dev_node_node_where.rc == 0 and (_dev_node_node_where.stdout | trim | length > 0)
+        fail_msg: >-
+          mise has no installed node on {{ inventory_hostname }}
+          ({{ _dev_node_node_where.stderr | default('') | trim }}). The dotfiles own
+          node: their bootstrap (`dotf tools sync`, run by setup-linux.sh) installs the
+          version their versions.conf pins. Check that dev_node_dotfiles_run_setup is
+          true, that the bootstrap above succeeded, and that the play ran without a
+          tag that skips it, then provision again.
+        quiet: true
       tags: [dev_node, mise, agents, orca]
 
     # `mise ls --missing` asks whether the version directory exists, not whether

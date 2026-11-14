@@ -92,6 +92,18 @@ def test_node_is_resolved_from_mise_after_the_dotfiles_bootstrap() -> None:
     assert bootstrap < _tasks().index(resolve)
 
 
+def test_a_node_mise_cannot_name_stops_the_play_with_the_cause() -> None:
+    """`mise where` exits non-zero on a node with none installed: say why, not "no such file"."""
+    tasks = _tasks()
+    resolve = tasks[_index("Resolve the node install mise has active")]
+    require = tasks[_index("Require a node that mise can name")]
+    assert resolve["failed_when"] is False, "the read reports; the assert below it fails the play"
+    assert tasks.index(resolve) < tasks.index(require)
+    assert "_dev_node_node_where.rc == 0" in require["ansible.builtin.assert"]["that"]
+    assert "bootstrap" in require["ansible.builtin.assert"]["fail_msg"], "name the owner that installs node"
+    assert set(require["tags"]) == set(resolve["tags"]), "an `orca` run must fail here too, not at the wrapper"
+
+
 def test_every_consumer_of_the_node_path_runs_after_the_resolve_and_carries_its_tags() -> None:
     """`--tags orca` skips untagged-for-it tasks: a consumer would read an undefined register."""
     tasks = _tasks()
