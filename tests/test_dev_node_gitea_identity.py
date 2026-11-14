@@ -91,9 +91,9 @@ def test_the_playbook_declares_dev_node_vars_at_all() -> None:
 def test_the_forge_identity_resolves_from_the_declared_map() -> None:
     """The account ace2 authenticates as is declared, not written in by hand.
 
-    ADR-062 D1 puts a node running agent work in the machine class, and
-    ANSIBLE-037's D1 records why that is forced rather than chosen: the identity
-    map holds exactly three keys and #1075 forbids inventing a fourth.
+    Since ANSIBLE-037's D1 amendment (#1075) that is the agents' account
+    (`apps.auth.identities.agent`), where agent pushes are attributed since #2578.
+    The original D1 chose the machine class when the map had no agent key.
     """
     gitea_identity = {
         name: expr

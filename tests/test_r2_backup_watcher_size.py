@@ -28,6 +28,7 @@ import subprocess
 import time
 
 import pytest
+from tests.shells import child_env
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 SIZE = REPO / "infra/k8s/base/services/r2-backup-watcher/size.sh"
@@ -90,15 +91,17 @@ def fleet(tmp_path: pathlib.Path, request):
         (fake / f"kubelab-backups_{prefix}_data.count").write_text(f"{packs}\n", encoding="utf-8", newline="\n")
     out = tmp_path / "sizes" / "sizes.txt"
     out.parent.mkdir()
-    env = {
-        "PATH": f"{bin_dir}:{os.environ['PATH']}",
-        "FAKE_DIR": str(fake),
-        "WATCHER_TARGETS": str(targets),
-        "WATCHER_SIZES": str(out),
-        "SIZE_TIMEOUT": "2",
-        "AWS_ACCESS_KEY_ID": "not-a-real-value-fixture",
-        "AWS_SECRET_ACCESS_KEY": "not-a-real-value-fixture",
-    }
+    env = child_env(
+        {
+            "PATH": f"{bin_dir}:{os.environ['PATH']}",
+            "FAKE_DIR": str(fake),
+            "WATCHER_TARGETS": str(targets),
+            "WATCHER_SIZES": str(out),
+            "SIZE_TIMEOUT": "2",
+            "AWS_ACCESS_KEY_ID": "not-a-real-value-fixture",
+            "AWS_SECRET_ACCESS_KEY": "not-a-real-value-fixture",
+        }
+    )
     return fake, out, env, request.param
 
 

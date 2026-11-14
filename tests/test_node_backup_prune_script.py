@@ -29,6 +29,7 @@ import pytest
 
 from tests.test_node_backup_role import _common, _defaults, _plays, _render
 from tests.shells import BASH
+from tests.shells import child_env
 
 LOCK_DAYS = int(_common()["backup"]["r2"]["lock_retention_days"])
 
@@ -103,7 +104,7 @@ def prune(tmp_path: Path):
         (fake_dir / "unlock.rc").write_text(f"{unlock_rc}\n", encoding="utf-8", newline="\n")
         (fake_dir / "forget.rc").write_text(f"{forget_rc}\n", encoding="utf-8", newline="\n")
         (fake_dir / "forget.out").write_text(forget_out, encoding="utf-8", newline="\n")
-        env = {"PATH": os.environ["PATH"], "FAKE_DIR": str(fake_dir), "TMPDIR": str(scratch)}
+        env = child_env({"PATH": os.environ["PATH"], "FAKE_DIR": str(fake_dir), "TMPDIR": str(scratch)})
         proc = subprocess.run(
             [BASH, str(script)], env=env, capture_output=True, text=True, encoding="utf-8", timeout=30
         )

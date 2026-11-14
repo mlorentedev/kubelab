@@ -27,14 +27,18 @@
 # CREDENTIAL HANDLING: both tokens reach curl through `--config` on stdin, never
 # `-H` and never a file. Never echoed. `set -x` must NOT be added.
 #
-# Usage: bash specs/ANSIBLE-037-dev-node-gitea-access/team_consequence_probe.sh
+# Usage: bash specs/archive/TOOL-035-gitea-repository-reconciliation/team_consequence_probe.sh
 set -uo pipefail
 
 GITEA_API="${GITEA_API:-https://gitea.kubelab.live/api/v1}"
 ORG="${ORG:-kubelab}"
 TEAM="probe-consequence"
 REPO="probe-consequence-repo"
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+REPO_ROOT="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel 2>/dev/null)"
+if [ ! -f "${REPO_ROOT}/infra/config/values/common.yaml" ]; then
+  echo "FATAL: cannot find the repository root from $(dirname "${BASH_SOURCE[0]}")."
+  exit 1
+fi
 TEAM_ID=""
 
 as_admin() { printf 'header = "Authorization: token %s"\n' "${ADMIN}" | curl -s --config - "$@"; }

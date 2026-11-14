@@ -31,6 +31,7 @@ import pytest
 
 from tests.test_node_backup_role import _defaults, _render
 from tests.shells import BASH
+from tests.shells import child_env
 
 EXISTING_ID = "a" * 64
 NEW_ID = "b" * 64
@@ -190,7 +191,7 @@ def node(tmp_path: Path, request: pytest.FixtureRequest):
         earlier = len(calls_file.read_text(encoding="utf-8").splitlines()) if calls_file.exists() else 0
         if recorded is not None:
             marker.write_text(f"{recorded}\n", encoding="utf-8", newline="\n")
-        env = {"PATH": f"{bin_dir}:{os.environ['PATH']}", "FAKE_DIR": str(fake_dir), "NEW_ID": NEW_ID}
+        env = child_env({"PATH": f"{bin_dir}:{os.environ['PATH']}", "FAKE_DIR": str(fake_dir), "NEW_ID": NEW_ID})
         if now is not None:
             env["FAKE_NOW"] = str(now)
         argv = [BASH, str(script)] + (["--check"] if check else [])

@@ -517,6 +517,19 @@
 # with an empty credential.
 # =============================================================================
 
+# A skip that says so. The block below is gated on the credential, and a vault
+# that loaded but lacks that one key would otherwise give a green run and a node
+# with no forge access (ANSIBLE-037 review). `require-secrets.yml` cannot catch a
+# missing key in a loaded tree; this names it in the run's output.
+- name: Say the forge block is skipped, and why
+  ansible.builtin.debug:
+    msg: >-
+      SKIPPED: git access to the forge is not configured on this node, because
+      dev_node_gitea_admin_password is empty (apps.services.core.gitea.admin_password
+      missing from the forge's vault?). Check with `make secrets-audit`.
+  when: dev_node_gitea_admin_password | length == 0
+  tags: [dev_node, gitea, identity]
+
 - name: Configure git access to the private forge
   when: dev_node_gitea_admin_password | length > 0
   tags: [dev_node, gitea, identity]
@@ -546,6 +559,31 @@
           -C '{{ dev_node_gitea_user }}@{{ inventory_hostname }} (ANSIBLE-037)'
           -f {{ dev_node_gitea_key_path }}
         creates: "{{ dev_node_gitea_key_path }}"
+      become: true
+      become_user: "{{ dev_node_user }}"
+
+    # `creates:` never revisits an existing key, so a node whose key predates a
+    # change of account keeps the old identity in its comment (ace2 said
+    # `hefesto@ace2` after the D1 amendment moved it to the agents' account).
+    # Re-comment in place: the fingerprint, and so the registration, is unchanged.
+    - name: Read the comment on this node's forge key
+      ansible.builtin.command: ssh-keygen -lf {{ dev_node_gitea_key_path }}.pub
+      register: _gitea_key_comment
+      changed_when: false
+      # Same reason as the fingerprint read below: on a fresh node in check mode
+      # the key does not exist yet, so a failure is only fatal in a real run.
+      check_mode: false
+      failed_when: _gitea_key_comment.rc != 0 and not ansible_check_mode
+      become: true
+      become_user: "{{ dev_node_user }}"
+
+    - name: Re-comment the key with the identity it is registered to
+      ansible.builtin.command: >-
+        ssh-keygen -c -P '' -f {{ dev_node_gitea_key_path }}
+        -C '{{ dev_node_gitea_user }}@{{ inventory_hostname }} (ANSIBLE-037)'
+      when: >-
+        (dev_node_gitea_user ~ '@' ~ inventory_hostname ~ ' (ANSIBLE-037)')
+        not in _gitea_key_comment.stdout
       become: true
       become_user: "{{ dev_node_user }}"
 
@@ -598,8 +636,11 @@
             IdentityFile {{ dev_node_gitea_key_path }}
             IdentitiesOnly yes
             StrictHostKeyChecking yes
+            # Only the declared key's type, so entries known_hosts gathered by
+            # trust-on-first-use for the same host (ace2 held ecdsa and rsa ones
+            # from the R1 probe) are never what authenticates the forge.
+            HostKeyAlgorithms {{ dev_node_gitea_ssh_host_key.split() | first }}
       become: true
-      register: _gitea_ssh_config
 
     - name: Read back the public half (never the private one)
       ansible.builtin.slurp:

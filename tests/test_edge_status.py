@@ -28,6 +28,7 @@ import pytest
 import yaml
 
 from tests.ansible_jinja import ansible_env
+from tests.shells import child_env
 
 REPO = Path(__file__).resolve().parents[1]
 ROLE = REPO / "infra" / "ansible" / "roles" / "gateway"
@@ -123,14 +124,16 @@ class Edge:
     def run(self, *args: str) -> subprocess.CompletedProcess[str]:
         calls = self.root / "fake" / "calls"
         calls.unlink(missing_ok=True)
-        env = {
-            "PATH": f"{self.root / 'bin'}:/usr/bin:/bin",
-            "FAKE": str(self.root / "fake"),
-            "EDGE_SYS_NET": str(self.root / "net"),
-            "EDGE_LEASES_DIR": str(self.root / "leases"),
-            "EDGE_LINK_FILE": str(self.root / "etc" / "link"),
-            "EDGE_RESOLV_CONF": str(self.root / "etc" / "resolv.conf"),
-        }
+        env = child_env(
+            {
+                "PATH": f"{self.root / 'bin'}:/usr/bin:/bin",
+                "FAKE": str(self.root / "fake"),
+                "EDGE_SYS_NET": str(self.root / "net"),
+                "EDGE_LEASES_DIR": str(self.root / "leases"),
+                "EDGE_LINK_FILE": str(self.root / "etc" / "link"),
+                "EDGE_RESOLV_CONF": str(self.root / "etc" / "resolv.conf"),
+            }
+        )
         result = subprocess.run(
             [SHELL, str(SCRIPT), *(args or (UPLINK,))],
             capture_output=True,

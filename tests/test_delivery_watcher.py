@@ -29,6 +29,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Iterator
 
 import pytest
+from tests.shells import child_env
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 WATCH = REPO / "infra/k8s/base/services/delivery-watcher/watch.py"
@@ -99,25 +100,27 @@ def github() -> Iterator[tuple[FakeGitHub, str]]:
         server.shutdown()
 
 
-def _run(api: str, env: str = "prod", deadline: int = 60) -> tuple[int, list[dict[str, object]]]:
+def _run(api: str, env: str = "prod", deadline: int = 60) -> tuple[int, list[dict[str, object]], str]:
     proc = subprocess.run(
         [sys.executable, "-I", str(WATCH)],
-        env={
-            "PATH": os.environ.get("PATH", ""),
-            "GITHUB_API": api,
-            "REPOSITORY": "mlorentedev/kubelab",
-            "BRANCH": "master",
-            "ARGO_ENV": env,
-            "GRACE_SECONDS": str(GRACE),
-            "DEADLINE_SECONDS": str(deadline),
-        },
+        env=child_env(
+            {
+                "PATH": os.environ.get("PATH", ""),
+                "GITHUB_API": api,
+                "REPOSITORY": "mlorentedev/kubelab",
+                "BRANCH": "master",
+                "ARGO_ENV": env,
+                "GRACE_SECONDS": str(GRACE),
+                "DEADLINE_SECONDS": str(deadline),
+            }
+        ),
         capture_output=True,
         text=True,
         encoding="utf-8",
         timeout=30,
     )
     lines = [json.loads(line) for line in proc.stdout.splitlines() if line.strip()]
-    return proc.returncode, lines
+    return proc.returncode, lines, proc.stderr
 
 
 def _status(env: str, state: str) -> dict[str, str]:
@@ -125,8 +128,8 @@ def _status(env: str, state: str) -> dict[str, str]:
 
 
 def _only_line(api: str, env: str = "prod", deadline: int = 60) -> dict[str, object]:
-    code, lines = _run(api, env, deadline)
-    assert code == 0, "the watcher owns its exits: every verdict, unknown included, exits 0"
+    code, lines, stderr = _run(api, env, deadline)
+    assert code == 0, f"the watcher owns its exits: every verdict, unknown included, exits 0\n{stderr}"
     assert len(lines) == 1, f"one run must print exactly one line, got {lines}"
     line = lines[0]
     assert line["metric"] == "argo_delivery"

@@ -41,23 +41,36 @@ echo "--- [2/3] SSH banner (which server answers) ---"
 # hand-rolling a /dev/tcp read: the nested quoting made the first version emit
 # nothing at all, and a diagnostic that silently returns empty is worse than no
 # diagnostic. Check 3 is the verdict either way; this only names the server.
-ssh -o BatchMode=yes "${ACE2}" \
+banner="$(ssh -o BatchMode=yes "${ACE2}" \
   "timeout 5 ssh -v -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
        -p ${GITEA_SSH_PORT} git@${GITEA_SSH_HOST} 2>&1 \
    | grep -i 'remote protocol version\\|remote software version' | head -2 \
-   || echo '(no banner)'"
+   || echo '(no banner)'")"
+echo "${banner}"
 echo
 
 echo "--- [3/3] git transport as the machine identity ---"
 # -T: no shell wanted. Gitea/OpenSSH answers a successful git auth with a
 # greeting and a non-zero exit, so the BANNER is the verdict, never the code.
-ssh -o BatchMode=yes "${ACE2}" \
+transport="$(ssh -o BatchMode=yes "${ACE2}" \
   "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
-       -T -p ${GITEA_SSH_PORT} git@${GITEA_SSH_HOST} 2>&1 | head -5" \
-  || true
+       -T -p ${GITEA_SSH_PORT} git@${GITEA_SSH_HOST} 2>&1 | head -5")"
+echo "${transport}"
 echo
 echo "=== verdict ==="
+# The exit code is the answer, so a dead path cannot read as a settled R1: a
+# server must have identified itself (check 2) AND judged a key (check 3), either
+# refusing it by name or greeting an account. A timeout or a resolve error is neither.
+if printf '%s\n' "${banner}" | grep -qi 'remote software version' \
+   && printf '%s\n' "${transport}" | grep -qE 'Permission denied \(publickey\)|^Hi there, '; then
+  echo "ANSWERED — a server answered and judged the key"
+  r1_rc=0
+else
+  echo "NOT ANSWERED — no SSH server judged a key on ${GITEA_SSH_HOST}:${GITEA_SSH_PORT}"
+  r1_rc=1
+fi
 echo "SSH is usable  → keep proposal.md D2 as written (per-node key, repo-only blast radius)."
 echo "SSH is not     → fall back to HTTPS + credential helper, and RE-RECORD D2:"
 echo "                 a scoped token at rest on the node is a different posture,"
 echo "                 not an implementation detail."
+exit "${r1_rc}"

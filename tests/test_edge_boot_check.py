@@ -25,6 +25,7 @@ import pytest
 import yaml
 
 from tests.conftest import system_path
+from tests.shells import child_env
 
 REPO = Path(__file__).resolve().parents[1]
 ROLE = REPO / "infra" / "ansible" / "roles" / "gateway"
@@ -203,14 +204,16 @@ class Edge:
         self.write(f"route_exact_{LAN}", f"{LAN_CIDR} proto kernel scope link src {LAN_ADDRESS} linkdown\n")
 
     def run(self, *args: str, expect: str | None = None) -> subprocess.CompletedProcess[str]:
-        env = {
-            "PATH": system_path(self.bin),
-            "FAKE": str(self.fake),
-            "EDGE_SYS_NET": str(self.net),
-            "EDGE_HOSTAPD_DIR": str(self.fake),
-            "EDGE_LIVENESS_DIR": str(self.liveness),
-            "EDGE_UPTIME": str(self.uptime),
-        }
+        env = child_env(
+            {
+                "PATH": system_path(self.bin),
+                "FAKE": str(self.fake),
+                "EDGE_SYS_NET": str(self.net),
+                "EDGE_HOSTAPD_DIR": str(self.fake),
+                "EDGE_LIVENESS_DIR": str(self.liveness),
+                "EDGE_UPTIME": str(self.uptime),
+            }
+        )
         if expect:
             env["EDGE_EXPECT"] = expect
         argv = args or (LAN, LAN_ADDRESS, UPLINK, AP, LAN_CIDR)
