@@ -1,4 +1,6 @@
 # {{ ansible_managed }}
 # Receive packet steering for {{ base_system_rps_interface }} (#3375): each receive queue's packets
 # are processed across the CPUs of this mask, not only on the CPU its interrupt lands on.
-ACTION=="add|change", SUBSYSTEM=="queues", KERNEL=="rx-*", DEVPATH=="*/net/{{ base_system_rps_interface }}/queues/rx-*", ATTR{rps_cpus}="{{ base_system_rps_mask }}"
+# Matched on the net device, not on its queues: a queue has no uevent file, so udev can neither
+# replay nor test a rule on it. `add` covers boot and a driver reload, which recreate the queues.
+ACTION=="add", SUBSYSTEM=="net", KERNEL=="{{ base_system_rps_interface }}", RUN+="/bin/sh -c 'for q in /sys/class/net/%k/queues/rx-*/rps_cpus; do echo {{ base_system_rps_mask }} > $q; done'"

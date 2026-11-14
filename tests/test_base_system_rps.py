@@ -44,14 +44,18 @@ def test_ace1_steers_its_lan_interface_named_once_in_common_yaml() -> None:
     assert _ace1_base_vars()["base_system_rps_interface"] == "{{ config.networking.nodes.ace1.lan_interface }}"
 
 
-def test_the_rule_matches_only_that_interfaces_receive_queues() -> None:
-    rule = [line for line in _render("enp1s0", 4).splitlines() if line and not line.startswith("#")]
-    assert len(rule) == 1
-    assert 'SUBSYSTEM=="queues"' in rule[0]
-    assert 'KERNEL=="rx-*"' in rule[0]
-    assert 'DEVPATH=="*/net/enp1s0/queues/rx-*"' in rule[0]
+def _rule(interface: str, nproc: int) -> str:
+    (rule,) = [line for line in _render(interface, nproc).splitlines() if line and not line.startswith("#")]
+    return rule
+
+
+def test_the_rule_matches_only_that_interface_when_it_appears() -> None:
+    """A queue has no uevent file, so a rule on SUBSYSTEM=="queues" is never replayed (seen on ace1)."""
+    rule = _rule("enp1s0", 4)
+    assert rule.startswith('ACTION=="add", SUBSYSTEM=="net", KERNEL=="enp1s0", ')
+    assert "/sys/class/net/%k/queues/rx-*/rps_cpus" in rule
 
 
 def test_the_mask_covers_every_cpu_of_the_node() -> None:
-    assert 'ATTR{rps_cpus}="f"' in _render("enp1s0", 4)
-    assert 'ATTR{rps_cpus}="ff"' in _render("enp1s0", 8)
+    assert "echo f > $q" in _rule("enp1s0", 4)
+    assert "echo ff > $q" in _rule("enp1s0", 8)
