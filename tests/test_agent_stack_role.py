@@ -57,6 +57,7 @@ def _context() -> dict:
         "agent_stack_webui_admin_email": "breakglass@example.test",
         "agent_stack_webui_admin_password": "admin-password-sentinel",
         "agent_stack_nan_api_key": "nan-key-sentinel",
+        "agent_stack_nan_models": common["apps"]["services"]["ai"]["nan"]["models"],
         "_agent_stack_webui_secret_key": "session-key-sentinel",
         "agent_stack_agent_user": common["apps"]["services"]["ai"]["hermes_kubelab"]["user"],
         "agent_stack_hermes": common["apps"]["services"]["ai"]["hermes_kubelab"],

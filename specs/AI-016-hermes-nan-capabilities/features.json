@@ -1,0 +1,37 @@
+[
+  {
+    "id": "AI-016-hermes-nan-capabilities-f1",
+    "behavior": "Open WebUI and Hermes consume one measured NaN catalog with 11 accessible chat models and declared vision, speech, image, embedding and rerank models; minimax-h3 is excluded.",
+    "verification": "poetry run pytest -q tests/test_open_webui_models.py tests/test_open_webui_rag.py tests/test_hermes_config.py",
+    "state": "passing",
+    "evidence": "Focused suite passed; live measurement passed 11 chat completions, excluded 403 minimax-h3, returned 4096 embedding dimensions and two rerank results."
+  },
+  {
+    "id": "AI-016-hermes-nan-capabilities-f2",
+    "behavior": "Hermes renders pinned-v0.22.1 vision, Whisper, Kokoro and NaN image routes using the shared catalog and an environment reference rather than a literal credential; live image description and transcription boundaries are recorded.",
+    "verification": "poetry run pytest -q tests/test_hermes_config.py",
+    "state": "passing",
+    "evidence": "Configured qwen3.6 answered Red for the synthetic red PNG; Kokoro produced 28077 bytes and Whisper transcribed the expected speech; one-shot chat returned AI016-CHAT-OK."
+  },
+  {
+    "id": "AI-016-hermes-nan-capabilities-f3",
+    "behavior": "The NaN image provider supports flux and qwen with a persistent, locked, fail-closed 50-request shared monthly budget and reserves 50 requests for Open WebUI.",
+    "verification": "poetry run pytest -q tests/test_hermes_nan_image_provider.py",
+    "state": "passing",
+    "evidence": "Seven provider tests passed; live registry available and one flux image materialized at 1024x1024, counter 0 to 1 with 49 remaining, still used=1 after recreation."
+  },
+  {
+    "id": "AI-016-hermes-nan-capabilities-f4",
+    "behavior": "Docker sandboxes match gateway UID/GID 10000, memories lose the sticky bit and gain effective ownership and mode 0755, writable paths are declared, and stale locks are cleaned and ignored.",
+    "verification": "poetry run pytest -q tests/test_hermes_config.py tests/test_hermes_digest.py tests/test_hermes_vault_sync.py tests/test_hermes_memory_permissions.py",
+    "state": "passing",
+    "evidence": "Memory add/patch/remove advanced mtime and left HEAD byte-identical; real sandbox UID/GID 10000 mapped to host 534287; no locks or memory diff in namespace-aware git status."
+  },
+  {
+    "id": "AI-016-hermes-nan-capabilities-f5",
+    "behavior": "Agent-stack regression tests and repository lint/tests pass, the second provision reports changed=0, and runbook and verification documents contain observed evidence and sibling follow-ups.",
+    "verification": "make test && make lint && make lint-ansible && git diff --check",
+    "state": "passing",
+    "evidence": "10457 passed and 96 skipped; Ruff/format and 26 playbook parses passed; final provisions changed=2 then changed=0 with failed=0; health, runbook and follow-ups recorded."
+  }
+]

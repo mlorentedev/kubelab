@@ -1,0 +1,7 @@
+name: nan
+version: 1.0.0
+description: "NaN OpenAI-compatible image generation with a shared monthly request guard."
+author: KubeLab
+kind: backend
+requires_env:
+  - NAN_API_KEY

@@ -87,6 +87,36 @@ from another network logs `[UFW BLOCK] ... DPT=8642` in `journalctl -k`
   being sent as OAuth again. Not covered yet: the second case from #2299, a
   **pinned** turn (a cron job pinned by model, and a delegated child) failing NaN
   and staying on it with no `Fallback activated`.
+- **Shared NaN capability catalog** (`apps.services.ai.nan.models` in
+  `common.yaml`, AI-016): both Open WebUI and Hermes render from this one
+  declaration. The measured chat allowlist is `qwen3.6`, `gemma4`,
+  `glm5.3-flash`, `deepseek-v4-flash`, `mimo-v2.6-flash`, `qwen3.8-flash`,
+  `glm5.3`, `kimi-k3.1-pro`, `qwen3.8-max`, `deepseek-v4-pro` and `hy4`.
+  `minimax-h3` is deliberately absent: `/v1/models` listed it but a completion
+  returned 403. `qwen3-embedding` returned 4096 dimensions and `rerank`
+  returned two results; those two remain Open WebUI RAG routes because pinned
+  Hermes v0.22.1 has no corresponding config contract.
+- **Hermes multimodal routes**: `auxiliary.vision` uses `qwen3.6`, STT uses
+  `whisper`, TTS uses `kokoro` with voice `ef_dora`, and image generation uses
+  `flux-2-klein` with `qwen-image-2.1` as the declared alternative. Do not pin
+  vision back to `deepseek-v4-flash`: on 2026-11-14 it described a solid-red
+  synthetic PNG as `White`; `qwen3.6` answered `Red` through the same adapter.
+  The Kokoro sample was 28,077 bytes and Whisper transcribed it as `Hermes
+  Speech Verificación.`. Open WebUI pins images to `512x512`; Hermes's pinned
+  OpenAI-compatible adapter maps `square` to `1024x1024`, which NaN accepted.
+- **Bounded image generation**: the role installs `image_gen/nan` read-only
+  and enables it explicitly in `plugins.enabled`. Only bundled backends
+  auto-load in v0.22.1; a user backend left `not enabled` is not registered,
+  even when its manifest is mounted and `image_gen.provider: nan` is set. Each
+  provision now reads `get_provider('nan')` back through the live registry.
+  One locked, atomic UTC-month counter in `$HERMES_HOME/cache/nan-image-quota.json`
+  covers both image models. Hermes stops at 50 of NaN's 100 shared member
+  requests, leaving 50 for Open WebUI. A claim is consumed before dispatch,
+  including a failed backend request; corrupt or unavailable state fails
+  closed. This is deliberate headroom, not a global count across both
+  consumers—NaN remains the authoritative limiter. The 2026-11-14 live request
+  materialized a flux image, moved the counter `0 -> 1`, and reported 49
+  remaining; it was still `used=1` after later gateway recreations.
 - **No command scanner.** v0.22 removed the bundled tirith scanner. What
   remains is the sandbox with no network (`terminal.docker_network: false`) and
   Hermes's own approval patterns. Do not re-add `security.tirith_*`: upgrading
@@ -175,7 +205,7 @@ pushes it. A failed run pages through `kubelab-notify@` once per incident: the f
   - *push refused*: the token. See "Rotate".
   An exit 75 is not a failure: the remote moved during the push, and the next
   run commits on the new tip.
-- **Memories**: the zone's `memories/` is mounted over the gateway's, so what the agent remembers is committed by the same sync. The gateway's lock files and temporaries (`*.lock`, `.mem_*`) are `0600` as a subuid the sync user cannot read; the sync's root-owned ignore file (`vault-ignore` next to the script) leaves them out. If a sync fails on `Permission denied` under `memories/`, that file is the first place to look.
+- **Memories**: the zone's `memories/` is mounted over the gateway's, so what the agent remembers is committed by the same sync. The clone root is `0711`: a sandbox subuid can traverse to the nested writable zone mount but cannot list the clone. A `0700` clone root rejects even a correctly owned nested mount with `Permission denied`; do not fix that symptom with `0777`. The zone, memories and proposals are `0755`, without sticky bits, owned by the gateway/sandbox's effective UID/GID 10000 (host subuid/subgid 534287 on ace2). Memory files keep their existing confidentiality modes, including `0600`; the vault sync enters the agent's user namespace to read them. Repairs run only on actual drift, stop writers before deleting stale locks or reclaiming ownership, never change memory file modes, and never reclaim a lock already deleted. The gateway's lock files and temporaries (`*.lock`, `.mem_*`) are left out by the sync's root-owned ignore file (`vault-ignore`). Live AI-016 proof: MemoryStore add/patch/remove all succeeded and advanced mtime, the file remained byte-identical to `HEAD` after removing the synthetic entry, a sandbox write was UID/GID 10000 inside and 534287 outside, and no memory lock appeared in git.
 - **Before seeding a job into the zone**, check each command it runs:
   `docker exec -u hermes hermes-kubelab hermes approvals test --env-type local
   -- <cmd>`, as the agent's user against its daemon. With the vault mounted,
@@ -228,12 +258,13 @@ Jobs are declared in `apps.services.ai.hermes_kubelab.cron` (`common.yaml`) and 
 - Run now: `sudo systemctl start hermes-kubelab-curator-analyze.service` on ace2, then `journalctl -u hermes-kubelab-curator-analyze -n 20`.
 - Exit 3 is the fetch guard: a repository whose lessons could not be listed fails the run rather than writing a thin candidate list.
 - An empty `candidates.json` after a clean run means no recurrence; a missing file means the unit never ran.
+- A truncated GitHub archive currently aborts the run with `http.client.IncompleteRead`; bounded download/retry handling is tracked in kubelab#3517 (AI-032), not fixed by AI-016.
 
 ## Curator judge and proposals
 
 Two jobs follow the analyzer on Mondays (UTC): `kubelab:curator-judge` at 14:20 and `kubelab:curator-emit` at 14:50. The judge is an agent turn with `deliver: local`, so nothing goes to Slack. Its pre-run script (`curator-judge-input.py`) trims `curator/candidates.json` to each candidate's id and excerpts; Hermes injects that output into the prompt (cut at 8000 characters) and the model answers with JSON verdicts. The emitter (`emit-proposals.py`, a no-agent job) reads the judge's latest run record and writes one draft per `RECURRENCE` to `proposals/<id>.md`; the vault sync commits it. The operator disposes of the drafts.
 
-- **The gateway mounts** `curator/` read-only and `proposals/` writable (`HERMES_VAULT_ZONE` names the zone's path inside it). The job scripts run in the gateway, which sees nothing else of the zone. `proposals/` is `01777`: the gateway's user writes, the sync user reads.
+- **The gateway mounts** `curator/` read-only and `proposals/` writable (`HERMES_VAULT_ZONE` names the zone's path inside it). The job scripts run in the gateway, which sees nothing else of the zone. `proposals/` is `0755` with the same effective owner as memories; the sync reads it through the user namespace, so no sticky bit is needed.
 - **Model output is data.** An id that is not ten hex digits, a label other than `RECURRENCE`, or an id the analyzer did not produce is ignored. A draft is created, never replaced, so a re-run is safe and a draft being triaged is never overwritten. The evidence comes from `candidates.json` by id, never from the run record.
 - **The run is found by its title**, `# Cron Job: kubelab:curator-judge`, and its response is the record's last section. Not by a phrase in the prompt: the prompt holds the injected script output (lesson-582).
 - **Run both now**: `hermes cron run <id>` for the judge, wait for it to end, then the emitter (ids in `cron/jobs.json`). Read `cron/output/<job id>/` for the record.

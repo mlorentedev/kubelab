@@ -13,7 +13,8 @@ agent_stack_webui_project: agent-stack-webui
 #   map), agent_stack_webui_oidc_client_id, agent_stack_oidc_issuer,
 #   agent_stack_webui_admin_email,
 #   agent_stack_agent_user, agent_stack_agent_probe_image,
-#   agent_stack_hermes (the apps.services.ai.hermes_kubelab map), and
+#   agent_stack_hermes (the apps.services.ai.hermes_kubelab map),
+#   agent_stack_nan_models (the shared apps.services.ai.nan.models catalog), and
 #   agent_stack_protected_paths (what the agent must fail to read).
 
 # Delivered from prod SOPS by the playbook. Empty means "not configured": the
@@ -147,6 +148,14 @@ agent_stack_hermes_project: agent-stack-hermes
 # Mounted at the same path inside the gateway: it computes the host side of
 # every sandbox mount from its own view of this directory.
 agent_stack_hermes_home: "{{ agent_stack_agent_home }}/data"
+# Role-owned backend plugin; mounted read-only into HERMES_HOME.
+agent_stack_hermes_plugins: /var/lib/hermes-kubelab/hermes-plugins
+# Gateway and sandbox identity inside the rootless namespace. Container uid 1 maps
+# to the first subordinate id, so uid 10000 maps to start + 9999 on the host.
+_agent_stack_hermes_uid: 10000
+_agent_stack_hermes_gid: 10000
+_agent_stack_hermes_host_uid: "{{ agent_stack_agent_subid_start | int + _agent_stack_hermes_uid | int - 1 }}"
+_agent_stack_hermes_host_gid: "{{ agent_stack_agent_subid_start | int + _agent_stack_hermes_gid | int - 1 }}"
 # Beside the data directory, not in it: the gateway's container sees only the
 # data directory, so neither file is readable from inside it.
 agent_stack_hermes_env: "{{ agent_stack_agent_home }}/hermes.env"
