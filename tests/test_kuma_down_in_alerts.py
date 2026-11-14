@@ -127,3 +127,42 @@ def test_staging_does_not_ask_uptime_kuma(quiet_grafana) -> None:
     with patch("toolkit.cli.observability.ask_down_monitors") as ask:
         _invoke("--env", "staging")
     ask.assert_not_called()
+
+
+# uptime-kuma-api 1.2.1 races its own events (#3458): when a live `heartbeat`
+# for a monitor arrives before that monitor's `heartbeatList`, the client
+# appends the whole list as ONE element instead of extending. Measured on prod
+# 2026-11-13, monitor 467: `[{beat}, [100 beats]]`, on 2 of 8 reads.
+@pytest.mark.parametrize(
+    ("live", "history", "expected_down"),
+    [
+        # The live beat is the newest and it is DOWN: reported.
+        (
+            _beat(MonitorStatus.DOWN, "2026-11-13 07:30:00.000", "timeout"),
+            [_beat(MonitorStatus.UP, "2026-11-13 07:20:00.000"), _beat(MonitorStatus.UP, "2026-11-13 07:25:00.000")],
+            True,
+        ),
+        # The newest beat sits inside the nested history and it is UP: not reported.
+        (
+            _beat(MonitorStatus.DOWN, "2026-11-13 07:00:00.000", "timeout"),
+            [_beat(MonitorStatus.DOWN, "2026-11-13 06:55:00.000"), _beat(MonitorStatus.UP, "2026-11-13 07:30:00.000")],
+            False,
+        ),
+    ],
+)
+def test_a_history_the_client_nested_inside_the_beats_is_read_as_beats(
+    live: dict, history: list[dict], expected_down: bool
+) -> None:
+    down = down_monitors(MONITORS, {1: [live, history]})
+    assert bool(down) is expected_down
+
+
+def test_an_unexpected_shape_is_reported_with_the_frame_that_raised() -> None:
+    # The failure in #3458 read only "'list' object has no attribute 'get'": the
+    # frame had to be found by reproducing it. The message now carries it.
+    api = MagicMock()
+    api.get_monitors.return_value = MONITORS
+    api.get_heartbeats.return_value = {1: ["not a beat"]}
+    with patch.object(kuma_status, "_connect", return_value=(api, {})):
+        with pytest.raises(KumaUnavailableError, match=r"AttributeError: .* \(at kuma_status\.py:\d+ in <lambda>\)"):
+            kuma_status.ask_down_monitors()
