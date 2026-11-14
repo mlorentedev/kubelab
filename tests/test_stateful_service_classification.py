@@ -129,8 +129,8 @@ def _rendered_claims(stream: str) -> set[str]:
 def _stateful_services(manifests: list[pathlib.Path] | None = None) -> dict[str, list[str]]:
     """Map owning service -> its claim names, discovered from the manifests.
 
-    The owning service is the file stem: `services/crowdsec.yaml` owns both
-    `crowdsec-db` and `crowdsec-config`. Deriving it from the PVC's own name
+    The owning service is the claim's `app.kubernetes.io/name` label when it has one,
+    else the file stem: `services/crowdsec.yaml` owns both `crowdsec-db` and `crowdsec-config`. Deriving it from the PVC's own name
     would be wrong — `crowdsec-db` would resolve to a `crowdsec-db` service that
     does not exist, and the two PVCs would split into two phantom services.
     """
@@ -142,8 +142,19 @@ def _stateful_services(manifests: list[pathlib.Path] | None = None) -> dict[str,
             pytest.fail(f"{path.relative_to(REPO_ROOT)} is not parseable YAML: {exc}")
         for doc in docs:
             for claim in _claim_names(doc):
-                owned.setdefault(path.stem, []).append(claim)
+                owned.setdefault(_owner(doc, path), []).append(claim)
     return owned
+
+
+def _owner(doc: dict[str, Any], path: pathlib.Path) -> str:
+    """The service a claim belongs to: its ``app.kubernetes.io/name`` label, else the file stem.
+
+    A contract-rendered product writes its claims to a file named for what it holds
+    (``claims.yaml``), so the stem would invent a service called ``claims`` (RES-HOST-001 D10).
+    """
+    labels = (doc.get("metadata") or {}).get("labels") or {}
+    label = labels.get("app.kubernetes.io/name") if isinstance(labels, dict) else None
+    return label if isinstance(label, str) and label else path.stem
 
 
 def _service_block(config: dict[str, Any], service: str) -> dict[str, Any] | None:
@@ -153,12 +164,18 @@ def _service_block(config: dict[str, Any], service: str) -> dict[str, Any] | Non
     `apps.services.<category>.<name>`. The eighth, `postgres`, is at
     `infra.postgres` — deliberately, per ADR-051, the same shared-multi-consumer
     pattern ADR-036 established for SMTP. Walking `apps.services.*` alone would
-    silently under-cover it, so both trees are searched (R4).
+    silently under-cover it, so both trees are searched (R4), and `apps.platform`
+    after them for a product rendered from its contract.
     """
-    categories = (config.get("apps") or {}).get("services") or {}
+    apps = config.get("apps") or {}
+    categories = apps.get("services") or {}
     for block in categories.values():
         if isinstance(block, dict) and isinstance(block.get(service), dict):
             return block[service]
+    # A contract-rendered product's block is `apps.platform.<app>` (RES-HOST-001 D10).
+    platform = (apps.get("platform") or {}).get(service)
+    if isinstance(platform, dict):
+        return platform
     shared = (config.get("infra") or {}).get(service)
     return shared if isinstance(shared, dict) else None
 
@@ -470,3 +487,46 @@ def test_a_statefulset_in_a_patch_file_is_not_a_service(tmp_path: pathlib.Path) 
         "resources: [widget.yaml]\npatches:\n  - path: patches.yaml\n", encoding="utf-8"
     )
     assert _stateful_services(_iter_manifests([tmp_path])) == {"widget": ["data-widget"]}
+
+
+# --------------------------------------------------------------------------
+# Generated claims (RES-HOST-001 D10). A contract-rendered product writes its
+# PVCs to a file named for what it holds (`claims.yaml`), not for the product,
+# and its config block lives under `apps.platform.<app>`. Attribution reads the
+# claim's `app.kubernetes.io/name` label first, so the gate names the product.
+# --------------------------------------------------------------------------
+
+_LABELLED_PVC = """
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: shop-data
+  labels:
+    app.kubernetes.io/name: shop
+spec:
+  accessModes: [ReadWriteOnce]
+"""
+
+
+def test_a_labelled_claim_is_attributed_to_its_label_not_its_file(tmp_path: pathlib.Path) -> None:
+    manifest = tmp_path / "claims.yaml"
+    manifest.write_text(_LABELLED_PVC, encoding="utf-8")
+
+    assert _stateful_services([manifest]) == {"shop": ["shop-data"]}
+
+
+def test_an_unlabelled_claim_still_falls_back_to_its_file_stem(tmp_path: pathlib.Path) -> None:
+    manifest = tmp_path / "widget.yaml"
+    manifest.write_text(_LABELLED_PVC.replace("  labels:\n    app.kubernetes.io/name: shop\n", ""), encoding="utf-8")
+
+    assert _stateful_services([manifest]) == {"widget": ["shop-data"]}
+
+
+def test_a_platform_product_resolves_its_block_from_apps_platform() -> None:
+    block = {"state_promotion": "singleton", "location": "always-on"}
+    config = {"apps": {"platform": {"shop": block}, "services": {}}}
+
+    assert classification_problems({"shop": ["shop-data"]}, config) == []
+    assert classification_problems({"shop": ["shop-data"]}, {"apps": {"platform": {}}}) == [
+        "shop (claims: shop-data): no config block found in common.yaml"
+    ]
