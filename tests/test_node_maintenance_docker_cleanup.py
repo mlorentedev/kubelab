@@ -15,6 +15,7 @@ import re
 import jinja2
 import pytest
 import yaml
+from tests.shells import BASH
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 ROLE = REPO / "infra/ansible/roles/node_maintenance"
@@ -98,7 +99,9 @@ def _run_gate(tmp_path: pathlib.Path, threshold: int, df_percent: str, df_rc: in
     bin_dir.mkdir()
     log = tmp_path / "docker.log"
     (bin_dir / "docker").write_text(
-        f'#!/bin/sh\nif [ "$1" = info ]; then echo {DOCKER_ROOT}; exit 0; fi\necho "$*" >> {log}\n', encoding="utf-8"
+        f'#!/bin/sh\nif [ "$1" = info ]; then echo {DOCKER_ROOT}; exit 0; fi\necho "$*" >> {log}\n',
+        encoding="utf-8",
+        newline="\n",
     )
     # Any other filesystem reads full, so measuring the wrong one prunes everything
     # and the below-threshold case goes red.
@@ -106,14 +109,15 @@ def _run_gate(tmp_path: pathlib.Path, threshold: int, df_percent: str, df_rc: in
         f'#!/bin/sh\necho "Use%"\nfor a; do last="$a"; done\n'
         f'if [ "$last" = {DOCKER_ROOT} ]; then echo " {df_percent}%"; else echo " 99%"; fi\nexit {df_rc}\n',
         encoding="utf-8",
+        newline="\n",
     )
     for stub in bin_dir.iterdir():
         stub.chmod(0o755)
     script = tmp_path / "gate.sh"
     # The maintenance script runs under `set -euo pipefail`, so the gate is tested under it too.
-    script.write_text("#!/bin/bash\nset -euo pipefail\n" + _gate_block(threshold), encoding="utf-8")
+    script.write_text("#!/bin/bash\nset -euo pipefail\n" + _gate_block(threshold), encoding="utf-8", newline="\n")
     env = {"PATH": f"{bin_dir}:/usr/bin:/bin", "HOME": str(tmp_path)}
-    subprocess.run(["bash", str(script)], check=True, env=env, capture_output=True, text=True, encoding="utf-8")
+    subprocess.run([BASH, str(script)], check=True, env=env, capture_output=True, text=True, encoding="utf-8")
     return log.read_text(encoding="utf-8").splitlines() if log.exists() else []
 
 

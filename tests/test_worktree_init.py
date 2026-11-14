@@ -60,6 +60,7 @@ def _fake_poetry(
         f'case "$*" in "check --lock"*) exit {check_rc};; "env info"*) {where};; "install"*) {install};; esac\n'
         "exit 0\n",
         encoding="utf-8",
+        newline="\n",
     )
     script.chmod(script.stat().st_mode | stat.S_IEXEC)
     return script, log
@@ -89,7 +90,9 @@ def _venv(root: pathlib.Path, *, shebang_dir: pathlib.Path) -> pathlib.Path:
     """A venv whose `pytest` script names an interpreter under `shebang_dir`."""
     venv = root / ".venv"
     (venv / "bin").mkdir(parents=True)
-    (venv / "bin" / "pytest").write_text(f"#!{shebang_dir}/bin/python\nprint('pytest')\n", encoding="utf-8")
+    (venv / "bin" / "pytest").write_text(
+        f"#!{shebang_dir}/bin/python\nprint('pytest')\n", encoding="utf-8", newline="\n"
+    )
     return venv
 
 
@@ -118,6 +121,7 @@ def test_the_venv_is_installed_in_the_worktree(tmp_path: pathlib.Path) -> None:
         'mkdir -p "$WORKTREE_VENV/bin"; : > "$WORKTREE_VENV/bin/toolkit"; chmod +x "$WORKTREE_VENV/bin/toolkit";; '
         '"env info"*) exit 1;; esac\nexit 0\n',
         encoding="utf-8",
+        newline="\n",
     )
     fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
     done = subprocess.run(
@@ -140,7 +144,7 @@ def test_the_venv_is_installed_in_the_worktree(tmp_path: pathlib.Path) -> None:
 def test_an_install_that_leaves_no_toolkit_in_the_worktree_fails(tmp_path: pathlib.Path) -> None:
     """The steps infer where Poetry builds; only the result says where it did (#2913)."""
     fake = tmp_path / "poetry"
-    fake.write_text('#!/bin/sh\ncase "$*" in "env info"*) exit 1;; esac\nexit 0\n', encoding="utf-8")
+    fake.write_text('#!/bin/sh\ncase "$*" in "env info"*) exit 1;; esac\nexit 0\n', encoding="utf-8", newline="\n")
     fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
     done = subprocess.run(
         ["make", "--no-print-directory", "worktree-init", f"POETRY={fake}", f"WORKTREE_VENV={tmp_path / '.venv'}"],
@@ -168,8 +172,8 @@ class TestRelocatedVenv:
 
     def test_system_interpreters_and_shell_scripts_are_not_judged(self, tmp_path: pathlib.Path) -> None:
         venv = _venv(tmp_path, shebang_dir=tmp_path / ".venv")
-        (venv / "bin" / "activate-helper").write_text("#!/bin/sh\n", encoding="utf-8")
-        (venv / "bin" / "tool").write_text("#!/usr/bin/env python3\n", encoding="utf-8")
+        (venv / "bin" / "activate-helper").write_text("#!/bin/sh\n", encoding="utf-8", newline="\n")
+        (venv / "bin" / "tool").write_text("#!/usr/bin/env python3\n", encoding="utf-8", newline="\n")
         assert _detector().relocated_shebang(venv) is None
 
     def test_a_real_venv_is_stale_exactly_after_its_directory_is_renamed(self, tmp_path: pathlib.Path) -> None:
@@ -188,7 +192,7 @@ class TestRelocatedVenv:
         venv_dir = _venv(tmp_path, shebang_dir=tmp_path / "old-name" / ".venv")
         script = tmp_path / "python3"
         asked = tmp_path / "detector-asked"
-        script.write_text(f'#!/bin/sh\necho "$*" >> "{asked}"\nexit 2\n', encoding="utf-8")
+        script.write_text(f'#!/bin/sh\necho "$*" >> "{asked}"\nexit 2\n', encoding="utf-8", newline="\n")
         script.chmod(script.stat().st_mode | stat.S_IEXEC)
         fake, _ = _fake_poetry(tmp_path, lock_is_fresh=True, venv=venv_dir)
         done = subprocess.run(
@@ -220,6 +224,7 @@ class TestRelocatedVenv:
             f'"env info"*) echo "{venv_dir}"; exit 0;;\n'
             '"install"*) kill -TERM $PPID; sleep 2; exit 0;;\nesac\nexit 0\n',
             encoding="utf-8",
+            newline="\n",
         )
         fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
         done = subprocess.run(

@@ -4,7 +4,9 @@
 `newline` is given, so on the operator's Windows workstation (ADR-052) a
 generated file came out CRLF and never matched its committed LF copy: a clean
 regeneration read as drift. Pinning `newline="\\n"` at each call is the fix,
-and this test keeps a new call from forgetting it.
+and this test keeps a new call from forgetting it. The tests are held to it
+too: a fixture written CRLF is what the shell scripts under test then read on
+Windows (#3409).
 """
 
 from __future__ import annotations
@@ -13,7 +15,7 @@ import ast
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-TOOLKIT = REPO / "toolkit"
+ROOTS = (REPO / "toolkit", REPO / "tests")
 
 
 def unpinned_write_text_calls(source: str) -> list[int]:
@@ -33,10 +35,11 @@ def test_the_scan_finds_an_unpinned_call_and_passes_a_pinned_one() -> None:
     assert unpinned_write_text_calls(source) == [1]
 
 
-def test_every_toolkit_write_text_pins_the_newline() -> None:
+def test_every_write_text_pins_the_newline() -> None:
     found = [
         f"{path.relative_to(REPO).as_posix()}:{line}"
-        for path in sorted(TOOLKIT.rglob("*.py"))
+        for root in ROOTS
+        for path in sorted(root.rglob("*.py"))
         for line in unpinned_write_text_calls(path.read_text(encoding="utf-8"))
     ]
     assert not found, 'write_text without newline="\\n" writes CRLF on Windows:\n' + "\n".join(found)

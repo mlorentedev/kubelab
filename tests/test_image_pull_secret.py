@@ -44,7 +44,7 @@ ENTRY = """\
 
 def _registry(tmp_path: Path, *entries: str) -> product_registry.Registry:
     path = tmp_path / "products.yaml"
-    path.write_text("products:\n  api:\n    forge: in-tree\n" + "".join(entries), encoding="utf-8")
+    path.write_text("products:\n  api:\n    forge: in-tree\n" + "".join(entries), encoding="utf-8", newline="\n")
     return product_registry.load_registry(path)
 
 
@@ -105,9 +105,7 @@ class TestMappingFromTheRegistry:
         assert mapping.envs == ("staging", "prod")
 
     def test_two_hosts_that_slug_alike_are_refused(self, tmp_path: Path) -> None:
-        registry = _registry(
-            tmp_path, _entry("beta", host="git.example.com"), _entry("gamma", host="git-example.com")
-        )
+        registry = _registry(tmp_path, _entry("beta", host="git.example.com"), _entry("gamma", host="git-example.com"))
 
         with pytest.raises(ValueError, match="pull-git-example-com"):
             pull_secret_mappings(registry)
@@ -115,7 +113,9 @@ class TestMappingFromTheRegistry:
     def test_an_uncatalogued_pull_secret_is_refused_naming_the_product_and_the_key(self, tmp_path: Path) -> None:
         registry = _registry(tmp_path, _entry("beta", secret="gitea.registry_pull"))
 
-        with pytest.raises(product_registry.RegistryError, match=r"beta names pull_credential\.secret 'gitea\.registry_pull'"):
+        with pytest.raises(
+            product_registry.RegistryError, match=r"beta names pull_credential\.secret 'gitea\.registry_pull'"
+        ):
             pull_secret_mappings(registry)
 
 
@@ -291,7 +291,7 @@ products:
         from toolkit.features.generator_k8s import K8sGenerator
 
         path = tmp_path / "products.yaml"
-        path.write_text(self.REGISTRY, encoding="utf-8")
+        path.write_text(self.REGISTRY, encoding="utf-8", newline="\n")
         monkeypatch.setattr(product_registry, "registry_path", lambda: path)
         manager = MagicMock()
         manager.return_value.get_env_vars.return_value = self._values("web", "beta", "gamma")
@@ -312,7 +312,9 @@ products:
         assert beta["spec"]["template"]["spec"]["imagePullSecrets"] == [{"name": pull_secret_name(HOST)}]
         assert pull_secret_name(HOST) == "pull-gitea-kubelab-live"
 
-    def test_the_name_is_the_one_the_secret_mapping_creates(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_the_name_is_the_one_the_secret_mapping_creates(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Deployment and Secret derive the name separately; a drift between them is a pod that never starts."""
         deployments = self._deployments(tmp_path, monkeypatch)
         (mapping,) = pull_secret_mappings(product_registry.load_registry(tmp_path / "products.yaml"))

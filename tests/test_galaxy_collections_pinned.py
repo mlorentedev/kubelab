@@ -170,7 +170,7 @@ def test_a_declaration_it_cannot_read_is_a_refusal_not_a_crash(tmp_path: Path, c
     if content is not None:
         path = tmp_path / provision_freshness.REQUIREMENTS
         path.parent.mkdir(parents=True)
-        path.write_text(content, encoding="utf-8")
+        path.write_text(content, encoding="utf-8", newline="\n")
 
     with pytest.raises(provision_freshness.DeclarationError, match=str(provision_freshness.REQUIREMENTS)):
         provision_freshness.declared_collections(tmp_path)
@@ -187,6 +187,7 @@ def test_a_declaration_with_two_documents_says_so(tmp_path: Path) -> None:
     path.write_text(
         "collections:\n  - name: ansible.posix\n    version: 2.2.2\n---\ncollections: []\n",
         encoding="utf-8",
+        newline="\n",
     )
 
     with pytest.raises(provision_freshness.DeclarationError, match="more than one YAML document"):
@@ -216,7 +217,7 @@ def test_a_well_formed_declaration_still_reads(tmp_path: Path) -> None:
     everything."""
     path = tmp_path / provision_freshness.REQUIREMENTS
     path.parent.mkdir(parents=True)
-    path.write_text("collections:\n  - name: ansible.posix\n    version: 2.2.2\n", encoding="utf-8")
+    path.write_text("collections:\n  - name: ansible.posix\n    version: 2.2.2\n", encoding="utf-8", newline="\n")
 
     assert provision_freshness.declared_collections(tmp_path) == {"ansible.posix": "2.2.2"}
 

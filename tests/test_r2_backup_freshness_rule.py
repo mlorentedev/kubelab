@@ -97,31 +97,36 @@ def _probe(tmp_path: pathlib.Path, nodes: list[Node], now: int) -> list[dict]:
     fake.mkdir(parents=True)
     bin_dir.mkdir()
     for name, body in (("restic", FAKE_RESTIC), ("nc", FAKE_NC)):
-        (bin_dir / name).write_text(body, encoding="utf-8")
+        (bin_dir / name).write_text(body, encoding="utf-8", newline="\n")
         (bin_dir / name).chmod(0o755)
     rows = []
     sizes = []
     for index, node in enumerate(nodes, start=1):
         address, repository_id = f"192.0.2.{index}", f"{index}" * 64
         rows.append(f"{node.name} {PREFIX}/{node.name} {repository_id} {address} 22 {node.cls} app")
-        (fake / f"{node.name}.id").write_text(repository_id, encoding="utf-8")
-        (fake / f"{node.name}.ls").write_text(_listing("app"), encoding="utf-8")
+        (fake / f"{node.name}.id").write_text(repository_id, encoding="utf-8", newline="\n")
+        (fake / f"{node.name}.ls").write_text(_listing("app"), encoding="utf-8", newline="\n")
         if node.age is None:
-            (fake / f"{node.name}.fail").write_text("Fatal: unable to open config file\n", encoding="utf-8")
+            (fake / f"{node.name}.fail").write_text(
+                "Fatal: unable to open config file\n", encoding="utf-8", newline="\n"
+            )
         else:
             stamp = datetime.datetime.fromtimestamp(now - node.age, datetime.timezone.utc)
             (fake / f"{node.name}.snaps").write_text(
                 json.dumps([{"time": stamp.strftime("%Y-%m-%dT%H:%M:%SZ"), "id": "x", "short_id": "s"}]),
                 encoding="utf-8",
+                newline="\n",
             )
         sizes.append(f"node {node.name} {'null' if node.size is None else node.size} 1\n")
         sizes.append(f"packs {node.name} {'null' if node.packs is None else node.packs} 1\n")
         if not node.up:
-            (fake / f"{address}.down").write_text("", encoding="utf-8")
+            (fake / f"{address}.down").write_text("", encoding="utf-8", newline="\n")
     targets = run / "targets.txt"
-    targets.write_text("\n".join(rows) + "\n", encoding="utf-8")
+    targets.write_text("\n".join(rows) + "\n", encoding="utf-8", newline="\n")
     bucket = sum(node.size or 0 for node in nodes)
-    (run / "sizes.txt").write_text("".join(sizes) + f"bucket {PREFIX.rsplit('/', 1)[1]} {bucket} 1\n", encoding="utf-8")
+    (run / "sizes.txt").write_text(
+        "".join(sizes) + f"bucket {PREFIX.rsplit('/', 1)[1]} {bucket} 1\n", encoding="utf-8", newline="\n"
+    )
     env = {
         "PATH": f"{bin_dir}:{os.environ['PATH']}",
         "FAKE_DIR": str(fake),
@@ -399,7 +404,7 @@ def test_a_ship_interval_in_days_fails_the_cadence_guard(tmp_path: pathlib.Path)
     """The same failure through the path the guard reads, so a refactor of
     `_ship_interval` that swallows the error turns this red (#2045)."""
     defaults = tmp_path / "main.yml"
-    defaults.write_text('node_backup_interval: "1d"\n', encoding="utf-8")
+    defaults.write_text('node_backup_interval: "1d"\n', encoding="utf-8", newline="\n")
     with pytest.raises(ValueError):
         _ship_interval(defaults)
 

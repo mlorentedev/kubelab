@@ -71,7 +71,7 @@ def test_every_committed_prod_hostname_has_a_public_record() -> None:
 def test_a_prod_hostname_with_no_record_is_refused_naming_zones_json(tmp_path: pathlib.Path) -> None:
     contract = yaml.safe_load((SNAPSHOT_DIR / "web.yaml").read_text(encoding="utf-8"))
     contract["hostnames"]["prod"] = "shop.mlorente.dev"
-    (tmp_path / "shop.yaml").write_text(yaml.safe_dump(contract), encoding="utf-8")
+    (tmp_path / "shop.yaml").write_text(yaml.safe_dump(contract), encoding="utf-8", newline="\n")
 
     [message] = _unresolvable(tmp_path, _committed())
 
@@ -87,7 +87,7 @@ def test_a_contract_with_no_prod_hostname_needs_no_public_record(tmp_path: pathl
     """
     contract = yaml.safe_load((SNAPSHOT_DIR / "web.yaml").read_text(encoding="utf-8"))
     del contract["hostnames"]["prod"]
-    (tmp_path / "staging-only-app.yaml").write_text(yaml.safe_dump(contract), encoding="utf-8")
+    (tmp_path / "staging-only-app.yaml").write_text(yaml.safe_dump(contract), encoding="utf-8", newline="\n")
     assert "prod" not in yaml.safe_load((tmp_path / "staging-only-app.yaml").read_text(encoding="utf-8"))["hostnames"]
 
     assert _unresolvable(tmp_path, _committed()) == []
@@ -96,7 +96,7 @@ def test_a_contract_with_no_prod_hostname_needs_no_public_record(tmp_path: pathl
 def test_a_staging_hostname_needs_no_public_record(tmp_path: pathlib.Path) -> None:
     contract = yaml.safe_load((SNAPSHOT_DIR / "web.yaml").read_text(encoding="utf-8"))
     contract["hostnames"]["staging"] = "shop.staging.mlorente.dev"
-    (tmp_path / "web.yaml").write_text(yaml.safe_dump(contract), encoding="utf-8")
+    (tmp_path / "web.yaml").write_text(yaml.safe_dump(contract), encoding="utf-8", newline="\n")
 
     assert _unresolvable(tmp_path, _committed()) == []
 

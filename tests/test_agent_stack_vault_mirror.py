@@ -64,6 +64,7 @@ def mirror(tmp_path: Path) -> tuple[Remote, Path, Path]:
             agent_stack_hermes={**HERMES, "vault_sync": {**SYNC, "remote": remote.bare.as_uri()}},
         ),
         encoding="utf-8",
+        newline="\n",
     )
     script.chmod(0o755)
     return remote, root, script
@@ -100,8 +101,8 @@ def test_anything_written_into_the_tree_is_discarded(mirror) -> None:
     _, root, script = mirror
     _run(script)
     tree = root / "tree"
-    (tree / "10_projects/kubelab/roadmap.md").write_text("tampered\n", encoding="utf-8")
-    (tree / "planted.md").write_text("not the vault\n", encoding="utf-8")
+    (tree / "10_projects/kubelab/roadmap.md").write_text("tampered\n", encoding="utf-8", newline="\n")
+    (tree / "planted.md").write_text("not the vault\n", encoding="utf-8", newline="\n")
     assert _run(script).returncode == 0
     assert (tree / "10_projects/kubelab/roadmap.md").read_text(encoding="utf-8") == "seed\n"
     assert not (tree / "planted.md").exists()
@@ -219,6 +220,7 @@ def _script_for(tmp_path: Path, root: Path, remote: str, **overrides: object) ->
             **overrides,
         ),
         encoding="utf-8",
+        newline="\n",
     )
     script.chmod(0o755)
     return script
@@ -226,7 +228,7 @@ def _script_for(tmp_path: Path, root: Path, remote: str, **overrides: object) ->
 
 def _age_stamp(root: Path, seconds: int) -> None:
     stamp = root / "last-fetch"
-    stamp.write_text(f"{int(time.time()) - seconds}\n", encoding="utf-8")
+    stamp.write_text(f"{int(time.time()) - seconds}\n", encoding="utf-8", newline="\n")
 
 
 def test_a_successful_run_records_when_it_fetched(mirror) -> None:

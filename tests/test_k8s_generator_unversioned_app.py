@@ -50,7 +50,7 @@ def _env(app: str, **overrides: str | None) -> dict[str, str]:
 def context(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     """`_build_context` for two registered apps, `api` pinned and `fresh` not, per call."""
     path = tmp_path / "products.yaml"
-    path.write_text(_REGISTRY, encoding="utf-8")
+    path.write_text(_REGISTRY, encoding="utf-8", newline="\n")
     monkeypatch.setattr(product_registry, "registry_path", lambda: path)
 
     def build(fresh_version: str | None) -> dict:

@@ -43,6 +43,7 @@ from pathlib import Path
 import pytest
 import yaml
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
+from tests.shells import BASH
 
 REPO = Path(__file__).resolve().parent.parent
 NOTIFY_ROLE = REPO / "infra/ansible/roles/node_notify"
@@ -360,7 +361,7 @@ def test_config_stdin_delivers_the_token_byte_exact(token: str):
     block = block.replace(f"https://{_defaults()['node_notify_domain']}", f"http://127.0.0.1:{port}")
 
     proc = subprocess.run(
-        ["bash", "-c", f'TOKEN="$1"\nPAYLOAD=\'{{"probe":1}}\'\n{block}', "bash", token],
+        [BASH, "-c", f'TOKEN="$1"\nPAYLOAD=\'{{"probe":1}}\'\n{block}', "bash", token],
         capture_output=True,
         text=True,
         encoding="utf-8",
@@ -496,7 +497,7 @@ def test_token_value_is_not_shell_interpreted():
     """
     hostile = "$(touch /tmp/kubelab-notify-pwned)`touch /tmp/kubelab-notify-pwned2`"
     probe = 'TOKEN="$1"\nprintf "%s" "Authorization: Bearer ${TOKEN}"\n'
-    proc = subprocess.run(["bash", "-c", probe, "bash", hostile], capture_output=True, text=True, encoding="utf-8")
+    proc = subprocess.run([BASH, "-c", probe, "bash", hostile], capture_output=True, text=True, encoding="utf-8")
     assert proc.returncode == 0
     assert proc.stdout == f"Authorization: Bearer {hostile}"
     assert not Path("/tmp/kubelab-notify-pwned").exists()
@@ -542,7 +543,7 @@ def test_a_unit_naming_only_the_recovery_notice_is_a_consumer(tmp_path: Path) ->
         "mentions": "# OnFailure=kubelab-notify@%n.service",
     }.items():
         (tmp_path / role / "templates").mkdir(parents=True)
-        (tmp_path / role / "templates" / "x.service.j2").write_text(f"[Unit]\n{line}\n", encoding="utf-8")
+        (tmp_path / role / "templates" / "x.service.j2").write_text(f"[Unit]\n{line}\n", encoding="utf-8", newline="\n")
     assert _notifier_consumers(tmp_path) == {"pages", "recovers"}
 
 
@@ -678,6 +679,7 @@ def test_the_order_spans_plays_and_included_roles(tmp_path: Path) -> None:
             ]
         ),
         encoding="utf-8",
+        newline="\n",
     )
     assert _applied_roles(playbook) == ["gateway", "rpi3_services", "node_notify", "node_backup"]
 

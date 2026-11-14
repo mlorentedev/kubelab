@@ -92,7 +92,7 @@ class _Fake:
             body = f"CREATE DATABASE vikunja;\nINSERT '{SECRET}';\n"
             if self.trailer:
                 body += f"--\n{TRAILER}\n--\n"
-            Path(stdout_path).write_text(body, encoding="utf-8")
+            Path(stdout_path).write_text(body, encoding="utf-8", newline="\n")
             self.dump_path = Path(stdout_path)
             return 0, "", ""
         if "get" in argv and "deploy" in argv:
@@ -119,7 +119,7 @@ class _Fake:
             log = 'psql:<stdin>:1: ERROR:  role "postgres" already exists\n'
             if self.load_rc:
                 log += f"psql:<stdin>:2: ERROR:  invalid input syntax: {SECRET}\n"
-            Path(stdout_path).write_text(log, encoding="utf-8")
+            Path(stdout_path).write_text(log, encoding="utf-8", newline="\n")
             return 0, "", ""
         if "datname" in (stdin or ""):
             return 0, "postgres\nvikunja\n", ""

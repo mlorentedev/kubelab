@@ -74,6 +74,7 @@ def common(tmp_path: Path) -> Path:
             }
         ),
         encoding="utf-8",
+        newline="\n",
     )
     return path
 

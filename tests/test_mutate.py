@@ -42,14 +42,14 @@ def repo(tmp_path: Path) -> Path:
     _git(tmp_path, "init", "-q")
     _git(tmp_path, "config", "user.email", "t@example.invalid")
     _git(tmp_path, "config", "user.name", "t")
-    (tmp_path / "guard.py").write_text(ORIGINAL, encoding="utf-8")
+    (tmp_path / "guard.py").write_text(ORIGINAL, encoding="utf-8", newline="\n")
     _git(tmp_path, "add", "-A")
     _git(tmp_path, "commit", "-qm", "base")
     return tmp_path
 
 
 def test_a_dirty_tree_refuses_before_touching_anything(repo: Path) -> None:
-    (repo / "guard.py").write_text(ORIGINAL + "# uncommitted work\n", encoding="utf-8")
+    (repo / "guard.py").write_text(ORIGINAL + "# uncommitted work\n", encoding="utf-8", newline="\n")
     ran: list[str] = []
     with pytest.raises(mutate.Refused, match="not clean"):
         mutate.run(repo, Path("guard.py"), "x > 0", "x >= 0", lambda: ran.append("test") or 1)
@@ -157,7 +157,9 @@ def test_a_marker_in_the_target_selects_a_test_the_default_markers_deselect(tmp_
     the result depends on that configuration and on nothing else in `tests/infra`."""
     root = Path(__file__).resolve().parents[1]
     infra = tmp_path / "test_sample.py"
-    infra.write_text("import pytest\n\n\n@pytest.mark.infra\ndef test_live():\n    pass\n", encoding="utf-8")
+    infra.write_text(
+        "import pytest\n\n\n@pytest.mark.infra\ndef test_live():\n    pass\n", encoding="utf-8", newline="\n"
+    )
     argv = [sys.executable, "-m", "pytest", "-c", str(root / "pyproject.toml"), "-q", "--no-cov"]
     argv += ["-p", "no:cacheprovider", "--collect-only", str(infra)]
     deselected = subprocess.run(argv, cwd=root, capture_output=True, text=True, encoding="utf-8")
@@ -277,10 +279,10 @@ def test_the_mutant_never_reaches_the_repository_bytecode_cache(
     _git(tmp_path, "init", "-q")
     _git(tmp_path, "config", "user.email", "t@example.invalid")
     _git(tmp_path, "config", "user.name", "t")
-    (tmp_path / ".gitignore").write_text("__pycache__/\n", encoding="utf-8")
-    (tmp_path / "limits.py").write_text("MODE = 0o600\n", encoding="utf-8")
+    (tmp_path / ".gitignore").write_text("__pycache__/\n", encoding="utf-8", newline="\n")
+    (tmp_path / "limits.py").write_text("MODE = 0o600\n", encoding="utf-8", newline="\n")
     (tmp_path / "test_limits.py").write_text(
-        "from limits import MODE\n\n\ndef test_mode():\n    assert MODE == 0o600\n", encoding="utf-8"
+        "from limits import MODE\n\n\ndef test_mode():\n    assert MODE == 0o600\n", encoding="utf-8", newline="\n"
     )
     _git(tmp_path, "add", "-A")
     _git(tmp_path, "commit", "-qm", "base")
@@ -308,10 +310,10 @@ def test_a_cached_original_cannot_stand_in_for_the_mutant(tmp_path: Path, monkey
     _git(tmp_path, "init", "-q")
     _git(tmp_path, "config", "user.email", "t@example.invalid")
     _git(tmp_path, "config", "user.name", "t")
-    (tmp_path / ".gitignore").write_text("__pycache__/\n", encoding="utf-8")
-    (tmp_path / "limits.py").write_text("MODE = 0o600\n", encoding="utf-8")
+    (tmp_path / ".gitignore").write_text("__pycache__/\n", encoding="utf-8", newline="\n")
+    (tmp_path / "limits.py").write_text("MODE = 0o600\n", encoding="utf-8", newline="\n")
     (tmp_path / "test_limits.py").write_text(
-        "from limits import MODE\n\n\ndef test_mode():\n    assert MODE == 0o600\n", encoding="utf-8"
+        "from limits import MODE\n\n\ndef test_mode():\n    assert MODE == 0o600\n", encoding="utf-8", newline="\n"
     )
     _git(tmp_path, "add", "-A")
     _git(tmp_path, "commit", "-qm", "base")
@@ -331,12 +333,13 @@ def test_a_failing_test_target_refuses_through_the_command(tmp_path: Path, monke
     _git(tmp_path, "init", "-q")
     _git(tmp_path, "config", "user.email", "t@example.invalid")
     _git(tmp_path, "config", "user.name", "t")
-    (tmp_path / ".gitignore").write_text("__pycache__/\n", encoding="utf-8")
-    (tmp_path / "limits.py").write_text("MODE = 0o600\n", encoding="utf-8")
+    (tmp_path / ".gitignore").write_text("__pycache__/\n", encoding="utf-8", newline="\n")
+    (tmp_path / "limits.py").write_text("MODE = 0o600\n", encoding="utf-8", newline="\n")
     (tmp_path / "test_limits.py").write_text(
         "from limits import MODE\n\n\ndef test_mode():\n    assert MODE == 0o600\n\n\n"
         "def test_unrelated():\n    assert False\n",
         encoding="utf-8",
+        newline="\n",
     )
     _git(tmp_path, "add", "-A")
     _git(tmp_path, "commit", "-qm", "base")
@@ -372,7 +375,7 @@ def test_an_empty_replacement_reaches_the_command_as_a_deletion(tmp_path: Path) 
     # A TO set in a makefile never reaches the recipe's shell, so `--to "$TO"` would be a deletion.
     # Through a second makefile, not --eval: the make macOS ships (3.81) has no such option.
     makefile = tmp_path / "to.mk"
-    makefile.write_text("TO := x\n", encoding="utf-8")
+    makefile.write_text("TO := x\n", encoding="utf-8", newline="\n")
     assert "--to" not in _recipe("-f", str(makefile), "-f", "Makefile")
 
 
@@ -405,10 +408,10 @@ def test_an_empty_envvar_is_no_replacement_but_an_empty_argument_is(
     _git(tmp_path, "init", "-q")
     _git(tmp_path, "config", "user.email", "t@example.invalid")
     _git(tmp_path, "config", "user.name", "t")
-    (tmp_path / ".gitignore").write_text("__pycache__/\n", encoding="utf-8")
-    (tmp_path / "limits.py").write_text("MODE = 0o600\n", encoding="utf-8")
+    (tmp_path / ".gitignore").write_text("__pycache__/\n", encoding="utf-8", newline="\n")
+    (tmp_path / "limits.py").write_text("MODE = 0o600\n", encoding="utf-8", newline="\n")
     (tmp_path / "test_limits.py").write_text(
-        "from limits import MODE\n\n\ndef test_mode():\n    assert MODE == 0o600\n", encoding="utf-8"
+        "from limits import MODE\n\n\ndef test_mode():\n    assert MODE == 0o600\n", encoding="utf-8", newline="\n"
     )
     _git(tmp_path, "add", "-A")
     _git(tmp_path, "commit", "-qm", "base")

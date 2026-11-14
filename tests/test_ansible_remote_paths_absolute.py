@@ -164,7 +164,7 @@ def test_the_scan_reports_every_way_a_remote_tilde_hides(tmp_path: pathlib.Path)
     }
     for rel, content in files.items():
         (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
-        (tmp_path / rel).write_text(yaml.safe_dump(content), encoding="utf-8")
+        (tmp_path / rel).write_text(yaml.safe_dump(content), encoding="utf-8", newline="\n")
 
     found = {line.split(": ", 1)[1] for line in _remote_tilde_paths(tmp_path)}
 
