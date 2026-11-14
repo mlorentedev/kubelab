@@ -1,5 +1,5 @@
 ---
-id: lesson-753-a-build-time-check-run-as-root-leaves-files-the-runtime-user-cannot-open
+id: lesson-754-a-build-time-check-run-as-root-leaves-files-the-runtime-user-cannot-open
 type: lesson
 status: active
 created: "2026-11-14"
