@@ -27,14 +27,14 @@ excluding regenerated schema and snapshot files.
 | A | Sealed Secrets controller and SOPS key on staging, probe | ~250 | owner | none |
 | K | ADR-073 to `accepted`, with the D9/D10 amendments | ~80 (docs) | owner | A deployed |
 | B | Contract `resources:` (volume, job), `forwardauth-admins`, schema | ~200 | agent | K |
-| C | Renderer: PVC, CronJob, mounts, fsGroup, Recreate | ~250 | owner | B |
+| C | Renderer: PVC, CronJob, mounts, fsGroup, Recreate, per-env schedule override | ~300 | owner | B |
 | L | ADR-061 gate attributes generated claims by label | ~80 | agent | C |
 | D [P] | `forwardauth-admins` render and Authelia subject test | ~100 | agent | B |
 | E | Generated NetworkPolicy pair, egress profiles, n8n reciprocal | ~200 | owner | C, Q1, Q2 |
 | F [P] | D8 hostname amendment | ~60 | agent | none |
-| G | No-success alert rule and its `EXEMPT` entry | ~150 | owner | C, personal/resume#777 |
+| G | No-success alert rule and its `EXEMPT` entry | ~150 | owner | C, resume's success marker (G) |
 | H | resume secrets: catalog entries and `resume-secrets` mapping | ~60 | owner (sets values) | none |
-| I | resume onboarding (registry entry, snapshot, values, Authelia rule) | ~100 + data | owner | B to H |
+| I | resume onboarding (registry entry, snapshot, values, Authelia rule) | ~100 + data | owner | B to H, resume issue 810 shipped |
 | J | First staging promote and runbook | ~120 (docs) | owner runs | I |
 
 ## A. Sealed Secrets key acceptance on staging (owner)
@@ -93,6 +93,11 @@ excluding regenerated schema and snapshot files.
 - [ ] C2 [AC4] Read claims from the env snapshot in `generator_k8s._build_context`;
   add the PVC and CronJob templates; branch the Deployment strategy on a mounted
   volume.
+- [ ] C2b [AC4] Test, then code: a registry entry may carry
+  `schedules: {<env>: {<job claim>: <cron>}}`; the renderer uses it over the
+  contract's `schedule` for that env; an override naming an undeclared job or
+  an invalid cron is refused. Platform-side, like `egress:`, so the contract
+  keeps one schedule (Q6 mitigation).
 - [ ] C3 [AC3] A product without `resources:` renders byte-identically
   (`make validate-sync`).
 - [ ] C4 Mutation check on the claim-rendering functions.
@@ -144,9 +149,10 @@ excluding regenerated schema and snapshot files.
   `configMapGenerator` in `infra/k8s/base/kustomization.yaml`) and whether an
   overlay can add a file; place the rule so it does not fire in an env where
   resume does not run (staging overlay, or `noDataState: OK`).
-- [ ] G2 [AC12] Test: the rule's window equals the job schedule's period plus
-  2 hours, read from resume's snapshot (26h for any daily schedule, for
-  example `0 6 * * *`; the schedule itself is resume's to set).
+- [ ] G2 [AC12] Test: the rule's window equals the effective schedule's
+  period plus 2 hours in each env, where the effective schedule is the
+  registry entry's override if set, else the snapshot's (26h for any daily
+  schedule, for example `0 6 * * *`; 170h for a weekly staging override).
 - [ ] G3 [AC12] The Loki rule on resume's success marker; an `EXEMPT` entry in
   `tests/test_alerting_emitter_window.py` with the owner's decision as reason;
   the job's container added to `CRONJOB_CONTAINERS` in
@@ -154,8 +160,8 @@ excluding regenerated schema and snapshot files.
 
 ## H. resume secrets (owner sets values)
 
-- [ ] Catalog `apps.platform.resume.llm_api_key` (staging and prod, separate
-  values; Q6).
+- [ ] Catalog `apps.platform.resume.llm_api_key`, one value shared by staging
+  and prod (owner ruling Q6 = B; risk recorded in the proposal).
 - [ ] `SecretMapping("resume-secrets")` with `RESUME_LLM_API_KEY` and the
   notify bearer (`apps.services.automation.notify.webhook_secret`).
 - [ ] Test first: the generated `resume` ConfigMap carries no key whose
@@ -172,11 +178,14 @@ excluding regenerated schema and snapshot files.
 - [ ] Registry entry: forge gitea, `personal/resume`, receiver dormant,
   `events.staging` only, `image_registry: ghcr.io/mlorentedev`, `private: true`,
   `pull_credential: {username: mlorentedev, secret: ghcr.pull_token}`,
-  `egress: [dns, public-https, notify]`.
+  `egress: [dns, public-https, notify]`, and the staging schedule override
+  for the `daily` job at low frequency (for example weekly; Q6 mitigation).
 - [ ] Contract snapshot for staging, with `hostnames.prod` declared and the
   volume claim named `data` (PVC `resume-data`, as proposal D11 assumes).
 - [ ] Staging values: `resume_web_host: 0.0.0.0`, the public URL, the notify
-  URL `http://n8n:5678/webhook/notify`, the fixture seed flag (Q5).
+  URL `http://n8n:5678/webhook/notify`, and the fixture seed setting that
+  https://gitea.kubelab.live/personal/resume/issues/810 defines (Q5). That
+  issue must ship in a published image before step J.
 - [ ] ADR-061 classification entry.
 - [ ] Staging Authelia rule with `subject: group:admins`.
 - [ ] Portal tile and the e2e expectation for the new host.

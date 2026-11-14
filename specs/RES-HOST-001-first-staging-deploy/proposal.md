@@ -108,7 +108,7 @@ first staging deploy (only staging renders), but it blocks prod onboarding. See 
 `tests/test_alerting_emitter_window.py` requires `MIN_SAMPLES = 2`. The rule
 needs an `EXEMPT` entry whose reason cites the owner's decision. There is no
 kube-state-metrics, so the rule reads a Loki log line: resume must print a
-stable success marker (personal/resume#777).
+stable success marker (https://gitea.kubelab.live/personal/resume/issues/777).
 
 **F7. Sealed Secrets is absent despite SEAL-001 (#372) being closed.** No
 manifest, no `cluster_bootstrap` entry, no SOPS key and no running controller
@@ -159,9 +159,15 @@ render time), relying on local-path's 0777 (owner ruling 2026-11-04).
 `backoffLimit: 2`, `restartPolicy: Never`. The CronJob pod uses the app's image,
 ConfigMap, `<app>-secrets` (when mapped), pull Secret and the named volume.
 Co-location comes from the local-path PV's node affinity, with no pod affinity
-(owner ruling Q1(A), 2026-10-22).
+(owner ruling Q1(A), 2026-10-22). The contract holds one `schedule`; a
+registry entry may override it per env (`schedules: {<env>: {<job>: <cron>}}`),
+platform-side like `egress:`, so staging can run less often than prod (Q6
+mitigation) without a second contract.
+Rejected for the override: env-keyed schedules inside the contract (the
+contract describes the product, not where it runs; ADR-067 keeps env facts on
+the platform side).
 Rejected: a shell line in `kubelab.yaml` instead of `resume daily` (#2366
-status; personal/resume#777).
+status; https://gitea.kubelab.live/personal/resume/issues/777).
 
 **D5. A Deployment that mounts a volume claim uses `strategy: Recreate`.**
 Today's template is `RollingUpdate`, `maxUnavailable: 0`, `maxSurge: 1`; a surge
@@ -220,8 +226,14 @@ service named `claims`.
 **D11. Backup.** The prod lane declares
 `backup.sources.vps.resume: {pvc: {namespace: kubelab, claim: resume-data},
 sqlite: [scan-history.sqlite, tracker.sqlite, evaluations.sqlite,
-embeddings.sqlite]}` and no pre-step (F3, pending Q3). Staging (`ace1`) has no
-backup sources and holds fixtures, so nothing is declared there.
+embeddings.sqlite]}` and no pre-step (F3; owner ruling Q3 = A). Each store is
+copied by its own `sqlite3 .backup`, one after another, so each copy is
+consistent on its own but the set is not a single point in time: the copies
+can be seconds apart, and a daily run that writes during the capture can leave
+one store a step ahead of another. The prod restore drill (Q8) restores the
+set from R2 and checks that resume opens it and that cross-store references
+resolve. Staging (`ace1`) has no backup sources and holds fixtures, so nothing
+is declared there.
 
 **D12. Notifications and alerting.** resume posts
 `{domain, severity, title, body, source}` to notify-router in-cluster with the
@@ -294,48 +306,63 @@ Deployed properties are marked (deployed); the rest are checked from the diff.
 - `Recreate` gives a short outage per deploy; acceptable for an admin tool.
 - The first egress restriction in the cluster may surface missing egress rules
   only resume needs (for example a provider that serves over a non-443 port).
-- The staging LLM key spends money on every scheduled run; see Q6.
+- Staging uses the prod LLM key (Q6 = B), so staging spend draws on prod's
+  provider budget, and a runaway staging job can exhaust it for prod.
+  Mitigation: the staging CronJob runs at low frequency (for example weekly),
+  set by a per-env schedule override on the registry entry (D4), and staging's acceptance run (AC12) is a single
+  Job created from the CronJob. The no-success alert window follows the staging
+  schedule (period plus 2 hours), so a weekly staging job does not alert daily. The key is shared, so a leak from staging is a prod leak; it is
+  mapped only into `resume-secrets` and never into the ConfigMap (slice H test).
+
+## Owner rulings
+
+Recorded from the owner, relayed on #3476. "Pending owner objection" marks a
+recommendation taken as the working position until the owner says otherwise.
+
+**Q1. Policy scope: (A), pending owner objection.** Pod-scoped policies in
+`kubelab` selecting resume's pods (D7). Rejected: (B) build ADR-067 D5's
+per-product namespaces first, then a namespace default-deny; it is a
+fleet-wide change far larger than this spec, and (A) gives resume the same
+default-deny now.
+
+**Q3. Backup pre-step: (A), ruled.** Reuse `node_backup`'s `sqlite3 .backup`,
+no `VACUUM INTO` (F3). The per-store copies can be seconds apart; see D11.
+
+**Q4. ADR-061 and the staging twin: (A), pending owner objection.** A narrow
+ADR-061 amendment: a singleton may render in staging when its entry declares
+`staging_state: fixtures`, and the duplication clause accepts it. Rejected:
+(B) classifying resume as `dual`, which misclassifies its prod state to pass a
+test. Needed before prod, not before staging.
+
+**Q5. Seeding staging fixtures: (A), ruled.** resume seeds fixture data itself
+when `/data` is empty and its seed setting is on (staging values only), tracked
+as https://gitea.kubelab.live/personal/resume/issues/810. Rejected: an init
+container copying fixtures from the image (platform code for a product
+concern); `kubectl cp` (a manual operation).
+
+**Q6. Staging LLM key: (B), ruled.** Staging uses the prod key. Risk and
+mitigation are under Risks. Rejected: (A) a separate capped key; (C) a
+suspended staging CronJob.
+
+**Q8. Restore verification (ADR-073 D10): (A), pending owner objection.**
+Deferred to the prod lane, with a restore drill from R2 before real data lands;
+the drill also checks the cross-store consistency named in D11. Rejected: (B)
+requiring it for staging, which holds fixtures only.
 
 ## Open questions (owner)
 
-**Q1. Policy scope.** (A) Pod-scoped policies in `kubelab` selecting resume's
-pods (D7). (B) Build ADR-067 D5's per-product namespaces first, then a
-namespace default-deny. **Recommend (A)**: it gives the same default-deny for
-resume now; (B) is a fleet-wide change far larger than this spec.
-
-**Q2. Egress rule.** (A) `public-https`: TCP 443 to anything outside private
-and link-local ranges. (B) An egress proxy with a domain allowlist. (C) A CNI
-with FQDN policy. **Recommend (A)**; record that HTTP-only boards are
-unreachable and that (B) is the path if a domain allowlist becomes a
+**Q2. Egress rule.** (A) `public-https`: TCP 443 to anything outside the
+private, carrier-grade NAT and link-local ranges (`10.0.0.0/8`,
+`172.16.0.0/12`, `192.168.0.0/16`, `100.64.0.0/10`, `169.254.0.0/16` in
+`except`). (B) An egress proxy with a domain allowlist. (C) A CNI with FQDN
+policy. **Recommend (A)**, the leading option; record that HTTP-only boards
+are unreachable and that (B) is the path if a domain allowlist becomes a
 requirement.
-
-**Q3. Backup pre-step.** (A) Use `node_backup`'s existing `sqlite3 .backup`,
-no pre-step. (B) Add `VACUUM INTO` as decided. **Recommend (A)** (F3).
-
-**Q4. ADR-061 and the staging twin.** (A) A narrow ADR-061 amendment: a
-singleton may render in staging when its entry declares
-`staging_state: fixtures`, and the duplication clause accepts it. (B) Classify
-resume as `dual`. **Recommend (A)**: resume's prod state really is a singleton;
-(B) would misclassify it to pass a test. Needed before prod, not before staging.
-
-**Q5. Seeding staging fixtures without a manual copy.** (A) resume seeds
-fixture data itself when `/data` is empty and `RESUME_SEED_FIXTURES` is set
-(staging values only). (B) An init container that copies fixtures from the
-image. (C) `kubectl cp` (violates zero manual operations). **Recommend (A)**:
-idempotent, owned by the product, no platform change. Needs a resume ticket.
-
-**Q6. Staging LLM key.** (A) A separate staging key with a provider-side budget
-cap. (B) The prod key. (C) No key; the CronJob is created suspended in staging.
-**Recommend (A)**.
 
 **Q7. Prod facts (prod cluster unreadable here).** Which node hosts resume in
 prod, and is it `vps`? Is the `resume.kubelab.live` DNS record to be created by
 the prod onboarding PR? #3286 (no pull credential on prod promotion) blocks the
 prod lane; confirm it stays the prod-lane gate.
-
-**Q8. Restore verification (ADR-073 D10).** (A) Defer to the prod lane, with a
-restore drill from R2 before real data lands. (B) Required for staging.
-**Recommend (A)**: staging holds fixtures only.
 
 ## Out of scope
 

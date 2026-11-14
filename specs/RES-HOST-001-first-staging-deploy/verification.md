@@ -43,14 +43,14 @@ credential; its digest check reports only match or mismatch.
 
 | Q | Owner answer | Date | Spec change |
 |---|---|---|---|
-| Q1 | | | |
-| Q2 | | | |
-| Q3 | | | |
-| Q4 | | | |
-| Q5 | | | |
-| Q6 | | | |
-| Q7 | | | |
-| Q8 | | | |
+| Q1 | (A), pending owner objection | 2026-11-14 | none, D7 stands |
+| Q2 | open; (A) leading | | |
+| Q3 | (A) ruled | 2026-11-14 | D11: per-store copies, restore drill checks the set |
+| Q4 | (A), pending owner objection | 2026-11-14 | none |
+| Q5 | (A) ruled, https://gitea.kubelab.live/personal/resume/issues/810 | 2026-11-14 | slice I depends on it |
+| Q6 | (B) ruled | 2026-11-14 | risk recorded; per-env schedule override (D4, step C2b) |
+| Q7 | open | | |
+| Q8 | (A), pending owner objection | 2026-11-14 | none |
 
 ## Independent review
 
