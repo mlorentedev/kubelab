@@ -1591,6 +1591,29 @@ apps:
               failure, but only a review proves delivery. Confirm by consequence:
               push to an open pull request and check for a review comment from the
               reviewer account (`apps.auth.identities.reviewer`).
+          # The forge console's receiver (CONSOLE-004, #3420). Declared whole and
+          # pinned to the api's prod domain by a committed test, like n8n's above:
+          # the forge is a singleton. Without it the console still converges, but
+          # only on the ten-minute reconcile. The receiver drops a delivery about a
+          # repository its source declaration does not name, so a hook on every
+          # repository is harmless.
+          - url: https://api.kubelab.live/api/forge/webhooks/gitea
+            content_type: json
+            type: gitea
+            # A FLOOR read from the projector (`ItemFromEvent`): Gitea expands both
+            # families into sub-events (label, assign, milestone, sync...), and the
+            # projector marks any type it does not read as projected.
+            events:
+              - issues
+              - pull_request
+            branch_filter: "*"
+            active: true
+            secret_key: apps.platform.api.forge_gitea_webhook_secret
+            verify_hint: >-
+              The receiver answers 401 to a bad signature and Gitea records it.
+              Confirm by consequence: edit an issue title in a declared repository
+              and check the console shows it within seconds, or read
+              `forge_webhook_failure` in Loki (docs/runbooks/forge-console-operations.md).
         # Who may still push straight to the default branch of a repository that
         # lists `writers:` (AUTH-024 AC2, #3148). Keys of `apps.auth.identities`; the
         # reconciler protects that branch with a push whitelist of exactly these.

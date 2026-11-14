@@ -53,7 +53,7 @@ created: "2026-10-21"
   - [x] ✓ 2026-11-03 Deliver `FORGE_GITHUB_WEBHOOK_SECRET` and `FORGE_GITEA_WEBHOOK_SECRET` through SOPS and `SECRET_CATALOG`, prod only: staging is VPN-only, so no forge reaches it
   - [ ] Register the two webhooks as code
     - [x] ✓ 2026-11-05 GitHub: the App's own hook, `make forge-github-hook` (plan; `APPLY=1` writes, `SECRET=1` resends after a rotation). The events and the Active toggle are the operator's settings step, which the command checks (lesson-714)
-    - [ ] Gitea: the sources now name each declared Gitea repository, so `repository_settings.webhooks` (one hook per declared repository) matches them; what remains is declaring the hook to the API there
+    - [ ] Gitea: declared in `repository_settings.webhooks` (#3420); ticked once the reconcile has written it and a delivery has been read back
 - [x] ✓ 2026-11-02 [AC4] Test: the same delivery twice projects once (`TestSameDeliveryProjectsOnce`, against Postgres)
 - [x] ✓ 2026-11-02 [AC4] Periodic reconcile per source every 10 minutes under the hourly call ceiling, with a guard test that counts calls. The ceiling is per forge since 2026-11-09, when the Gitea reader was wired (see the sources task below)
 - [ ] [AC1] Queue endpoint with the inbox reason (author, requested reviewer, failing CI, waiting on me). `GET /console/queue` serves the open items without reasons since 2026-11-04; the reasons need the operator's login per forge and check-run reads
