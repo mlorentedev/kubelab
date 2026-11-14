@@ -40,7 +40,8 @@ function pages(scenario: string): { next: string | null }[] {
 export function answerQueue(scenario: string, query: URLSearchParams): Answer {
   if (scenario === 'unavailable') return { status: 503 };
   if (scenario === 'expired') return { status: 302, headers: { Location: '/login' } };
-  const recorded = pages(scenario);
+  // Only a name listed under fixtures/ reaches the filesystem, so `../x` cannot read outside it.
+  const recorded = scenarioNames().includes(scenario) ? pages(scenario) : [];
   if (recorded.length === 0) {
     throw new Error(`no fixture scenario "${scenario}"; choose one of: ${scenarioNames().join(', ')}`);
   }

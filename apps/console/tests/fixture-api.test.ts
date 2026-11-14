@@ -59,4 +59,10 @@ describe('the fixture API', () => {
   it('an unknown scenario is an error naming the choices, not a silent default', () => {
     expect(() => get('nope')).toThrow(/default/);
   });
+
+  it('a scenario that names a path outside fixtures/ is refused before any file is read', () => {
+    for (const name of ['../fixtures/default', 'default/../default', '/etc', '..']) {
+      expect(() => get(name)).toThrow(/no fixture scenario/);
+    }
+  });
 });
