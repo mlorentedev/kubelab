@@ -111,7 +111,7 @@ def test_every_entry_names_a_collected_test(request: pytest.FixtureRequest) -> N
     items are the full collection; a subset run judges only the files it collected,
     and a test `-k`/`-m` deselected still counts as collected.
     """
-    nodeids = [item.nodeid for item in request.session.items]
-    nodeids += request.config.stash.get(known.DESELECTED, [])
+    deselected: list[str] = request.config.stash.get(known.DESELECTED, [])
+    nodeids = [item.nodeid for item in request.session.items] + deselected
     stale = known.stale(known.parse(known.LIST.read_text(encoding="utf-8")), nodeids, REPO)
     assert not stale, f"{known.LIST.name} lists tests that do not exist (renamed or removed?):\n" + "\n".join(stale)
