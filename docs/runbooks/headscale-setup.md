@@ -35,7 +35,7 @@ make deploy TARGET=vps ENV=prod CHECK=1      # dry run
 
 ### 1.1 Directory and config (rendered)
 
-The role creates `/opt/headscale` and `/opt/headscale/config`, then renders `config/config.yaml` from `infra/ansible/roles/headscale/templates/config.yaml.j2`. The values come from `common.yaml` through `deploy-vps.yml`: the domain, the listen and STUN ports, `networking.tailscale_cidr`, split DNS from `networking.staging_zones` (6.1) and the ACL policy path (Phase 8). Headscale reads `config.yaml` only at startup, so the role restarts the stack whenever the rendered file changes. Do not edit it on the VPS: the next deploy overwrites the edit. Change the value in `common.yaml` (or the template) and deploy.
+The role creates `/opt/headscale` and `/opt/headscale/config`, then renders `config/config.yaml` from `infra/ansible/roles/headscale/templates/config.yaml.j2`. The values come from `common.yaml` through `deploy-vps.yml`: the domain, the listen and STUN ports, `networking.tailscale_cidr`, split DNS from the derived `infra/config/products/edge.json` (6.1) and the ACL policy path (Phase 8). Headscale reads `config.yaml` only at startup, so the role restarts the stack whenever the rendered file changes. Do not edit it on the VPS: the next deploy overwrites the edit. Change the value in `common.yaml` (or the template) and deploy.
 
 ### 1.2 docker-compose.yml on the VPS (rendered)
 
@@ -482,7 +482,7 @@ Full setup documented in [dns-homelab](dns-homelab.md).
 
 ### 6.1 Headscale config (rendered)
 
-The role renders split DNS from `networking.staging_zones` in `common.yaml`: `deploy-vps.yml` points every zone in that list at `networking.nodes.rpi4.tailscale_ip` and `config.yaml.j2` writes the result under `dns.nameservers.split`. `tests/test_headscale_runbook_compose.py` fails when this snippet stops matching what the template renders.
+The role renders split DNS from `infra/config/products/edge.json`, which `toolkit sync edge-dns` derives (EDGE-001): the platform's own zones from `networking.staging_zones` in `common.yaml`, then the staging hostname of each product in the registry (`infra/config/products.yaml`) whose apex is a zone declared in `infra/terraform/dns/zones.json`. `deploy-vps.yml` points every zone in that list at `networking.nodes.rpi4.tailscale_ip` and `config.yaml.j2` writes the result under `dns.nameservers.split`. The platform zones come first, as below; product zones follow them in registry order. `tests/test_headscale_runbook_compose.py` fails when this snippet stops matching what the template renders for the platform zones.
 
 ```yaml
 dns:
@@ -492,11 +492,9 @@ dns:
         - 100.64.0.10
       staging.mlorente.dev:
         - 100.64.0.10
-      staging.imagesensortool.com:
-        - 100.64.0.10
 ```
 
-`100.64.0.10` is RPi4 (Pi-hole on port 53, forwarding to CoreDNS). To add or remove a zone, edit `networking.staging_zones` and run `make deploy TARGET=vps ENV=prod`; the role restarts Headscale because `config.yaml` changed. Do not edit `/opt/headscale/config/config.yaml` on the VPS. Keep zones under `staging.`: a broad `kubelab.live` zone sends prod lookups to RPi4 (2026-03-03 entry in "Last tested").
+`100.64.0.10` is RPi4 (Pi-hole on port 53, forwarding to CoreDNS). A product's zone is never added by hand. The product's onboarding PR (the receiver's) carries the regenerated `edge.json`, and `make validate-sync` fails if the file differs from the derivation. A platform zone is an edit to `networking.staging_zones`, followed by `toolkit sync edge-dns`. Either way, the edge is reconciled by `make deploy TARGET=vps ENV=prod` (Headscale, restarted because `config.yaml` changed) and `make deploy TARGET=dns ENV=staging` (CoreDNS and Pi-hole on RPi4); doing that on merge is the next step (#2449). Do not edit `/opt/headscale/config/config.yaml` on the VPS. Keep zones under `staging.`: a broad `kubelab.live` zone sends prod lookups to RPi4 (2026-03-03 entry in "Last tested").
 
 ### 6.2 Client config
 

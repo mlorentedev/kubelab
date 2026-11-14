@@ -26,16 +26,27 @@ VALUES = REPO / "infra/config/values"
 COREDNS_CUSTOM = REPO / "infra/k8s/base/edge/coredns-custom.yaml"
 
 
-def _lookup(kind: str, path: str) -> str:
-    assert kind == "file", f"only lookup('file', ...) is implemented, got {kind!r}"
-    return Path(os.path.normpath(path)).read_text(encoding="utf-8")
+MANIFEST = REPO / "infra/config/products/edge.json"
 
 
-def _env() -> jinja2.Environment:
+def _env(manifest: Path | None = None) -> jinja2.Environment:
+    """Ansible's template defaults, plus ``lookup('file')`` over the repository.
+
+    ``manifest`` stands in for ``edge.json`` wherever a consumer looks it up, so a
+    test can render the consumers for a fixed zone list without editing the file.
+    """
+
+    def lookup(kind: str, path: str) -> str:
+        assert kind == "file", f"only lookup('file', ...) is implemented, got {kind!r}"
+        resolved = Path(os.path.normpath(path))
+        if manifest is not None and resolved == MANIFEST:
+            resolved = manifest
+        return resolved.read_text(encoding="utf-8")
+
     # The template module's defaults: trim_blocks on, the source's trailing newline kept.
     env = jinja2.Environment(undefined=jinja2.StrictUndefined, trim_blocks=True, keep_trailing_newline=True)
     env.filters["from_json"] = json.loads
-    env.globals["lookup"] = _lookup
+    env.globals["lookup"] = lookup
     return env
 
 
@@ -61,10 +72,10 @@ def _expression(value: str) -> str:
     return value[2:-2].strip()
 
 
-def coredns_role_vars() -> dict[str, Any]:
+def coredns_role_vars(manifest: Path | None = None) -> dict[str, Any]:
     """Every `coredns` role default, resolved against common.yaml as Ansible would (lazily, by passes)."""
     defaults = yaml.safe_load((ROLE / "defaults/main.yml").read_text(encoding="utf-8"))
-    env = _env()
+    env = _env(manifest)
     ctx: dict[str, Any] = {"common": _common(), "role_path": str(ROLE)}
 
     def render(value: Any) -> Any:
@@ -95,31 +106,39 @@ def coredns_role_vars() -> dict[str, Any]:
     return ctx
 
 
-def rendered_corefile() -> str:
+def rendered_corefile(manifest: Path | None = None) -> str:
     text = (ROLE / "templates/Corefile.j2").read_text(encoding="utf-8")
-    return _env().from_string(text).render(**coredns_role_vars())
+    return _env(manifest).from_string(text).render(**coredns_role_vars(manifest))
 
 
-def rendered_pihole_forwarding() -> str:
+def rendered_pihole_forwarding(manifest: Path | None = None) -> str:
     text = (ROLE / "templates/pihole-forwarding.conf.j2").read_text(encoding="utf-8")
-    return _env().from_string(text).render(**coredns_role_vars())
+    return _env(manifest).from_string(text).render(**coredns_role_vars(manifest))
 
 
-def headscale_split() -> dict[str, list[str]]:
+def headscale_split(manifest: Path | None = None) -> dict[str, list[str]]:
     """`_headscale_dns_split` as the `deploy-vps.yml` task builds it, from that task's own `loop`."""
     play = yaml.safe_load((PLAYBOOKS / "deploy-vps.yml").read_text(encoding="utf-8"))[0]
     [task] = [t for t in play["pre_tasks"] if "split DNS" in t.get("name", "")]
     config = _merged(play["vars"]["deploy_env"])
     ctx = {"config": config, "playbook_dir": str(PLAYBOOKS)}
-    zones = _env().compile_expression(_expression(task["loop"]))(**ctx)
+    zones = _env(manifest).compile_expression(_expression(task["loop"]))(**ctx)
     item_value = _expression(task["set_fact"]["_headscale_dns_split"])
     assert "combine({item: [config.networking.nodes.rpi4.tailscale_ip]})" in item_value, item_value
     return {zone: [config["networking"]["nodes"]["rpi4"]["tailscale_ip"]] for zone in zones}
 
 
-def rendered_hairpin() -> str:
+def rendered_hairpin(manifest: Path | None = None) -> str:
     """The pod-side hairpin ConfigMap's staging blocks, rendered by the toolkit path `make deploy-k8s` uses."""
-    from toolkit.cli.infra import _staging_zones
+    from unittest.mock import patch
+
+    from toolkit.cli import infra
+    from toolkit.features import edge_dns
     from toolkit.features.k8s_render import render_staging_zones
 
-    return render_staging_zones(COREDNS_CUSTOM.read_text(encoding="utf-8"), _staging_zones())
+    source = manifest or MANIFEST
+    with patch.object(
+        infra, "staging_zones", lambda path: edge_dns.staging_zones(source if path == MANIFEST else path)
+    ):
+        zones = infra._staging_zones()
+    return render_staging_zones(COREDNS_CUSTOM.read_text(encoding="utf-8"), zones)

@@ -74,7 +74,11 @@ def values_copy(tmp_path: Path) -> Path:
 
 
 def _list_zone(values_dir: Path, zone: str) -> None:
-    """Add ``zone`` to ``networking.staging_zones``: D8 lets a staging hostname name only a listed zone."""
+    """Declare ``zone`` as a platform zone in ``networking.staging_zones``.
+
+    D8 accepts a declared zone, or ``staging.<domain>`` on an apex ``zones.json`` grants (EDGE-001).
+    ``new.dev`` is no granted apex, so a fixture on it needs the declaration.
+    """
     path = values_dir / "common.yaml"
     path.write_text(
         path.read_text(encoding="utf-8").replace("  staging_zones:\n", f'  staging_zones:\n  - "{zone}"\n'),
@@ -134,7 +138,7 @@ def test_a_hostname_change_moves_the_site_keys_with_the_domain(env: str, values_
         .replace("prod: mlorente.dev\n", "prod: new.mlorente.dev\n"),
         encoding="utf-8",
     )
-    _list_zone(values_copy, "staging.new.mlorente.dev")
+    # No zone listed: mlorente.dev is a granted apex, so the new zone is derived (EDGE-001).
     host = getattr(validate_contract(moved).hostnames, env)
 
     changed = write(validate_contract(moved), "web", env, values_dir=values_copy)

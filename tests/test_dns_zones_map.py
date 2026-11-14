@@ -18,6 +18,8 @@ from typing import Any
 
 import yaml
 
+from toolkit.features import edge_dns
+
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 DNS = REPO_ROOT / "infra/terraform/dns"
 VALUES = REPO_ROOT / "infra/config/values"
@@ -76,7 +78,7 @@ def test_every_service_zone_is_in_the_map() -> None:
 
 def _public_hosts(configs: list[dict[str, Any]]) -> set[str]:
     hosts = {h for config in configs for h in _domain_values(config)}
-    hosts.update(z for config in configs for z in config.get("networking", {}).get("staging_zones", []))
+    hosts.update(edge_dns.staging_zones())  # the effective zones, derived (EDGE-001)
     return {h for h in hosts if _apex(h).split(".")[-1] not in NON_PUBLIC_TLDS and not _is_reference(h, configs)}
 
 

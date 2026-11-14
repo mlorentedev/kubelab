@@ -2,13 +2,16 @@
 
 The contract model cannot read ``common.yaml``, so the check runs at render time, where the
 values directory is known. A staging hostname is accepted only if it is exactly a zone in
-``networking.staging_zones`` (other than the platform wildcard zone) or one label under
-``staging.kubelab.live``; a product that also declares prod must name ``staging.`` + its prod
-hostname. Names here are fixtures, not any real product's.
+``networking.staging_zones`` (other than the platform wildcard zone), one label under
+``staging.kubelab.live``, or ``staging.<domain>`` whose apex is a Cloudflare zone granted in
+``infra/terraform/dns/zones.json`` (EDGE-001: its split-DNS zone is then derived, never
+hand-listed); a product that also declares prod must name ``staging.`` + its prod hostname.
+Names here are fixtures, not any real product's.
 """
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -51,11 +54,19 @@ def test_a_label_under_the_wildcard_zone_passes() -> None:
     check_staging_hostname(_contract("shop.staging.kubelab.live"), ZONES)
 
 
-def test_a_zone_missing_from_the_list_is_refused_naming_the_line_to_add() -> None:
-    err = _refused("staging.example-product.test", zones=["staging.kubelab.live", "staging.mlorente.dev"])
+def test_a_staging_name_on_a_granted_apex_passes_without_a_listed_zone() -> None:
+    """EDGE-001: the zone is derived from the contract, so the grant is the apex, not a hand-listed zone."""
+    check_staging_hostname(_contract("staging.example-product.test"), ZONES[:2], ["example-product.test"])
 
-    assert ZONE_LINE in err.fix
-    assert "networking.staging_zones" in err.fix
+
+def test_a_staging_name_on_an_apex_nobody_granted_is_refused_naming_zones_json() -> None:
+    with pytest.raises(ContractError) as excinfo:
+        check_staging_hostname(_contract("staging.example-product.test"), ZONES[:2], ["kubelab.live"])
+
+    err = excinfo.value
+    assert "D8" in err.why
+    assert "infra/terraform/dns/zones.json" in err.fix
+    assert "networking.staging_zones" not in err.fix
 
 
 def test_a_name_that_is_not_staging_dot_a_domain_is_refused() -> None:
@@ -103,12 +114,20 @@ def test_the_committed_zones_include_web_and_the_wildcard() -> None:
     assert {"staging.kubelab.live", "staging.mlorente.dev"} <= set(staging_zones())
 
 
-def test_rendering_refuses_a_hostname_the_zones_do_not_grant(tmp_path: Path) -> None:
+def _dns_zones(tmp_path: Path, apexes: list[str]) -> Path:
+    path = tmp_path / "zones.json"
+    path.write_text(json.dumps({apex: {"key": apex.split(".")[0], "records": []} for apex in apexes}), encoding="utf-8")
+    return path
+
+
+def test_rendering_refuses_a_hostname_whose_apex_zones_json_does_not_grant(tmp_path: Path) -> None:
     contract = _contract("staging.example-product.test")
+    values = _values(tmp_path, ZONES[:2])
 
     with pytest.raises(ContractError):
-        product_render.rendered(contract, "web", "staging", values_dir=_values(tmp_path, ZONES[:2]))
-    assert product_render.rendered(contract, "web", "staging", values_dir=_values(tmp_path, ZONES))["domain"] == (
+        product_render.rendered(contract, "web", "staging", values_dir=values, dns_zones=_dns_zones(tmp_path, []))
+    granted = _dns_zones(tmp_path, ["example-product.test"])
+    assert product_render.rendered(contract, "web", "staging", values_dir=values, dns_zones=granted)["domain"] == (
         "staging.example-product.test"
     )
 

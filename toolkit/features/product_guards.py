@@ -100,7 +100,7 @@ def check_staging_hostname(contract: Contract, zones: Iterable[str], apexes: Ite
         own_zone = (
             host.startswith("staging.")
             and "." in host.removeprefix("staging.")
-            and not any(host.endswith(f".{zone}") for zone in declared)
+            and not any(host == zone or host.endswith(f".{zone}") for zone in declared)
         )
         if not own_zone:
             raise _staging_refusal(

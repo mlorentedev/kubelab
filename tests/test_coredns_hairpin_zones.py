@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from toolkit.features import edge_dns
 from toolkit.features.k8s_render import (
     BootstrapEntry,
     RenderError,
@@ -71,8 +72,8 @@ def test_todays_two_zones_render_todays_two_blocks_byte_for_byte() -> None:
 
 
 def test_the_committed_zone_list_renders_a_forward_block_per_zone() -> None:
-    """Follows `common.yaml` as zones are added: it names no zone of its own."""
-    zones = yaml.safe_load(COMMON.read_text(encoding="utf-8"))["networking"]["staging_zones"]
+    """Follows the derived `edge.json` as zones are added: it names no zone of its own (EDGE-001)."""
+    zones = edge_dns.staging_zones()
 
     assert set(ZONES) <= set(zones)
     server = _server(render_staging_zones(_committed(), zones))
@@ -184,7 +185,7 @@ def test_the_cluster_bootstrap_hands_the_committed_zone_list_to_the_hairpin(monk
     assert infra._apply_cluster_bootstrap("kubeconfig", dry_run=True)
 
     hairpin = next(m for m in kubectl.manifests if "kubelab-hairpin.server" in m)
-    zones = yaml.safe_load(COMMON.read_text(encoding="utf-8"))["networking"]["staging_zones"]
+    zones = edge_dns.staging_zones()
     assert zones, "no zone listed: nothing was checked"
     for zone in zones:
         assert f"{zone}:53 {{\n  forward . {RPI4_IP}\n}}\n" in _server(hairpin)

@@ -13,7 +13,7 @@ shape changing (the image tag, the public IP); everything else is compared as
 rendered, so a renamed network or a new published port fails here.
 
 Section 6.1 quotes the split DNS block of `config.yaml.j2` and is held the same way,
-so a zone added to `networking.staging_zones` fails here until the runbook shows it.
+so a zone added to the derived `infra/config/products/edge.json` fails here until the runbook shows it.
 """
 
 from __future__ import annotations
@@ -24,6 +24,7 @@ from typing import Any
 
 import yaml
 
+from tests import edge_dns_render
 from tests.ansible_jinja import ansible_env
 
 REPO = Path(__file__).resolve().parent.parent
@@ -88,7 +89,6 @@ def _rendered_nameservers() -> dict[str, Any]:
     """`dns.nameservers` of `config.yaml.j2` as the VPS play renders it."""
     config = _prod_config()
     headscale = config["apps"]["services"]["core"]["headscale"]
-    rpi4 = config["networking"]["nodes"]["rpi4"]["tailscale_ip"]
     variables = yaml.safe_load((ROLE / "defaults/main.yml").read_text(encoding="utf-8"))
     variables.update(
         {
@@ -97,7 +97,8 @@ def _rendered_nameservers() -> dict[str, Any]:
             "tailscale_cidr": config["networking"]["tailscale_cidr"],
             "headscale_dns_global": config["networking"]["public_resolvers"],
             # The "Build Headscale split DNS from staging zones" task in deploy-vps.yml.
-            "headscale_dns_split": {zone: [rpi4] for zone in config["networking"]["staging_zones"]},
+            # The effective zones (edge.json, EDGE-001), resolved from the task's own `loop`.
+            "headscale_dns_split": edge_dns_render.headscale_split(),
         }
     )
     env = ansible_env(str(TEMPLATES), trim_blocks=True)
@@ -124,9 +125,19 @@ def _runbook_split_dns() -> dict[str, Any]:
 
 
 def test_the_runbook_shows_the_split_dns_the_role_renders() -> None:
+    """The runbook shows the platform's declared zones, which the rendered map starts with.
+
+    Product zones follow them in the rendered map, derived into `edge.json`
+    (EDGE-001). The runbook names that file instead of listing them, so onboarding a
+    product never needs a hand edit here.
+    """
+    from toolkit.features.edge_dns import declared_staging_zones
+
     rendered = _rendered_split_dns()
-    assert rendered, "no zone rendered, so this compares nothing"
-    assert _runbook_split_dns() == rendered
+    declared = declared_staging_zones()
+    assert declared, "no zone declared, so this compares nothing"
+    assert list(rendered)[: len(declared)] == declared
+    assert _runbook_split_dns() == {zone: rendered[zone] for zone in declared}
 
 
 def test_the_runbook_numbers_its_headings_once() -> None:
