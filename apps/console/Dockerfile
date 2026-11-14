@@ -46,10 +46,13 @@ USER 0
 RUN apk update && apk upgrade --no-cache && rm -rf /usr/share/nginx/html/*
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
-# Fail the build, which pull requests run, on a config that would not start.
-RUN nginx -t
-# The base's own user (uid 101), so the pod can run with a read-only root and a tmpfs at /tmp.
+# The base's own user (uid 101). Everything after this runs as the user the pod runs as.
 USER 101
+# Fail the build, which pull requests run, on a config that would not start. It must run as
+# uid 101: as root it left a root-owned /tmp/nginx.pid in the layer, which the runtime user
+# cannot open, and every pod crash-looped (#3443). The rm is for the same reason: nothing
+# the check wrote belongs in the image.
+RUN nginx -t && rm -f /tmp/nginx.pid
 
 EXPOSE 8080
 

@@ -4,6 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 754 | [A build-time check run as root leaves files the runtime user cannot open, and only starting the image as that user shows it](lesson-754-a-build-time-check-run-as-root-leaves-files-the-runtime-user-cannot-open.md) | 2026-11-14 |
 | 750 | [`git add -A && git commit` from a worktree that has vanished records its disappearance as a mass deletion](lesson-750-git-add-all-from-a-directory-that-no-longer-exists-stages-its-deletion.md) | 2026-11-14 |
 | 740 | [An acceptance criterion is only testable if fleet policy allows the mechanism it names](lesson-740-an-acceptance-criterion-is-only-testable-if-fleet-policy-allows-its-mechanism.md) | 2026-11-12 |
 | 617 | [A closed epic is not a built substrate, and an ADR's "next" list is not a ticket](lesson-617-a-closed-epic-is-not-a-built-substrate.md) | 2026-10-22 |
