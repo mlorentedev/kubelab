@@ -266,8 +266,7 @@
       failed_when: false
       # A read: --check would skip it and hand the next tasks an empty stdout.
       check_mode: false
-      # orca: the wrapper loop below carries that tag and reads this result.
-      tags: [dev_node, mise, agents, orca]
+      tags: [dev_node, mise, agents]
 
     - name: Require a node that mise can name
       ansible.builtin.assert:
@@ -280,7 +279,7 @@
           true, that the bootstrap above succeeded, and that the play ran without a
           tag that skips it, then provision again.
         quiet: true
-      tags: [dev_node, mise, agents, orca]
+      tags: [dev_node, mise, agents]
 
     # `mise ls --missing` asks whether the version directory exists, not whether
     # the toolchain in it works. An interrupted `npm update --global` leaves npm,
@@ -379,7 +378,7 @@
         mode: "0755"
         follow: false
       vars:
-        wrapper_src_dir: "{{ _dev_node_node_where.stdout | trim }}/bin"
+        wrapper_mise_tool: node
       loop:
         - node
         - npm

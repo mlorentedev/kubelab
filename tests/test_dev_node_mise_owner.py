@@ -20,10 +20,14 @@ Go is the role's: the dotfiles' `GO_VERSION` is not a mise pin (it is the
 from __future__ import annotations
 
 import re
+import shutil
+import subprocess
+import sys
 import tomllib
 from pathlib import Path
 
 import jinja2
+import pytest
 import yaml
 
 REPO = Path(__file__).resolve().parent.parent
@@ -105,22 +109,104 @@ def test_a_node_mise_cannot_name_stops_the_play_with_the_cause() -> None:
 
 
 def test_every_consumer_of_the_node_path_runs_after_the_resolve_and_carries_its_tags() -> None:
-    """`--tags orca` skips untagged-for-it tasks: a consumer would read an undefined register."""
+    """`--tags mise` skips tasks without it: a consumer would read an undefined register."""
     tasks = _tasks()
     resolve = tasks[_index("Resolve the node install mise has active")]
     consumers = [t for t in tasks if "block" not in t and "_dev_node_node_where" in str(t) and t is not resolve]
-    assert len(consumers) >= 4, "the entry-point check, the repair, the npm install and the wrapper"
+    assert len(consumers) >= 4, "the assert, the entry-point check, the repair and the npm install"
     for task in consumers:
         assert tasks.index(resolve) < tasks.index(task), task["name"]
         tags = set(task.get("tags", [])) - {"dev_node"}
         assert tags <= set(resolve["tags"]), f"{task['name']!r} can run without the resolve under {tags}"
 
 
-def test_the_wrapper_and_the_npm_install_resolve_to_the_active_node() -> None:
-    """Render the vars the consumers use with a fake mise answer: the path is mise's."""
+def test_the_npm_install_resolves_to_the_active_node() -> None:
+    """Render the var the install uses with a fake `mise where` answer: the path is mise's."""
     active = "/home/u/.local/share/mise/installs/node/24.22.1"
-    registered = {"stdout": active + "\n"}
-    wrapper = _tasks()[_index("Wrap mise node, npm, npx, and claude into /usr/local/bin for non-interactive SSH tools")]
     npm = _tasks()[_index("Install global agent CLI tools via mise node npm")]
-    for raw in (wrapper["vars"]["wrapper_src_dir"], npm["vars"]["_dev_node_mise_node_bin"]):
-        assert jinja2.Template(raw).render(_dev_node_node_where=registered) == active + "/bin"
+    raw = npm["vars"]["_dev_node_mise_node_bin"]
+    assert jinja2.Template(raw).render(_dev_node_node_where={"stdout": active + "\n"}) == active + "/bin"
+
+
+# --- the /usr/local/bin wrappers resolve node on every call ------------------
+# dotfiles' converge prunes node installs no config pins any more
+# (`mise prune --yes --tools`), so the day it bumps NODE_VERSION the old tree is
+# gone. A wrapper that exec'd the path the provision saw would point at nothing
+# until the next provision, and a non-interactive SSH agent has no other node.
+
+NODE_WRAPPED = ["node", "npm", "npx", "claude"]
+WRAPPER_TASK = "Wrap mise node, npm, npx, and claude into /usr/local/bin for non-interactive SSH tools"
+
+
+def _render_wrapper(item: str, home: Path) -> str:
+    task = _tasks()[_index(WRAPPER_TASK)]
+    env = jinja2.Environment(loader=jinja2.FileSystemLoader(str(ROLE / "templates")), undefined=jinja2.StrictUndefined)
+    return env.get_template("mise-bin-wrapper.sh.j2").render(item=item, dev_node_home=str(home), **task["vars"])
+
+
+def test_a_node_wrapper_names_no_install_version() -> None:
+    for item in NODE_WRAPPED:
+        rendered = _render_wrapper(item, Path("/home/u"))
+        code = "\n".join(ln for ln in rendered.splitlines() if ln.strip() and not ln.lstrip().startswith("#"))
+        assert "installs/" not in code, f"the {item} wrapper bakes in an install directory"
+        assert not re.search(r"\d+\.\d+\.\d+", code), f"the {item} wrapper bakes in a version"
+        assert 'mise" where node' in code, f"the {item} wrapper must ask mise which node is active"
+
+
+def _install(home: Path, version: str) -> None:
+    for item in NODE_WRAPPED:
+        tool = home / "installs/node" / version / "bin" / item
+        tool.parent.mkdir(parents=True, exist_ok=True)
+        tool.write_text(f'#!/bin/sh\necho {item} {version} "$@"\n', encoding="utf-8")
+        tool.chmod(0o755)
+
+
+def _run(wrapper: Path, home: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    """As a non-interactive SSH session runs it: no mise activation, a bare PATH."""
+    env = {"HOME": str(home), "PATH": "/usr/bin:/bin"}
+    return subprocess.run(["/bin/sh", str(wrapper), *args], env=env, capture_output=True, text=True, check=False)
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX sh wrappers")
+def test_the_wrapper_follows_a_node_bump_without_a_reprovision(tmp_path: Path) -> None:
+    """The consumer is a shell that runs the wrapper after the converge pruned the old node."""
+    home = tmp_path / "home"
+    (home / ".local/bin").mkdir(parents=True)
+    mise = home / ".local/bin/mise"
+    mise.write_text(
+        '#!/bin/sh\n[ "$1 $2" = "where node" ] || exit 2\ncat "' + str(home) + '/active"\n',
+        encoding="utf-8",
+    )
+    mise.chmod(0o755)
+    wrappers = {}
+    for item in NODE_WRAPPED:
+        wrappers[item] = tmp_path / f"wrapper-{item}"
+        wrappers[item].write_text(_render_wrapper(item, home), encoding="utf-8")
+
+    _install(home, "1.0.0")
+    (home / "active").write_text(str(home / "installs/node/1.0.0") + "\n", encoding="utf-8")
+    for item, wrapper in wrappers.items():
+        out = _run(wrapper, home, "hi")
+        assert (out.returncode, out.stdout.strip()) == (0, f"{item} 1.0.0 hi"), out.stderr
+
+    # The converge bumps node and prunes the old tree.
+    _install(home, "2.0.0")
+    shutil.rmtree(home / "installs/node/1.0.0")
+    (home / "active").write_text(str(home / "installs/node/2.0.0") + "\n", encoding="utf-8")
+    for item, wrapper in wrappers.items():
+        out = _run(wrapper, home, "hi")
+        assert (out.returncode, out.stdout.strip()) == (0, f"{item} 2.0.0 hi"), out.stderr
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX sh wrappers")
+def test_the_wrapper_says_so_when_mise_has_no_node(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    (home / ".local/bin").mkdir(parents=True)
+    mise = home / ".local/bin/mise"
+    mise.write_text("#!/bin/sh\necho 'mise ERROR node not installed' >&2\nexit 1\n", encoding="utf-8")
+    mise.chmod(0o755)
+    wrapper = tmp_path / "wrapper-node"
+    wrapper.write_text(_render_wrapper("node", home), encoding="utf-8")
+    out = _run(wrapper, home, "--version")
+    assert out.returncode != 0
+    assert "no node" in out.stderr, "a caller must see why, not 'No such file or directory'"
