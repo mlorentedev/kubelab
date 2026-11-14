@@ -26,6 +26,7 @@ from toolkit.features.gitea_git import (
     resolve_git_credential,
     run_git,
 )
+from tests.shells import child_env
 
 PASSWORD = "correct-horse-battery-staple"
 AGENT_TOKEN = "cccccccccccccccccccccccccccccccccccccccc"
@@ -181,7 +182,7 @@ def test_the_ambient_environment_is_preserved() -> None:
     Passed explicitly rather than read from `os.environ`, so the test says what it
     depends on instead of inheriting it.
     """
-    env = build_env("manu", PASSWORD, base_env={"PATH": "/usr/bin", "HOME": "/home/manu"})
+    env = build_env("manu", PASSWORD, base_env=child_env({"PATH": "/usr/bin", "HOME": "/home/manu"}))
 
     assert env["PATH"] == "/usr/bin" and env["HOME"] == "/home/manu"
     assert env["GITEA_GIT_PASS"] == PASSWORD

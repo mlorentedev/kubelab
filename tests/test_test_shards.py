@@ -22,6 +22,7 @@ import yaml
 
 from tests import sharding
 from tests.shells import BASH
+from tests.shells import child_env
 
 ROOT = Path(__file__).resolve().parents[1]
 UNKNOWN = "tests/test_zz_a_file_the_record_does_not_know.py"
@@ -105,7 +106,7 @@ def test_the_plugin_deselects_other_shards_and_runs_unknown_files(tmp_path: Path
             capture_output=True,
             text=True,
             encoding="utf-8",
-            env={"PYTHONPATH": str(ROOT), "PATH": "/usr/bin:/bin"},
+            env=child_env({"PYTHONPATH": str(ROOT), "PATH": "/usr/bin:/bin"}),
             timeout=120,
         )
         assert run.returncode == 0, run.stdout[-800:] + run.stderr[-800:]
@@ -142,7 +143,7 @@ def test_stored_durations_are_summed_per_file(tmp_path: Path) -> None:
         capture_output=True,
         text=True,
         encoding="utf-8",
-        env={"PYTHONPATH": str(ROOT), "PATH": "/usr/bin:/bin"},
+        env=child_env({"PYTHONPATH": str(ROOT), "PATH": "/usr/bin:/bin"}),
         timeout=120,
     )
     assert run.returncode == 0, run.stdout[-800:]
@@ -192,7 +193,7 @@ def test_under_xdist_the_heaviest_file_is_dispatched_first(tmp_path: Path) -> No
         capture_output=True,
         text=True,
         encoding="utf-8",
-        env={"PYTHONPATH": str(ROOT), "PATH": "/usr/bin:/bin"},
+        env=child_env({"PYTHONPATH": str(ROOT), "PATH": "/usr/bin:/bin"}),
         timeout=120,
     )
     assert run.returncode == 0, run.stdout[-800:]

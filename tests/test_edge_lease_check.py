@@ -37,6 +37,7 @@ import pytest
 import yaml
 
 from tests.ansible_jinja import ansible_env
+from tests.shells import child_env
 
 REPO = Path(__file__).resolve().parents[1]
 SCRIPT = REPO / "infra" / "ansible" / "roles" / "gateway" / "files" / "edge-lease-check.sh"
@@ -137,11 +138,13 @@ def _run(
         (leases / IFINDEX).write_text(lease, encoding="utf-8", newline="\n")
     nets = INTERNAL if networks is None else networks
     args = [f"{name}={cidr}" for name, cidr in nets.items()]
-    env = {
-        "PATH": f"{awk_bin}:/usr/bin:/bin",
-        "EDGE_LEASES_DIR": str(leases),
-        "EDGE_SYS_NET": str(sys_net),
-    }
+    env = child_env(
+        {
+            "PATH": f"{awk_bin}:/usr/bin:/bin",
+            "EDGE_LEASES_DIR": str(leases),
+            "EDGE_SYS_NET": str(sys_net),
+        }
+    )
     return subprocess.run(
         [_sh(awk_bin), str(SCRIPT), interface, *args],
         capture_output=True,
@@ -326,7 +329,9 @@ def test_a_malformed_network_is_a_usage_error(tmp_path: Path, awk_bin: Path, spe
         capture_output=True,
         text=True,
         encoding="utf-8",
-        env={"PATH": f"{awk_bin}:/usr/bin:/bin", "EDGE_LEASES_DIR": str(tmp_path), "EDGE_SYS_NET": str(tmp_path)},
+        env=child_env(
+            {"PATH": f"{awk_bin}:/usr/bin:/bin", "EDGE_LEASES_DIR": str(tmp_path), "EDGE_SYS_NET": str(tmp_path)}
+        ),
         check=False,
     )
     assert result.returncode == 64, _output(result)
@@ -419,7 +424,7 @@ def test_the_units_pass_systemd_analyze_verify(tmp_path: Path) -> None:
         capture_output=True,
         text=True,
         encoding="utf-8",
-        env={"SYSTEMD_UNIT_PATH": f"{tmp_path}:", "PATH": "/usr/bin:/bin"},
+        env=child_env({"SYSTEMD_UNIT_PATH": f"{tmp_path}:", "PATH": "/usr/bin:/bin"}),
         check=False,
     )
     assert proc.returncode == 0, proc.stderr

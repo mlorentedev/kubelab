@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from toolkit.core import sops
+from tests.shells import child_env
 
 TOOLKIT_ROOT = Path(__file__).resolve().parents[1] / "toolkit"
 _SUBPROCESS_FUNCS = {"run", "Popen", "call", "check_call", "check_output"}
@@ -95,15 +96,15 @@ class TestAgeKeyEnv:
         conv = tmp_path / ".config" / "age" / "key.txt"
         conv.parent.mkdir(parents=True)
         conv.write_text("k", encoding="utf-8", newline="\n")
-        out = sops.age_key_env({"PATH": "/x"})
+        out = sops.age_key_env(child_env({"PATH": "/x"}))
         assert out["SOPS_AGE_KEY_FILE"] == str(conv)
         assert out["PATH"] == "/x"
 
     def test_returns_base_env_unchanged_when_no_key(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        out = sops.age_key_env({"PATH": "/x"})
+        out = sops.age_key_env(child_env({"PATH": "/x"}))
         assert "SOPS_AGE_KEY_FILE" not in out
-        assert out == {"PATH": "/x"}
+        assert out == child_env({"PATH": "/x"})
 
 
 class TestSopsCallsUseAgeKeyEnv:
