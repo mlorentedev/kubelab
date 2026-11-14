@@ -4,6 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 756 | [A hot receive CPU on a saturated node is a symptom, not the limit](lesson-756-a-hot-receive-cpu-on-a-saturated-node-is-a-symptom-not-the-limit.md) | 2026-11-14 |
 | 753 | [A golden render of live data turns every onboarding into a hand edit](lesson-753-a-golden-render-of-live-data-turns-every-onboarding-into-a-hand-edit.md) | 2026-11-14 |
 | 720 | [A gotcha nobody re-measures turns into work against a defect that does not exist](lesson-720-a-gotcha-nobody-re-measures-becomes-work.md) | 2026-11-06 |
 | 689 | [netplan merges nameservers across files, so a leftover file rewrites your resolvers](lesson-689-netplan-merges-nameservers-across-files-so-a-leftover-file-rewrites-your-resolvers.md) | 2026-11-02 |

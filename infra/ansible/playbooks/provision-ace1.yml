@@ -147,7 +147,6 @@
         netplan_interface: "{{ config.networking.nodes.ace1.lan_interface }}"
         netplan_address: "{{ config.networking.nodes.ace1.lan_ip }}/24"
         netplan_gateway: "{{ config.networking.nodes.rpi4.lan_ip }}"
-        base_system_rps_interface: "{{ config.networking.nodes.ace1.lan_interface }}"
 
     - role: ../roles/ssh_hardening
       tags: [ssh]
