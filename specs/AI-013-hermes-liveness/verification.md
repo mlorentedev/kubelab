@@ -38,7 +38,7 @@ owner: manu
 
 ## Promotion candidates
 
-- [x] Lesson for the repo's `docs/lessons/`? yes: `docs/lessons/observability/lesson-754-an-on-demand-liveness-watchdog-must-be-local-but-independent-of-the-agent-kill-switch.md`.
+- [x] Lesson for the repo's `docs/lessons/`? yes: `docs/lessons/observability/lesson-755-an-on-demand-liveness-watchdog-must-be-local-but-independent-of-the-agent-kill-switch.md`.
 - [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? no: implements the existing ADR-028 on-demand and ADR-044 fabric decisions; no new architecture decision.
 - [x] New pattern candidate for `00_meta/patterns/`? no: one-repo implementation evidence so far; do not promote prematurely.
 

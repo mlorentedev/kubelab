@@ -1,5 +1,5 @@
 ---
-id: lesson-754-an-on-demand-liveness-watchdog-must-be-local-but-independent-of-the-agent-kill-switch
+id: lesson-755-an-on-demand-liveness-watchdog-must-be-local-but-independent-of-the-agent-kill-switch
 type: lesson
 status: active
 created: "2026-11-14"
