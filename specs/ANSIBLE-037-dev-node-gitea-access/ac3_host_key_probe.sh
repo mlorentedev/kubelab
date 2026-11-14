@@ -20,7 +20,12 @@
 set -uo pipefail
 
 ACE2="${ACE2_HOST:-ace2}"
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# The repository root by git, not by depth: the spec moves to specs/archive/ on archive.
+REPO_ROOT="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel 2>/dev/null)"
+if [ ! -f "${REPO_ROOT}/infra/config/values/common.yaml" ]; then
+  echo "FATAL: cannot find the repository root from $(dirname "${BASH_SOURCE[0]}")."
+  exit 1
+fi
 
 gitea() {
   (cd "${REPO_ROOT}" && python3 -c "import sys, yaml; print(yaml.safe_load(open('infra/config/values/common.yaml'))['apps']['services']['core']['gitea'][sys.argv[1]])" "$1")
@@ -56,7 +61,28 @@ case "${before}" in
 esac
 
 echo
+# The drill removes the pin, so refuse to start where the restore cannot run:
+# the provision freshness guard refuses a checkout behind origin/master.
+git -C "${REPO_ROOT}" fetch -q origin master
+if ! git -C "${REPO_ROOT}" merge-base --is-ancestor origin/master HEAD; then
+  echo "FAIL — this checkout is behind origin/master, so the re-provision in step 4 would be refused."
+  echo "Merge origin/master first. Nothing was changed on the node."
+  exit 1
+fi
+
+# From here on the node has no pin until step 4 restores it. Any exit before
+# the restore is confirmed prints the command that brings it back.
+RESTORED=0
+on_exit() {
+  if [ "${RESTORED}" -ne 1 ]; then
+    echo
+    echo "The forge's pin on ${ACE2} may be missing. Restore it with:"
+    echo "  make provision NODE=${ACE2} ENV=staging TAGS=gitea"
+  fi
+}
+
 echo "--- [2/5] remove the forge's entry from known_hosts ---"
+trap on_exit EXIT
 ssh -o BatchMode=yes "${ACE2}" "ssh-keygen -R '${ENTRY}' >/dev/null 2>&1"
 left="$(pinned_count)"
 echo "pinned lines: ${left}"
@@ -88,6 +114,6 @@ echo "pinned lines: $(pinned_count)"
 restored="$(strict_access)"
 echo "${restored}"
 case "${restored}" in
-  *"Hi there, ${AGENT}!"*) echo "PASS — both halves demonstrated" ;;
+  *"Hi there, ${AGENT}!"*) RESTORED=1; echo "PASS — both halves demonstrated" ;;
   *) echo "FAIL — re-provisioning did not restore a prompt-free connection."; exit 1 ;;
 esac
