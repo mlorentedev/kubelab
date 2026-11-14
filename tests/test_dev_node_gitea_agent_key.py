@@ -157,3 +157,28 @@ def test_the_forge_key_lookup_survives_a_dry_run() -> None:
     lookup = _task_named("Look up this node's key on each account it may be on")
     assert lookup.get("check_mode") is False
     assert lookup.get("when") == "_gitea_key_fp.rc == 0"
+
+
+def test_an_empty_credential_skips_loudly() -> None:
+    """A loaded vault without the key must not give a silent, green, access-less node."""
+    tasks = yaml.safe_load(ROLE_TASKS.read_text(encoding="utf-8"))
+    names = [t.get("name") for t in tasks]
+    notice = tasks[names.index("Say the forge block is skipped, and why")]
+    block = tasks[names.index("Configure git access to the private forge")]
+    assert notice["when"] == "dev_node_gitea_admin_password | length == 0"
+    assert block["when"] == "dev_node_gitea_admin_password | length > 0", (
+        "the notice must be the block's exact complement"
+    )
+    assert "SKIPPED" in notice["ansible.builtin.debug"]["msg"]
+
+
+def test_an_existing_key_is_recommented_to_its_account() -> None:
+    """`creates:` never revisits a key, so the comment is converged separately."""
+    recomment = _task_named("Re-comment the key with the identity it is registered to")
+    cmd = recomment["ansible.builtin.command"]
+    assert "ssh-keygen -c" in cmd and "{{ dev_node_gitea_user }}@{{ inventory_hostname }}" in cmd
+    assert "_gitea_key_comment.stdout" in recomment["when"], (
+        "re-comment only on a mismatch, or it reports changed every run"
+    )
+    read = _task_named("Read the comment on this node's forge key")
+    assert read["changed_when"] is False and read["check_mode"] is False
