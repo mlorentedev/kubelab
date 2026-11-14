@@ -404,8 +404,8 @@ def load_test_run(
 
         def save(result: dict[str, Any]) -> None:
             result = {**result, "date": now.strftime("%Y-%m-%dT%H:%MZ"), "commit": commit}
-            base.with_suffix(".json").write_text(dumps_result(result), encoding="utf-8")
-            base.with_suffix(".md").write_text(render(result), encoding="utf-8")
+            base.with_suffix(".json").write_text(dumps_result(result), encoding="utf-8", newline="\n")
+            base.with_suffix(".md").write_text(render(result), encoding="utf-8", newline="\n")
 
         image = staging["load_test"]["image"]
         save(

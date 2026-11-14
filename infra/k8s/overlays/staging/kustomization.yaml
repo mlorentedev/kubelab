@@ -16,4 +16,5 @@ resources:
   - pihole.yaml
   - gitea.yaml
   - stuck-backend.yaml
+  - imagesensortool-networkpolicy.yaml
   # secrets managed via: toolkit infra k8s apply-secrets --env staging (ADR-014)

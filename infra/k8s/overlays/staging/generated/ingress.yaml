@@ -60,3 +60,28 @@ spec:
         - name: error-pages
   tls:
     certResolver: letsencrypt
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: imagesensortool
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: imagesensortool
+    app.kubernetes.io/part-of: kubelab
+    app.kubernetes.io/managed-by: toolkit
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`staging.imagesensortool.com`)
+      kind: Rule
+      services:
+        - name: imagesensortool
+          port: 8080
+      middlewares:
+        - name: secure-headers
+        - name: rate-limit
+        - name: error-pages
+  tls:
+    certResolver: letsencrypt
