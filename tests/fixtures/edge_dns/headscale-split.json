@@ -1,0 +1,11 @@
+{
+  "staging.kubelab.live": [
+    "100.64.0.10"
+  ],
+  "staging.mlorente.dev": [
+    "100.64.0.10"
+  ],
+  "staging.imagesensortool.com": [
+    "100.64.0.10"
+  ]
+}

@@ -1,0 +1,49 @@
+---
+# Hairpin DNS: allow K3s pods to resolve staging/prod domains.
+#
+# Problem: K3s CoreDNS (10.43.0.10) only knows K8s service names.
+# Pods calling external domains (e.g. Gitea→Authelia OIDC token exchange)
+# fail with "no such host". This is standard K8s split-horizon DNS.
+#
+# Solution: forward staging zones to RPi4 CoreDNS (100.64.0.10) which is
+# already the authoritative resolver for staging domains. The `STAGING_ZONE_BLOCKS`
+# line below stands for one forward block per entry of `networking.staging_zones`
+# (common.yaml): a product's staging zone is declared once, there (IDP-053 D8,
+# k8s_render.render_staging_zones). Apply this file only through the toolkit.
+#
+# Prod zones (kubelab.live, mlorente.dev) are rewritten to Traefik's ClusterIP.
+# `answer auto` is required, not cosmetic: without it the A record comes back
+# owned by `traefik.kube-system.svc.cluster.local`, which musl (Alpine) accepts
+# and glibc (Debian/Ubuntu) silently drops. Until 2026-09-27 the hairpin only
+# worked for musl pods; the PR-Agent server (Debian) could not resolve
+# gitea.kubelab.live (lesson-472, test_coredns_hairpin_answer.py).
+#
+# K3s loads this via: import /etc/coredns/custom/*.server
+# Applied separately (kube-system, NOT via the Kustomize kubelab overlay) by the toolkit
+# through the cluster_bootstrap layer (ADR-047/TOOL-009): `RESOLVE_RPI4_TAILSCALE_IP` is
+# rendered via MagicDNS at deploy time (RPi4's Tailscale IP rotates on re-registration,
+# ADR-025) and server-side applied by `make deploy-k8s`. Declared in common.yaml.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: coredns-custom
+  namespace: kube-system
+data:
+  kubelab-hairpin.server: |
+    staging.kubelab.live:53 {
+      forward . RESOLVE_RPI4_TAILSCALE_IP
+    }
+    staging.mlorente.dev:53 {
+      forward . RESOLVE_RPI4_TAILSCALE_IP
+    }
+    staging.imagesensortool.com:53 {
+      forward . RESOLVE_RPI4_TAILSCALE_IP
+    }
+    kubelab.live:53 {
+      rewrite name regex (.*)\.kubelab\.live traefik.kube-system.svc.cluster.local answer auto
+      forward . 10.43.0.10
+    }
+    mlorente.dev:53 {
+      rewrite name regex (.*)\.mlorente\.dev traefik.kube-system.svc.cluster.local answer auto
+      forward . 10.43.0.10
+    }

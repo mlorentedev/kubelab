@@ -628,7 +628,7 @@
     "accepted_statuscodes": [
       "200-299"
     ],
-    "description": "Staging web (K3s on ace1). VPN-only — resolves via Headscale split DNS. SSOT: networking.staging_zones.",
+    "description": "Staging web (K3s on ace1). VPN-only — resolves via Headscale split DNS. SSOT: infra/config/products/edge.json (derived, EDGE-001).",
     "active": true,
     "httpBodyEncoding": "json",
     "maxredirects": 10,

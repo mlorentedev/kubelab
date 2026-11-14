@@ -88,7 +88,7 @@ kubelab publishes the contract's JSON Schema. A **registry** of admitted product
 
 "Hostname per environment" is not a free choice. A hosted product's hostnames follow one rule, enforced when `toolkit product render` runs rather than remembered:
 
-- **Staging:** `staging.<product domain>`, reachable on the VPN only (Headscale split DNS). The zone is one line in `networking.staging_zones` (`infra/config/values/common.yaml`); the RPi4 resolver, Pi-hole and the pod-side CoreDNS forward block (`coredns-custom.yaml`) all follow from that list.
+- **Staging:** `staging.<product domain>`, reachable on the VPN only (Headscale split DNS). *Amended 2026-11-13 (EDGE-001, #3495):* the zone is no longer a hand-written line. `toolkit sync edge-dns` derives it from the registry and the product's contract snapshot into `infra/config/products/edge.json`, and only inside an apex the platform grants in `infra/terraform/dns/zones.json`. A contract chooses a name in a granted zone and never grants one. `networking.staging_zones` keeps only the platform's own zones. The RPi4 resolver, Pi-hole, Headscale and the pod-side CoreDNS forward block (`coredns-custom.yaml`) all read the derived list.
 - **Prod:** `<product domain>`, public, its zone in `infra/terraform/dns/zones.json`. A product that declares prod must name `staging.` plus that hostname as its staging one.
 - **Exception, a product with no domain yet:** one label under the platform wildcard, `<product>.staging.kubelab.live`, which needs no zone line.
 - `web` already conforms (`staging.mlorente.dev`, `mlorente.dev`); nothing migrates.

@@ -53,7 +53,7 @@ Personal Internal Developer Platform (IDP) — a hybrid-cloud infrastructure pow
 - **SOPS for secrets** — age-encrypted YAML committed to Git, toolkit injects into K8s at deploy time
 - **Headscale self-hosted VPN** — replaces Tailscale SaaS, WireGuard-based mesh across all nodes
 - **Terraform for DNS** — Cloudflare zones managed declaratively, prod domains only
-- **Split DNS** — staging zones in `networking.staging_zones` (SSOT) → Headscale split DNS → RPi4 Pi-hole → CoreDNS
+- **Split DNS** — staging zones derived from the product registry into `infra/config/products/edge.json` → Headscale split DNS → RPi4 Pi-hole → CoreDNS
 
 ## Tech Stack
 

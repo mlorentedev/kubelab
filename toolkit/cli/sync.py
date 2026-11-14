@@ -274,6 +274,25 @@ def platform_json(
         raise typer.Exit(rc)
 
 
+@app.command(name="edge-dns")
+def edge_dns(
+    check: Annotated[bool, typer.Option("--check", help="Check for drift without modifying files")] = False,
+) -> None:
+    """Derive the edge's staging zones from the product registry into infra/config/products/edge.json (EDGE-001)."""
+    from toolkit.features import edge_dns as edge
+
+    try:
+        rc = edge.sync(check=check)
+    except edge.EdgeDnsError as exc:
+        logger.error(str(exc))
+        raise typer.Exit(1) from exc
+    if rc != 0:
+        manifest = edge.MANIFEST.relative_to(settings.project_root)
+        logger.error(f"{manifest} differs from the derivation: run `toolkit sync edge-dns`")
+        raise typer.Exit(rc)
+    logger.success("edge-dns: in sync" if check else "edge-dns: infra/config/products/edge.json written")
+
+
 @app.command()
 def operators(
     check: Annotated[bool, typer.Option("--check", help="Check for drift without modifying files")] = False,
@@ -540,6 +559,19 @@ def sync_all(
     except Exception as e:
         logger.error(f"platform-json sync crashed: {e}")
         failures.append("platform-json")
+
+    # Edge DNS manifest (EDGE-001)
+    try:
+        from toolkit.features import edge_dns as edge
+
+        if edge.sync(check=check) != 0:
+            logger.error("edge-dns: infra/config/products/edge.json differs from the derivation")
+            failures.append("edge-dns")
+        else:
+            logger.success("edge-dns: in sync" if check else "edge-dns: infra/config/products/edge.json written")
+    except Exception as e:
+        logger.error(f"edge-dns sync crashed: {e}")
+        failures.append("edge-dns")
 
     # 5. R2 watcher targets (BACKUP-055)
     try:

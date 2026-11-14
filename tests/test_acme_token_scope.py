@@ -188,3 +188,20 @@ def test_the_data_key_is_the_one_the_role_renders() -> None:
     template = REPO / "infra/ansible/roles/k3s_server/templates/cloudflare-secret.yaml.j2"
 
     assert "  api-token:" in template.read_text(encoding="utf-8")
+
+
+def test_the_cli_probes_the_registered_product_apexes_too() -> None:
+    """#3482: per-route issuance draws zones from the registry, so the probe must too."""
+    config = {"edge": {"traefik": {"acme_domains": [{"main": "kubelab.live"}]}}}
+    with (
+        patch("toolkit.cli.secrets._provider_value_lookup", return_value=lambda _key: "tok"),
+        patch("toolkit.features.configuration.ConfigurationManager.get_merged_config", return_value=config),
+        patch("toolkit.features.acme_token_scope.probe_acme_token", return_value=[]) as probe,
+    ):
+        result = CliRunner().invoke(app, ["acme-token-scope"])
+
+    assert result.exit_code == 0, result.output
+    zones = list(probe.call_args.args[1])
+    assert zones[0] == "kubelab.live"
+    assert "imagesensortool.com" in zones
+    assert len(zones) == len(set(zones))

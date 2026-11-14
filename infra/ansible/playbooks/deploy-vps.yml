@@ -51,10 +51,12 @@
     - import_tasks: _includes/require-secrets.yml
       tags: [always]
 
+    # The effective zones, derived from the product registry (EDGE-001); never
+    # config.networking.staging_zones, which holds the platform's own zones only.
     - name: Build Headscale split DNS from staging zones (SSOT)
       set_fact:
         _headscale_dns_split: "{{ _headscale_dns_split | default({}) | combine({item: [config.networking.nodes.rpi4.tailscale_ip]}) }}"
-      loop: "{{ config.networking.staging_zones }}"
+      loop: "{{ (lookup('file', playbook_dir ~ '/../../config/products/edge.json') | from_json).staging_zones }}"
       tags: [always]
 
     - name: Build Headscale extra records from vpn_extra_records (SSOT)
