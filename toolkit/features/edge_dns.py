@@ -186,5 +186,5 @@ def sync(*, check: bool = False, path: Path = MANIFEST) -> int:
     if check:
         return 0 if current == rendered else 1
     if current != rendered:
-        path.write_text(rendered, encoding="utf-8")
+        path.write_text(rendered, encoding="utf-8", newline="\n")
     return 0
