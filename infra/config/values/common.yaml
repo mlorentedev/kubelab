@@ -2394,6 +2394,44 @@ apps:
     # (NaN, ADR-042 C11b). What runs here now is the operator's agent tooling on
     # ace2 (ADR-068, spec AI-009-hermes-ace2), deployed by the `agent_stack` role.
     ai:
+      # Measured NaN capability catalog (AI-015/AI-016). Both Open WebUI and
+      # Hermes consume this one declaration. Live 2026-11-13: each chat model
+      # below answered a completion; `minimax-h3` was listed by /v1/models but
+      # returned 403 for this key, so it is deliberately absent.
+      nan:
+        models:
+          chat:
+            - qwen3.6
+            - gemma4
+            - glm5.3-flash
+            - deepseek-v4-flash
+            - mimo-v2.6-flash
+            - qwen3.8-flash
+            - glm5.3
+            - kimi-k3.1-pro
+            - qwen3.8-max
+            - deepseek-v4-pro
+            - hy4
+          # Hermes's auxiliary image-description route. Live AI-016 proof with
+          # one solid-red PNG: deepseek-v4-flash answered "White" while qwen3.6
+          # answered "Red" through the same v0.22.1 adapter, so pin the latter.
+          vision: qwen3.6
+          speech_to_text: whisper
+          text_to_speech:
+            model: kokoro
+            voice: ef_dora
+          # NaN answers image requests with a temporary URL. Both models share
+          # ONE 100-request/member/month pool (NaN docs, 2026-11-13), not 100
+          # each. Hermes stops at 50, leaving headroom for Open WebUI.
+          image_generation:
+            model: flux-2-klein
+            alternatives: [qwen-image-2.1]
+            size: 512x512
+            monthly_shared_limit: 100
+            hermes_monthly_limit: 50
+          # Open WebUI's RAG routes (4096 dimensions measured 2026-11-13).
+          embedding_model: qwen3-embedding
+          reranking_model: rerank
       open_webui:
         # ADR028-004. Chat history and accounts live only here, with no
         # promotion path, so a second instance would fork them. On-demand
@@ -2425,38 +2463,10 @@ apps:
         # `dimensions`, so NaN returns 4096-wide vectors; Chroma takes any width.
         # A batch of 16 was measured to answer (spec verification.md, PR 5a).
         rag:
-          embedding_model: qwen3-embedding
           embedding_batch_size: 16
-          reranking_model: rerank
-        # One job per NaN model (spec AI-015, #2211). NaN's key lists every model
-        # it hosts, and the picker offered embedding, reranking, speech and image
-        # models as if they could chat. Open WebUI offers these chat models from
-        # NaN and no others; the rest are wired to the feature they serve.
-        # Measured 2026-10-11 against NaN: each chat model answers 200;
-        # `minimax-h3` (listed) and `glm5.3` answered 401 then. NaN has since
-        # opened every model to every plan (one credit pool, 2026-11); these two
-        # are left out because nothing here is configured for them;
-        # `qwen-image-2.1` is a second image model on the same 100-a-month cap.
-        models:
-          chat:
-            - qwen3.6
-            - gemma4
-            - glm5.3-flash
-            - deepseek-v4-flash
-            - mimo-v2.6-flash
-            - qwen3.8-flash
-          # Transcribed a Spanish sample as `es` (2026-10-11).
-          speech_to_text: whisper
-          # NaN lists no voices; `ef_dora` is Kokoro's Spanish voice and answered
-          # 200. Each user can pick another in Open WebUI's settings.
-          text_to_speech:
-            model: kokoro
-            voice: ef_dora
-          # NaN answers an image request with a `url`, so Open WebUI must not ask
-          # for `b64_json` (IMAGE_URL_RESPONSE_MODELS_REGEX_PATTERN, webui.env.j2).
-          image_generation:
-            model: flux-2-klein
-            size: 512x512
+        # The model allowlist and speech/image routes come from
+        # apps.services.ai.nan.models (spec AI-015/AI-016). Keeping them out of
+        # this service prevents Hermes and Open WebUI drifting into two catalogs.
         # The MCP bridge that serves Open WebUI the vault, read-only (spec AI-009
         # AC9): mcpo in front of the filesystem MCP server, on Open WebUI's
         # network and no other, built on ace2 by the agent_stack role. The base

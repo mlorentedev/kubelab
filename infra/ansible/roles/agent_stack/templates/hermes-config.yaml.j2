@@ -10,7 +10,7 @@
   JSON is YAML, so `tojson` writes each value as the SSOT typed it.
 #}
 {% set ported = agent_stack_hermes.agent_config %}
-{% set role_sections = ['approvals', 'terminal', 'slack', 'unauthorized_dm_behavior', 'cron', 'model', 'delegation', 'fallback_providers', 'skills', 'mcp_servers'] %}
+{% set role_sections = ['approvals', 'terminal', 'slack', 'unauthorized_dm_behavior', 'cron', 'model', 'delegation', 'fallback_providers', 'skills', 'mcp_servers', 'auxiliary', 'stt', 'tts', 'image_gen', 'plugins'] %}
 
 model:
   provider: custom
@@ -35,6 +35,9 @@ terminal:
   # ace2 itself (C13), and receives none of the gateway's environment.
   backend: docker
   docker_image: {{ agent_stack_hermes.sandbox.image }}
+  # v0.22.1 resolves os.getuid/getgid in the gateway: 10000:10000. Matching
+  # that identity prevents root-owned files from blocking atomic memory renames.
+  docker_run_as_host_user: true
   docker_forward_env: []
   container_cpu: {{ agent_stack_hermes.sandbox.cpus }}
   container_memory: {{ agent_stack_hermes.sandbox.memory_mb }}
@@ -94,6 +97,46 @@ delegation:
   {{ key }}: {{ value | tojson }}
 {% endfor %}
 
+# NaN capabilities (spec AI-016), using v0.22.1's actual config contract.
+# The environment reference is expanded by Hermes at load time; the key itself
+# stays only in the 0600 env file. An explicit auxiliary vision route makes
+# image input use the description path even when the main model can see.
+auxiliary:
+  vision:
+    provider: custom
+    model: {{ agent_stack_nan_models.vision }}
+    base_url: {{ agent_stack_nan_api_base_url }}
+    api_key: ${NAN_API_KEY}
+
+stt:
+  provider: openai
+  # Voice notes may be Spanish or English: do not inherit upstream's `en` hint.
+  language: ""
+  openai:
+    model: {{ agent_stack_nan_models.speech_to_text }}
+    base_url: {{ agent_stack_nan_api_base_url }}
+    api_key: ${NAN_API_KEY}
+
+tts:
+  provider: openai
+  openai:
+    model: {{ agent_stack_nan_models.text_to_speech.model }}
+    voice: {{ agent_stack_nan_models.text_to_speech.voice }}
+    base_url: {{ agent_stack_nan_api_base_url }}
+    api_key: ${NAN_API_KEY}
+
+image_gen:
+  provider: nan
+  # One request at a time; a single locked counter covers both NaN models.
+  max_parallel_requests: 1
+  nan:
+    monthly_limit: {{ agent_stack_nan_models.image_generation.hermes_monthly_limit }}
+    monthly_shared_limit: {{ agent_stack_nan_models.image_generation.monthly_shared_limit }}
+  openai:
+    model: {{ agent_stack_nan_models.image_generation.model }}
+    base_url: {{ agent_stack_nan_api_base_url }}
+    key_env: NAN_API_KEY
+
 # The managed skills (spec AI-012 AC9) are an external directory: Hermes treats its
 # skills as read-only to the agent and its curator, and ranks them below the agent's
 # own. `external_dirs` is the role's, so the ported keys cannot point it elsewhere.
@@ -105,6 +148,16 @@ delegation:
 {% set _ = skills.update({'external_dirs': [agent_stack_hermes_skills_mount]}) %}
 {% endif %}
 skills: {{ skills | tojson }}
+
+{# User backends are opt-in; only bundled backends auto-load (v0.22.1
+   plugins_discovery.gate_manifest). Selection is still image_gen.provider. #}
+{% set plugin_config = {} %}
+{% for key, value in (ported.plugins | default({})).items() if key != 'enabled' %}
+{% set _ = plugin_config.update({key: value}) %}
+{% endfor %}
+{% set plugin_enabled = ['image_gen/nan'] + (ported.plugins | default({})).get('enabled', []) %}
+{% set _ = plugin_config.update({'enabled': plugin_enabled | unique | list}) %}
+plugins: {{ plugin_config | tojson }}
 
 {% if agent_stack_grafana_token | length > 0 %}
 # The cluster-state reader (spec AI-024 stage 2): a stdio MCP server the gateway starts,
