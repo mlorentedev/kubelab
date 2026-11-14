@@ -152,3 +152,68 @@
           {{ ('node-backup-prune.service failures in the last 7 days: ' ~ (prune_failures.stdout_lines | length))
              if prune_load_state.stdout == 'loaded'
              else 'node-backup-prune.service is not installed on this node (' ~ prune_load_state.stdout ~ '): nothing measured' }}
+
+    - name: Read how many deletes the bucket lock refused in the last prune
+      # #3496: a refused pack delete exits 0, so the unit's result cannot show
+      # it. The prune ends every run with this count. Absent on a run that
+      # waited, never shipped, or predates the count: reported as not measured.
+      check_mode: false
+      ansible.builtin.shell:
+        cmd: >-
+          set -o pipefail;
+          journalctl -u node-backup-prune.service --since "7 days ago" --output cat --no-pager
+          | grep 'deletes refused by the bucket lock' | tail -n 1
+      args:
+        executable: /bin/bash
+      register: prune_refused
+      changed_when: false
+      failed_when: prune_refused.rc not in [0, 1]
+
+    - name: Read how many prune runs the journal holds for the last seven days
+      # The denominator: "0 failures" and "0 waits" mean nothing over a journal
+      # that kept no run at all (rotated, or a node that was off).
+      check_mode: false
+      ansible.builtin.command:
+        cmd: >-
+          journalctl -u node-backup-prune.service --since "7 days ago"
+          --output cat --no-pager --grep "^Starting node-backup-prune"
+      register: prune_runs
+      changed_when: false
+      failed_when: prune_runs.rc not in [0, 1]
+
+    - name: Read the prune runs that waited instead of forgetting over the last seven days
+      # A run that waits for copied history (#1920) exits 0 without calling
+      # forget, so "0 failures" alone cannot tell a week of real prunes from a
+      # week of waits. This count can.
+      check_mode: false
+      ansible.builtin.command:
+        cmd: >-
+          journalctl -u node-backup-prune.service --since "7 days ago"
+          --output cat --no-pager --grep "forget waits"
+      register: prune_waits
+      changed_when: false
+      failed_when: prune_waits.rc not in [0, 1]
+
+    - name: Read the ship runs that found the repository locked over the last seven days
+      # #3496: the prune and an always-on ship both fire at 00:00 to 00:05. The
+      # prune waits for a ship (--retry-lock), the ship's `backup` does not, and
+      # a prune retrying refused deletes holds the exclusive lock for about 15
+      # minutes. Each line counted here is a ship that failed on that lock.
+      check_mode: false
+      ansible.builtin.command:
+        cmd: >-
+          journalctl -u node-backup-ship.service --since "7 days ago"
+          --output cat --no-pager --grep "already locked"
+      register: ship_locked
+      changed_when: false
+      failed_when: ship_locked.rc not in [0, 1]
+
+    - name: Report the lock's effect on prune and ship
+      check_mode: false
+      ansible.builtin.debug:
+        msg: >-
+          {{ (prune_refused.stdout | trim) if (prune_refused.stdout | trim)
+             else 'node-backup-prune: no refused-delete count in the last 7 days (no run that reached forget since the count shipped)' }};
+          node-backup-prune runs in the journal for the last 7 days: {{ prune_runs.stdout_lines | length }};
+          node-backup-prune runs that waited instead of forgetting in the last 7 days: {{ prune_waits.stdout_lines | length }};
+          node-backup-ship runs that found the repository locked in the last 7 days: {{ ship_locked.stdout_lines | length }}
