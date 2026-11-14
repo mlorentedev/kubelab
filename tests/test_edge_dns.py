@@ -27,7 +27,7 @@ APEXES = ["kubelab.live", "mlorente.dev", "imagesensortool.com", "example-produc
 def _registry(tmp_path: Path, products: dict[str, Any], name: str = "products.yaml") -> Path:
     # A new file per version: load_registry caches by path.
     path = tmp_path / name
-    path.write_text(yaml.safe_dump({"products": products}), encoding="utf-8")
+    path.write_text(yaml.safe_dump({"products": products}, sort_keys=False), encoding="utf-8")
     return path
 
 
@@ -151,3 +151,39 @@ def test_the_platform_no_longer_hand_lists_a_product_zone() -> None:
 
 def test_the_accessor_reads_the_committed_manifest() -> None:
     assert edge_dns.staging_zones() == json.loads(edge_dns.MANIFEST.read_text(encoding="utf-8"))["staging_zones"]
+
+
+# --- ACME probe zones (#3482) -------------------------------------------------
+
+
+def test_the_acme_probe_covers_each_registered_hostnames_apex_per_env(world: tuple[Path, Path]) -> None:
+    registry, snapshots = world
+    _snapshot(snapshots / "prod", "web", "staging.mlorente.dev", "mlorente.dev")
+    mains = {"staging": ["kubelab.live"], "prod": ["kubelab.live"]}
+
+    zones = edge_dns.acme_probe_zones(mains, APEXES, registry=registry, snapshot_dir=snapshots)
+
+    # The acme_domains mains first, each once, then the product apexes in registry order.
+    assert zones == ["kubelab.live", "mlorente.dev", "imagesensortool.com"]
+
+
+def test_a_new_product_adds_its_probe_target_and_removing_it_drops_it(world: tuple[Path, Path]) -> None:
+    registry, snapshots = world
+    products = yaml.safe_load(registry.read_text(encoding="utf-8"))["products"]
+    _snapshot(snapshots, "shop", "staging.example-product.test")
+    added = _registry(registry.parent, products | {"shop": _remote("shop")}, "added.yaml")
+    mains = {"staging": ["kubelab.live"], "prod": ["kubelab.live"]}
+
+    assert "example-product.test" in edge_dns.acme_probe_zones(mains, APEXES, registry=added, snapshot_dir=snapshots)
+    assert "example-product.test" not in edge_dns.acme_probe_zones(
+        mains, APEXES, registry=registry, snapshot_dir=snapshots
+    )
+
+
+def test_every_committed_registered_hostname_has_its_apex_probed() -> None:
+    """The guard #3482 asks for, on the committed registry: no registered hostname escapes the probe."""
+    zones = set(edge_dns.acme_probe_zones({"staging": [], "prod": []}, edge_dns.granted_apexes()))
+    for env in ("staging", "prod"):
+        for host in edge_dns.registered_hostnames(env):
+            assert edge_dns.apex_of(host, edge_dns.granted_apexes()) in zones, host
+    assert "imagesensortool.com" in zones

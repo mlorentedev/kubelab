@@ -974,9 +974,9 @@ def acme_token_scope(
     zone: found by name, DNS records readable, zone settings refused with 403.
 
     The zones are the `main` names of `edge.traefik.acme_domains` in staging
-    and prod, the apexes the clusters' certificates are issued for. That list is what the VPS
-    Traefik role reads; K3s Traefik issues per IngressRoute host, under the
-    same apexes today.
+    and prod (what the VPS Traefik role reads), then the apex of every
+    registered product hostname per env: K3s Traefik issues per IngressRoute
+    host, and a product's generated route issues in its own zone (#3482).
 
     Exits 1 when a probe answers differently (a 200 on zone settings means the
     token is broader than DNS), 2 when Cloudflare cannot be asked.
@@ -985,6 +985,7 @@ def acme_token_scope(
     provision. `--live` also compares each cluster's Secret with it, exiting 1 on
     a difference and 2 when a cluster cannot be read.
     """
+    from toolkit.features import edge_dns
     from toolkit.features.acme_token_scope import ScopeUncheckableError, cluster_holds_token, probe_acme_token
     from toolkit.features.configuration import ConfigurationManager
 
@@ -994,11 +995,23 @@ def acme_token_scope(
         logger.error("cloudflare.acme_dns_token is absent from SOPS")
         raise typer.Exit(2)
     # Both clusters, each with its own overrides merged: a zone only one env
-    # issues for must still be probed.
-    zones: list[str] = []
-    for env in ("staging", "prod"):
-        merged = ConfigurationManager(env, settings.project_root).get_merged_config()
-        zones += [d["main"] for d in merged["edge"]["traefik"]["acme_domains"] if d["main"] not in zones]
+    # issues for must still be probed. Then every registered product hostname's
+    # apex: its generated route issues per host, in a zone acme_domains may not name (#3482).
+    mains = {
+        env: [
+            d["main"]
+            for d in ConfigurationManager(env, settings.project_root).get_merged_config()["edge"]["traefik"][
+                "acme_domains"
+            ]
+        ]
+        for env in ("staging", "prod")
+    }
+    try:
+        zones = edge_dns.acme_probe_zones(mains, edge_dns.granted_apexes())
+    except edge_dns.EdgeDnsError as exc:
+        logger.error(str(exc))
+        raise typer.Exit(1) from exc
+    logger.info(f"zones: {', '.join(zones)}")
 
     try:
         probes = probe_acme_token(token, zones)

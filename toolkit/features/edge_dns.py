@@ -20,7 +20,7 @@ VPS play read it with ``lookup('file') | from_json``, like ``services.json``.
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 
 import yaml
@@ -129,6 +129,37 @@ def derive_staging_zones(
         zone = staging_zone_for(host, declared, apexes)
         if zone is not None and zone not in zones:
             zones.append(zone)
+    return zones
+
+
+def acme_probe_zones(
+    mains_by_env: Mapping[str, Sequence[str]],
+    apexes: Iterable[str],
+    *,
+    registry: Path | None = None,
+    snapshot_dir: Path = SNAPSHOT_DIR,
+) -> list[str]:
+    """The Cloudflare zones the ACME token must reach: what the clusters issue certificates in (#3482).
+
+    The ``edge.traefik.acme_domains`` mains of each env first, then the apex of
+    every registered product hostname per env, since a generated IngressRoute with
+    ``certResolver`` and no ``domains`` issues by DNS-01 on its own host's zone.
+    Each zone once, in first-seen order.
+    """
+    apexes = list(apexes)
+    zones = list(dict.fromkeys(zone for mains in mains_by_env.values() for zone in mains))
+    for env in mains_by_env:
+        for host in registered_hostnames(env, registry=registry, snapshot_dir=snapshot_dir):
+            apex = apex_of(host, apexes)
+            if apex is None:
+                raise EdgeDnsError(
+                    f"{env} hostname '{host}' is in no Cloudflare zone the platform declares",
+                    "its certificate is issued by DNS-01 in its apex zone, which the platform must declare "
+                    "before a product may use it (EDGE-001).",
+                    "declare its apex in infra/terraform/dns/zones.json (an operator change, reviewed)",
+                )
+            if apex not in zones:
+                zones.append(apex)
     return zones
 
 
