@@ -1700,6 +1700,10 @@ sync-k8s-images:
 sync-operators:
 	@$(TOOLKIT) sync operators
 
+.PHONY: renovate-dry-run
+renovate-dry-run: ## Run the pinned Renovate engine over the working tree, extract only; touches no forge (#3440)
+	@$(TOOLKIT) tools renovate-dry-run
+
 .PHONY: sync-oidc-hashes
 sync-oidc-hashes:
 	@test -n "$(filter $(ENV),staging prod)" || (echo "Usage: make sync-oidc-hashes ENV=staging|prod" && exit 1)

@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import os
 import pathlib
+import re
 import shutil
 import subprocess
 import sys
@@ -506,3 +507,57 @@ def test_a_release_failure_that_is_not_json_names_its_output(tmp_path: pathlib.P
     assert code != 0
     assert "::error::toolkit product release-contract failed: Traceback: boom" in log, log
     assert not any(call.startswith("product render") for call in calls)
+
+
+# --- the registry pull token (#3286) ----------------------------------------
+
+# The catalog key of the Gitea registry pull token (`toolkit secrets set` in the bee role records it
+# under this key). `catalog_secret` reads the variable the key flattens to before it asks SOPS, and a
+# hosted runner has no age key, so this is the only way the token reaches a private product's proof.
+PULL_TOKEN_KEY = "apps.services.core.gitea.registry_pull_token"
+
+
+def _secret_references(text: str) -> list[str]:
+    """Every `secrets.NAME` the text names inside a `${{ }}` expression."""
+    return re.findall(r"\$\{\{[^}]*\bsecrets\.([A-Za-z0-9_]+)[^}]*\}\}", text)
+
+
+def test_the_release_contract_step_receives_the_pull_token_as_the_variable_the_toolkit_reads() -> None:
+    """The consumer is `catalog_secret`: the step's env, handed to it, must yield the Actions secret's value."""
+    from toolkit.features.registry import catalog_secret, catalog_secret_variable
+
+    variable = catalog_secret_variable(PULL_TOKEN_KEY)
+    env = _step("contract").get("env", {})
+    assert env.get(variable) == f"${{{{ secrets.{variable} }}}}"
+    # The proof's own lookup, fed the env a runner would build from that mapping.
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setenv(variable, "sentinel-token-value")
+        assert catalog_secret(PULL_TOKEN_KEY) == "sentinel-token-value"
+
+
+def test_no_other_step_receives_the_pull_token() -> None:
+    """Narrow by construction: the token is in the one step that proves the image, and nowhere else."""
+    from toolkit.features.registry import catalog_secret_variable
+
+    variable = catalog_secret_variable(PULL_TOKEN_KEY)
+    holders = [step.get("id") or step.get("name") for step in _steps() if variable in str(step.get("env", {}))]
+    assert holders == ["contract"]
+    # A workflow- or job-level `env:` would hand it to every step while the list above stays green.
+    doc = _load()
+    assert variable not in str(doc.get("env", {}))
+    assert [name for name, job in doc["jobs"].items() if variable in str(job.get("env", {}))] == []
+
+
+def test_a_secret_never_appears_inside_a_run_script() -> None:
+    """`${{ secrets.X }}` in a `run:` is textual substitution into the shell and shows in a trace."""
+    offenders = [
+        step.get("id") or step.get("name") for step in _steps() if _secret_references(str(step.get("run", "")))
+    ]
+    assert offenders == []
+
+
+def test_the_pull_token_is_not_echoed_by_the_contract_step() -> None:
+    from toolkit.features.registry import catalog_secret_variable
+
+    variable = catalog_secret_variable(PULL_TOKEN_KEY)
+    assert variable not in str(_step("contract")["run"])

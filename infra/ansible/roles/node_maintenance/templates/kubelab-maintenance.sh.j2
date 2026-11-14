@@ -155,8 +155,26 @@ if command -v docker &>/dev/null; then
         FAILURES="$FAILURES docker-reclaim"
     fi
 {% endif %}
-    docker image prune -af || echo "WARN: docker image prune failed"
-    docker builder prune -af || echo "WARN: docker builder prune failed"
+    # BEGIN docker-prune-gate
+    # Everything unused goes (`-a`) unless the node opts into pruning by disk
+    # pressure: then only above the threshold, and below it only dangling images
+    # and build cache, so a CI node does not start every day cold (#3079). The
+    # filesystem is the one holding Docker's root; an unreadable one prunes.
+{% if maintenance_docker_prune_above_percent | int > 0 %}
+    DOCKER_ROOT="$(docker info -f '{% raw %}{{.DockerRootDir}}{% endraw %}' 2>/dev/null || true)"
+    DOCKER_PCENT="$(df --output=pcent "${DOCKER_ROOT:-/var/lib/docker}" 2>/dev/null | tail -1 | tr -dc '0-9' || true)"
+    if [ "${DOCKER_PCENT:-100}" -ge {{ maintenance_docker_prune_above_percent }} ]; then
+        PRUNE_ALL="-a"
+    else
+        PRUNE_ALL=""
+        echo "Docker's filesystem at ${DOCKER_PCENT}%, under {{ maintenance_docker_prune_above_percent }}%: keeping unused images and build cache"
+    fi
+{% else %}
+    PRUNE_ALL="-a"
+{% endif %}
+    docker image prune -f $PRUNE_ALL || echo "WARN: docker image prune failed"
+    docker builder prune -f $PRUNE_ALL || echo "WARN: docker builder prune failed"
+    # END docker-prune-gate
 
     # Ad-hoc buildx builder containers (docker/setup-buildx-action, per CI job)
     # outlive the ephemeral runner that created them and are invisible to

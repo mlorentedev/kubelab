@@ -251,6 +251,72 @@ Parallel work that remains on CONSOLE-004's task list:
 - the runbook;
 - the end-to-end probe.
 
+## Amendments
+
+### 2026-11-13 — Grouping, a board layout, and parity with the board it replaces (#3441)
+
+Step 4 named a filtered list. The console is meant to replace the bitácora board (ADR-066 A4), and the operator wants it clearly more capable than that board, not a list that does less. Nothing in this ADR measured "more capable". The operator decided the following on 2026-11-13.
+
+**Layouts.** One query (tabs, filters, saved view) is rendered in one of two layouts.
+
+- **List**, Linear-style, groupable. This comes first.
+- **Board**, GitHub-Projects-style: one column per value of a field, with cards. It comes right after, over the same filters and saved views.
+
+A saved view stores its layout and its grouping along with its filters.
+
+**Group-by fields.** The same set is offered as list groups and as board columns:
+
+- status and priority;
+- pull-request state (D7's seven values);
+- repository and area;
+- assignee and author.
+
+Status, priority and area are the forge labels CONSOLE-006 declares once for both forges (`status:*`, `priority:*`, `area:*`). An item with no value for the field falls in a "none" group, never out of the view.
+
+**Grouping is computed by the API, as D7 already requires of every derived value.** The queue is paged (step 1), so counts computed in the browser would count one page and present it as the whole. The queue endpoint therefore takes the group field and answers each group's count over every item that matches the filters. The rows stay paged within each group.
+
+**Pull-request state is visible in both layouts.**
+
+- In the list, every pull-request row carries its D7 state as a chip, so "triaged or not, conflicting, CI green or red" reads without opening the row.
+- In the board, the same state is a column field.
+- "Merged unreviewed" stays on merged pull requests, as D7 says.
+
+**Parity with the live board.** Inventory read from project 1 on 2026-11-13. Each row says what the console does with it.
+
+| The board today | In the console |
+|---|---|
+| Status (Backlog, In Progress, Blocked, Done) | `status:*` labels. Open with no label is Backlog, closed is Done. Group and column field. |
+| Priority (P0 to P3) | `priority:*` labels. Group and column field. |
+| Type (spec, bug, chore, ideas) | `type:*` labels. Filter. |
+| Stream | `area:*` labels (CONSOLE-006 moves the area set to a forge-neutral key). Group and column field. |
+| ID (`AREA-NNN`) | Stays in the title, where it already is. Found by text filter, not stored as a field. |
+| Repository, assignees, labels | Group and filter fields. |
+| Reviewers, linked pull requests | Requested reviewers on pull-request rows, which D7's "reviewer missing" reads anyway. The issue and pull-request link is read from closing keywords. Both are shown in a row, not grouped. |
+| Created, updated, closed | `updated_at` today. Created and closed land with #3435, and sorting and ages switch to them then. |
+| Parent issue, sub-issues progress | Read where the forge has them (GitHub sub-issues). Gitea has none, so this is shown, never grouped by. Its own step after the board. |
+| Milestone | Not carried. No open item uses one. The trigger to reopen is the first milestone in use. |
+| View "Board" (by Status) | The board layout grouped by status, saved as a default view. |
+| View "By repo" | The list grouped by repository. |
+| View "Priority queue" | The list grouped by priority. |
+| View "PRs pending" | The pull-requests tab grouped by pull-request state. |
+| `add-to-project.yml`, `bitacora-status.yml` automations | Step 9, as already sequenced. |
+
+**What makes it more than the board, not only equal to it:**
+
+- both forges in one view;
+- every pull request's state derived from CI, conflicts, reviews and the triage marker, instead of set by hand;
+- inbox reasons;
+- per-source freshness, so an unread forge never shows as an empty one;
+- keyboard navigation;
+- row writes confirmed by the forge (ADR-066 A2).
+
+**Sequence, amended.**
+
+- **Step 4** becomes the list with grouping by every field above except pull-request state. That field needs step 5, so it joins the list there.
+- **Step 5** adds the state chip and the pull-request-state group.
+- **A new step 5a** adds the board layout and the four default views from the parity table.
+- Steps 3 and 4 are unchanged in who merges them: step 3 still adds a CI workflow and is a human merge.
+
 ## References
 
 - #2477 (this decision), #2570 (CONSOLE-004), #3107 (console host), #3068 (webhook source filter), #2929 (OBS-042), #2494 (ADR-050 D5), #1860

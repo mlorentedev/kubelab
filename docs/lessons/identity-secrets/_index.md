@@ -4,6 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 742 | [A key missing from the local secrets file does not mean nobody holds the value](lesson-742-absent-from-the-local-secrets-file-is-not-held-by-nobody.md) | 2026-11-13 |
 | 734 | [Retiring a credential path moves every caller that borrowed it, not only the ones it was named for](lesson-734-retiring-a-credential-path-moves-every-caller-that-borrowed-it.md) | 2026-11-10 |
 | 730 | [Gitea drops a push whitelist entry for an account without write, and answers 200](lesson-730-gitea-drops-a-push-whitelist-entry-without-write-and-answers-200.md) | 2026-11-09 |
 | 728 | [Gitea's repository creation limit is write-only and is checked on the owner](lesson-728-gitea-repository-creation-limit-is-write-only-and-checked-on-the-owner.md) | 2026-11-09 |

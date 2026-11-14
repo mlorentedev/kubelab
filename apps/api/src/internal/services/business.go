@@ -47,7 +47,7 @@ func GetEmailDelay(minutes int) int {
 
 // ValidateEmailConfiguration validates that email configuration exists
 func ValidateEmailConfiguration() bool {
-	if conf.Email.Host == "" || conf.Email.Port == "" || conf.Email.User == "" || conf.Email.Pass == "" {
+	if settings().Email.Host == "" || settings().Email.Port == "" || settings().Email.User == "" || settings().Email.Pass == "" {
 		logger.LogFunction("error", constants.Messages.Backend.Error["EmailConfigMissing"], nil)
 		return false
 	}
@@ -92,6 +92,6 @@ func generateResourceEmailHTML(options models.ResourceEmailOptions) string {
 		options.ResourceLink,
 		options.ResourceLink,
 		year,
-		conf.Site.URL,
-		conf.Site.URL)
+		settings().Site.URL,
+		settings().Site.URL)
 }

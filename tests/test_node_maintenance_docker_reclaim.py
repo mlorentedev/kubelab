@@ -125,7 +125,7 @@ def test_the_timer_script_runs_the_reclaim_between_the_two_prunes() -> None:
     # A failure is recorded, not swallowed.
     assert 'FAILURES="$FAILURES docker-reclaim"' in script
     # Stopped containers go first so their volumes read as unheld; images after.
-    assert script.index("docker container prune -f") < invocation.start() < script.index("docker image prune -af")
+    assert script.index("docker container prune -f") < invocation.start() < script.index("docker image prune -f")
 
 
 def _run_docker_section(tmp_path: Path, group_names: list[str], reclaim_rc: int) -> tuple[list[str], str]:
@@ -157,26 +157,35 @@ def _run_docker_section(tmp_path: Path, group_names: list[str], reclaim_rc: int)
     return (log.read_text(encoding="utf-8").splitlines() if log.exists() else []), result.stdout
 
 
+def _image_prune(calls: list[str]) -> int:
+    """Index of the image prune; whether it carries `-a` is the disk gate's call."""
+    found = [i for i, c in enumerate(calls) if c.startswith("docker image prune -f")]
+    assert len(found) == 1, f"expected exactly one image prune, got {calls}"
+    return found[0]
+
+
 def test_the_timer_actually_calls_the_reclaim_in_order(tmp_path: Path) -> None:
     calls, out = _run_docker_section(tmp_path, CI_HOST, reclaim_rc=0)
     reclaim = [i for i, c in enumerate(calls) if c.startswith("python3 /opt/kubelab-docker-reclaim.py --apply")]
     assert len(reclaim) == 1, calls
     # The stub logs the arguments the shell passed, so the filter's quotes are gone.
     prune = "docker container prune -f --filter label!=com.docker.compose.project"
-    assert calls.index(prune) < reclaim[0] < calls.index("docker image prune -af")
+    assert calls.index(prune) < reclaim[0] < _image_prune(calls)
     assert "FAILURES=\n" in out or out.rstrip().endswith("FAILURES=")
 
 
 def test_a_failed_reclaim_is_recorded_and_the_cleanup_goes_on(tmp_path: Path) -> None:
     calls, out = _run_docker_section(tmp_path, CI_HOST, reclaim_rc=1)
     assert "docker-reclaim" in out
-    assert "docker image prune -af" in calls, "a failed reclaim must not stop the rest of the cleanup"
+    # A failed reclaim must not stop the rest of the cleanup: the image prune still runs after it.
+    reclaim = [i for i, c in enumerate(calls) if c.startswith("python3 /opt/kubelab-docker-reclaim.py --apply")]
+    assert reclaim and reclaim[0] < _image_prune(calls), calls
 
 
 def test_a_node_without_the_reclaim_never_calls_it(tmp_path: Path) -> None:
     calls, _ = _run_docker_section(tmp_path, GATEWAY, reclaim_rc=0)
     assert not [c for c in calls if c.startswith("python3")]
-    assert "docker image prune -af" in calls
+    _image_prune(calls)  # asserts the image prune ran exactly once
 
 
 def test_a_node_without_the_reclaim_renders_none() -> None:
