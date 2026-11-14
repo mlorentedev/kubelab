@@ -36,7 +36,7 @@ owner: manu
 - [x] Every acceptance criterion has a non-vacuous `features.json` verification and observed evidence or an explicitly named pending live gate.
 - [x] Lint, type and relevant test suites pass; diff stays within AI-013.
 - [x] Knowledge hygiene and newly discovered test-contract defects are recorded in-session.
-- [ ] Draft PR opened with `Closes #2175` only after live acceptance is satisfied or explicitly deferred by the operator.
+- [x] Draft PR #3558 opened with `Closes #2175` after live acceptance; independent review findings then applied and live-verified.
 - [ ] CI and every reviewer output dispositioned; no merge from the implementing session.
 - [ ] Independent adversarial review before a separate curator archives the spec.
 - [ ] `/handoff` completed.

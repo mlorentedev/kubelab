@@ -32,6 +32,6 @@
     "behavior": "AC5: provisioning is idempotent, regression tests protect the wiring, and an approved live stop/start records alert and recovery evidence without credentials.",
     "verification": "poetry run pytest -q tests/test_hermes_liveness.py && make lint-ansible",
     "state": "passing",
-    "evidence": "Final suite 10630 passed/96 skipped; Ruff, mypy and 26 playbooks green. Initial pair ended changed=0 and final corrected-head provision changed=0/failed=0. Clean drill produced one incident and recovery after 1 failed run; final gateway healthy, timer active, spool 0."
+    "evidence": "Final suite 10630 passed/96 skipped; Ruff, mypy and 26 playbooks green. Initial pair ended changed=0 and final corrected-head provision changed=0/failed=0. Review-fix recreate measured changed=4 then changed=0 with zero new watchdog messages. Clean drill produced one incident and recovery after 1 failed run; final gateway healthy, timer active, spool 0."
   }
 ]
