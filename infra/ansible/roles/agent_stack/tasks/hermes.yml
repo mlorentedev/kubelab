@@ -133,6 +133,33 @@
         cmd: install -d -o {{ agent_stack_agent_user }} -g {{ agent_stack_agent_user }} -m 0700 {{ agent_stack_hermes_home }}
         creates: "{{ agent_stack_hermes_home }}"
 
+    - name: Create Hermes writable runtime directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ _agent_stack_hermes_host_uid }}"
+        group: "{{ _agent_stack_hermes_host_gid }}"
+        mode: "0755"
+      loop:
+        - "{{ agent_stack_hermes_home }}/cache"
+        - "{{ agent_stack_hermes_home }}/cache/delegation"
+        - "{{ agent_stack_hermes_home }}/cache/documents"
+        - "{{ agent_stack_hermes_home }}/workspace"
+
+    # These sections are rendered from apps.services.ai.nan.models. Silently
+    # dropping an operator-supplied override would make the SSOT lie.
+    - name: Reject ported overrides of role-owned NaN sections
+      ansible.builtin.assert:
+        that:
+          - agent_stack_hermes.agent_config.auxiliary is not defined
+          - agent_stack_hermes.agent_config.stt is not defined
+          - agent_stack_hermes.agent_config.tts is not defined
+          - agent_stack_hermes.agent_config.image_gen is not defined
+        fail_msg: >-
+          Move NaN capability declarations to apps.services.ai.nan.models;
+          auxiliary/stt/tts/image_gen are role-owned. Add an explicit template
+          merge before introducing any non-NaN override.
+
     - name: Render the hermes-kubelab env file
       ansible.builtin.template:
         src: hermes.env.j2
@@ -142,6 +169,15 @@
         mode: "0600"
       register: _agent_stack_hermes_env_file
       no_log: true
+
+    - name: Install the quota-guarded NaN image provider
+      ansible.builtin.copy:
+        src: hermes-plugins/
+        dest: "{{ agent_stack_hermes_plugins }}/"
+        owner: root
+        group: root
+        mode: u=rwX,go=rX
+      register: _agent_stack_hermes_plugins_copy
 
     # Outside the data directory and mounted read-only (see the role defaults):
     # the gateway reads it and can neither rewrite its approvals nor migrate it.
@@ -469,7 +505,8 @@
         {{ '--force-recreate' if (_agent_stack_hermes_env_file.changed or _agent_stack_hermes_config.changed
                                   or _agent_stack_hermes_soul.changed | default(false)
                                   or _agent_stack_hermes_ts_env_file.changed
-                                  or _agent_stack_hermes_unbound | bool) else '' }}
+                                  or _agent_stack_hermes_unbound | bool
+                                  or _agent_stack_hermes_plugins_copy.changed | default(false)) else '' }}
       become_user: "{{ agent_stack_agent_user }}"
       environment: "{{ agent_stack_agent_daemon_env }}"
       register: _agent_stack_hermes_up
@@ -645,6 +682,34 @@
       changed_when: false
       failed_when: (_agent_stack_hermes_allowed.stdout | from_json).verdict not in _agent_stack_hermes_passed_verdicts
       check_mode: false
+
+    # A mounted manifest is not enough: user backends need plugins.enabled, and
+    # image_gen.provider cannot select a provider the registry never imported.
+    - name: Read the NaN image provider through the live registry
+      ansible.builtin.command:
+        argv:
+          - docker
+          - exec
+          - -u
+          - hermes
+          - hermes-kubelab
+          - python3
+          - -c
+          - >-
+            from hermes_cli.plugins import _ensure_plugins_discovered;
+            from agent.image_gen_registry import get_provider;
+            _ensure_plugins_discovered(force=True);
+            provider = get_provider('nan');
+            print('registered' if provider is not None and provider.is_available() else '')
+      become_user: "{{ agent_stack_agent_user }}"
+      environment: "{{ agent_stack_agent_daemon_env }}"
+      register: _agent_stack_hermes_nan_provider
+      changed_when: false
+      failed_when: >-
+        _agent_stack_hermes_nan_provider.rc != 0
+        or _agent_stack_hermes_nan_provider.stdout != 'registered'
+      check_mode: false
+      when: not ansible_check_mode
 
     # The gateway's own view of the managed skills: each declared one must be listed with
     # the source `external`. A name the image also ships as a built-in is listed too, as

@@ -142,6 +142,88 @@ def test_the_key_is_named_in_the_config_and_held_only_in_the_env_file() -> None:
     assert env["API_SERVER_KEY"] == "hermes-api-key-sentinel", "the API refuses to start without a key"
 
 
+def test_default_and_scheduled_models_are_in_the_shared_chat_catalog() -> None:
+    models = yaml.safe_load(COMMON.read_text(encoding="utf-8"))["apps"]["services"]["ai"]["nan"]["models"]
+    config = _config()
+    assert config["model"]["default"] in models["chat"]
+    assert config["cron"]["model"] in models["chat"]
+    assert config["delegation"]["model"] in models["chat"]
+
+
+def test_vision_uses_the_shared_catalog_and_nan_credential_reference() -> None:
+    models = yaml.safe_load(COMMON.read_text(encoding="utf-8"))["apps"]["services"]["ai"]["nan"]["models"]
+    vision = _config()["auxiliary"]["vision"]
+    assert vision["provider"] == "custom"
+    assert vision["model"] == models["vision"]
+    # Live AI-016 proof: deepseek-v4-flash called a solid-red image "White";
+    # qwen3.6 identified the same image through this exact adapter as "Red".
+    assert vision["model"] == "qwen3.6"
+    assert vision["model"] in models["chat"]
+    assert vision["base_url"] == "https://api.nan.builders/v1"
+    assert vision["api_key"] == "${NAN_API_KEY}"
+
+
+def test_speech_uses_whisper_and_kokoro_through_nan_without_literal_secrets() -> None:
+    models = yaml.safe_load(COMMON.read_text(encoding="utf-8"))["apps"]["services"]["ai"]["nan"]["models"]
+    config = _config()
+    stt = config["stt"]
+    assert stt["provider"] == "openai"
+    assert stt["language"] == "", "Spanish and English voice notes both need auto-detection"
+    assert stt["openai"]["model"] == models["speech_to_text"]
+    assert stt["openai"]["base_url"] == "https://api.nan.builders/v1"
+    assert stt["openai"]["api_key"] == "${NAN_API_KEY}"
+    tts = config["tts"]
+    assert tts["provider"] == "openai"
+    assert tts["openai"]["model"] == models["text_to_speech"]["model"]
+    assert tts["openai"]["voice"] == models["text_to_speech"]["voice"]
+    assert tts["openai"]["base_url"] == "https://api.nan.builders/v1"
+    assert tts["openai"]["api_key"] == "${NAN_API_KEY}"
+    assert "nan-key-sentinel" not in yaml.safe_dump(config)
+
+
+def test_image_generation_declares_both_models_and_uses_the_flux_default() -> None:
+    models = yaml.safe_load(COMMON.read_text(encoding="utf-8"))["apps"]["services"]["ai"]["nan"]["models"]
+    image = _config()["image_gen"]
+    assert image["openai"]["model"] == models["image_generation"]["model"] == "flux-2-klein"
+    assert models["image_generation"]["alternatives"] == ["qwen-image-2.1"]
+    assert image["openai"]["base_url"] == "https://api.nan.builders/v1"
+    assert image["openai"]["key_env"] == "NAN_API_KEY"
+    assert image["max_parallel_requests"] == 1
+
+
+def test_the_quota_guarded_nan_provider_is_enabled_and_mounted_read_only() -> None:
+    config = _config()
+    image = config["image_gen"]
+    models = yaml.safe_load(COMMON.read_text(encoding="utf-8"))["apps"]["services"]["ai"]["nan"]["models"]
+    assert image["provider"] == "nan"
+    assert image["nan"]["monthly_limit"] == models["image_generation"]["hermes_monthly_limit"] == 50
+    assert image["nan"]["monthly_shared_limit"] == models["image_generation"]["monthly_shared_limit"] == 100
+    manifest = yaml.safe_load((ROLE / "files/hermes-plugins/nan/plugin.yaml").read_text(encoding="utf-8"))
+    # Bundled backends auto-load; user backends still require plugins.enabled.
+    # image_gen.provider selects nan only after this registration has happened.
+    assert manifest["kind"] == "backend"
+    assert "image_gen/nan" in config["plugins"]["enabled"]
+    assert "nan" not in config.get("plugins", {}).get("disabled", [])
+    home = _gateway()["environment"]["HERMES_HOME"]
+    [mount] = [v for v in _gateway()["volumes"] if v.endswith(f"{home}/plugins/image_gen/nan:ro")]
+    assert "{{" not in mount
+
+
+def test_ported_capability_overrides_fail_instead_of_being_discarded() -> None:
+    [task] = [t for t in _tasks() if t.get("name") == "Reject ported overrides of role-owned NaN sections"]
+    conditions = task["ansible.builtin.assert"]["that"]
+    for section in ("auxiliary", "stt", "tts", "image_gen"):
+        assert any(f"agent_config.{section} is not defined" in condition for condition in conditions)
+
+
+def test_every_provision_reads_the_nan_provider_through_the_live_registry() -> None:
+    [task] = [t for t in _tasks() if t.get("name") == "Read the NaN image provider through the live registry"]
+    assert "get_provider('nan')" in str(task["ansible.builtin.command"])
+    assert "is_available()" in str(task["ansible.builtin.command"])
+    assert task["changed_when"] is False
+    assert "_agent_stack_hermes_nan_provider" in task["failed_when"]
+
+
 # --------------------------------------------------------------------------- the gateway
 
 

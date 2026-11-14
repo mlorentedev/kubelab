@@ -272,10 +272,11 @@ def test_the_memories_directory_exists_before_the_gateway_mounts_it() -> None:
 
     [task] = [t for t in flat(tasks) if "memories" in str(t.get("ansible.builtin.file", {}).get("path", ""))]
     assert task["ansible.builtin.file"]["state"] == "directory"
-    assert task["ansible.builtin.file"]["mode"] == "01777", (
-        "the gateway's user is not the clone's owner, and the sticky bit stops any other local uid "
-        "from replacing files the sync will commit"
+    assert task["ansible.builtin.file"]["mode"] == "0755", (
+        "the directory and files have one effective gateway owner; a sticky bit would block atomic rename"
     )
+    assert task["ansible.builtin.file"]["owner"] == "{{ _agent_stack_hermes_host_uid }}"
+    assert task["ansible.builtin.file"]["group"] == "{{ _agent_stack_hermes_host_gid }}"
 
 
 def test_the_scripts_cleanup_refuses_to_run_on_an_empty_glob() -> None:

@@ -142,6 +142,7 @@ def test_a_new_key_recreates_the_sidecar_so_it_logs_in_again() -> None:
         "_agent_stack_hermes_config",
         "_agent_stack_hermes_ts_env_file",
         "_agent_stack_hermes_soul",
+        "_agent_stack_hermes_plugins_copy",
     )
     # The fourth input is a fact, and set_fact hands it over as a string.
     for *changed, unbound in product((False, True), repeat=len(registers) + 1):

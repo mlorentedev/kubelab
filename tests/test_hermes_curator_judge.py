@@ -317,7 +317,9 @@ def test_the_proposals_directory_is_the_kind_the_gateways_user_can_write_and_the
     tasks = yaml.safe_load((ROLE / "tasks/vault_zone.yml").read_text(encoding="utf-8"))
     flat = [t for block in tasks for t in (block.get("block") or [block])]
     task = next(t for t in flat if "proposals directory" in t.get("name", ""))
-    assert task["ansible.builtin.file"]["mode"] == "01777", "sticky and world-writable, like memories/"
+    assert task["ansible.builtin.file"]["mode"] == "0755", "one effective owner; no sticky-bit rename trap"
+    assert task["ansible.builtin.file"]["owner"] == "{{ _agent_stack_hermes_host_uid }}"
+    assert task["ansible.builtin.file"]["group"] == "{{ _agent_stack_hermes_host_gid }}"
 
 
 def test_an_id_is_checked_even_when_the_candidates_file_names_it(tmp_path: Path) -> None:
