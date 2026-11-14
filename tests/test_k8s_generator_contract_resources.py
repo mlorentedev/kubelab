@@ -289,7 +289,7 @@ class TestConflictingFsGroups:
         other = "  logs:\n    type: volume\n    params: {size: 1Gi, mount_path: /logs, fs_group: 20002}\n"
         (snapshots / "sample.yaml").write_text(_contract() + other, encoding="utf-8")
 
-        with pytest.raises(ContractError, match=r"fs_group.*10001.*20002"):
+        with pytest.raises(ContractError, match=r"resources\.logs\.params\.fs_group.*20002.*10001"):
             build()
 
     def test_two_volumes_naming_the_same_group_are_accepted(self, build, snapshots: Path) -> None:

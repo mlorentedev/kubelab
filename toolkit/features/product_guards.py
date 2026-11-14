@@ -139,20 +139,21 @@ def check_resources(contract: Contract) -> None:
                 "an unknown name would render a CronJob whose pod can never start.",
                 f"set it to a declared volume claim (declared: {declared}), or add that volume under resources.",
             )
-    groups = sorted(
-        {
-            claim.params.fs_group
-            for claim in contract.resources.values()
-            if claim.type == "volume" and claim.params.fs_group
-        }
-    )
-    if len(groups) > 1:
-        raise ContractError(
-            f"field 'resources': volume claims name different fs_group values ({', '.join(map(str, groups))})",
-            "every pod that mounts the claims has a single fsGroup, so two volumes asking for different "
-            "groups cannot both be honoured and one would be owned by the wrong group.",
-            "give the volume claims the same fs_group, or declare it on one of them only.",
-        )
+    first: tuple[str, int] | None = None
+    for name, claim in contract.resources.items():
+        group = claim.params.fs_group if claim.type == "volume" else None
+        if not group:
+            continue
+        if first is None:
+            first = (name, group)
+        elif group != first[1]:
+            raise ContractError(
+                f"field 'resources.{name}.params.fs_group': {group} differs from {first[1]} "
+                f"set by 'resources.{first[0]}'",
+                "every pod that mounts the claims has a single fsGroup, so two volumes asking for different "
+                "groups cannot both be honoured and one would be owned by the wrong group.",
+                f"give every volume claim the same fs_group, or declare it on one of them only (e.g. {first[1]}).",
+            )
 
 
 def _staging_refusal(host: str, reason: str, fix: str) -> ContractError:

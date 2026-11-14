@@ -146,7 +146,8 @@ def test_volumes_naming_different_fs_groups_are_refused(tmp_path: Path) -> None:
     with pytest.raises(ContractError) as excinfo:
         check_resources(contract)
     err = excinfo.value
-    assert "field 'resources'" in err.error
+    # The first volume to name a group sets it; the one that disagrees is the field to fix.
+    assert "field 'resources.logs.params.fs_group'" in err.error
     assert "10001" in err.error and "20002" in err.error
     assert "fsGroup" in err.why
     assert "fs_group" in err.fix
