@@ -1198,6 +1198,24 @@ def test_reporting_the_schedule_cannot_change_it() -> None:
         assert "schedule_state" in str(task["when"]), f"task {task.get('name')!r} is not gated on the requested state"
 
 
+def test_the_schedule_report_reads_the_refused_count_the_prune_prints() -> None:
+    """#3496: the prune's last line and the report's grep are one contract.
+
+    Rewording either side silently turns the report into "not measured" on
+    every node, which reads like a node that never pruned rather than a broken
+    reader.
+    """
+    script = (ROLE / "templates" / "node-backup-prune.sh.j2").read_text(encoding="utf-8")
+    phrase = "deletes refused by the bucket lock"
+    assert f'echo "node-backup-prune: $REFUSED {phrase}"' in script
+    reader = next(
+        (t for t in _schedule_playbook()["tasks"] if "refused" in t.get("name", "")),
+        None,
+    )
+    assert reader is not None, "backup-schedule reads no refused-delete count"
+    assert phrase in str(reader["ansible.builtin.shell"]["cmd"])
+
+
 def test_an_unrecognised_state_is_refused_rather_than_ignored() -> None:
     """Silently ignoring STATE=stoped reports success and changes nothing.
 
