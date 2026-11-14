@@ -61,9 +61,9 @@ jobs:
 
       - name: Full suite
         shell: bash
-        continue-on-error: true
+        continue-on-error: ${{ inputs.audit == true }}
         env:
-          AUDIT: --runxfail
+          AUDIT: ${{ inputs.audit == true && '--runxfail' || '' }}
         run: |
           set -o pipefail
           # shellcheck disable=SC2086  # AUDIT is empty or one flag
