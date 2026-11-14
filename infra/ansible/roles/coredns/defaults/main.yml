@@ -38,7 +38,10 @@ pihole_timezone: "America/Denver"
 restart_policy: "{{ common.global.restart_policy }}"
 base_domain: "{{ common.global.base_domain }}"
 staging_domain: "staging.{{ common.global.base_domain }}"
-staging_zones: "{{ common.networking.staging_zones }}"
+# The effective staging zones: the platform's declared ones plus each registered
+# product's, derived by `toolkit sync edge-dns` (EDGE-001). Never
+# common.networking.staging_zones, which holds the platform's zones only.
+staging_zones: "{{ (lookup('file', role_path ~ '/../../../config/products/edge.json') | from_json).staging_zones }}"
 vps_public_ip: "{{ common.networking.vps.public_ip }}"
 # Where CoreDNS binds its health port: loopback, because a node address may not
 # exist when Docker starts, and a failed bind drops the whole container's port

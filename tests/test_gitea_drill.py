@@ -14,7 +14,8 @@ the container, its volumes and the directory go on every exit path.
 from __future__ import annotations
 
 import json
-import subprocess
+import re
+import shutil
 from pathlib import Path
 from typing import Optional
 
@@ -26,6 +27,17 @@ from toolkit.features.gitea_drill import _paginate, compare, repos_on_disk, run_
 TOKEN = "SCRATCH-TOKEN-THAT-MUST-NOT-PRINT"
 STAGING = "/opt/node-backup/staging"
 IMAGE = "gitea/gitea:1.25.5"
+
+
+def _host_side(volume: str) -> str:
+    """The host path of a `docker -v host:container[:mode]` spec.
+
+    Not `split(":")[0]`: on Windows the host path starts with a drive letter,
+    and `C:\\...:/data` would split to `C` (#3409).
+    """
+    match = re.match(r"(?:[A-Za-z]:)?[^:]+", volume)
+    assert match, volume
+    return match[0]
 
 
 def test_repositories_are_read_from_disk_in_lower_case(tmp_path: Path) -> None:
@@ -152,8 +164,8 @@ class _Fake:
             return 0, json.dumps([{"name": b, "commit": {"id": s}} for b, s in self.heads[full].items()]), ""
         if argv[:3] == ["docker", "run", "--rm"]:
             # The root-run wipe: the real one empties the bind-mounted directory.
-            for child in Path(argv[argv.index("-v") + 1].split(":")[0]).iterdir():
-                subprocess.run(["rm", "-rf", str(child)], check=True)
+            for child in Path(_host_side(argv[argv.index("-v") + 1])).iterdir():
+                shutil.rmtree(child) if child.is_dir() else child.unlink()
             return 0, "", ""
         return 0, "", ""
 

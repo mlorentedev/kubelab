@@ -23,9 +23,9 @@ from toolkit.features.argo_manager import (
 from toolkit.features.argo_manager import (
     set_revision as argo_set_revision_feature,
 )
+from toolkit.features.edge_dns import staging_zones
 from toolkit.features.k8s_kubeconfig import output_path
 from toolkit.features.k8s_render import BootstrapEntry, render_and_apply
-from toolkit.features.product_guards import staging_zones
 from toolkit.features.validation import (
     confirm_dangerous_operation,
     validate_environment_config,
@@ -1495,8 +1495,8 @@ def _load_cluster_bootstrap() -> list[BootstrapEntry]:
 
 
 def _staging_zones() -> list[str]:
-    """``networking.staging_zones`` (common.yaml): the list the hairpin's staging blocks render from."""
-    return staging_zones(settings.project_root / "infra" / "config" / "values")
+    """The effective staging zones (``infra/config/products/edge.json``, EDGE-001): what the hairpin renders."""
+    return staging_zones(settings.project_root / "infra" / "config" / "products" / "edge.json")
 
 
 def _apply_cluster_bootstrap(kubeconfig: str, *, dry_run: bool) -> bool:
