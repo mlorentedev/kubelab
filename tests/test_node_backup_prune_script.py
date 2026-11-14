@@ -28,6 +28,7 @@ from pathlib import Path
 import pytest
 
 from tests.test_node_backup_role import _common, _defaults, _plays, _render
+from tests.shells import BASH
 
 LOCK_DAYS = int(_common()["backup"]["r2"]["lock_retention_days"])
 
@@ -59,12 +60,12 @@ def prune(tmp_path: Path):
     fake_dir = tmp_path / "fake"
     fake_dir.mkdir()
     restic = tmp_path / "restic"
-    restic.write_text(FAKE_RESTIC, encoding="utf-8")
+    restic.write_text(FAKE_RESTIC, encoding="utf-8", newline="\n")
     restic.chmod(0o755)
     creds = {}
     for name in ("password", "access", "secret"):
         creds[name] = tmp_path / f"cred-{name}"
-        creds[name].write_text("dummy\n", encoding="utf-8")
+        creds[name].write_text("dummy\n", encoding="utf-8", newline="\n")
     marker = tmp_path / "r2.repository-id"
     scratch = tmp_path / "scratch"
     scratch.mkdir()
@@ -80,6 +81,7 @@ def prune(tmp_path: Path):
             node_backup_r2_repository_id_file=str(marker),
         ),
         encoding="utf-8",
+        newline="\n",
     )
 
     def run(
@@ -91,14 +93,14 @@ def prune(tmp_path: Path):
         forget_rc: int = 0,
     ):
         if shipped:
-            marker.write_text("a" * 64 + "\n", encoding="utf-8")
-        (fake_dir / "snapshots.json").write_text(json.dumps(snapshots or []), encoding="utf-8")
-        (fake_dir / "snapshots.rc").write_text(f"{snapshots_rc}\n", encoding="utf-8")
-        (fake_dir / "unlock.rc").write_text(f"{unlock_rc}\n", encoding="utf-8")
-        (fake_dir / "forget.rc").write_text(f"{forget_rc}\n", encoding="utf-8")
+            marker.write_text("a" * 64 + "\n", encoding="utf-8", newline="\n")
+        (fake_dir / "snapshots.json").write_text(json.dumps(snapshots or []), encoding="utf-8", newline="\n")
+        (fake_dir / "snapshots.rc").write_text(f"{snapshots_rc}\n", encoding="utf-8", newline="\n")
+        (fake_dir / "unlock.rc").write_text(f"{unlock_rc}\n", encoding="utf-8", newline="\n")
+        (fake_dir / "forget.rc").write_text(f"{forget_rc}\n", encoding="utf-8", newline="\n")
         env = {"PATH": os.environ["PATH"], "FAKE_DIR": str(fake_dir), "TMPDIR": str(scratch)}
         proc = subprocess.run(
-            ["bash", str(script)], env=env, capture_output=True, text=True, encoding="utf-8", timeout=30
+            [BASH, str(script)], env=env, capture_output=True, text=True, encoding="utf-8", timeout=30
         )
         calls_file = fake_dir / "calls"
         calls = calls_file.read_text(encoding="utf-8").splitlines() if calls_file.exists() else []

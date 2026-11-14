@@ -26,6 +26,7 @@ import tempfile
 from pathlib import Path
 
 import pytest
+from tests.shells import BASH
 
 REPO = Path(__file__).resolve().parent.parent
 SCRIPT = REPO / "scripts/bootstrap-controller.sh"
@@ -119,7 +120,7 @@ def _run(*args: str, path_prefix: Path | None = None) -> subprocess.CompletedPro
     # which does not translate a Windows path and silently strips its
     # backslashes into a name that does not exist.
     return subprocess.run(  # noqa: S603 - fixed argv, repo-local script
-        ["bash", "scripts/bootstrap-controller.sh", *args],
+        [BASH, "scripts/bootstrap-controller.sh", *args],
         cwd=REPO,
         capture_output=True,
         text=True,
@@ -179,7 +180,7 @@ def test_check_mode_asks_the_doctor_instead_of_assuming():
 
 def _stub(directory: Path, name: str, body: str) -> None:
     path = directory / name
-    path.write_text(f"#!/bin/sh\n{body}", encoding="utf-8")
+    path.write_text(f"#!/bin/sh\n{body}", encoding="utf-8", newline="\n")
     path.chmod(0o755)
 
 
@@ -491,7 +492,7 @@ def test_a_windows_shell_is_refused_before_anything_runs(tmp_path: Path):
     stub = tmp_path / "bin"
     stub.mkdir()
     uname = stub / "uname"
-    uname.write_text("#!/bin/sh\necho MINGW64_NT-10.0\n", encoding="utf-8")
+    uname.write_text("#!/bin/sh\necho MINGW64_NT-10.0\n", encoding="utf-8", newline="\n")
     uname.chmod(0o755)
 
     result = _run("--check", path_prefix=stub)

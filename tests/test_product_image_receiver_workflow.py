@@ -29,6 +29,7 @@ from typer.testing import CliRunner
 
 from toolkit.features import product_registry, promotion
 from toolkit.main import app as toolkit_app
+from tests.shells import BASH
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 RECEIVER = REPO_ROOT / ".github/workflows/product-image-receiver.yml"
@@ -161,7 +162,7 @@ def _toolkit_answering_for(registry: pathlib.Path, tmp_path: pathlib.Path, monke
         result = CliRunner().invoke(toolkit_app, argv)
         answers[" ".join(argv)] = {"stdout": result.stdout, "code": result.exit_code}
     table = tmp_path / "toolkit-answers.json"
-    table.write_text(json.dumps(answers), encoding="utf-8")
+    table.write_text(json.dumps(answers), encoding="utf-8", newline="\n")
     stub = tmp_path / "toolkit-stub"
     stub.write_text(
         f"#!{sys.executable}\n"
@@ -172,6 +173,7 @@ def _toolkit_answering_for(registry: pathlib.Path, tmp_path: pathlib.Path, monke
         "sys.stdout.write(answer['stdout'])\n"
         "sys.exit(answer['code'])\n",
         encoding="utf-8",
+        newline="\n",
     )
     stub.chmod(0o755)
     return str(stub)
@@ -198,7 +200,7 @@ def _run(
     """
     bindir = tmp_path / "bin"
     bindir.mkdir(exist_ok=True)
-    (bindir / "gh").write_text(_GH_STUB, encoding="utf-8")
+    (bindir / "gh").write_text(_GH_STUB, encoding="utf-8", newline="\n")
     (bindir / "gh").chmod(0o755)
     calls = tmp_path / "gh_calls"
     calls.touch()
@@ -220,7 +222,7 @@ def _run(
     }
     (tmp_path / "runner-temp").mkdir(exist_ok=True)
     proc = subprocess.run(  # noqa: S603
-        ["bash", "-e", "-c", step["run"]],
+        [BASH, "-e", "-c", step["run"]],
         cwd=work,
         env=env,
         capture_output=True,
@@ -466,11 +468,11 @@ def _fetch(tmp_path: pathlib.Path, body: str | None) -> tuple[int, str, list[str
     work = tmp_path / "work"
     (work / "infra/config/products/contracts").mkdir(parents=True)
     (work / "infra/config").joinpath("products.yaml").write_text(
-        (REPO_ROOT / "infra/config/products.yaml").read_text(encoding="utf-8"), encoding="utf-8"
+        (REPO_ROOT / "infra/config/products.yaml").read_text(encoding="utf-8"), encoding="utf-8", newline="\n"
     )
     scenario = {}
     if body is not None:
-        (tmp_path / "served.yaml").write_text(body, encoding="utf-8")
+        (tmp_path / "served.yaml").write_text(body, encoding="utf-8", newline="\n")
         scenario["STUB_CONTRACT"] = str(tmp_path / "served.yaml")
     code, _, log, calls = _run(
         tmp_path,

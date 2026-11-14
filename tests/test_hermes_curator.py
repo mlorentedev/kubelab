@@ -72,7 +72,9 @@ def _vault(root: Path, sessions: dict[str, str]) -> Path:
     for name, bullet in sessions.items():
         path = root / "10_projects" / "demo" / "sessions" / name
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(f"---\nid: s\n---\n\n## Findings\n\n{bullet}\n\n## Next action\n\n{OTHER}\n", encoding="utf-8")
+        path.write_text(
+            f"---\nid: s\n---\n\n## Findings\n\n{bullet}\n\n## Next action\n\n{OTHER}\n", encoding="utf-8", newline="\n"
+        )
     return root
 
 
@@ -119,7 +121,7 @@ def test_the_file_is_replaced_whole_and_nothing_else_is_written(analyzer, tmp_pa
     vault = _vault(tmp_path / "vault", {"2026-01-01-a.md": SAME_CAUSE})
     out = tmp_path / "zone/curator/candidates.json"
     out.parent.mkdir(parents=True)
-    out.write_text("{}", encoding="utf-8")
+    out.write_text("{}", encoding="utf-8", newline="\n")
     assert _run(analyzer, vault, out) == 0
     assert [p.name for p in out.parent.iterdir()] == ["candidates.json"], "no temporary file is left behind"
     assert "candidates" in json.loads(out.read_text(encoding="utf-8"))
@@ -179,9 +181,9 @@ def test_a_path_that_climbs_out_of_the_lessons_is_not_extracted(analyzer, tmp_pa
 def test_a_repository_dropped_from_the_list_stops_feeding_the_corpus(analyzer, tmp_path: Path, monkeypatch) -> None:
     cache = tmp_path / "cache"
     (cache / "mlorentedev_gone").mkdir(parents=True)
-    (cache / "mlorentedev_gone" / "lesson-001-old.md").write_text(SAME_CAUSE, encoding="utf-8")
+    (cache / "mlorentedev_gone" / "lesson-001-old.md").write_text(SAME_CAUSE, encoding="utf-8", newline="\n")
     (cache / "mlorentedev_kept").mkdir()
-    (cache / "mlorentedev_kept" / "lesson-002-new.md").write_text(SAME_CAUSE, encoding="utf-8")
+    (cache / "mlorentedev_kept" / "lesson-002-new.md").write_text(SAME_CAUSE, encoding="utf-8", newline="\n")
     monkeypatch.setattr(analyzer, "fetch_github_lessons", lambda repos, c: {r: 1 for r in repos})
     vault = _vault(tmp_path / "vault", {"2026-01-01-a.md": SAME_CAUSE})
     out = tmp_path / "c.json"
@@ -197,7 +199,7 @@ def test_a_fetched_lesson_names_its_repository_and_category_as_its_source(analyz
     cache = tmp_path / "cache"
     (cache / "mlorentedev_demo" / "containers").mkdir(parents=True)
     lesson = cache / "mlorentedev_demo" / "containers" / "lesson-001-sync.md"
-    lesson.write_text(SAME_CAUSE, encoding="utf-8")
+    lesson.write_text(SAME_CAUSE, encoding="utf-8", newline="\n")
     units = analyzer.load_corpus([lesson], tmp_path / "vault", (cache,))
     assert {u["source"] for u in units} == {"mlorentedev_demo/containers/lesson-001-sync.md"}
 

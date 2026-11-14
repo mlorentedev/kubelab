@@ -320,7 +320,7 @@ class TestKeyDelivery:
 
     def test_an_existing_out_file_is_never_overwritten(self, mocker, tmp_path) -> None:
         out = tmp_path / "key.out"
-        out.write_text("previous-content", encoding="utf-8")
+        out.write_text("previous-content", encoding="utf-8", newline="\n")
         with pytest.raises(AuthKeyRefused, match="exists"):
             write_owner_only(out, KEY_MATERIAL)
         assert out.read_text(encoding="utf-8") == "previous-content"

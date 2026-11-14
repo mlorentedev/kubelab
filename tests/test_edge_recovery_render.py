@@ -208,10 +208,10 @@ def test_the_ladder_has_a_grace_and_a_cap() -> None:
 def test_the_units_pass_systemd_analyze_verify(tmp_path: Path) -> None:
     if shutil.which("systemd-analyze") is None:
         pytest.skip("systemd-analyze is not installed")
-    (tmp_path / SERVICE).write_text(_render(SERVICE, gateway_liveness_path="/bin/true"), encoding="utf-8")
-    (tmp_path / TIMER).write_text(_render(TIMER), encoding="utf-8")
+    (tmp_path / SERVICE).write_text(_render(SERVICE, gateway_liveness_path="/bin/true"), encoding="utf-8", newline="\n")
+    (tmp_path / TIMER).write_text(_render(TIMER), encoding="utf-8", newline="\n")
     for stub in ("kubelab-notify@.service", "kubelab-notify-recovered@.service"):
-        (tmp_path / stub).write_text("[Service]\nType=oneshot\nExecStart=/bin/true\n", encoding="utf-8")
+        (tmp_path / stub).write_text("[Service]\nType=oneshot\nExecStart=/bin/true\n", encoding="utf-8", newline="\n")
     proc = subprocess.run(
         ["systemd-analyze", "verify", "--man=no", str(tmp_path / SERVICE), str(tmp_path / TIMER)],
         capture_output=True,
@@ -245,7 +245,7 @@ class Edge:
         for name in ("fake", "bin", "net", "module", "leases", "run", "state"):
             (self.root / name).mkdir()
         for name, body in FAKES.items():
-            (self.root / "bin" / name).write_text(f"#!/bin/sh\n{body}", encoding="utf-8")
+            (self.root / "bin" / name).write_text(f"#!/bin/sh\n{body}", encoding="utf-8", newline="\n")
             (self.root / "bin" / name).chmod(0o755)
         (self.root / "module" / AP_DRIVER / "holders" / HOLDER).mkdir(parents=True)
         self.ap(serving=True)
@@ -253,9 +253,13 @@ class Edge:
 
     def ap(self, *, serving: bool) -> None:
         (self.root / "net" / AP).mkdir(exist_ok=True)
-        (self.root / "net" / AP / "operstate").write_text("up\n" if serving else "down\n", encoding="utf-8")
+        (self.root / "net" / AP / "operstate").write_text(
+            "up\n" if serving else "down\n", encoding="utf-8", newline="\n"
+        )
         state = "ENABLED" if serving else "DISABLED"
-        (self.root / "fake" / "hostapd_status").write_text(f"state={state}\nphy=phy0\nfreq=2437\n", encoding="utf-8")
+        (self.root / "fake" / "hostapd_status").write_text(
+            f"state={state}\nphy=phy0\nfreq=2437\n", encoding="utf-8", newline="\n"
+        )
 
     def uplink(self, *, present: bool, lease: bool = True) -> None:
         device = self.root / "net" / UPLINK
@@ -266,15 +270,17 @@ class Edge:
         module = device / "device" / "driver" / "module"
         if not module.is_symlink():
             module.symlink_to(f"../../../../module/{UPLINK_DRIVER}")
-        (device / "ifindex").write_text(f"{IFINDEX}\n", encoding="utf-8")
+        (device / "ifindex").write_text(f"{IFINDEX}\n", encoding="utf-8", newline="\n")
         lease_file = self.root / "leases" / IFINDEX
         if lease:
-            lease_file.write_text("# This is private data. Do not parse.\nADDRESS=192.0.2.10\n", encoding="utf-8")
+            lease_file.write_text(
+                "# This is private data. Do not parse.\nADDRESS=192.0.2.10\n", encoding="utf-8", newline="\n"
+            )
         else:
             lease_file.unlink(missing_ok=True)
 
     def reboots(self, *times: int) -> None:
-        (self.root / "state" / "reboots").write_text("".join(f"{t}\n" for t in times), encoding="utf-8")
+        (self.root / "state" / "reboots").write_text("".join(f"{t}\n" for t in times), encoding="utf-8", newline="\n")
 
     def run(self, now: int = NOW, kill_after: float | None = None) -> subprocess.CompletedProcess[str]:
         calls = self.root / "fake" / "calls"
@@ -477,7 +483,7 @@ def test_an_ap_that_disappeared_is_a_miss(edge: Edge) -> None:
 
 
 def test_hostapd_enabled_on_a_down_interface_is_a_miss(edge: Edge) -> None:
-    (edge.root / "net" / AP / "operstate").write_text("down\n", encoding="utf-8")
+    (edge.root / "net" / AP / "operstate").write_text("down\n", encoding="utf-8", newline="\n")
     _miss(edge, GRACE)
     assert edge.calls == RELOAD_AP
 
@@ -486,7 +492,7 @@ def test_hostapd_enabled_on_a_down_interface_is_a_miss(edge: Edge) -> None:
 def test_an_up_interface_whose_hostapd_is_not_enabled_is_a_miss(edge: Edge, status: str) -> None:
     """A halted firmware can leave the interface up; hostapd is what knows. No reply is
     a hostapd that is gone or hung."""
-    (edge.root / "fake" / "hostapd_status").write_text(status, encoding="utf-8")
+    (edge.root / "fake" / "hostapd_status").write_text(status, encoding="utf-8", newline="\n")
     _miss(edge, GRACE)
     assert edge.calls == RELOAD_AP
 

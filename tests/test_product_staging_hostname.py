@@ -91,7 +91,9 @@ def test_the_prod_relation_binds_a_wildcard_label_too() -> None:
 
 
 def _values(tmp_path: Path, zones: list[str]) -> Path:
-    (tmp_path / "common.yaml").write_text(yaml.safe_dump({"networking": {"staging_zones": zones}}), encoding="utf-8")
+    (tmp_path / "common.yaml").write_text(
+        yaml.safe_dump({"networking": {"staging_zones": zones}}), encoding="utf-8", newline="\n"
+    )
     return tmp_path
 
 

@@ -35,10 +35,11 @@ def _spec(root: Path, feature_id: str, issue: str, *, archived: bool = False, re
         "---\n\n"
         f"# {feature_id}\n",
         encoding="utf-8",
+        newline="\n",
     )
     if archived and review:
         (folder / "review.md").write_text(
-            '---\nverdict: "PASS"\nreviewer: "nan/deepseek-v4-flash"\n---\n', encoding="utf-8"
+            '---\nverdict: "PASS"\nreviewer: "nan/deepseek-v4-flash"\n---\n', encoding="utf-8", newline="\n"
         )
     return folder
 
@@ -145,7 +146,7 @@ def test_cross_repo_spec_is_matched_when_the_slug_agrees(specs: Path) -> None:
 def test_a_spec_without_an_issue_field_is_skipped(specs: Path) -> None:
     folder = specs / "NOTIFY-001"
     folder.mkdir()
-    (folder / "proposal.md").write_text('---\nid: "NOTIFY-001"\n---\n', encoding="utf-8")
+    (folder / "proposal.md").write_text('---\nid: "NOTIFY-001"\n---\n', encoding="utf-8", newline="\n")
 
     assert spec_gate.check("Closes #1", specs, repo=REPO) == []
 

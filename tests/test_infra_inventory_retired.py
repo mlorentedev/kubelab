@@ -30,7 +30,7 @@ def _write_inventory(path: Path) -> Path:
             }
         }
     }
-    path.write_text(yaml.safe_dump(inventory), encoding="utf-8")
+    path.write_text(yaml.safe_dump(inventory), encoding="utf-8", newline="\n")
     return path
 
 

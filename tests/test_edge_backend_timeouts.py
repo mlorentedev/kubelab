@@ -60,7 +60,11 @@ def _render(overlay: str) -> list[dict[str, Any]]:
 def _rules(docs: list[dict[str, Any]]) -> list[tuple[str, str, set[str]]]:
     """(IngressRoute name, match, the serversTransport names its services reference)."""
     return [
-        (d["metadata"]["name"], rule["match"], {s["serversTransport"] for s in rule.get("services", []) if s.get("serversTransport")})
+        (
+            d["metadata"]["name"],
+            rule["match"],
+            {s["serversTransport"] for s in rule.get("services", []) if s.get("serversTransport")},
+        )
         for d in docs
         if d["kind"] == "IngressRoute"
         for rule in d["spec"].get("routes", [])

@@ -142,7 +142,7 @@ def test_a_redirection_is_not_an_argument(tmp_path: Path, monkeypatch: pytest.Mo
     spec = tmp_path / "X-001"
     spec.mkdir()
     feature = {"id": "f1", "state": "passing", "verification": f"poetry run pytest tests/x.py -q{redirect} | tee log"}
-    (spec / "features.json").write_text(json.dumps([feature]), encoding="utf-8")
+    (spec / "features.json").write_text(json.dumps([feature]), encoding="utf-8", newline="\n")
     monkeypatch.setattr(sys.modules[__name__], "SPECS", tmp_path)
     assert list(_commands()) == [("tests/x.py", "-q")]
 
@@ -216,7 +216,7 @@ def test_the_guard_finds_a_scaffold_planted_in_an_archived_spec(tmp_path: Path) 
         {"id": "X-001-f1", "verification": "poetry run pytest tests/x.py"},
         {"id": "X-001-f2", "verification": "echo 'not implemented' && exit 1"},
     ]
-    (spec / "features.json").write_text(json.dumps(features), encoding="utf-8")
+    (spec / "features.json").write_text(json.dumps(features), encoding="utf-8", newline="\n")
     assert scaffold_features(tmp_path) == ["X-001: X-001-f2"]
 
 
