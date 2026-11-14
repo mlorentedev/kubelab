@@ -33,13 +33,22 @@ REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 _needs_bash = pytest.mark.skipif(shutil.which("bash") is None, reason="the step is a bash script")
 
+# One lane per in-tree app: each has its own job, its own built-result variable and its
+# own stable branch. console's is held to api's by tests/test_console_delivery_lane.py.
+APPS = ("api", "console")
+_JOBS = {"api": "open-pr", "console": "open-pr-console"}
+
 # `poetry run toolkit ...` replaced: `image-tag` answers the pin the scenario
 # sets, `promote` is logged, and anything else fails so an unexpected call is
-# visible rather than silently absorbed.
+# visible rather than silently absorbed. An app with no pin is a failure unless the
+# step asks for `--allow-unpinned`, as the real command is.
 _POETRY_STUB = """#!/usr/bin/env bash
 case "$*" in
-  *"deployment image-tag --env staging --app api"*) printf '%s\\n' "$STUB_PIN" ;;
-  *"deployment promote --env staging --app api --version "*) echo "$*" >> "$POETRY_CALLS" ;;
+  *"deployment registered --app $STUB_APP"*) printf '%s\\n' "${STUB_REGISTERED:-true}" ;;
+  *"deployment image-tag --env staging --app $STUB_APP"*)
+    if [ -z "$STUB_PIN" ] && [[ "$*" != *"--allow-unpinned"* ]]; then exit 1; fi
+    printf '%s\\n' "$STUB_PIN" ;;
+  *"deployment promote --env staging --app $STUB_APP --version "*) echo "$*" >> "$POETRY_CALLS" ;;
   *) exit 1 ;;
 esac
 """
@@ -51,14 +60,19 @@ _GIT_ENV = {
 }
 
 
-def _job() -> dict:
+@pytest.fixture(params=APPS)
+def app(request: pytest.FixtureRequest) -> str:
+    return request.param
+
+
+def _job(app: str) -> dict:
     workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/staging-deploy.yml").read_text(encoding="utf-8"))
-    return workflow["jobs"]["open-pr"]
+    return workflow["jobs"][_JOBS[app]]
 
 
-def _step(step_id: str) -> dict:
+def _step(app: str, step_id: str) -> dict:
     """Found by its `id:`; a rename errors instead of skipping."""
-    return next(s for s in _job()["steps"] if s.get("id") == step_id)
+    return next(s for s in _job(app)["steps"] if s.get("id") == step_id)
 
 
 def _git(cwd: pathlib.Path, *args: str) -> str:
@@ -95,7 +109,13 @@ def _tag(sha: str) -> str:
 
 
 def _run(
-    tmp_path: pathlib.Path, work: pathlib.Path, pin: str, built: str, api_built: str = "success"
+    app: str,
+    tmp_path: pathlib.Path,
+    work: pathlib.Path,
+    pin: str,
+    built: str,
+    app_built: str = "success",
+    registered: str = "true",
 ) -> tuple[subprocess.CompletedProcess, list[str]]:
     bindir = tmp_path / "bin"
     bindir.mkdir(exist_ok=True)
@@ -113,11 +133,13 @@ def _run(
         "STUB_PIN": pin,
         "GITHUB_SHA": built,
         "SHA": _tag(built),
-        "API_BUILT": api_built,
+        f"{app.upper()}_BUILT": app_built,
+        "STUB_APP": app,
+        "STUB_REGISTERED": registered,
     }
     # `bash -e`, the shell GitHub Actions uses for `run:`.
     proc = subprocess.run(  # noqa: S603
-        [BASH, "-e", "-c", _step("promote")["run"]],
+        [BASH, "-e", "-c", _step(app, "promote")["run"]],
         cwd=work,
         env=env,
         capture_output=True,
@@ -128,52 +150,96 @@ def _run(
     return proc, calls.read_text(encoding="utf-8").splitlines()
 
 
-def test_the_job_checks_out_master_with_its_history() -> None:
-    checkout = next(s for s in _job()["steps"] if str(s.get("uses", "")).startswith("actions/checkout@"))
+def test_the_job_checks_out_master_with_its_history(app: str) -> None:
+    checkout = next(s for s in _job(app)["steps"] if str(s.get("uses", "")).startswith("actions/checkout@"))
     assert checkout["with"]["ref"] == "master"
     assert checkout["with"]["fetch-depth"] == 0
 
 
 @_needs_bash
-def test_a_newer_build_is_promoted(tmp_path: pathlib.Path, history: tuple[pathlib.Path, list[str]]) -> None:
+def test_a_newer_build_is_promoted(app: str, tmp_path: pathlib.Path, history: tuple[pathlib.Path, list[str]]) -> None:
     work, shas = history
-    proc, calls = _run(tmp_path, work, pin=_tag(shas[0]), built=shas[2])
+    proc, calls = _run(app, tmp_path, work, pin=_tag(shas[0]), built=shas[2])
     assert proc.returncode == 0, proc.stderr
-    assert calls == [f"run toolkit deployment promote --env staging --app api --version {_tag(shas[2])}"]
+    assert calls == [f"run toolkit deployment promote --env staging --app {app} --version {_tag(shas[2])}"]
 
 
 @_needs_bash
-def test_the_pinned_build_itself_goes_through(tmp_path: pathlib.Path, history: tuple[pathlib.Path, list[str]]) -> None:
+def test_the_pinned_build_itself_goes_through(
+    app: str, tmp_path: pathlib.Path, history: tuple[pathlib.Path, list[str]]
+) -> None:
     """A commit is its own ancestor; promote then writes nothing and the next step says so."""
     work, shas = history
-    proc, calls = _run(tmp_path, work, pin=_tag(shas[1]), built=shas[1])
+    proc, calls = _run(app, tmp_path, work, pin=_tag(shas[1]), built=shas[1])
     assert proc.returncode == 0, proc.stderr
     assert len(calls) == 1
 
 
 @_needs_bash
 def test_an_older_build_than_the_pin_is_not_promoted(
-    tmp_path: pathlib.Path, history: tuple[pathlib.Path, list[str]]
+    app: str, tmp_path: pathlib.Path, history: tuple[pathlib.Path, list[str]]
 ) -> None:
     work, shas = history
-    proc, calls = _run(tmp_path, work, pin=_tag(shas[2]), built=shas[0])
+    proc, calls = _run(app, tmp_path, work, pin=_tag(shas[2]), built=shas[0])
     assert proc.returncode == 0, proc.stderr
     assert calls == []
     assert "already pins" in proc.stdout
 
 
 @_needs_bash
-def test_a_pin_git_cannot_place_fails_the_job(tmp_path: pathlib.Path, history: tuple[pathlib.Path, list[str]]) -> None:
+def test_a_pin_git_cannot_place_fails_the_job(
+    app: str, tmp_path: pathlib.Path, history: tuple[pathlib.Path, list[str]]
+) -> None:
     work, shas = history
-    proc, calls = _run(tmp_path, work, pin="sha-0ddba11", built=shas[2])
+    proc, calls = _run(app, tmp_path, work, pin="sha-0ddba11", built=shas[2])
     assert proc.returncode != 0
     assert calls == []
     assert "cannot place" in proc.stdout
 
 
-def test_only_a_successful_build_reaches_the_job() -> None:
+def test_only_a_successful_build_reaches_the_job(app: str) -> None:
     """The gate that keeps an unbuilt app out is the job's `if:`. The step's own
-    `API_BUILT` check never sees anything but `success`, so running it with another
+    `<APP>_BUILT` check never sees anything but `success`, so running it with another
     value would measure a state CI cannot produce."""
-    gate = " ".join(_job()["if"].split())
-    assert "needs.build-api.result == 'success'" in gate
+    gate = " ".join(_job(app)["if"].split())
+    assert f"needs.build-{app}.result == 'success'" in gate
+
+
+@_needs_bash
+def test_an_app_with_no_pin_yet_is_a_first_promotion(
+    app: str, tmp_path: pathlib.Path, history: tuple[pathlib.Path, list[str]]
+) -> None:
+    """No earlier build can precede the first, so there is nothing to compare: it promotes.
+
+    The stub fails an unpinned read that does not pass `--allow-unpinned`, as the real
+    command does, so this fails if the step stops asking for it.
+    """
+    work, shas = history
+    proc, calls = _run(app, tmp_path, work, pin="", built=shas[2])
+    assert proc.returncode == 0, proc.stderr
+    assert calls == [f"run toolkit deployment promote --env staging --app {app} --version {_tag(shas[2])}"]
+
+
+@_needs_bash
+def test_an_app_the_registry_does_not_carry_yet_is_a_green_notice(
+    app: str, tmp_path: pathlib.Path, history: tuple[pathlib.Path, list[str]]
+) -> None:
+    """Between this lane landing and the PR that registers the app, a push under its path must not
+    red master. The step stops green with a notice, promotes nothing, and the next step finds no
+    change to open a PR for."""
+    work, shas = history
+    proc, calls = _run(app, tmp_path, work, pin="", built=shas[2], registered="false")
+    assert proc.returncode == 0, proc.stderr
+    assert calls == []
+    assert f"::notice::{app} is not in infra/config/products.yaml yet" in proc.stdout
+
+
+@_needs_bash
+def test_a_registered_app_still_promotes_when_the_registry_says_so(
+    app: str, tmp_path: pathlib.Path, history: tuple[pathlib.Path, list[str]]
+) -> None:
+    """The other side: registering the app is all it takes, with nothing else touched."""
+    work, shas = history
+    proc, calls = _run(app, tmp_path, work, pin="", built=shas[2], registered="true")
+    assert proc.returncode == 0, proc.stderr
+    assert calls == [f"run toolkit deployment promote --env staging --app {app} --version {_tag(shas[2])}"]

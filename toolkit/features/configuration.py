@@ -188,8 +188,24 @@ class ConfigurationManager:
         self._inject_oidc_client_derivations(config)
         # 7. #1356: admin usernames come from the identity declaration, not a vault.
         self._inject_identity_derivations(config)
+        # 8. #3443: the console frontend's host is the one the api answers /console on.
+        self._inject_console_domain_derivation(config)
 
         return config
+
+    @staticmethod
+    def _inject_console_domain_derivation(config: Dict[str, Any]) -> None:
+        """#3443: `apps.platform.console.domain` is `infra.forge.console_domain`, declared once.
+
+        The api answers `/console` only for the host it is told (`INFRA_FORGE_CONSOLE_DOMAIN`),
+        and the frontend's route must serve exactly that host, so the app's domain is read from
+        the declaration instead of restated per env. Assigned, not defaulted: a stale `domain`
+        in an env file must not win over the host the api is told.
+        """
+        domain = config.get("infra", {}).get("forge", {}).get("console_domain")
+        console = config.get("apps", {}).get("platform", {}).get("console")
+        if domain and isinstance(console, dict):
+            console["domain"] = domain
 
     @staticmethod
     def _inject_identity_derivations(config: Dict[str, Any]) -> None:
