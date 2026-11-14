@@ -45,9 +45,7 @@ def _run(monkeypatch: pytest.MonkeyPatch, existing: dict[str, dict[str, Any]]) -
     monkeypatch.setattr(manager, "generate_oidc_client_secret_hash", lambda s: "$argon2id$fake")
     monkeypatch.setattr(manager, "generate_bcrypt_hash", lambda s: "$2b$fake")
     monkeypatch.setattr(manager, "_generate_htpasswd_bcrypt_hash", lambda u, p: "u:$2y$fake")
-    monkeypatch.setattr(
-        manager, "_reconcile_external_credentials", lambda new, old: events.append(("reconcile", old))
-    )
+    monkeypatch.setattr(manager, "_reconcile_external_credentials", lambda new, old: events.append(("reconcile", old)))
     manager.setup_authelia_secrets("prod", auto_update=True)
     return events
 
@@ -67,4 +65,6 @@ def test_kuma_is_changed_only_after_common_holds_the_new_password(monkeypatch: p
     """File before service: a failed common write must leave Kuma untouched, still on common's old value."""
     events = _run(monkeypatch, {"common": {KEY: "held-by-common"}})
     names = [e[0] for e in events]
-    assert names.index("reconcile") > names.index("write") and ("write", "common") in events[: names.index("reconcile")], events
+    assert (
+        names.index("reconcile") > names.index("write") and ("write", "common") in events[: names.index("reconcile")]
+    ), events

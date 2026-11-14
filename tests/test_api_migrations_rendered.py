@@ -49,17 +49,17 @@ def test_job_and_configmap_share_one_hash(env: str) -> None:
 def test_every_input_of_the_job_changes_its_name(tmp_path: Path) -> None:
     # A Job's spec is immutable: a change that keeps the name is a refused sync.
     (tmp_path / "apps" / "api" / "migrations").mkdir(parents=True)
-    (tmp_path / "apps" / "api" / "migrations" / "1.sql").write_text("a", encoding="utf-8")
+    (tmp_path / "apps" / "api" / "migrations" / "1.sql").write_text("a", encoding="utf-8", newline="\n")
     template = tmp_path / "infra" / "k8s" / "templates" / "migrations.yaml.j2"
     template.parent.mkdir(parents=True)
-    template.write_text("t", encoding="utf-8")
+    template.write_text("t", encoding="utf-8", newline="\n")
     base = _hash(tmp_path)
     assert base != _hash(tmp_path, INFRA_POSTGRES_ATLAS_IMAGE="atlas:2")
     assert base != _hash(tmp_path, INFRA_POSTGRES_HOST="elsewhere")
-    template.write_text("t2", encoding="utf-8")
+    template.write_text("t2", encoding="utf-8", newline="\n")
     assert base != _hash(tmp_path)
-    template.write_text("t", encoding="utf-8")
-    (tmp_path / "apps" / "api" / "migrations" / "2.sql").write_text("b", encoding="utf-8")
+    template.write_text("t", encoding="utf-8", newline="\n")
+    (tmp_path / "apps" / "api" / "migrations" / "2.sql").write_text("b", encoding="utf-8", newline="\n")
     assert base != _hash(tmp_path)
 
 

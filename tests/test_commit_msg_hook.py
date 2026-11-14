@@ -51,14 +51,14 @@ def repo(tmp_path: pathlib.Path) -> pathlib.Path:
     shutil.copy(HOOK, installed)
     installed.chmod(0o755)
 
-    (r / "base.txt").write_text("base\n", encoding="utf-8")
+    (r / "base.txt").write_text("base\n", encoding="utf-8", newline="\n")
     _git(r, "add", "base.txt")
     assert _git(r, "commit", "-m", "feat: base").returncode == 0
     return r
 
 
 def _commit(repo: pathlib.Path, name: str, message: str) -> subprocess.CompletedProcess[str]:
-    (repo / name).write_text(name, encoding="utf-8")
+    (repo / name).write_text(name, encoding="utf-8", newline="\n")
     _git(repo, "add", name)
     return _git(repo, "commit", "-m", message)
 
@@ -116,7 +116,7 @@ class TestGitAuthoredMessages:
         """
         f = repo / "conflict.txt"
         for n, msg in ((1, "feat: one"), (2, "feat: two"), (3, "feat: three")):
-            f.write_text(f"{n}\n", encoding="utf-8")
+            f.write_text(f"{n}\n", encoding="utf-8", newline="\n")
             _git(repo, "add", "conflict.txt")
             assert _git(repo, "commit", "-m", msg).returncode == 0
 
@@ -124,7 +124,7 @@ class TestGitAuthoredMessages:
         _git(repo, "revert", "--no-edit", target)
         assert (repo / ".git" / "REVERT_HEAD").exists(), "expected a conflicted revert"
 
-        f.write_text("resolved\n", encoding="utf-8")
+        f.write_text("resolved\n", encoding="utf-8", newline="\n")
         _git(repo, "add", "conflict.txt")
         finish = _git(repo, "commit", "--no-edit")
         assert finish.returncode == 0, f"could not finish the revert: {finish.stdout}{finish.stderr}"
@@ -139,12 +139,12 @@ class TestGitAuthoredMessages:
         somewhere the gate never governed.
         """
         f = repo / "pick.txt"
-        f.write_text("main\n", encoding="utf-8")
+        f.write_text("main\n", encoding="utf-8", newline="\n")
         _git(repo, "add", "pick.txt")
         assert _git(repo, "commit", "-m", "feat: main side").returncode == 0
 
         _git(repo, "checkout", "-q", "-b", "pick-src", "HEAD~1")
-        f.write_text("branch\n", encoding="utf-8")
+        f.write_text("branch\n", encoding="utf-8", newline="\n")
         _git(repo, "add", "pick.txt")
         assert _git(repo, "commit", "--no-verify", "-m", "imported from elsewhere").returncode == 0
         sha = _git(repo, "rev-parse", "HEAD").stdout.strip()
@@ -153,14 +153,14 @@ class TestGitAuthoredMessages:
         _git(repo, "cherry-pick", sha)
         assert (repo / ".git" / "CHERRY_PICK_HEAD").exists(), "expected a conflicted cherry-pick"
 
-        f.write_text("resolved\n", encoding="utf-8")
+        f.write_text("resolved\n", encoding="utf-8", newline="\n")
         _git(repo, "add", "pick.txt")
         finish = _git(repo, "commit", "--no-edit")
         assert finish.returncode == 0, f"could not finish the cherry-pick: {finish.stdout}{finish.stderr}"
 
     def test_fixup_succeeds(self, repo: pathlib.Path) -> None:
         sha = _git(repo, "rev-parse", "HEAD").stdout.strip()
-        (repo / "f.txt").write_text("f", encoding="utf-8")
+        (repo / "f.txt").write_text("f", encoding="utf-8", newline="\n")
         _git(repo, "add", "f.txt")
         fixup = _git(repo, "commit", "--fixup", sha)
         assert fixup.returncode == 0, f"fixup refused: {fixup.stdout}{fixup.stderr}"

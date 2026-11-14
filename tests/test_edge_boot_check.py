@@ -126,7 +126,7 @@ class Edge:
         ):
             directory.mkdir(parents=True)
         for name, body in FAKES.items():
-            (self.bin / name).write_text(f"#!/bin/sh\n{body}", encoding="utf-8")
+            (self.bin / name).write_text(f"#!/bin/sh\n{body}", encoding="utf-8", newline="\n")
             (self.bin / name).chmod(0o755)
         self.write("ruleset", "")
         self.write("show_RuntimeWatchdogUSec_manager", "15s")
@@ -155,7 +155,7 @@ class Edge:
             self.write_sys(interface, "1")
 
     def write(self, name: str, text: str) -> None:
-        (self.fake / name).write_text(text, encoding="utf-8")
+        (self.fake / name).write_text(text, encoding="utf-8", newline="\n")
 
     def read(self, name: str) -> str:
         return (self.fake / name).read_text(encoding="utf-8").strip()
@@ -164,7 +164,7 @@ class Edge:
         (self.fake / name).unlink()
 
     def write_sys(self, interface: str, carrier: str) -> None:
-        (self.net / interface / "carrier").write_text(f"{carrier}\n", encoding="utf-8")
+        (self.net / interface / "carrier").write_text(f"{carrier}\n", encoding="utf-8", newline="\n")
 
     def order(self, ruleset: float, networkd: float, network: float = 16.2) -> None:
         """When each unit reached the state the check reads, in seconds since boot; 0 never."""
@@ -190,11 +190,11 @@ class Edge:
 
     def misses(self, count: int) -> None:
         """The uplink misses the liveness check has counted in a row this boot."""
-        (self.liveness / "uplink.misses").write_text(f"{count}\n", encoding="utf-8")
+        (self.liveness / "uplink.misses").write_text(f"{count}\n", encoding="utf-8", newline="\n")
 
     def booted(self, minutes: float, next_run: float = 0) -> None:
         """Minutes since boot, and when the liveness timer runs next, in minutes since boot."""
-        self.uptime.write_text(f"{minutes * 60:.2f} 1000.00\n", encoding="utf-8")
+        self.uptime.write_text(f"{minutes * 60:.2f} 1000.00\n", encoding="utf-8", newline="\n")
         self.write("next_elapse", f"t {round(next_run * 60e6)}\n")
 
     def unplug_lan(self) -> None:

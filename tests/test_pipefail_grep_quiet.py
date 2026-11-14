@@ -20,6 +20,7 @@ from __future__ import annotations
 import re
 import subprocess
 from pathlib import Path
+from tests.shells import BASH
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -69,7 +70,7 @@ def test_no_pipefail_script_pipes_into_a_quiet_grep() -> None:
 
 
 def _status(pipeline: str) -> int:
-    return subprocess.run(["bash", "-o", "pipefail", "-c", pipeline], check=False).returncode
+    return subprocess.run([BASH, "-o", "pipefail", "-c", pipeline], check=False).returncode
 
 
 def test_the_mechanism_a_quiet_grep_fails_a_pipeline_that_matched() -> None:
@@ -93,8 +94,7 @@ def test_the_detector_sees_the_files_and_matches_the_known_forms() -> None:
     # carries shell must pass it. pr-agent.yml, the other one, has called the shared
     # reviewer since CI-007 and holds no shell of its own.
     texts = {
-        f: (REPO / f).read_text(encoding="utf-8")
-        for f in (".github/workflows/dependabot-declare-unreviewed.yml",)
+        f: (REPO / f).read_text(encoding="utf-8") for f in (".github/workflows/dependabot-declare-unreviewed.yml",)
     }
     for name, text in texts.items():
         assert name in scanned and "pipefail" in text, name

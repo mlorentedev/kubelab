@@ -18,7 +18,14 @@ from typer.testing import CliRunner
 
 from toolkit.cli.product import app
 from toolkit.features import forge_adapter, product_ready, product_registry, promotion
-from toolkit.features.forge_adapter import ForgeAdapter, ForgeError, ForgeReadError, GiteaForge, GitHubForge, adapter_for
+from toolkit.features.forge_adapter import (
+    ForgeAdapter,
+    ForgeError,
+    ForgeReadError,
+    GiteaForge,
+    GitHubForge,
+    adapter_for,
+)
 from toolkit.features.gitea_client import ADMIN_METHODS, SCOPE_BY_METHOD, GiteaClient
 from toolkit.features.product_contract import ContractError
 

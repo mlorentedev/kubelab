@@ -34,6 +34,7 @@ from typing import Any
 
 import pytest
 import yaml
+from tests.shells import BASH
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 COMMON = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
@@ -202,14 +203,14 @@ def test_a_failed_heartbeat_never_fails_the_ship(tmp_path: pathlib.Path, curl_ex
     bindir = tmp_path / "bin"
     bindir.mkdir()
     stub = bindir / "curl"
-    stub.write_text(f"#!/usr/bin/env bash\ncat > /dev/null\nexit {curl_exit}\n", encoding="utf-8")
+    stub.write_text(f"#!/usr/bin/env bash\ncat > /dev/null\nexit {curl_exit}\n", encoding="utf-8", newline="\n")
     stub.chmod(0o755)
     token = tmp_path / "token"
-    token.write_text("Abc-123_xyz", encoding="utf-8")
+    token.write_text("Abc-123_xyz", encoding="utf-8", newline="\n")
 
     block = _heartbeat_block().replace("/opt/node-backup-heartbeat-token", str(token))
     proc = subprocess.run(
-        ["bash", "-c", "set -euo pipefail\n" + block],
+        [BASH, "-c", "set -euo pipefail\n" + block],
         cwd=tmp_path,
         env={**os.environ, "PATH": f"{bindir}{os.pathsep}{os.environ['PATH']}"},
         capture_output=True,
@@ -236,14 +237,16 @@ def test_the_token_never_reaches_curls_argv(tmp_path: pathlib.Path) -> None:
     bindir.mkdir()
     seen = tmp_path / "argv"
     stub = bindir / "curl"
-    stub.write_text(f'#!/usr/bin/env bash\nprintf "%s\\n" "$@" > {seen}\ncat > /dev/null\n', encoding="utf-8")
+    stub.write_text(
+        f'#!/usr/bin/env bash\nprintf "%s\\n" "$@" > {seen}\ncat > /dev/null\n', encoding="utf-8", newline="\n"
+    )
     stub.chmod(0o755)
     token = tmp_path / "token"
-    token.write_text("SECRETTOKENVALUE", encoding="utf-8")
+    token.write_text("SECRETTOKENVALUE", encoding="utf-8", newline="\n")
 
     block = _heartbeat_block().replace("/opt/node-backup-heartbeat-token", str(token))
     subprocess.run(
-        ["bash", "-c", "set -euo pipefail\n" + block],
+        [BASH, "-c", "set -euo pipefail\n" + block],
         cwd=tmp_path,
         env={**os.environ, "PATH": f"{bindir}{os.pathsep}{os.environ['PATH']}"},
         capture_output=True,
@@ -270,14 +273,14 @@ def test_an_implausible_token_is_refused_rather_than_posted(tmp_path: pathlib.Pa
     bindir.mkdir()
     called = tmp_path / "called"
     stub = bindir / "curl"
-    stub.write_text(f"#!/usr/bin/env bash\ntouch {called}\ncat > /dev/null\n", encoding="utf-8")
+    stub.write_text(f"#!/usr/bin/env bash\ntouch {called}\ncat > /dev/null\n", encoding="utf-8", newline="\n")
     stub.chmod(0o755)
     token = tmp_path / "token"
-    token.write_text("../../evil?x=", encoding="utf-8")
+    token.write_text("../../evil?x=", encoding="utf-8", newline="\n")
 
     block = _heartbeat_block().replace("/opt/node-backup-heartbeat-token", str(token))
     proc = subprocess.run(
-        ["bash", "-c", "set -euo pipefail\n" + block],
+        [BASH, "-c", "set -euo pipefail\n" + block],
         cwd=tmp_path,
         env={**os.environ, "PATH": f"{bindir}{os.pathsep}{os.environ['PATH']}"},
         capture_output=True,

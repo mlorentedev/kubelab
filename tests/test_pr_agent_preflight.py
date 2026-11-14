@@ -72,14 +72,14 @@ class Preflight:
 
     def __init__(self, tmp_path: Path) -> None:
         self.out = tmp_path / "output"
-        self.out.write_text("", encoding="utf-8")
+        self.out.write_text("", encoding="utf-8", newline="\n")
         self.argv_log = tmp_path / "argv.log"
         self.stdin_log = tmp_path / "stdin.log"
         self.summary = tmp_path / "summary.md"
         bindir = tmp_path / "bin"
         bindir.mkdir()
         curl = bindir / "curl"
-        curl.write_text(FAKE_CURL, encoding="utf-8")
+        curl.write_text(FAKE_CURL, encoding="utf-8", newline="\n")
         curl.chmod(0o755)
         self.env = _base_env()
         self.env["PATH"] = f"{bindir}{os.pathsep}{os.environ['PATH']}"
@@ -303,7 +303,7 @@ def nan() -> Iterator[LocalNaN]:
 
 def _run_real(nan: LocalNaN, tmp_path: Path, model: str) -> tuple[subprocess.CompletedProcess[str], list[str]]:
     out = tmp_path / "output"
-    out.write_text("", encoding="utf-8")
+    out.write_text("", encoding="utf-8", newline="\n")
     env = {**_base_env(), "NAN_API_BASE": nan.url, "PREFLIGHT_TIMEOUT": "2"}
     proc = subprocess.run(  # noqa: S603
         [str(PREFLIGHT), "--model", model, "--fallbacks", '["openai/alive"]', "--output", str(out)],

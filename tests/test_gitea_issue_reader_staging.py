@@ -90,10 +90,7 @@ class TestMint:
         decrypt = next(t for t in tasks if "{{ gitea_staging_reader_env }}.enc.yaml" in str(t.get("command")))
         register = decrypt["register"]
         store = next(
-            key
-            for t in tasks
-            for key, value in (t.get("set_fact") or {}).items()
-            if f"{register}.stdout" in str(value)
+            key for t in tasks for key, value in (t.get("set_fact") or {}).items() if f"{register}.stdout" in str(value)
         )
         gate = variables["gitea_issue_reader_staging_token"]
         assert gate.replace(" ", "").startswith("{{" + store + "." + READER_KEY), (
@@ -107,7 +104,9 @@ class TestMint:
 
         assert "--token-name kubelab-issue-reader-staging" in mint
         assert "--scopes {{ gitea_issue_reader_staging_scopes }}" in mint
-        assert re.search(r"when:.*not gitea_issue_reader_staging_token", mint), "an ungated mint issues a new token every run"
+        assert re.search(r"when:.*not gitea_issue_reader_staging_token", mint), (
+            "an ungated mint issues a new token every run"
+        )
         assert f"toolkit secrets set {READER_KEY} --env {{{{ gitea_staging_reader_env }}}} --stdin" in record, (
             "the staging token must be written to staging's SOPS, not gitea_identity_env's"
         )

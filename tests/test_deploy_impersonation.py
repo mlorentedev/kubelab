@@ -59,6 +59,7 @@ class TestSpokeServiceAccountResolution:
         manifest.write_text(
             "apiVersion: v1\nkind: ServiceAccount\nmetadata:\n  name: renamed-manager\n  namespace: elsewhere\n",
             encoding="utf-8",
+            newline="\n",
         )
         monkeypatch.setattr(infra.settings, "project_root", tmp_path)
 
@@ -72,7 +73,9 @@ class TestSpokeServiceAccountResolution:
         """
         manifest = tmp_path / infra.SPOKE_RBAC_MANIFEST
         manifest.parent.mkdir(parents=True, exist_ok=True)
-        manifest.write_text("apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: nope\n", encoding="utf-8")
+        manifest.write_text(
+            "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: nope\n", encoding="utf-8", newline="\n"
+        )
         monkeypatch.setattr(infra.settings, "project_root", tmp_path)
 
         with pytest.raises(ValueError, match="No ServiceAccount found"):

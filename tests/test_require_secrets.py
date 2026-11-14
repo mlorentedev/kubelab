@@ -83,7 +83,7 @@ def _run(tmp_path: Path, module: str, extra: dict) -> subprocess.CompletedProces
         }
     ]
     path = tmp_path / "play.yml"
-    path.write_text(json.dumps(play), encoding="utf-8")
+    path.write_text(json.dumps(play), encoding="utf-8", newline="\n")
     return subprocess.run(
         ["ansible-playbook", str(path), "-i", "localhost,", "-c", "local", "--tags", "role", "-e", json.dumps(extra)],
         cwd=ANSIBLE_DIR,

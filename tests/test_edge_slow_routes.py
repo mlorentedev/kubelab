@@ -131,20 +131,26 @@ class TestTheDeclaredRoutes:
 
         hits = subprocess.run(["git", "grep", "-l", esr.THRESHOLD_KEY, "--", "infra"], cwd=REPO,
                               capture_output=True, text=True, encoding="utf-8", check=False).stdout.split()  # fmt: skip
-        assert sorted(hits) == sorted([str(esr.DEFAULTS), "infra/ansible/roles/k3s_server/templates/traefik-helmconfig.yaml.j2"])
+        assert sorted(hits) == sorted(
+            [str(esr.DEFAULTS), "infra/ansible/roles/k3s_server/templates/traefik-helmconfig.yaml.j2"]
+        )
 
 
 class TestTheReport:
     def test_it_states_what_the_figures_are(self) -> None:
         rows = esr.summarize(TestTheRows()._results(), ["web", "gitea", "api"], [30])
-        text = esr.render(rows, window="7d", bounds=[30], logged_from_ns=10**9, days=[(f"2026-11-0{d}", 1) for d in range(5, 9)])
+        text = esr.render(
+            rows, window="7d", bounds=[30], logged_from_ns=10**9, days=[(f"2026-11-0{d}", 1) for d in range(5, 9)]
+        )
         assert "OriginDuration" in text and "upper bound" in text
         assert "no sample" in text
         assert "| gitea | 4d0b79276f78ba8cd4d5 | 571 |" in text  # the router column is the router's own suffix
         assert "> 30 s" in text
 
     def test_it_says_how_far_back_the_log_reaches(self) -> None:
-        text = esr.render([], window="7d", bounds=[30], logged_from_ns=10**9, days=[("2026-11-05", 12), ("2026-11-06", 900)])
+        text = esr.render(
+            [], window="7d", bounds=[30], logged_from_ns=10**9, days=[("2026-11-05", 12), ("2026-11-06", 900)]
+        )
         assert "2026-11-05" in text and "2 days" in text
 
 

@@ -61,7 +61,10 @@ class TestLatestStatus:
         assert latest_status(statuses, CONTEXT)["state"] == "success"
 
     def test_the_newest_by_timestamp_wins_whatever_the_list_order(self) -> None:
-        statuses = [_status("pending", updated="2026-10-21T10:00:00Z"), _status("success", updated="2026-10-21T10:05:00Z")]
+        statuses = [
+            _status("pending", updated="2026-10-21T10:00:00Z"),
+            _status("success", updated="2026-10-21T10:05:00Z"),
+        ]
         assert latest_status(statuses, CONTEXT)["state"] == "success"
 
     def test_within_one_second_the_list_order_decides(self) -> None:
@@ -119,7 +122,9 @@ class TestWaitStatus:
         assert "HTTP 502" in line
 
     def test_an_outage_after_pending_says_what_was_last_read(self) -> None:
-        verdict, line, _, _ = _run([[_status("pending", description="syncing")], StatusFetchError("HTTP 502")], timeout=30)
+        verdict, line, _, _ = _run(
+            [[_status("pending", description="syncing")], StatusFetchError("HTTP 502")], timeout=30
+        )
         assert verdict is WaitStatus.CANNOT_CHECK
         assert "HTTP 502" in line and "still pending: syncing" in line
 

@@ -124,6 +124,7 @@ def test_the_scan_sees_each_form_it_must_refuse(tmp_path: Path) -> None:
         "    webbrowser.open('https://example.test')\n"
         "    Image.open(p)\n",
         encoding="utf-8",
+        newline="\n",
     )
 
     assert unspecified_encodings(("pkg",), tmp_path) == [f"pkg/m.py:{n}" for n in (5, 7, 8, 9, 10, 11, 12, 13, 14)]
