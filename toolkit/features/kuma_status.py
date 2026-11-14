@@ -7,6 +7,8 @@ is down" when Kuma cannot be asked.
 
 from __future__ import annotations
 
+import traceback
+from pathlib import Path
 from typing import Any
 
 from uptime_kuma_api import MonitorStatus
@@ -19,11 +21,23 @@ class KumaUnavailableError(RuntimeError):
     """Uptime Kuma could not be asked; distinct from "nothing is down"."""
 
 
+def _flat_beats(beats: list[Any]) -> list[dict[str, Any]]:
+    """The beats, with any history the client nested as one element spread back out.
+
+    uptime-kuma-api 1.2.1 appends a monitor's `heartbeatList` as a single element
+    when a live `heartbeat` for it arrived first, instead of extending (#3458).
+    """
+    flat: list[dict[str, Any]] = []
+    for beat in beats:
+        flat.extend(beat if isinstance(beat, list) else [beat])
+    return flat
+
+
 def down_monitors(monitors: list[dict[str, Any]], heartbeats: dict[int, list[dict[str, Any]]]) -> list[dict[str, str]]:
     """Active monitors whose newest heartbeat is DOWN, with that beat's message and time."""
     down = []
     for monitor in monitors:
-        beats = heartbeats.get(monitor["id"]) or []
+        beats = _flat_beats(heartbeats.get(monitor["id"]) or [])
         if not monitor.get("active") or not beats:
             continue
         latest = max(beats, key=lambda beat: beat.get("time") or "")
@@ -31,6 +45,15 @@ def down_monitors(monitors: list[dict[str, Any]], heartbeats: dict[int, list[dic
             msg = (latest.get("msg") or "").strip().splitlines()
             down.append({"name": monitor["name"], "msg": msg[0] if msg else "", "checked": latest.get("time") or ""})
     return down
+
+
+def _where(exc: BaseException) -> str:
+    """The error with the frame that raised it, so a new shape is findable from one line (#3458)."""
+    frames = traceback.extract_tb(exc.__traceback__)
+    if not frames:
+        return f"{type(exc).__name__}: {exc}"
+    last = frames[-1]
+    return f"{type(exc).__name__}: {exc} (at {Path(last.filename).name}:{last.lineno} in {last.name})"
 
 
 def ask_down_monitors() -> list[dict[str, str]]:
@@ -41,6 +64,6 @@ def ask_down_monitors() -> list[dict[str, str]]:
     try:
         return down_monitors(api.get_monitors(), api.get_heartbeats())
     except Exception as exc:  # noqa: BLE001
-        raise KumaUnavailableError(f"Uptime Kuma did not answer: {exc}") from exc
+        raise KumaUnavailableError(f"Uptime Kuma did not answer: {_where(exc)}") from exc
     finally:
         api.disconnect()
