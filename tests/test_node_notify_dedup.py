@@ -10,7 +10,6 @@ A notice n8n refused waits in the spool until `--flush` delivers it (#2787).
 from __future__ import annotations
 
 import calendar
-import fcntl
 import json
 import os
 import re
@@ -18,6 +17,7 @@ import shlex
 import shutil
 import stat
 import subprocess
+import sys
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -26,7 +26,12 @@ from typing import Any
 
 import pytest
 
-from tests.test_node_notify_role import _defaults, _render
+if sys.platform == "win32":
+    pytest.skip("Linux-only: the script under test runs under flock on the nodes (#3409)", allow_module_level=True)
+
+import fcntl  # noqa: E402
+
+from tests.test_node_notify_role import _defaults, _render  # noqa: E402
 
 # util-linux; macOS has no flock, so the script under test cannot run there.
 pytestmark = pytest.mark.skipif(shutil.which("flock") is None, reason="needs flock")
