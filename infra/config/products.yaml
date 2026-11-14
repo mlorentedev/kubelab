@@ -34,6 +34,8 @@ products:
     events:
       staging: web-image-published
       prod: web-release-published
+  console:
+    forge: in-tree
   imagesensortool:
     repository: personal/imagesensortool
     forge: gitea

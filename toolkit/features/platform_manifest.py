@@ -848,7 +848,7 @@ def build_service_tables(
         grafana = services.get("observability", {}).get("grafana", {})
         loki = services.get("observability", {}).get("loki", {})
 
-        return [
+        rows = [
             _svc(
                 "API",
                 f"https://api.{prefix}",
@@ -980,6 +980,25 @@ def build_service_tables(
                 version="CronJobs",
             ),
         ]
+        # Declared in common.yaml once the console is registered (#3443); the host mirrors
+        # `infra.forge.console_domain` (console.<zone>), which this builder cannot read: it sees
+        # common.yaml alone, and the staging value is an overlay.
+        console = platform.get("console")
+        if console:
+            rows.insert(
+                2,
+                _svc(
+                    "Console",
+                    f"https://console.{prefix}",
+                    _health(f"https://console.{prefix}", console, "console"),
+                    _auth(console),
+                    "Platform",
+                    nd,
+                    "Forge console",
+                    version=console.get("version", ""),
+                ),
+            )
+        return rows
 
     staging = _env_services("staging")
     # imagesensortool declares a staging lane only (IDP-053): a tile here, none in prod.

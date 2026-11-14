@@ -8,6 +8,7 @@ import pytest
 import yaml
 
 from toolkit.config import settings as settings_module
+from toolkit.features.configuration import ConfigurationManager
 from toolkit.features import product_registry
 from toolkit.features.product_guards import apps_declaring
 from toolkit.features.product_registry import RegistryError, UnknownEventError
@@ -53,7 +54,9 @@ class TestPlatformApps:
         held to it: a product with no ``events.prod`` does not run in prod (IDP-053 D5).
         """
         assert apps_declaring(env), f"no registered product declares a {env} lane: nothing was checked"
-        missing = _undeployable(env, _platform_blocks("common"), _platform_blocks(env))
+        # Through the loader, so a field the loader derives (the console's `domain`, #3443) counts.
+        effective = dict(ConfigurationManager(env, REPO).get_merged_config().get("apps", {}).get("platform") or {})
+        missing = _undeployable(env, effective, {})
         assert not missing, f"registered, but common.yaml + {env}.yaml lack what generator_k8s needs: {missing}"
 
     def test_a_product_with_no_prod_lane_is_not_held_to_a_prod_block(self, fixture_registry: Path) -> None:

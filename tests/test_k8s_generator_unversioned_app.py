@@ -28,8 +28,15 @@ _ENVS = ("staging", "prod")
 # that LOSES its pin is deleted from the cluster by the next sync, and the drift gate accepts it
 # (the regenerated overlay and the committed one agree). Naming the absence here is what turns
 # that deletion into a failing test: a pin removed by mistake is not on this list, and an app
-# registered ahead of its first build is added here and removed again in the PR that pins it.
-DECLARED_UNPINNED: dict[str, set[str]] = {"staging": set(), "prod": {"imagesensortool"}}
+# registered ahead of its first build is added here and may stay once it is pinned (the deploy
+# pull request that pins it edits only values and generated/, never this file).
+#
+# TEMPORARY for `console` (#3443): the comparison below is `<=` only so the first console deploy
+# pull request does not fail on this declaration. `console` leaves this set for staging as soon as
+# its first pin exists, and for prod after the first promote-prod; the PR that deletes the
+# embedded page (3c) removes both entries and returns the comparison to `==`, so that a pin lost
+# afterwards is a failing test again.
+DECLARED_UNPINNED: dict[str, set[str]] = {"staging": {"console"}, "prod": {"imagesensortool", "console"}}
 
 _REGISTRY = """\
 products:
@@ -125,7 +132,9 @@ def test_the_committed_overlay_runs_each_pinned_app_on_its_pin_and_no_other(env:
     assert pinned, "no registered app has a pin: the check below would pass on nothing"
     assert set(pinned) <= set(images), f"{env}: pinned apps with no Deployment: {set(pinned) - set(images)}"
     registered_unpinned = set(product_registry.platform_apps()) - set(pinned)
-    assert registered_unpinned == DECLARED_UNPINNED[env], (
+    # A subset, not equality: the first deploy pull request pins an app that is still declared here,
+    # and must not fail the shard. A LOST pin is still caught, since that app is not declared.
+    assert registered_unpinned <= DECLARED_UNPINNED[env], (
         f"{env}: apps with no apps.platform.<app>.version are {sorted(registered_unpinned)}, declared "
         f"{sorted(DECLARED_UNPINNED[env])}. A lost pin deletes the app (Argo CD prunes); a new app "
         "registered before its first build is declared in DECLARED_UNPINNED"

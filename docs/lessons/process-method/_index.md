@@ -4,6 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 750 | [`git add -A && git commit` from a worktree that has vanished records its disappearance as a mass deletion](lesson-750-git-add-all-from-a-directory-that-no-longer-exists-stages-its-deletion.md) | 2026-11-14 |
 | 740 | [An acceptance criterion is only testable if fleet policy allows the mechanism it names](lesson-740-an-acceptance-criterion-is-only-testable-if-fleet-policy-allows-its-mechanism.md) | 2026-11-12 |
 | 617 | [A closed epic is not a built substrate, and an ADR's "next" list is not a ticket](lesson-617-a-closed-epic-is-not-a-built-substrate.md) | 2026-10-22 |
 | 578 | [A client test checks its requests against the server's own swagger, because a fake certifies whatever it is asked](lesson-578-a-client-test-checks-its-requests-against-the-servers-own-swagger-not-a-fake.md) | 2026-10-16 |
