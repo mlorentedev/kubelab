@@ -49,6 +49,68 @@ _SECRET_NAME = r"^[a-z0-9_]+(\.[a-z0-9_]+)*$"
 Hostname = Annotated[str, StringConstraints(max_length=253, pattern=_HOSTNAME)]
 SecretName = Annotated[str, StringConstraints(max_length=200, pattern=_SECRET_NAME)]
 
+_RESOURCE_NAME = r"^[a-z][a-z0-9-]{0,30}$"
+# A Kubernetes quantity, decimal or binary suffix; no exponent form.
+_QUANTITY = r"^[0-9]+(\.[0-9]+)?(Ki|Mi|Gi|Ti|Pi|Ei|k|M|G|T|P|E)?$"
+_ABSOLUTE_PATH = r"^/[A-Za-z0-9._/-]*$"
+# Five cron fields of digits and * / , -; names (MON, JAN) and macros (@daily) are not accepted.
+_CRON = r"^[0-9*/,-]+( [0-9*/,-]+){4}$"
+
+ResourceName = Annotated[str, StringConstraints(max_length=31, pattern=_RESOURCE_NAME)]
+
+
+class VolumeParams(BaseModel):
+    """A persistent volume the product's containers mount (one PVC per claim, RWO)."""
+
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
+
+    size: str = Field(max_length=32, pattern=_QUANTITY, description="Kubernetes quantity, e.g. 1Gi.")
+    mount_path: str = Field(max_length=256, pattern=_ABSOLUTE_PATH, description="Absolute path in the container.")
+    fs_group: int | None = Field(
+        default=None,
+        ge=1,
+        le=2**31 - 1,
+        description="Group id the pod's volumes are owned by; set it to the image's non-root group.",
+    )
+
+
+class VolumeClaim(BaseModel):
+    """``type: volume``: storage that outlives a pod."""
+
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True, populate_by_name=True)
+
+    type: Literal["volume"]
+    class_: Literal["local"] = Field(default="local", alias="class", description="Storage class; only local today.")
+    params: VolumeParams
+
+
+class JobParams(BaseModel):
+    """A scheduled run of the product's image (a CronJob; concurrency Forbid, two retries)."""
+
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
+
+    schedule: str = Field(max_length=100, pattern=_CRON, description="Five-field cron schedule, in UTC.")
+    command: list[Annotated[str, StringConstraints(min_length=1, max_length=256)]] = Field(
+        min_length=1, max_length=32, description="Argv the job runs, e.g. [resume, daily]; no shell."
+    )
+    volume: ResourceName = Field(description="Name of a volume claim in this contract the job mounts.")
+    active_deadline_seconds: int = Field(
+        default=3600, ge=1, le=86400, description="A run still going after this many seconds is stopped."
+    )
+
+
+class JobClaim(BaseModel):
+    """``type: job``: a scheduled task."""
+
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True, populate_by_name=True)
+
+    type: Literal["job"]
+    class_: Literal["cron"] = Field(default="cron", alias="class", description="Job kind; only cron today.")
+    params: JobParams
+
+
+Resource = Annotated[VolumeClaim | JobClaim, Field(discriminator="type")]
+
 
 class ContractError(Exception):
     """A contract refusal, worded for the product author who has to fix it."""
@@ -107,14 +169,19 @@ class Contract(BaseModel):
         description="HTTP path that answers 2xx when the container is healthy.",
     )
     hostnames: Hostnames
-    auth: Literal["public", "forwardauth", "oidc"] = Field(
+    auth: Literal["public", "forwardauth", "forwardauth-admins", "oidc"] = Field(
         description=(
-            "public: no auth; forwardauth: Authelia in front of every request; oidc: the app is an OIDC client."
+            "public: no auth; forwardauth: Authelia in front of every request; forwardauth-admins: the same, "
+            "limited to the admins group; oidc: the app is an OIDC client."
         ),
     )
     secrets: list[SecretName] = Field(
         default_factory=list,
         description="Names of the secrets the product expects. Values never appear here; the operator sets them.",
+    )
+    resources: dict[ResourceName, Resource] = Field(
+        default_factory=dict,
+        description="Platform resources the product claims, by name: a volume, a scheduled job. Optional.",
     )
 
     @field_validator("schema_version", mode="before")
@@ -156,9 +223,14 @@ class _UniqueKeyLoader(yaml.SafeLoader):
 
 
 def _field(loc: tuple[int | str, ...]) -> str:
-    """``("hostnames", "prod")`` -> ``hostnames.prod``; ``("secrets", 0)`` -> ``secrets[0]``."""
+    """``("hostnames", "prod")`` -> ``hostnames.prod``; ``("secrets", 0)`` -> ``secrets[0]``.
+
+    A refused mapping key, ``("resources", "Data", "[key]")``, is named ``resources.Data``.
+    """
     out = ""
     for part in loc:
+        if part == "[key]":  # pydantic's marker for a refused mapping key: the key itself is already named
+            continue
         out += f"[{part}]" if isinstance(part, int) else (f".{part}" if out else str(part))
     return out
 
@@ -173,7 +245,11 @@ _FIELD_FIX = {
         "declare hostnames.staging, and hostnames.prod once the product has a prod lane (it is optional before "
         "that), each a lowercase FQDN with no scheme or path."
     ),
-    "auth": "set auth to one of: public, forwardauth, oidc.",
+    "auth": "set auth to one of: public, forwardauth, forwardauth-admins, oidc.",
+    "resources": (
+        "declare each claim as <name>: {type: volume|job, class?, params}; a name is lowercase, starts with a "
+        "letter, at most 31 characters."
+    ),
     "secrets": "list secret names as dotted lowercase keys, e.g. apps.platform.<app>.api_key; values never go here.",
 }
 

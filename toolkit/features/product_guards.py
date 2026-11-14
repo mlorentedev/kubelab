@@ -103,6 +103,25 @@ def check_staging_hostname(contract: Contract, zones: Iterable[str]) -> None:
         )
 
 
+def check_resources(contract: Contract) -> None:
+    """Refuse a job claim whose ``volume`` names no volume claim in the same contract (RES-HOST-001 B2).
+
+    The schema checks each claim alone; whether one claim names another is only known with the whole
+    mapping in hand, so it is checked here, before any manifest is rendered.
+    """
+    volumes = sorted(name for name, claim in contract.resources.items() if claim.type == "volume")
+    for name, claim in contract.resources.items():
+        if claim.type == "job" and claim.params.volume not in volumes:
+            declared = ", ".join(volumes) if volumes else "none"
+            raise ContractError(
+                f"field 'resources.{name}.params.volume': '{claim.params.volume}' is not a volume claim "
+                "in this contract",
+                "a job runs against the product's data, so it mounts one of the product's own volume claims; "
+                "an unknown name would render a CronJob whose pod can never start.",
+                f"set it to a declared volume claim (declared: {declared}), or add that volume under resources.",
+            )
+
+
 def _staging_refusal(host: str, reason: str, fix: str) -> ContractError:
     return ContractError(
         f"field 'hostnames.staging': '{host}' {reason}",
