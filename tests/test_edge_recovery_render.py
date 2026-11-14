@@ -29,7 +29,7 @@ import shutil
 import signal
 import subprocess
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 import pytest
@@ -121,7 +121,7 @@ def test_the_role_writes_the_drop_in_and_re_executes_systemd() -> None:
 
 
 def test_the_drop_in_directory_exists_before_the_drop_in() -> None:
-    directory = _first(lambda task: (task.get("file") or {}).get("path") == str(Path(WATCHDOG).parent))
+    directory = _first(lambda task: (task.get("file") or {}).get("path") == PurePosixPath(WATCHDOG).parent.as_posix())
     assert TASKS[directory]["file"]["state"] == "directory"
     assert directory < _first(lambda task: (task.get("template") or {}).get("dest") == WATCHDOG)
 

@@ -73,7 +73,7 @@ def _candidates() -> list[tuple[str, dict]]:
     for path in sorted(ROLES.glob("*/tasks/*.yml")):
         for task in _flatten(yaml.safe_load(path.read_text(encoding="utf-8"))):
             if _is_read(task):
-                found.append((str(path.relative_to(REPO)), task))
+                found.append((path.relative_to(REPO).as_posix(), task))
     return found
 
 

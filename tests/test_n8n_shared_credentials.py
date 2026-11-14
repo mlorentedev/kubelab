@@ -197,7 +197,7 @@ def _run(
 
 
 def _sale_spec() -> N8nImportSpec:
-    return next(s for s in N8N_IMPORT_CATALOG if str(s.workflow_path) == SALE_JSON)
+    return next(s for s in N8N_IMPORT_CATALOG if s.workflow_path.as_posix() == SALE_JSON)
 
 
 def _smtp() -> Any:
@@ -501,7 +501,7 @@ class TestSharedLifecycle:
     def test_removing_the_sale_leaves_the_shared_credential_in_place(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """2026-11-09: delete the sale's catalog entry and its JSON. What stays must
         keep working, and nothing of the sale may be asked of the vault."""
-        without_sale = [s for s in N8N_IMPORT_CATALOG if str(s.workflow_path) != SALE_JSON]
+        without_sale = [s for s in N8N_IMPORT_CATALOG if s.workflow_path.as_posix() != SALE_JSON]
         assert len(without_sale) == len(N8N_IMPORT_CATALOG) - 1
         vault = _vault()
         for path in SALE_PATHS.values():

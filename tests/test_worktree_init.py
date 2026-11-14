@@ -91,7 +91,7 @@ def _venv(root: pathlib.Path, *, shebang_dir: pathlib.Path) -> pathlib.Path:
     venv = root / ".venv"
     (venv / "bin").mkdir(parents=True)
     (venv / "bin" / "pytest").write_text(
-        f"#!{shebang_dir}/bin/python\nprint('pytest')\n", encoding="utf-8", newline="\n"
+        f"#!{shebang_dir / 'bin'}/python\nprint('pytest')\n", encoding="utf-8", newline="\n"
     )
     return venv
 

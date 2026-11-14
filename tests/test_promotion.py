@@ -157,7 +157,7 @@ class TestPromoteReadsTheRegistry:
         root, generator = env_patched
         _write_values(root)
 
-        with pytest.raises(ValueError, match=r"ghost.*fixtures/product/registry\.yaml"):
+        with pytest.raises(ValueError, match=r"ghost.*fixtures[/\\]product[/\\]registry\.yaml"):
             promotion.promote("staging", "ghost", "sha-abc1234")
         generator.return_value.generate.assert_not_called()
 
@@ -168,7 +168,7 @@ class TestPromoteReadsTheRegistry:
         assert promotion.resolve_image_sha("staging", "third") == "sha-abc1234"
 
     def test_resolve_image_sha_refuses_an_unregistered_product(self, env_patched) -> None:
-        with pytest.raises(ValueError, match=r"ghost.*fixtures/product/registry\.yaml"):
+        with pytest.raises(ValueError, match=r"ghost.*fixtures[/\\]product[/\\]registry\.yaml"):
             promotion.resolve_image_sha("staging", "ghost")
 
 

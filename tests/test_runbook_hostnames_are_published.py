@@ -74,7 +74,7 @@ def _docs() -> dict[str, str]:
     texts = {}
     for root in DOCS:
         for path in root.rglob("*.md"):
-            rel = str(path.relative_to(REPO))
+            rel = path.relative_to(REPO).as_posix()
             if rel not in NOT_CURRENT:
                 texts[rel] = _unescape(path.read_text(encoding="utf-8"))
     return texts

@@ -93,7 +93,7 @@ def _waiting_units() -> dict[str, dict[str, list[str]]]:
     for path in sorted(ROLES.glob("*/templates/*.service.j2")):
         directives = _directives(path)
         if any(_waits_for_the_tailnet(v) for v in directives.get("ExecStartPre", []) + directives.get("ExecStart", [])):
-            units[str(path.relative_to(ROLES))] = directives
+            units[path.relative_to(ROLES).as_posix()] = directives
     return units
 
 
