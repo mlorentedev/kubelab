@@ -94,7 +94,7 @@
         "volume": {
           "description": "Name of a volume claim in this contract the job mounts.",
           "maxLength": 31,
-          "pattern": "^[a-z][a-z0-9-]{0,30}$",
+          "pattern": "^[a-z]([a-z0-9-]{0,29}[a-z0-9])?$",
           "title": "Volume",
           "type": "string"
         }
@@ -219,7 +219,7 @@
     "resources": {
       "description": "Platform resources the product claims, by name: a volume, a scheduled job. Optional.",
       "patternProperties": {
-        "^[a-z][a-z0-9-]{0,30}$": {
+        "^[a-z]([a-z0-9-]{0,29}[a-z0-9])?$": {
           "discriminator": {
             "mapping": {
               "job": "#/$defs/JobClaim",

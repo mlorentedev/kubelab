@@ -27,6 +27,8 @@ from typing import Any
 import pytest
 import yaml
 
+from toolkit.features import product_registry
+
 REPO = Path(__file__).resolve().parent.parent
 OVERLAYS = ["staging", "prod"]
 WORKFLOWS = REPO / "infra/n8n/workflows"
@@ -205,10 +207,17 @@ def test_every_workload_is_selected_by_an_ingress_policy(overlay: str) -> None:
 @pytest.mark.parametrize("overlay", OVERLAYS)
 def test_every_policy_selects_a_workload(overlay: str) -> None:
     labels = [_labels(w) for w in _workloads(overlay).values()]
+    # A registered app with no pin in this env has no workload yet, and its policy is declared ahead
+    # of it: the first deploy pull request edits only values and generated/, so it could not add
+    # one, and an app with no policy fails the check above the moment it is deployed (#3443). A
+    # policy that selects a name no registered app carries is still dead: that is a renamed label.
+    deployed = {lb.get(NAME) for lb in labels}
+    waiting = set(product_registry.platform_apps()) - deployed
     dead = [
         p["metadata"]["name"]
         for p in _policies(overlay)
         if not any(_selects(p["spec"]["podSelector"], lb) for lb in labels)
+        and p["spec"]["podSelector"].get("matchLabels", {}).get(NAME) not in waiting
     ]
     assert not dead, f"policies that select no pod (a renamed label?): {dead}"
 

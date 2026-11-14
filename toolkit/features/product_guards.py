@@ -144,10 +144,11 @@ def staging_hostname_for(prod: str) -> str:
 
 
 def check_resources(contract: Contract) -> None:
-    """Refuse a job claim whose ``volume`` names no volume claim in the same contract (RES-HOST-001 B2).
+    """Refuse claims that only conflict as a set (RES-HOST-001 B2, C).
 
-    The schema checks each claim alone; whether one claim names another is only known with the whole
-    mapping in hand, so it is checked here, before any manifest is rendered.
+    The schema checks each claim alone. That a job's ``volume`` names a volume claim, that the volume
+    claims mount distinct paths, and that they agree on one ``fs_group`` are only known with the whole
+    mapping in hand, so they are checked here, before any manifest is rendered.
     """
     volumes = sorted(name for name, claim in contract.resources.items() if claim.type == "volume")
     for name, claim in contract.resources.items():
@@ -159,6 +160,35 @@ def check_resources(contract: Contract) -> None:
                 "a job runs against the product's data, so it mounts one of the product's own volume claims; "
                 "an unknown name would render a CronJob whose pod can never start.",
                 f"set it to a declared volume claim (declared: {declared}), or add that volume under resources.",
+            )
+    mounted: dict[str, str] = {}
+    for name, claim in contract.resources.items():
+        if claim.type != "volume":
+            continue
+        path = claim.params.mount_path
+        if path in mounted:
+            raise ContractError(
+                f"field 'resources.{name}.params.mount_path': '{path}' is already mounted by "
+                f"'resources.{mounted[path]}'",
+                "the product's containers mount every volume claim, and Kubernetes rejects a container "
+                "with two mounts at one path.",
+                "give each volume claim its own mount_path.",
+            )
+        mounted[path] = name
+    first: tuple[str, int] | None = None
+    for name, claim in contract.resources.items():
+        group = claim.params.fs_group if claim.type == "volume" else None
+        if not group:
+            continue
+        if first is None:
+            first = (name, group)
+        elif group != first[1]:
+            raise ContractError(
+                f"field 'resources.{name}.params.fs_group': {group} differs from {first[1]} "
+                f"set by 'resources.{first[0]}'",
+                "every pod that mounts the claims has a single fsGroup, so two volumes asking for different "
+                "groups cannot both be honoured and one would be owned by the wrong group.",
+                f"give every volume claim the same fs_group, or declare it on one of them only (e.g. {first[1]}).",
             )
 
 
