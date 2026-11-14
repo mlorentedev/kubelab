@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-11-14T04:46:46Z",
-  "source_commit": "5fbb608634590525c3bfb66d5b6c4d8b0514bba1",
+  "generated_at": "2026-11-14T06:59:01Z",
+  "source_commit": "b6b07b3a896f19a432dbfa3f201e6f11e36a9eae",
   "cluster": {
     "name": "KubeLab Hybrid Cloud & Edge Platform",
     "version": "K3s v1.34.4+k3s1",
