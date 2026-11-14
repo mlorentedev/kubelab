@@ -167,6 +167,16 @@ contract's schedule; see Risks).
 Rejected: a shell line in `kubelab.yaml` instead of `resume daily` (#2366
 status; https://gitea.kubelab.live/personal/resume/issues/777).
 
+Note (2026-11-14): the CronJob pod template carries `app.kubernetes.io/name: <app>`
+(the NetworkPolicies of slice E and the ADR-061 gate key on it) plus
+`app.kubernetes.io/component: cronjob`. The Service selects pods by the name label
+alone, and a job pod with no readiness probe is Ready while it runs, so each daily run
+would have sent Service traffic to a pod with nothing listening (502s). Only for an app
+that declares a job, the Deployment pod template therefore gains `component: app` and
+the Service selector adds it; the Deployment's `matchLabels` stay as they are, since
+they are immutable. An app with no job renders as before. The CronJob also sets
+`timeZone: Etc/UTC`, because the contract states its schedule in UTC.
+
 **D5. A Deployment that mounts a volume claim uses `strategy: Recreate`.**
 Today's template is `RollingUpdate`, `maxUnavailable: 0`, `maxSurge: 1`; a surge
 pod cannot open a WAL database the old pod still holds, and on a multi-node

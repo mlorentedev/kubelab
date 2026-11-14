@@ -9,7 +9,9 @@ from toolkit.core.templating import create_renderer
 from toolkit.features.configuration import ConfigurationManager
 from toolkit.features.generator_base import BaseGenerator
 from toolkit.features.k8s_secrets import SECRET_DEFINITIONS, pull_secret_name
+from toolkit.features.product_contract import JobClaim, VolumeClaim, validate_contract
 from toolkit.features.product_registry import product
+from toolkit.features.product_render import SNAPSHOT_DIR, snapshot_path
 
 
 class K8sGenerator(BaseGenerator):
@@ -72,7 +74,11 @@ class K8sGenerator(BaseGenerator):
         ("migrations.yaml.j2", "migrations.yaml"),
         ("ingress.yaml.j2", "ingress.yaml"),
         ("hooks.yaml.j2", "hooks.yaml"),
+        ("claims.yaml.j2", "claims.yaml"),
     ]
+
+    # Where each env's contract snapshots live; a class attribute so a test can point it at a fixture tree.
+    snapshot_dir = SNAPSHOT_DIR
 
     def generate(self, env: str) -> dict[str, Any]:
         """Generate K8s manifests for the specified environment.
@@ -278,6 +284,8 @@ class K8sGenerator(BaseGenerator):
             # Per-app resources (fall back to defaults)
             app_resources = self._build_resources(env_vars, component, default_resources)
 
+            volumes, jobs = self._build_claims(component, env)
+
             apps.append(
                 {
                     "name": component,
@@ -294,6 +302,9 @@ class K8sGenerator(BaseGenerator):
                     "resources": app_resources,
                     "middlewares": middlewares,
                     "extra_routes": self._build_extra_routes(env_vars, component),
+                    "volumes": volumes,
+                    "jobs": jobs,
+                    "fs_group": self._fs_group(component, volumes),
                 }
             )
 
@@ -309,6 +320,51 @@ class K8sGenerator(BaseGenerator):
             "route_probe_image": env_vars.get("ARGOCD_ROUTE_PROBE_IMAGE", ""),
             "migrations": self._build_migrations(env_vars),
         }
+
+    def _build_claims(self, component: str, env: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        """The volume and job claims of ``component``'s contract snapshot for ``env``.
+
+        Read from the snapshot and not through values (D6): ``_extract_app_env_vars`` would
+        flatten a claim into pod environment variables. An app with no snapshot claims nothing.
+        """
+        path = snapshot_path(component, env, self.snapshot_dir)
+        if not path.exists():
+            return [], []
+        resources = validate_contract(path).resources
+        volumes = {
+            name: {
+                "name": name,
+                "claim": f"{component}-{name}",
+                "size": claim.params.size,
+                "mount_path": claim.params.mount_path,
+                "fs_group": claim.params.fs_group,
+            }
+            for name, claim in resources.items()
+            if isinstance(claim, VolumeClaim)
+        }
+        jobs = [
+            {
+                "name": name,
+                "schedule": claim.params.schedule,
+                "command": claim.params.command,
+                "active_deadline_seconds": claim.params.active_deadline_seconds,
+                "volume": volumes[claim.params.volume],
+            }
+            for name, claim in resources.items()
+            if isinstance(claim, JobClaim)
+        ]
+        return list(volumes.values()), jobs
+
+    @staticmethod
+    def _fs_group(component: str, volumes: list[dict[str, Any]]) -> int | None:
+        """The one group every volume of the pod is owned by, or None when no claim names one.
+
+        A pod has a single ``fsGroup``; two volumes asking for different ones cannot both be honoured.
+        """
+        groups = {v["fs_group"] for v in volumes if v["fs_group"]}
+        if len(groups) > 1:
+            raise ValueError(f"{component}: volume claims name different fs_group values {sorted(groups)}")
+        return groups.pop() if groups else None
 
     def _build_migrations(self, env_vars: dict[str, str]) -> dict[str, Any]:
         """The API's Atlas migration directory, with a hash of everything the Job renders from.
