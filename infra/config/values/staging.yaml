@@ -63,7 +63,7 @@ apps:
       auth_level: bypass
       version: sha-bbb4c929d205
     console:
-      version: sha-309bdf9
+      version: sha-a07adfd
 
   # Third-party services
   services:
