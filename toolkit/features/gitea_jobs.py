@@ -58,9 +58,9 @@ class RunSummary:
 
 def describe_job(job: Mapping[str, Any], now: datetime) -> Job:
     started = _ts(job.get("started_at"))
-    taken = bool(job.get("runner_id")) and started is not None
+    taken = started is not None
     ran = None
-    if taken and started is not None:
+    if started is not None:
         ran = _minutes(started, _ts(job.get("completed_at")) or now)
     return Job(
         id=int(job["id"]),
