@@ -76,9 +76,14 @@ class TestMappingFromTheRegistry:
     def test_a_registry_with_no_private_entry_adds_no_secret(self, tmp_path: Path) -> None:
         assert pull_secret_mappings(_registry(tmp_path)) == []
 
-    def test_the_committed_registry_adds_no_secret_so_the_applied_set_is_unchanged(self) -> None:
-        assert pull_secret_mappings(product_registry.load_registry()) == []
-        assert not [m for m in ks._definitions_for_env("prod", ks.SECRET_DEFINITIONS) if m.name.startswith("pull-")]
+    def test_the_committed_registry_adds_one_gitea_secret_and_only_staging_deploys_it(self) -> None:
+        """IDP-053 S3b: imagesensortool is the one private entry; it declares no prod lane, so prod gets no Secret
+        from a product (the pull Secret itself still applies in both envs where its token is catalogued)."""
+        (mapping,) = pull_secret_mappings(product_registry.load_registry())
+
+        assert mapping.name == pull_secret_name(HOST)
+        prod = ks._definitions_for_env("prod", ks.SECRET_DEFINITIONS)
+        assert [m.name for m in prod if m.name.startswith("pull-")] == []
 
     def test_the_token_is_read_from_the_variable_the_catalog_key_flattens_to(self, tmp_path: Path) -> None:
         (mapping,) = pull_secret_mappings(_registry(tmp_path, _entry(secret="ghcr.pull_token", host="ghcr.io")))
@@ -314,7 +319,7 @@ products:
 
     @pytest.mark.parametrize("env", ["staging", "prod"])
     def test_every_committed_deployment_is_byte_identical(self, env: str, tmp_path: Path) -> None:
-        """The committed registry has no private entry, so the rendered bytes must not move.
+        """The committed files are what the template renders, and only imagesensortool pulls with a Secret.
 
         Compared with the file committed before this change, not with a second render of the new
         template: `make validate-sync` would pass on a template that changed both.
@@ -330,4 +335,9 @@ products:
         committed = generator.project_root / f"infra/k8s/overlays/{env}/generated/deployments.yaml"
 
         assert out.read_bytes() == committed.read_bytes()
-        assert b"imagePullSecrets" not in committed.read_bytes()
+        pulls = [
+            d["metadata"]["name"]
+            for d in yaml.safe_load_all(committed.read_text(encoding="utf-8"))
+            if d and d["spec"]["template"]["spec"].get("imagePullSecrets")
+        ]
+        assert pulls == (["imagesensortool"] if env == "staging" else [])

@@ -126,6 +126,7 @@ networking:
   staging_zones:
   - "staging.kubelab.live"
   - "staging.mlorente.dev"
+  - "staging.imagesensortool.com"
   # VPN-only services — Headscale extra_records for direct access via Tailscale IP.
   # Consumed by deploy-vps playbook → Headscale config.yaml template.
   vpn_extra_records:
@@ -1181,6 +1182,12 @@ apps:
       enable_blog: true
       enable_homelabs: true
       enable_contact: true
+
+    # Staging-only static site (IDP-053): its image lives on the Gitea registry the
+    # product's entry names, so only the repository name is declared here. The rest
+    # (domain, site_*, version) is staging.yaml's, rendered from the contract.
+    imagesensortool:
+      image_name: imagesensortool
 
     # portfolio: removed — renamed to web (WEB-001, 2026-03-15)
     # blog: removed — killed (2026-03-15)
