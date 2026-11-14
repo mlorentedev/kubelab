@@ -222,6 +222,8 @@ def test_the_dev_regulation_bans_no_address(monkeypatch: pytest.MonkeyPatch) -> 
 # --------------------------------------------------------------------------
 
 ADMINS = ["group:admins"]
+#: A rule that bypasses never evaluates its subject, so only these policies can limit a host to admins.
+LOGIN_POLICIES = frozenset({"one_factor", "two_factor"})
 
 
 def _subjects(rule: dict) -> list:
@@ -230,13 +232,19 @@ def _subjects(rule: dict) -> list:
 
 
 def admins_rule_problems(access: dict, hosts: set[str]) -> list[str]:
-    """One problem per admins-only host whose rules are missing or name any subject but `group:admins`."""
+    """One problem per admins-only host with no rule, or a rule that names any subject but `group:admins`
+    or a policy that does not ask for a login (`bypass` ignores the subject)."""
     problems = []
     for host in sorted(hosts):
         rules = [rule for rule in access.get("rules", []) if host in _domains(rule)]
         if not rules:
             problems.append(f"{host}: no rule names it")
         problems += [f"{host}: rule subject {_subjects(rule)} is not {ADMINS}" for rule in rules if _subjects(rule) != ADMINS]
+        problems += [
+            f"{host}: rule policy {rule.get('policy')!r} does not ask for a login"
+            for rule in rules
+            if rule.get("policy") not in LOGIN_POLICIES
+        ]
     return problems
 
 
@@ -283,8 +291,13 @@ _ADMINS_RULE = {"domain": ["shop.staging.kubelab.live"], "policy": "one_factor",
             [_ADMINS_RULE, {**_ADMINS_RULE, "subject": ["user:guest"]}],
             ["shop.staging.kubelab.live: rule subject ['user:guest'] is not ['group:admins']"],
         ),
+        ([{**_ADMINS_RULE, "policy": "two_factor"}], []),
+        (
+            [{**_ADMINS_RULE, "policy": "bypass"}],
+            ["shop.staging.kubelab.live: rule policy 'bypass' does not ask for a login"],
+        ),
     ],
-    ids=["list", "string", "no-rule", "no-subject", "extra-group", "second-rule-other-subject"],
+    ids=["list", "string", "no-rule", "no-subject", "extra-group", "second-rule-other-subject", "two-factor", "bypass"],
 )
 def test_the_admins_rule_check_judges_each_shape(rules: list[dict], expected: list[str]) -> None:
     assert admins_rule_problems({"rules": rules}, {"shop.staging.kubelab.live"}) == expected
@@ -295,10 +308,10 @@ def test_admins_hosts_reads_the_auth_level_from_each_lane_snapshot(
 ) -> None:
     from toolkit.features import product_guards, product_render
 
-    for app, auth in (("shop", "forwardauth-admins"), ("blog", "forwardauth")):
-        (tmp_path / f"{app}.yaml").write_text(
-            yaml.safe_dump({"auth": auth, "hostnames": {"staging": f"{app}.staging.kubelab.live"}}), encoding="utf-8"
-        )
+    levels = {"shop": "forwardauth-admins", "blog": "forwardauth"}
+    for app in levels:
+        snapshot = {"auth": levels[app], "hostnames": {"staging": f"{app}.staging.kubelab.live"}}
+        (tmp_path / f"{app}.yaml").write_text(yaml.safe_dump(snapshot), encoding="utf-8")
     monkeypatch.setattr(product_guards, "apps_declaring", lambda env: ("shop", "blog", "api", "gone"))
     monkeypatch.setattr(product_render, "snapshot_path", lambda app, env: tmp_path / f"{app}.yaml")
 
