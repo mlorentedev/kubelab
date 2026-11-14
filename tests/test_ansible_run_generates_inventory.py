@@ -32,9 +32,9 @@ _ROOT = Path(__file__).resolve().parents[1]
 @pytest.fixture
 def ansible_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     (tmp_path / "playbooks").mkdir()
-    (tmp_path / "playbooks" / "site.yml").write_text("---\n", encoding="utf-8")
+    (tmp_path / "playbooks" / "site.yml").write_text("---\n", encoding="utf-8", newline="\n")
     (tmp_path / "generated" / "prod").mkdir(parents=True)
-    (tmp_path / "generated" / "prod" / "hosts.yml").write_text("---\n", encoding="utf-8")
+    (tmp_path / "generated" / "prod" / "hosts.yml").write_text("---\n", encoding="utf-8", newline="\n")
     monkeypatch.setattr(infra, "settings", SimpleNamespace(ansible_dir=tmp_path))
     return tmp_path
 

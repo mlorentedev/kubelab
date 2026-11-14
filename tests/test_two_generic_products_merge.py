@@ -67,7 +67,7 @@ def _merge(base: str, ours: str, theirs: str, tmp: pathlib.Path) -> tuple[int, s
     paths = {}
     for name, text in (("base", base), ("ours", ours), ("theirs", theirs)):
         paths[name] = tmp / name
-        paths[name].write_text(text, encoding="utf-8")
+        paths[name].write_text(text, encoding="utf-8", newline="\n")
     done = subprocess.run(
         ["git", "merge-file", "-p", str(paths["ours"]), str(paths["base"]), str(paths["theirs"])],
         capture_output=True,
@@ -89,7 +89,7 @@ def _diff(before: str, after: str) -> list[str]:
 @pytest.fixture
 def promote_into(monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path):
     registry = tmp_path / "products.yaml"
-    registry.write_text(REGISTRY, encoding="utf-8")
+    registry.write_text(REGISTRY, encoding="utf-8", newline="\n")
     monkeypatch.setattr(product_registry, "registry_path", lambda: registry)
     monkeypatch.setattr(promotion, "tag_exists", MagicMock(return_value=True))
     monkeypatch.setattr(promotion, "K8sGenerator", MagicMock())
@@ -106,7 +106,7 @@ def promote_into(monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path):
         root = tmp_path / f"{app}-{tag}"
         values = root / "infra/config/values/staging.yaml"
         values.parent.mkdir(parents=True)
-        values.write_text(VALUES, encoding="utf-8")
+        values.write_text(VALUES, encoding="utf-8", newline="\n")
         monkeypatch.setattr(promotion, "settings", MagicMock(project_root=root))
         promotion.promote("staging", app, tag)
         return values.read_text(encoding="utf-8")
@@ -156,7 +156,7 @@ def real_values_branch(monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path):
         shutil.copytree(product_render.VALUES_DIR, values_dir)
         if contract is not None:
             snapshot = root / "contract.yaml"
-            snapshot.write_text(contract, encoding="utf-8")
+            snapshot.write_text(contract, encoding="utf-8", newline="\n")
             assert product_render.write(validate_contract(snapshot), app, "staging", values_dir=values_dir)
         monkeypatch.setattr(promotion, "settings", MagicMock(project_root=root))
         promotion.promote("staging", app, tag)

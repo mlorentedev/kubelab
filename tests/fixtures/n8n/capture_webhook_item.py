@@ -143,7 +143,7 @@ def main() -> None:
     image = pinned_image()
     with tempfile.TemporaryDirectory() as tmp:
         probe = pathlib.Path(tmp) / "probe.json"
-        probe.write_text(json.dumps(probe_workflow()), encoding="utf-8")
+        probe.write_text(json.dumps(probe_workflow()), encoding="utf-8", newline="\n")
         probe.chmod(0o644)
         pathlib.Path(tmp).chmod(0o755)
         wf_id = probe_workflow()["id"]
@@ -202,7 +202,7 @@ def main() -> None:
         "sent_form_body_base64": base64.b64encode(FORM_BODY).decode(),
         "code_node_saw_form": form_response,
     }
-    OUTPUT.write_text(json.dumps(fixture, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    OUTPUT.write_text(json.dumps(fixture, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
     print(f"wrote {OUTPUT.relative_to(REPO_ROOT)} from {image}")
 
 

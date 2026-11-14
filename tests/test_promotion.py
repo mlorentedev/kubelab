@@ -24,7 +24,7 @@ def _write_values(root: Path, body: str = _VALUES) -> Path:
     values_dir = root / "infra" / "config" / "values"
     values_dir.mkdir(parents=True, exist_ok=True)
     path = values_dir / "staging.yaml"
-    path.write_text(body, encoding="utf-8")
+    path.write_text(body, encoding="utf-8", newline="\n")
     return path
 
 
@@ -191,7 +191,7 @@ class TestPromoteUsesTheEntrysRegistry:
         root, _ = env_patched
         _write_values(root)
         path = tmp_path / "products.yaml"
-        path.write_text(registry_body, encoding="utf-8")
+        path.write_text(registry_body, encoding="utf-8", newline="\n")
         monkeypatch.setattr(product_registry, "registry_path", lambda: path)
         promotion.ConfigurationManager.return_value.get_env_vars.return_value[
             f"APPS_PLATFORM_{app.upper()}_IMAGE_NAME"
@@ -280,7 +280,7 @@ class TestProdLane:
     def test_a_prod_values_block_for_it_is_found_pinned_or_not(self, tmp_path: Path, block: str) -> None:
         """Unpinned it would deploy ``:latest``; pinned it would run without a lane: both are findings."""
         values = tmp_path / "prod.yaml"
-        values.write_text(f"apps:\n  platform:\n    {block}\n", encoding="utf-8")
+        values.write_text(f"apps:\n  platform:\n    {block}\n", encoding="utf-8", newline="\n")
 
         assert _prod_residue(FIXTURE_REGISTRY, values, tmp_path / "snapshots") == [
             "third: apps.platform.third in prod.yaml"
@@ -288,10 +288,10 @@ class TestProdLane:
 
     def test_a_prod_snapshot_for_it_is_found(self, tmp_path: Path) -> None:
         values = tmp_path / "prod.yaml"
-        values.write_text("apps:\n  platform:\n    web: {version: 1.0.0}\n", encoding="utf-8")
+        values.write_text("apps:\n  platform:\n    web: {version: 1.0.0}\n", encoding="utf-8", newline="\n")
         snapshots = tmp_path / "snapshots"
         snapshots.mkdir()
-        (snapshots / "third.yaml").write_text("{}", encoding="utf-8")
+        (snapshots / "third.yaml").write_text("{}", encoding="utf-8", newline="\n")
 
         assert _prod_residue(FIXTURE_REGISTRY, values, snapshots) == ["third: snapshots/third.yaml"]
 
@@ -344,7 +344,7 @@ class TestPromoteErrors:
         d = root / "infra" / "config" / "values"
         d.mkdir(parents=True, exist_ok=True)
         path = d / "common.yaml"
-        path.write_text(body, encoding="utf-8")
+        path.write_text(body, encoding="utf-8", newline="\n")
         return path
 
     def test_changes_only_the_version_line(self, env_patched, monkeypatch) -> None:
@@ -383,7 +383,7 @@ class TestPromoteErrors:
 
         def _writes(path: Path) -> int:
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text("synced\n", encoding="utf-8")
+            path.write_text("synced\n", encoding="utf-8", newline="\n")
             return 0
 
         monkeypatch.setattr(promotion.sync_k8s_images, "sync", lambda _common, out: _writes(out))

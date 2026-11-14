@@ -245,17 +245,17 @@ class TestSwitch:
     def test_anything_but_true_is_off(self, tmp_path, value) -> None:
         block = {} if value is None else {"merge": value}
         path = tmp_path / "r.json"
-        path.write_text(json.dumps({"mechanical": block}), encoding="utf-8")
+        path.write_text(json.dumps({"mechanical": block}), encoding="utf-8", newline="\n")
         assert merge_enabled(path) is False
 
     def test_true_is_on(self, tmp_path) -> None:
         path = tmp_path / "r.json"
-        path.write_text(json.dumps({"mechanical": {"merge": True}}), encoding="utf-8")
+        path.write_text(json.dumps({"mechanical": {"merge": True}}), encoding="utf-8", newline="\n")
         assert merge_enabled(path) is True
 
     def test_an_unreadable_registry_is_off(self, tmp_path) -> None:
         path = tmp_path / "r.json"
-        path.write_text("{not json", encoding="utf-8")
+        path.write_text("{not json", encoding="utf-8", newline="\n")
         assert merge_enabled(path) is False
 
     def test_the_committed_switch_is_on(self) -> None:

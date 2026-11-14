@@ -253,7 +253,7 @@ def apply_seed(kuma_url, monkeypatch, tmp_path):
     def _apply(seed: list[dict], *, prune: bool = False) -> None:
         export_dir = tmp_path / monitoring.EXPORT_DIR
         export_dir.mkdir(parents=True, exist_ok=True)
-        (export_dir / monitoring.MONITORS_FILE).write_text(json.dumps(seed), encoding="utf-8")
+        (export_dir / monitoring.MONITORS_FILE).write_text(json.dumps(seed), encoding="utf-8", newline="\n")
         # The seed directory is both files: tags are converged like any field
         # (#1974), so a seed without its tag declarations cannot converge.
         shutil.copyfile(REPO_ROOT / monitoring.EXPORT_DIR / monitoring.TAGS_FILE, export_dir / monitoring.TAGS_FILE)
@@ -435,7 +435,7 @@ class TestApplyAgainstARealInstance:
 
         monkeypatch.setattr(monitoring, "_connect", lambda _root: (_client(kuma_url), {"url": kuma_url}))
         path = tmp_path / monitoring.EXPORT_DIR / monitoring.MONITORS_FILE
-        path.write_text(monitoring._seed_json(seed), encoding="utf-8")
+        path.write_text(monitoring._seed_json(seed), encoding="utf-8", newline="\n")
         monitoring.export_monitors(tmp_path)
 
         exported = path.read_text(encoding="utf-8")
@@ -506,7 +506,7 @@ class TestBootstrapAgainstAFreshInstance:
         )
         export_dir = tmp_path / monitoring.EXPORT_DIR
         export_dir.mkdir(parents=True, exist_ok=True)
-        (export_dir / monitoring.MONITORS_FILE).write_text(json.dumps(self._seed()), encoding="utf-8")
+        (export_dir / monitoring.MONITORS_FILE).write_text(json.dumps(self._seed()), encoding="utf-8", newline="\n")
 
         monitoring.bootstrap(tmp_path)
 
@@ -529,7 +529,7 @@ class TestBootstrapAgainstAFreshInstance:
         )
         export_dir = tmp_path / monitoring.EXPORT_DIR
         export_dir.mkdir(parents=True, exist_ok=True)
-        (export_dir / monitoring.MONITORS_FILE).write_text(json.dumps(self._seed()), encoding="utf-8")
+        (export_dir / monitoring.MONITORS_FILE).write_text(json.dumps(self._seed()), encoding="utf-8", newline="\n")
         monitoring.bootstrap(tmp_path)
 
         monitoring.bootstrap(tmp_path)  # must not raise, must not duplicate

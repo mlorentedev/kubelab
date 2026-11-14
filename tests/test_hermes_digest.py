@@ -272,10 +272,11 @@ def test_the_memories_directory_exists_before_the_gateway_mounts_it() -> None:
 
     [task] = [t for t in flat(tasks) if "memories" in str(t.get("ansible.builtin.file", {}).get("path", ""))]
     assert task["ansible.builtin.file"]["state"] == "directory"
-    assert task["ansible.builtin.file"]["mode"] == "01777", (
-        "the gateway's user is not the clone's owner, and the sticky bit stops any other local uid "
-        "from replacing files the sync will commit"
+    assert task["ansible.builtin.file"]["mode"] == "0755", (
+        "the directory and files have one effective gateway owner; a sticky bit would block atomic rename"
     )
+    assert task["ansible.builtin.file"]["owner"] == "{{ _agent_stack_hermes_host_uid }}"
+    assert task["ansible.builtin.file"]["group"] == "{{ _agent_stack_hermes_host_gid }}"
 
 
 def test_the_scripts_cleanup_refuses_to_run_on_an_empty_glob() -> None:
@@ -325,14 +326,16 @@ def test_the_sync_skips_the_gateways_unreadable_plumbing_in_the_memories(tmp_pat
     ]
     ignore = tmp_path / "vault-ignore"
     assert patterns and all("/memories/" in entry for entry in patterns), "anchored to the memories, not the clone"
-    ignore.write_text("\n".join(patterns).replace("{{ agent_stack_vault_zone }}", "zone") + "\n", encoding="utf-8")
+    ignore.write_text(
+        "\n".join(patterns).replace("{{ agent_stack_vault_zone }}", "zone") + "\n", encoding="utf-8", newline="\n"
+    )
 
     repo = tmp_path / "clone"
     memories = repo / "zone" / "memories"
     memories.mkdir(parents=True)
-    (memories / "MEMORY.md").write_text("a fact\n", encoding="utf-8")
+    (memories / "MEMORY.md").write_text("a fact\n", encoding="utf-8", newline="\n")
     for name in ("MEMORY.md.lock", ".mem_abc123"):
-        (memories / name).write_text("", encoding="utf-8")
+        (memories / name).write_text("", encoding="utf-8", newline="\n")
         (memories / name).chmod(0o000)
     env = {**os.environ, "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1"}
     subprocess.run(["git", "init", "-q", str(repo)], check=True, env=env)

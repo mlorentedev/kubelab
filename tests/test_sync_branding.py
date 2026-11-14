@@ -90,7 +90,9 @@ class TestBrandingSyncLive:
         """The committed brand.css must match common.yaml without running a sync first."""
         assert sync_branding.OUTPUT_CSS.exists()
         assert sync_branding.OUTPUT_THEME.exists()
-        in_sync = _run_with_check([sync_branding.OUTPUT_CSS, sync_branding.OUTPUT_THEME], sync_branding.main, "branding")
+        in_sync = _run_with_check(
+            [sync_branding.OUTPUT_CSS, sync_branding.OUTPUT_THEME], sync_branding.main, "branding"
+        )
         assert in_sync is True
 
     def test_sync_command_checks_every_file_main_writes(self) -> None:
@@ -102,7 +104,7 @@ class TestBrandingSyncLive:
     def test_drift_check_detects_mutation(self, tmp_path: Path, monkeypatch) -> None:
         """Drift check returns False when the target CSS diverges from common.yaml."""
         test_css = tmp_path / "brand.css"
-        test_css.write_text("/* drifted content */\n:root { --drift: true; }\n", encoding="utf-8")
+        test_css.write_text("/* drifted content */\n:root { --drift: true; }\n", encoding="utf-8", newline="\n")
         monkeypatch.setattr(sync_branding, "OUTPUT_CSS", test_css)
         monkeypatch.setattr(sync_branding, "OUTPUT_THEME", tmp_path / "theme.css")
         in_sync = _run_with_check([test_css], sync_branding.main, "branding")

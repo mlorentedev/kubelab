@@ -40,6 +40,7 @@ def mirror(tmp_path: Path):
             agent_stack_hermes={**HERMES, "docs_mirror": {**DOCS, "remote": remote.bare.as_uri(), "branch": BRANCH}},
         ),
         encoding="utf-8",
+        newline="\n",
     )
     script.chmod(0o755)
     return remote, mirror_dir / "tree", sandbox, script
@@ -72,8 +73,8 @@ def test_anything_written_into_a_tree_is_discarded_and_a_deleted_file_leaves(mir
     remote, tree, sandbox, script = mirror
     remote.commit("docs/old.md", "x\n")
     _run(script)
-    (sandbox / "docs/guide.md").write_text("tampered\n", encoding="utf-8")
-    (sandbox / "planted.md").write_text("not the docs\n", encoding="utf-8")
+    (sandbox / "docs/guide.md").write_text("tampered\n", encoding="utf-8", newline="\n")
+    (sandbox / "planted.md").write_text("not the docs\n", encoding="utf-8", newline="\n")
     (remote.work / "docs/old.md").unlink()
     _git(remote.work, "commit", "-q", "-am", "drop")
     _git(remote.work, "push", "-q", "origin", f"HEAD:{BRANCH}")

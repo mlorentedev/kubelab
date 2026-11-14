@@ -16,6 +16,8 @@ tags: [kubelab, toolkit-tooling, windows, testing]
 
 **Solution**: Run 43556340653 resolved `bash` through `which` and made `write_text` default to LF, both in throwaway test-side shims. Failures went from 805 to 491, with 314 fixed and 0 new. In the toolkit (#3480), every `write_text` now passes `newline="\n"`, and `tests/test_toolkit_writes_lf.py` fails on any call that omits it. The controller-side headscale probe now opens its connection from Python, with no `timeout` and no `bash`.
 
-**Rule**: On Windows, pass a shell to a subprocess by its full path, taken from `shutil.which`, never as a bare name. Pin `newline="\n"` on every text write whose bytes matter. Before marking a test platform-only, measure it with the suspected mechanism removed: a classification made by reading the code is a hypothesis.
+lesson-727 had already recorded the WSL launcher, and `test_check_lessons.py` worked around it at one call. The other 25 test files kept the bare name, because a lesson does not reach code that is written later. The tests now take the shell from `tests.shells.BASH`. `tests/test_shells.py` fails on any call that passes a bare `"bash"` as its argv, and the LF guard covers `tests/` as well as `toolkit/`.
+
+**Rule**: On Windows, pass a shell to a subprocess by its full path, taken from `shutil.which`, never as a bare name. Pin `newline="\n"` on every text write whose bytes matter. Before marking a test platform-only, measure it with the suspected mechanism removed: a classification made by reading the code is a hypothesis. A gotcha that has already been fixed at one call site needs a guard that covers every call site, or it comes back at the next one.
 
 **Tags**: `#windows` `#testing` `#issue-3409` `#issue-3480`

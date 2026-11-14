@@ -139,12 +139,14 @@ def _probe(tmp_path: pathlib.Path, down: set[str]) -> list[dict]:
     fake, bin_dir = run / "fake", run / "bin"
     fake.mkdir(parents=True)
     bin_dir.mkdir()
-    (bin_dir / "nc").write_text(FAKE_NC, encoding="utf-8")
+    (bin_dir / "nc").write_text(FAKE_NC, encoding="utf-8", newline="\n")
     (bin_dir / "nc").chmod(0o755)
     for node in down:
         (fake / f"{TARGETS[node]}.down").touch()
     targets = run / "targets.txt"
-    targets.write_text("".join(f"{node} {address} 22\n" for node, address in TARGETS.items()), encoding="utf-8")
+    targets.write_text(
+        "".join(f"{node} {address} 22\n" for node, address in TARGETS.items()), encoding="utf-8", newline="\n"
+    )
     env = {
         "PATH": f"{bin_dir}:{os.environ['PATH']}",
         "FAKE_DIR": str(fake),

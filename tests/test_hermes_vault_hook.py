@@ -33,7 +33,9 @@ def _hook(hooks: Path, zone: str) -> Path:
     env = Environment(loader=FileSystemLoader(str(ROLE / "templates")), undefined=StrictUndefined)
     hook = hooks / "pre-commit"
     template = env.get_template("pre-commit-zone.sh.j2")
-    hook.write_text(template.render(ansible_managed="managed", agent_stack_vault_zone=zone), encoding="utf-8")
+    hook.write_text(
+        template.render(ansible_managed="managed", agent_stack_vault_zone=zone), encoding="utf-8", newline="\n"
+    )
     hook.chmod(0o755)
     return hook
 
@@ -53,7 +55,7 @@ def _vault(tmp_path: Path, zone: str) -> Path:
         _git(repo, *args)
     for path in ("10_projects/kubelab/roadmap.md", f"{zone}/notes.md"):
         (repo / path).parent.mkdir(parents=True, exist_ok=True)
-        (repo / path).write_text("seed\n", encoding="utf-8")
+        (repo / path).write_text("seed\n", encoding="utf-8", newline="\n")
     _git(repo, "add", "-A")
     assert _git(repo, "commit", "-q", "--no-verify", "-m", "seed").returncode == 0
     return repo
@@ -71,7 +73,7 @@ def _commit(repo: Path) -> int:
 
 def _write(repo: Path, path: str) -> None:
     (repo / path).parent.mkdir(parents=True, exist_ok=True)
-    (repo / path).write_text("change\n", encoding="utf-8")
+    (repo / path).write_text("change\n", encoding="utf-8", newline="\n")
 
 
 def test_a_change_inside_the_zone_is_accepted(vault: Path) -> None:
@@ -125,7 +127,7 @@ def test_a_failing_git_refuses_the_commit(tmp_path: Path) -> None:
     hook = _hook(tmp_path / "hooks", ZONE)
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
-    (bin_dir / "git").write_text("#!/bin/sh\nexit 128\n", encoding="utf-8")
+    (bin_dir / "git").write_text("#!/bin/sh\nexit 128\n", encoding="utf-8", newline="\n")
     (bin_dir / "git").chmod(0o755)
     env = {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}"}
     assert subprocess.run([str(hook)], env=env, cwd=tmp_path, capture_output=True, check=False).returncode != 0

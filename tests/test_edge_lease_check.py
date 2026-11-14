@@ -132,9 +132,9 @@ def _run(
     leases.mkdir(exist_ok=True)
     if with_interface:
         (sys_net / interface).mkdir(parents=True, exist_ok=True)
-        (sys_net / interface / "ifindex").write_text(f"{IFINDEX}\n", encoding="utf-8")
+        (sys_net / interface / "ifindex").write_text(f"{IFINDEX}\n", encoding="utf-8", newline="\n")
     if lease is not None:
-        (leases / IFINDEX).write_text(lease, encoding="utf-8")
+        (leases / IFINDEX).write_text(lease, encoding="utf-8", newline="\n")
     nets = INTERNAL if networks is None else networks
     args = [f"{name}={cidr}" for name, cidr in nets.items()]
     env = {
@@ -407,11 +407,13 @@ def test_the_path_unit_watches_networkds_lease_directory() -> None:
 def test_the_units_pass_systemd_analyze_verify(tmp_path: Path) -> None:
     if shutil.which("systemd-analyze") is None:
         pytest.skip("systemd-analyze is not installed")
-    (tmp_path / SERVICE).write_text(_render(SERVICE, gateway_lease_check_path="/bin/true"), encoding="utf-8")
-    (tmp_path / PATH_UNIT).write_text(_render(PATH_UNIT), encoding="utf-8")
-    (tmp_path / TIMER).write_text(_render(TIMER), encoding="utf-8")
+    (tmp_path / SERVICE).write_text(
+        _render(SERVICE, gateway_lease_check_path="/bin/true"), encoding="utf-8", newline="\n"
+    )
+    (tmp_path / PATH_UNIT).write_text(_render(PATH_UNIT), encoding="utf-8", newline="\n")
+    (tmp_path / TIMER).write_text(_render(TIMER), encoding="utf-8", newline="\n")
     for stub in ("kubelab-notify@.service", "kubelab-notify-recovered@.service"):
-        (tmp_path / stub).write_text("[Service]\nType=oneshot\nExecStart=/bin/true\n", encoding="utf-8")
+        (tmp_path / stub).write_text("[Service]\nType=oneshot\nExecStart=/bin/true\n", encoding="utf-8", newline="\n")
     proc = subprocess.run(
         ["systemd-analyze", "verify", "--man=no", *(str(tmp_path / unit) for unit in (SERVICE, PATH_UNIT, TIMER))],
         capture_output=True,
@@ -514,7 +516,7 @@ def test_an_ifindex_the_check_cannot_read_is_blind_not_a_collision(
     if ifindex is None:
         (sys_net / "ifindex").mkdir()
     else:
-        (sys_net / "ifindex").write_text(ifindex, encoding="utf-8")
+        (sys_net / "ifindex").write_text(ifindex, encoding="utf-8", newline="\n")
     result = _run(tmp_path, awk_bin, _site_lease(), with_interface=False)
     assert result.returncode == 2, _output(result)
 

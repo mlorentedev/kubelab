@@ -87,7 +87,9 @@ def test_the_token_is_catalogued_audited_under_both_clusters_and_delivered_nowhe
     assert spec is not None, f"{PULL_TOKEN_KEY} is not in SECRET_CATALOG, so no audit can report it absent"
     assert spec.kind is SecretKind.EXTERNAL, "Gitea mints it; a locally generated string would authenticate nothing"
     assert spec.expiry is Expiry.NEVER, "Gitea tokens carry no expiry field; see the bot_token entry"
-    assert set(spec.envs) == {"staging", "prod"}, "both clusters pull with it; `envs` is the audit dimension, not the file"
+    assert set(spec.envs) == {"staging", "prod"}, (
+        "both clusters pull with it; `envs` is the audit dimension, not the file"
+    )
     assert spec.forge_actions == (), "forge_actions writes Gitea Actions secrets; the cluster reads this, CI never does"
 
 
@@ -101,6 +103,7 @@ def test_a_product_can_name_it_as_its_pull_credential(tmp_path: pathlib.Path) ->
         "    receiver: generic\n    image_registry: gitea.kubelab.live/personal\n    private: true\n"
         f"    pull_credential: {{username: reviewer, secret: {PULL_TOKEN_KEY}}}\n",
         encoding="utf-8",
+        newline="\n",
     )
 
     (mapping,) = pull_secret_mappings(product_registry.load_registry(path))

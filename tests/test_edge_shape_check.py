@@ -265,18 +265,18 @@ def test_the_probe_writes_one_line_per_connect(tmp_path: Path) -> None:
     """Run the probe loop for real against a fake curl: the file holds `<time> <code>` lines."""
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
-    (bin_dir / "curl").write_text('#!/bin/sh\nprintf "0.012 200\\n"\n', encoding="utf-8")
+    (bin_dir / "curl").write_text('#!/bin/sh\nprintf "0.012 200\\n"\n', encoding="utf-8", newline="\n")
     (bin_dir / "curl").chmod(0o755)
-    (bin_dir / "sleep").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    (bin_dir / "sleep").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8", newline="\n")
     (bin_dir / "sleep").chmod(0o755)
     # A fake clock: the real one can tick between computing the deadline and the
     # first check, and on a loaded runner the loop then never runs (#3306).
     # The first two calls read 0, every later one reads 100: exactly one connect.
     calls = tmp_path / "date-calls"
     (bin_dir / "date").write_text(
-        f'#!/bin/sh\necho x >> "{calls}"\n'
-        f'[ "$(wc -l < "{calls}")" -le 2 ] && echo 0 || echo 100\n',
+        f'#!/bin/sh\necho x >> "{calls}"\n[ "$(wc -l < "{calls}")" -le 2 ] && echo 0 || echo 100\n',
         encoding="utf-8",
+        newline="\n",
     )
     (bin_dir / "date").chmod(0o755)
     probe = tmp_path / "probe"

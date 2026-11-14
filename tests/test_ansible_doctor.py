@@ -193,7 +193,7 @@ def test_a_relative_config_path_is_resolved_against_the_ansible_dir(tmp_path):
     one in effect — and the check would fail on a healthy controller."""
     ansible_dir = tmp_path / "infra/ansible"
     ansible_dir.mkdir(parents=True)
-    (ansible_dir / "ansible.cfg").write_text("[defaults]\n", encoding="utf-8")
+    (ansible_dir / "ansible.cfg").write_text("[defaults]\n", encoding="utf-8", newline="\n")
     check = doctor._check_config_file(
         ansible_dir, _core(), doctor.Probe(output=_banner("ansible.cfg"), located=True, error="")
     )
@@ -203,7 +203,7 @@ def test_a_relative_config_path_is_resolved_against_the_ansible_dir(tmp_path):
 def test_somebody_elses_config_fails(tmp_path):
     """The property is not "a config file exists" but "it is THIS repo's"."""
     other = tmp_path / "ansible.cfg"
-    other.write_text("[defaults]\n", encoding="utf-8")
+    other.write_text("[defaults]\n", encoding="utf-8", newline="\n")
     check = doctor._check_config_file(ANSIBLE_DIR, _core(), doctor.Probe(output=_banner(other), located=True, error=""))
     assert not check.ok
     assert str(other) in check.detail
@@ -319,6 +319,7 @@ def test_the_inventory_counts_hosts_under_nested_children(tmp_path):
         "          hosts:\n"
         "            c: {}\n",
         encoding="utf-8",
+        newline="\n",
     )
     assert doctor._count_hosts({"hosts": {"a": {}}}) == 1
     assert doctor._count_hosts({"children": {"x": {"children": {"y": {"hosts": {"z": {}}}}}}}) == 1
@@ -330,7 +331,7 @@ def test_the_inventory_counts_hosts_under_nested_children(tmp_path):
 def test_an_empty_inventory_fails(tmp_path):
     inventory = tmp_path / "infra/ansible/inventories/homelab.yml"
     inventory.parent.mkdir(parents=True)
-    inventory.write_text("all:\n  children: {}\n", encoding="utf-8")
+    inventory.write_text("all:\n  children: {}\n", encoding="utf-8", newline="\n")
     check = doctor._check_inventory(tmp_path)
     assert not check.ok
     assert "declares no host" in check.detail
