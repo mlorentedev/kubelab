@@ -1,7 +1,7 @@
 ---
 id: "AI-016-hermes-nan-capabilities"
 type: spec
-status: implementing
+status: archived
 created: "2026-11-13"
 issue: "mlorentedev/kubelab#2214"
 tags: [spec, proposal]
