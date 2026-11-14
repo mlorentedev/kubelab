@@ -68,7 +68,7 @@ What this does not show: routes with no slow request (`api`, `argocd`, `brand-as
 ## Test status
 
 - Test suite: `make test` -> 10268 passed, 95 skipped (head of #3446 before its last merge of master)
-- Staging: `make test-e2e ENV=staging` -> 68 passed, 23 skipped (2026-11-13, after the provision). This shows no regression only: no e2e expectation covers the timeout yet (the open AC1/AC2 e2e task), so AC1 and AC2 rest on the direct measurements above
+- Staging: `make test-e2e ENV=staging` -> 68 passed, 23 skipped (2026-11-13, after the provision). This shows no regression only: the suite had no timeout expectation then. The next entry is the one that covers AC1 and AC2
 - Staging, 2026-11-14: `tests/e2e/test_backend_timeouts.py` -> 2 passed in 136 s (again at 07:36Z, after the lift, with master at `8297a058`) (the default route answers the edge's 504 page at or after the declared bound; `/exception` is still open 15 s past it). Both read their values from the declarations: the bound from the `k3s_server` role defaults, the host from the fixture. `make mutate` raising the declared bound to 70 s turned the 504 test red (it got the 504 at about 60 s), so it checks the bound, not just the status
 - No regressions in existing test suite: yes. One intermittent unrelated failure seen once and filed as #3445
 
@@ -76,16 +76,15 @@ What this does not show: routes with no slow request (`api`, `argocd`, `brand-as
 
 Brief log of non-obvious trade-offs or course corrections taken during the work. Routine choices belong in commit messages, not here.
 
--
--
+- The task to measure time-to-first-header directly, for each route over the bound, was closed partly on inference. The independent review (2026-11-14) graded this a Major, THEORETICAL. Only Headscale's handshake was measured, by re-registering under the bound. For Gitea, uptime-kuma and console, "headers not late" is read from status and duration (see the readings above). The 5 s dial bound is not measured (ADR-076 D3). The edge's own log is the check. A route cut at the header bound logs a `504` near 60 s, and one cut at the dial bound logs a `504` near 5 s. The first read after the deploy found 0 `504`s on any router, 2026-11-14 05:00Z to 07:55Z. The 7 `502`s in that window were Headscale's, at 06:37Z, before the lift, and took under 1 ms, so they were not cut by a bound. Three hours is not a sample of the cut path. A zero there cannot tell "nothing was cut" from "no request ran past the bound", so it records only that the deploy broke nothing at once. The question stays open until #3520 reads a week.
 
 ## Promotion candidates
 
 Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`. `dotf spec archive` refuses a line left unanswered, a `no` without a reason, and a `yes` whose file does not exist; a `00_meta/` path is looked up in the vault.
 
-- [ ] Lesson for the repo's `docs/lessons/`? <yes: path / no: reason>
-- [ ] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? <yes: path / no: reason>
-- [ ] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. <yes: path / no: reason>
+- [x] Lesson for the repo's `docs/lessons/`? yes: docs/lessons/gitops-delivery/lesson-743-a-new-kind-reaches-argo-cd-only-after-register-spoke.md
+- [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? yes: docs/adr/adr-076-edge-backend-timeouts.md
+- [x] New pattern candidate for `00_meta/patterns/`? no: the bound and its exceptions are specific to this edge; nothing like it exists in another project yet
 
 ## Archive checklist
 
