@@ -71,7 +71,7 @@ class FakeRunner:
 def gh(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> FakeRunner:
     """A registry of four products, and a `gh` every call of which is observed."""
     registry = tmp_path / "products.yaml"
-    registry.write_text(REGISTRY, encoding="utf-8")
+    registry.write_text(REGISTRY, encoding="utf-8", newline="\n")
     monkeypatch.setattr(product_registry, "registry_path", lambda: registry)
     runner = FakeRunner()
     monkeypatch.setattr(forge_adapter, "run_gh", runner)

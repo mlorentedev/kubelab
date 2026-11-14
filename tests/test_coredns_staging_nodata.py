@@ -116,7 +116,7 @@ def coredns(docker_mount_dir: Path) -> Iterator[int]:
             pytest.fail("docker not on PATH in CI: the staging zone went unqueried")
         pytest.skip("docker not on PATH: cannot run CoreDNS (a skip is CANNOT CHECK, not OK)")
     image = yaml.safe_load((ROLE / "defaults/main.yml").read_text(encoding="utf-8"))["coredns_image"]
-    (docker_mount_dir / "Corefile").write_text(f"{APEX}:1053 {{{_staging_zone()}", encoding="utf-8")
+    (docker_mount_dir / "Corefile").write_text(f"{APEX}:1053 {{{_staging_zone()}", encoding="utf-8", newline="\n")
     # The image runs as a non-root user, and the temporary directory is 0700:
     # without this CoreDNS cannot read its config and exits at once.
     docker_mount_dir.chmod(0o755)

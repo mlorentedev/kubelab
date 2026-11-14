@@ -80,28 +80,8 @@ spec:
       services:
         - name: headscale
           port: 8080
-          serversTransport: headscale
   tls:
     certResolver: letsencrypt
     options:
       name: headscale-http11
       namespace: kubelab
----
-# Headscale waits without a header bound (ADR-076 D2, `edge.backend_timeouts.exceptions`).
-# It is every node's bootstrap dependency and staging has no route to rehearse on, so it
-# keeps Traefik's unbounded default until a node re-registers under the edge's default
-# (OPS-065 AC4). A ServersTransport does not inherit the static defaults: dialTimeout
-# restates the edge's.
-apiVersion: traefik.io/v1alpha1
-kind: ServersTransport
-metadata:
-  name: headscale
-  namespace: kubelab
-  labels:
-    app.kubernetes.io/name: headscale
-    app.kubernetes.io/component: vpn
-    app.kubernetes.io/part-of: kubelab
-spec:
-  forwardingTimeouts:
-    responseHeaderTimeout: 0s
-    dialTimeout: 5s

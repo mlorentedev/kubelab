@@ -10,8 +10,8 @@
 #   - the host itself runs under the edge's default bound, and must get the edge's 504
 #     page once the bound passes (AC1);
 #   - `/exception` is the route the exceptions declaration names, and must stay open
-#     past the default (AC2). Headscale is prod's only exception and has no staging
-#     route, so this is the one an exception can be shown through.
+#     past the default (AC2). Headscale, the one prod exception until OPS-065 AC4,
+#     had no staging route, so this is the rule an exception is shown through.
 #
 # Staging only: the overlay is VPN-only and the route is rate-limited like any other.
 ---

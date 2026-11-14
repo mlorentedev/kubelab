@@ -182,7 +182,9 @@ def test_vector_redacts_every_token_kind_and_nothing_else(target: str, docker_mo
         pytest.skip("docker not on PATH: cannot run Vector (a skip is CANNOT CHECK, not OK)")
     config, transform = VECTOR_CONFIGS[target]
     tests = docker_mount_dir / "tests.yaml"
-    tests.write_text(VECTOR_TESTS.read_text(encoding="utf-8").replace("parse_logs", transform), encoding="utf-8")
+    tests.write_text(
+        VECTOR_TESTS.read_text(encoding="utf-8").replace("parse_logs", transform), encoding="utf-8", newline="\n"
+    )
     out = subprocess.run(
         [
             "docker",

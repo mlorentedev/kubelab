@@ -157,7 +157,7 @@ def bot_harness(tmp_path: pathlib.Path):
     bin_dir.mkdir()
     calls = tmp_path / "calls.log"
 
-    (bin_dir / "wget").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    (bin_dir / "wget").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8", newline="\n")
 
     def build(*, bot_exists: bool, prohibited: bool) -> None:
         rows = f"1\t{BOT}\tbot@example.test\n" if bot_exists else ""
@@ -172,6 +172,7 @@ case "$cmd" in
 esac
 """,
             encoding="utf-8",
+            newline="\n",
         )
         (bin_dir / "curl").write_text(
             f"""#!/bin/sh
@@ -182,12 +183,13 @@ case "$*" in
 esac
 """,
             encoding="utf-8",
+            newline="\n",
         )
         for stub in ("wget", "su", "curl"):
             (bin_dir / stub).chmod(0o755)
 
     marker = tmp_path / "state"
-    marker.write_text("", encoding="utf-8")
+    marker.write_text("", encoding="utf-8", newline="\n")
 
     def run():
         env = {
@@ -259,7 +261,7 @@ def test_an_account_already_in_the_right_state_is_not_patched_again(bot_harness)
     bot_harness.build(bot_exists=True, prohibited=False)
     # The creation limit (AUTH-024) converges by its own marker; seed it so
     # this test isolates the login state, which converges by read-back.
-    (bot_harness.calls.parent / f".kubelab-creation-limit-{BOT}-2").write_text("", encoding="utf-8")
+    (bot_harness.calls.parent / f".kubelab-creation-limit-{BOT}-2").write_text("", encoding="utf-8", newline="\n")
     result = bot_harness.run()
     assert "already correct" in result.stdout
     assert "Updated machine account" not in result.stdout, (
@@ -344,6 +346,7 @@ def test_a_failed_login_state_patch_stops_the_run(bot_harness, tmp_path):
         '#!/bin/sh\ncase "$*" in\n  *PATCH*) exit 22 ;;\n'
         '  *) printf \'{"login":"hefesto","prohibit_login":true}\' ;;\nesac\n',
         encoding="utf-8",
+        newline="\n",
     )
     (bin_dir / "curl").chmod(0o755)
 

@@ -1,0 +1,93 @@
+# The full test suite on Windows (#3409). The operator's workstation runs
+# Windows (ADR-052), and until this job nothing ran the suite there, so tests
+# that fail on it kept landing.
+#
+# tests/windows_known_failures.txt declares what fails today, by cause; conftest
+# marks those tests xfail on Windows. So this job fails on a failure outside that
+# list, and lists a declared test that now passes as XPASS: remove it from the
+# file. The list can only shrink.
+#
+# Not a required check: a red run here says a change broke Windows, which the
+# author fixes or declares, and does not block a merge.
+name: Windows suite
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+  # audit: run the declared failures as ordinary tests (--runxfail), so the
+  # report carries every traceback the burn-down needs. Never fails the run.
+  workflow_dispatch:
+    inputs:
+      audit:
+        description: Run the declared failures too and keep their tracebacks
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-suite-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  suite:
+    name: Full suite (Windows)
+    # GitHub-hosted: ADR-030's self-hosted runner is Linux-only.
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - name: Allow long paths
+        run: git config --system core.longpaths true
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7
+        with:
+          python-version: '3.12'
+
+      - name: Install Poetry
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "poetry>=1.8,<2.0"
+
+      - name: Install project and dev deps
+        run: poetry install
+
+      - name: Record the checkout's line endings
+        shell: bash
+        run: git config --get core.autocrlf || echo "core.autocrlf unset"
+
+      - name: Full suite
+        shell: bash
+        continue-on-error: ${{ inputs.audit == true }}
+        env:
+          AUDIT: ${{ inputs.audit == true && '--runxfail' || '' }}
+          # As in ci.yml: Rich turns colour on under GitHub Actions, and tests
+          # match its plain text.
+          TERM: dumb
+        run: |
+          set -o pipefail
+          # shellcheck disable=SC2086  # AUDIT is empty or one flag
+          poetry run pytest -n auto --dist loadfile -q --tb=short -rfEX $AUDIT \
+            --junitxml=windows-results.xml 2>&1 | tee pytest.log
+
+      # Every failure's traceback, the input to the burn-down (#3409).
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        if: always()
+        with:
+          name: windows-results
+          path: windows-results.xml
+
+      - name: Report declared failures that now pass
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '### Declared Windows failures that now pass'
+            echo 'Remove these from `tests/windows_known_failures.txt`:'
+            echo '```'
+            grep -E '^XPASS ' pytest.log || echo '(none)'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

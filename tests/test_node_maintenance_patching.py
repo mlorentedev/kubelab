@@ -14,6 +14,7 @@ import subprocess
 
 import jinja2
 import yaml
+from tests.shells import BASH
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 ROLE = REPO / "infra/ansible/roles/node_maintenance"
@@ -354,13 +355,13 @@ def _run_hold_block(
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     for name, body in (("apt-mark", APT_MARK_STUB), ("dpkg-query", DPKG_QUERY_STUB)):
-        (bin_dir / name).write_text(body, encoding="utf-8")
+        (bin_dir / name).write_text(body, encoding="utf-8", newline="\n")
         (bin_dir / name).chmod(0o755)
     env = {"PATH": f"{bin_dir}:/usr/bin:/bin", "FAIL_HOLD": " ".join(fail_hold), "SHOWHOLD": " ".join(held_before)}
     env.update({f"STATE_{pkg.replace('.', '_').replace('-', '_')}": st for pkg, st in states.items()})
 
     out = subprocess.run(
-        ["bash", "-c", harness], env=env, capture_output=True, text=True, encoding="utf-8", check=True
+        [BASH, "-c", harness], env=env, capture_output=True, text=True, encoding="utf-8", check=True
     ).stdout
     lines = dict(line.split("=", 1) for line in out.strip().splitlines())
     return set(lines["UNPROTECTED"].split()), set(lines["HELD"].split())

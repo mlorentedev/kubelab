@@ -33,6 +33,7 @@ import yaml
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
 from toolkit.features.generator_ansible import AnsibleGenerator
+from tests.shells import BASH
 
 REPO = Path(__file__).resolve().parent.parent
 ROLE = REPO / "infra/ansible/roles/node_backup"
@@ -354,7 +355,7 @@ def _capture(tmp_path: Path, source: dict[str, object], shims: dict[str, str] | 
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     for name, body in {"sqlite3": FAKE_SQLITE3, **(shims or {})}.items():
-        (bin_dir / name).write_text(body, encoding="utf-8")
+        (bin_dir / name).write_text(body, encoding="utf-8", newline="\n")
         (bin_dir / name).chmod(0o755)
     staging = tmp_path / "staging"
     script = tmp_path / "capture.sh"
@@ -368,11 +369,12 @@ def _capture(tmp_path: Path, source: dict[str, object], shims: dict[str, str] | 
             node_backup_capture_sentinel=str(staging / ".capture-complete"),
         ),
         encoding="utf-8",
+        newline="\n",
     )
     env = {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}"}
     # A bound, so a capture that loops fails the test instead of hanging the suite.
     result = subprocess.run(
-        ["bash", str(script)], env=env, capture_output=True, text=True, encoding="utf-8", check=False, timeout=60
+        [BASH, str(script)], env=env, capture_output=True, text=True, encoding="utf-8", check=False, timeout=60
     )
     assert result.returncode == 0, result.stderr
     assert (staging / ".capture-complete").exists()
@@ -386,7 +388,7 @@ def _files(root: Path) -> dict[str, str]:
 def _tree(tmp_path: Path, files: dict[str, str]) -> None:
     for name, content in files.items():
         (tmp_path / "src" / name).parent.mkdir(parents=True, exist_ok=True)
-        (tmp_path / "src" / name).write_text(content, encoding="utf-8")
+        (tmp_path / "src" / name).write_text(content, encoding="utf-8", newline="\n")
 
 
 def test_a_database_in_a_subdirectory_keeps_its_snapshot(tmp_path: Path) -> None:
@@ -1198,6 +1200,46 @@ def test_reporting_the_schedule_cannot_change_it() -> None:
         assert "schedule_state" in str(task["when"]), f"task {task.get('name')!r} is not gated on the requested state"
 
 
+def test_the_schedule_report_reads_the_refused_count_the_prune_prints() -> None:
+    """#3496: the prune's last line and the report's grep are one contract.
+
+    Rewording either side silently turns the report into "not measured" on
+    every node, which reads like a node that never pruned rather than a broken
+    reader.
+    """
+    script = (ROLE / "templates" / "node-backup-prune.sh.j2").read_text(encoding="utf-8")
+    phrase = "deletes refused by the bucket lock"
+    assert f'echo "node-backup-prune: $REFUSED {phrase}, ' in script
+    reader = next(
+        (t for t in _schedule_playbook()["tasks"] if "refused" in t.get("name", "")),
+        None,
+    )
+    assert reader is not None, "backup-schedule reads no refused-delete count"
+    assert phrase in str(reader["ansible.builtin.shell"]["cmd"])
+
+
+def test_the_schedule_report_reads_the_wait_line_the_prune_prints() -> None:
+    """Same contract for the wait: reworded on one side only, every node would
+    report 0 waits, which reads as a week of real prunes."""
+    script = (ROLE / "templates" / "node-backup-prune.sh.j2").read_text(encoding="utf-8")
+    phrase = "forget waits"
+    assert f'; {phrase}"' in script
+    reader = next((t for t in _schedule_playbook()["tasks"] if "waited" in t.get("name", "")), None)
+    assert reader is not None, "backup-schedule reads no wait count"
+    assert f'--grep "{phrase}"' in str(reader["ansible.builtin.command"]["cmd"])
+
+
+def test_every_journal_read_in_the_schedule_report_covers_the_same_week() -> None:
+    """A count over eight days printed beside denominators over seven pairs a
+    refusal with runs it did not come from."""
+    reads = [
+        str(t.get("ansible.builtin.command", t.get("ansible.builtin.shell", {})).get("cmd", ""))
+        for t in _schedule_playbook()["tasks"]
+    ]
+    windows = {w for r in reads if "journalctl" in r for w in re.findall(r'--since "([^"]+)"', r)}
+    assert windows == {"7 days ago"}, windows
+
+
 def test_an_unrecognised_state_is_refused_rather_than_ignored() -> None:
     """Silently ignoring STATE=stoped reports success and changes nothing.
 
@@ -1384,7 +1426,7 @@ def test_every_rendered_unit_passes_systemd_analyze_verify(tmp_path):
         "node-backup-capture.service": "[Service]\nType=oneshot\nExecStart=/bin/true\n",
     }
     for name, text in units.items():
-        (tmp_path / name).write_text(text, encoding="utf-8")
+        (tmp_path / name).write_text(text, encoding="utf-8", newline="\n")
     # Every unit the role renders; the capture unit is only a stub for `Wants=`.
     targets = [str(tmp_path / n) for n in units if n != "node-backup-capture.service"]
     proc = subprocess.run(

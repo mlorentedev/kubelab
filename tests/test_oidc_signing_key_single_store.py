@@ -130,7 +130,7 @@ def test_the_guard_reads_every_tracked_text_file_and_no_generated_one() -> None:
     planted = ROOT / "infra/config/authelia/generated/_guard_probe.yml"
     created = [d for d in planted.parents if not d.exists()]
     planted.parent.mkdir(parents=True, exist_ok=True)
-    planted.write_text(f"{ENV_NAME}: planted\n", encoding="utf-8")
+    planted.write_text(f"{ENV_NAME}: planted\n", encoding="utf-8", newline="\n")
     try:
         rels = {rel for rel, _ in _tracked_texts()}
     finally:

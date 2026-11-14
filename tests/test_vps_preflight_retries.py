@@ -161,13 +161,14 @@ def _run_preflight(tmp_path: Path, fail_first: int) -> tuple[subprocess.Complete
     (values / "common.yaml").write_text(
         "networking:\n  vps:\n    tailscale_ip: stub-vps.example.invalid\n    ssh_user: stubuser\n",
         encoding="utf-8",
+        newline="\n",
     )
-    (playbooks / "play.yml").write_text(PLAY.format(include=INCLUDE), encoding="utf-8")
+    (playbooks / "play.yml").write_text(PLAY.format(include=INCLUDE), encoding="utf-8", newline="\n")
 
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     ssh = bin_dir / "ssh"
-    ssh.write_text(STUB_SSH, encoding="utf-8")
+    ssh.write_text(STUB_SSH, encoding="utf-8", newline="\n")
     ssh.chmod(ssh.stat().st_mode | stat.S_IEXEC)
 
     env = {

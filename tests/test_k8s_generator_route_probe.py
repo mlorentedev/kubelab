@@ -157,7 +157,9 @@ def _run_script(tmp_path: pathlib.Path, answer: str) -> tuple[int, str, str]:
     assert container["command"][:2] == ["/bin/sh", "-c"]
     stub = tmp_path / "curl"
     stub.write_text(
-        f"#!/bin/sh\nprintf '%s\\n' \"$@\" > \"{tmp_path}/args\"\nprintf '%s' '{answer}'\n", encoding="utf-8"
+        f"#!/bin/sh\nprintf '%s\\n' \"$@\" > \"{tmp_path}/args\"\nprintf '%s' '{answer}'\n",
+        encoding="utf-8",
+        newline="\n",
     )
     stub.chmod(stub.stat().st_mode | stat.S_IEXEC)
     env = {**_env(job), "PATH": f"{tmp_path}:/usr/bin:/bin"}

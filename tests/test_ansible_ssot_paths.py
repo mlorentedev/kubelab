@@ -232,10 +232,12 @@ def test_what_is_not_a_root_read_is_skipped() -> None:
 
 def test_a_jinja_comment_and_a_yaml_comment_are_not_read(tmp_path: Path) -> None:
     template = tmp_path / "t.j2"
-    template.write_text("{# config.gone.away #}{{ config.apps.x }}\n", encoding="utf-8")
+    template.write_text("{# config.gone.away #}{{ config.apps.x }}\n", encoding="utf-8", newline="\n")
     playbook = tmp_path / "p.yml"
     playbook.write_text(
-        "# {{ config.gone.away }}\n- when: config.global.y\n  debug: {msg: '{{ secrets.z }}'}\n", encoding="utf-8"
+        "# {{ config.gone.away }}\n- when: config.global.y\n  debug: {msg: '{{ secrets.z }}'}\n",
+        encoding="utf-8",
+        newline="\n",
     )
     assert list(expressions(template)) == [" config.apps.x "]
     assert sorted(expressions(playbook)) == [" secrets.z ", "config.global.y"]

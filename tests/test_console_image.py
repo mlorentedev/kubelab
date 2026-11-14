@@ -142,16 +142,26 @@ def test_dependabot_tracks_the_console_base_images() -> None:
     assert ("npm", "/apps/console") in declared
 
 
-def test_a_console_fix_cannot_release_before_there_is_a_job_to_publish_it() -> None:
+def test_a_console_dependency_commit_releases_only_once_an_image_can_be_re_tagged() -> None:
     """release-please puts every releasable package in one pull request. A `fix` commit under
-    apps/console would add `console-vX.Y.Z` to the next `api` release, and until `release.yml`
-    re-tags an image for it that tag names nothing. Dependabot writes such commits, so its
-    prefix for the app is `chore` until the publish job exists."""
+    apps/console adds `console-vX.Y.Z` to the next `api` release, and `publish-console` re-tags the
+    STAGING-VALIDATED digest. Without a staging pin (`apps.platform.console.version`) that job fails
+    after the tag exists, so the prefix stays `chore` until the job AND the pin both exist, and is
+    api's `fix` after. Dependabot writes these commits."""
     release = yaml.safe_load((ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8"))
-    if "publish-console" in release["jobs"]:
-        return
+    staging = yaml.safe_load((ROOT / "infra/config/values/staging.yaml").read_text(encoding="utf-8"))
+    pinned = bool(staging.get("apps", {}).get("platform", {}).get("console", {}).get("version"))
     cfg = yaml.safe_load((ROOT / ".github/dependabot.yml").read_text(encoding="utf-8"))
-    prefixes = {
-        u["commit-message"]["prefix"] for u in cfg["updates"] if u["directory"] == "/apps/console" and "commit-message" in u
-    }
-    assert prefixes == {"chore"}, f"console dependency commits would release without a publish job: {prefixes}"
+
+    def prefixes(directory: str) -> set[str]:
+        return {
+            u["commit-message"]["prefix"]
+            for u in cfg["updates"]
+            if u["directory"] == directory and u["package-ecosystem"] == "docker" and "commit-message" in u
+        }
+
+    ready = "publish-console" in release["jobs"] and pinned
+    expected = prefixes("/apps/api") if ready else {"chore"}
+    assert prefixes("/apps/console") == expected, (
+        f"console dependency commits would release without an image to re-tag: {prefixes('/apps/console')}"
+    )

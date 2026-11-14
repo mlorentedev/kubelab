@@ -5,7 +5,7 @@
 # TARGETARCH. The output is static files, identical for every architecture, so BuildKit runs
 # the stage once and both platforms copy the same dist/. An ARG in scope is part of every
 # RUN's cache key: declaring them made `web`'s build run once per target (#376 there).
-FROM --platform=$BUILDPLATFORM node:22-bookworm-slim@sha256:5ec23b7c622b00547753bc6ffd78085dd868a68aeb41c8e0a1418f033e13d96d AS build
+FROM --platform=$BUILDPLATFORM node:25-bookworm-slim@sha256:81db02c4b671288a03915da9534dbd54f96d0e7c24d80ccc54f5b36b2e684370 AS build
 
 WORKDIR /app
 RUN chown node:node /app

@@ -29,6 +29,7 @@ import pytest
 import yaml
 
 from toolkit.features import product_registry, product_render
+from tests.shells import BASH
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 PROMOTE = REPO_ROOT / ".github/workflows/promote-prod.yml"
@@ -219,7 +220,7 @@ def _resolve(tmp_path: pathlib.Path, **env_overrides: str) -> tuple[int, dict[st
         **env_overrides,
     }
     proc = subprocess.run(  # noqa: S603
-        ["bash", "-c", step["run"]],
+        [BASH, "-c", step["run"]],
         cwd=tmp_path,
         env=env,
         capture_output=True,
@@ -351,6 +352,7 @@ def _stub_toolkit(tmp_path: pathlib.Path, route_stdout: str, route_code: int, li
         f"cat <<'ROUTE'\n{route_stdout}\nROUTE\n"
         f"exit {route_code}\n",
         encoding="utf-8",
+        newline="\n",
     )
     stub.chmod(0o755)
     return str(stub)
@@ -437,6 +439,7 @@ def _contract(tmp_path: pathlib.Path, forge: str, release_answer: str, release_c
         '  *) echo "unexpected toolkit call: $*" >&2; exit 1 ;;\n'
         "esac\n",
         encoding="utf-8",
+        newline="\n",
     )
     stub.chmod(0o755)
     calls.touch()
@@ -449,7 +452,7 @@ def _contract(tmp_path: pathlib.Path, forge: str, release_answer: str, release_c
         "TOOLKIT": f"{stub} ",
     }
     proc = subprocess.run(  # noqa: S603
-        ["bash", "-c", step["run"]], cwd=tmp_path, env=env, capture_output=True, text=True, encoding="utf-8", timeout=60
+        [BASH, "-c", step["run"]], cwd=tmp_path, env=env, capture_output=True, text=True, encoding="utf-8", timeout=60
     )
     return proc.returncode, proc.stdout + proc.stderr, calls.read_text(encoding="utf-8").splitlines()
 

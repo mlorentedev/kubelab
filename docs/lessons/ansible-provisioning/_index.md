@@ -4,6 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 748 | [A version directory says a toolchain was installed, not that it runs](lesson-748-a-version-directory-says-a-toolchain-was-installed-not-that-it-runs.md) | 2026-11-13 |
 | 729 | [A pipe into `grep -q` under `pipefail` can read a match as a miss](lesson-729-a-pipe-into-grep-q-under-pipefail-can-read-a-match-as-a-miss.md) | 2026-11-09 |
 | 726 | [A `WinError 87` at `ansible` import is not a path bug — `ansible-core` has no Windows controller](lesson-726-a-winerror-87-at-ansible-import-is-not-a-path-bug.md) | 2026-11-09 |
 | 677 | [A tag on `include_tasks` stays on the include line; only `import_tasks` gives it to the tasks inside](lesson-677-a-tag-on-include-tasks-stays-on-the-include-line.md) | 2026-10-30 |

@@ -75,7 +75,7 @@ class Session:
 @pytest.fixture
 def entry(tmp_path: Path) -> product_registry.Product:
     path = tmp_path / "products.yaml"
-    path.write_text(REGISTRY, encoding="utf-8")
+    path.write_text(REGISTRY, encoding="utf-8", newline="\n")
     return product_registry.load_registry(path).products["beta"]
 
 
@@ -296,7 +296,9 @@ class TestTheLoginIsNotSwappedForTheOperatorsOwn:
         import toolkit.cli.services as cli
 
         netrc = tmp_path / "netrc"
-        netrc.write_text(f"machine {HOST} login operator password operators-own-password\n", encoding="utf-8")
+        netrc.write_text(
+            f"machine {HOST} login operator password operators-own-password\n", encoding="utf-8", newline="\n"
+        )
         netrc.chmod(0o600)
         monkeypatch.setenv("NETRC", str(netrc))
         challenge = {"WWW-Authenticate": f'Bearer realm="{REALM}",service="registry"'}
@@ -350,7 +352,7 @@ class TestTheTokenNeverLeaks:
 class TestWhoCanBeChecked:
     def test_an_app_that_is_not_private_is_refused_with_error_why_and_fix(self, tmp_path: Path) -> None:
         path = tmp_path / "products.yaml"
-        path.write_text(REGISTRY, encoding="utf-8")
+        path.write_text(REGISTRY, encoding="utf-8", newline="\n")
         web = product_registry.load_registry(path).products["web"]
         session = Session({})
 
@@ -383,7 +385,7 @@ class TestTheCommand:
         import toolkit.cli.services as cli
 
         path = tmp_path / "products.yaml"
-        path.write_text(REGISTRY, encoding="utf-8")
+        path.write_text(REGISTRY, encoding="utf-8", newline="\n")
         monkeypatch.setattr(product_registry, "registry_path", lambda: path)
         merged = {"apps": {"services": {"core": {"gitea": {"registry_pull_token": TOKEN}}}}}
         monkeypatch.setattr(cli, "_gitea_merged_config", lambda env: merged)

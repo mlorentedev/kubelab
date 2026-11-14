@@ -138,11 +138,13 @@ def test_a_loopback_check_on_a_tailnet_port_is_still_caught(tmp_path: Path) -> N
         'services:\n  a:\n    ports:\n      - "{{ tailscale_ip }}:3080:8080"\n'
         '  b:\n    ports:\n      - "127.0.0.1:{{ api_port }}:{{ api_port }}"\n',
         encoding="utf-8",
+        newline="\n",
     )
     (role / "tasks/main.yml").write_text(
         "- name: ok\n  ansible.builtin.uri:\n    url: http://127.0.0.1:{{ api_port }}/health\n"
         "- name: wrong\n  ansible.builtin.uri:\n    url: http://localhost:3080/health\n",
         encoding="utf-8",
+        newline="\n",
     )
     with pytest.raises(AssertionError, match="'wrong'"):
         test_no_health_check_asks_the_loopback_on_a_port_bound_elsewhere(role)

@@ -98,13 +98,17 @@ class TestVerdict:
         assert result.measured and result.quiet
         assert result.at_ns == 1 + q.EVAL_OFFSET_S * 10**9
 
-    @pytest.mark.parametrize("line", ["INF Testing certificate renew... acmeCA=x", "INF Starting provider *acme.Provider"])
+    @pytest.mark.parametrize(
+        "line", ["INF Testing certificate renew... acmeCA=x", "INF Starting provider *acme.Provider"]
+    )
     def test_a_matched_traefik_line_is_a_rule_regression(self, line: str) -> None:
         result = q.verdict(q.BOOT_LINE, 1, ALERT, [line])
         assert result.measured and not result.quiet
         assert "regression of the rule" in result.reason
 
-    @pytest.mark.parametrize(("anchor", "advice"), [(q.HEARTBEAT, "next heartbeat"), (q.BOOT_LINE, "next Traefik restart")])
+    @pytest.mark.parametrize(
+        ("anchor", "advice"), [(q.HEARTBEAT, "next heartbeat"), (q.BOOT_LINE, "next Traefik restart")]
+    )
     def test_a_real_failure_in_the_window_measured_nothing(self, anchor: str, advice: str) -> None:
         # Not a regression of the rule, and not quiet either: that window cannot
         # say whether the rule ignores Traefik's own line. Rerunning re-reads the
@@ -170,7 +174,9 @@ class TestRun:
 
     def test_quiet_on_the_heartbeat_but_matching_the_boot_line_fails(self) -> None:
         # The boot line rarely shares the heartbeat's window, so it needs its own instant.
-        loki = _Loki({q.HEARTBEAT: 5 * S, q.BOOT_LINE: 100 * S}, {160 * S: ALERT}, ["INF Starting provider *acme.Provider"])
+        loki = _Loki(
+            {q.HEARTBEAT: 5 * S, q.BOOT_LINE: 100 * S}, {160 * S: ALERT}, ["INF Starting provider *acme.Provider"]
+        )
         result = q.run_acme_quiet_check(loki, _docs(EXPR))
         assert result.exit_code == 1
         assert [a.quiet for a in result.anchors] == [True, False]

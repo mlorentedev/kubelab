@@ -7,7 +7,8 @@
 #
 # The unit fails, and notifies, on restic's exit code alone. A refused pack
 # (unreferenced, left by an interrupted backup) exits 0: expected, harmless, and
-# bounded in storage by the r2-backup-size alert. A refused snapshot exits 3,
+# bounded in storage by the r2-backup-size alert. Because it exits 0, the run
+# ends with a count of them (#3496), which `make backup-schedule` reads back. A refused snapshot exits 3,
 # which cannot happen while --keep-within exceeds the lock's R, so it is a fault,
 # with one exception the script waits out: copied history (below, #1920).
 set -euo pipefail
@@ -81,7 +82,6 @@ else:
     print("forget")
 PY
 )"
-# The EXIT trap does not run past the `exec` below.
 rm -f "$LISTING"
 case "$VERDICT" in
     forget) ;;
@@ -101,4 +101,21 @@ $RESTIC unlock
 
 # --retry-lock outlasts the longest ship (TimeoutStartSec=600), so a prune that
 # starts mid-ship waits for it instead of failing on the lock.
-exec $RESTIC forget {{ node_backup_retention_flags }} --prune --retry-lock 10m -o s3.connections={{ node_backup_prune_connections }}
+#
+# Not `exec`: the run ends by counting the deletes the lock refused. After its
+# own retries restic prints, per pack, `Remove(<data/..>) failed: <reason>` and
+# then `unable to remove <path> from the repository`. Only a reason naming the
+# bucket policy is the lock; any other failed delete (a token without delete
+# rights, a 5xx past the retries) is counted apart so it never reads as the
+# lock. Everything still reaches the journal through `tee`, and the unit keeps
+# restic's exit code.
+FORGET_LOG="$(mktemp)"
+trap 'rm -f "$FORGET_LOG"' EXIT
+set +e
+$RESTIC forget {{ node_backup_retention_flags }} --prune --retry-lock 10m -o s3.connections={{ node_backup_prune_connections }} 2>&1 | tee "$FORGET_LOG"
+FORGET_RC=${PIPESTATUS[0]}
+set -e
+FAILED="$(grep -c '^unable to remove ' "$FORGET_LOG" || true)"
+REFUSED="$(grep -c '^Remove(.*) failed: .*locked by the bucket policy' "$FORGET_LOG" || true)"
+echo "node-backup-prune: $REFUSED deletes refused by the bucket lock, $((FAILED - REFUSED)) failed otherwise"
+exit "$FORGET_RC"

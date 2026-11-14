@@ -373,7 +373,7 @@ products:
 @pytest.fixture
 def private_registry(tmp_path: Path) -> Path:
     path = tmp_path / "products.yaml"
-    path.write_text(_PRODUCTS.format(key=CATALOG_KEY), encoding="utf-8")
+    path.write_text(_PRODUCTS.format(key=CATALOG_KEY), encoding="utf-8", newline="\n")
     return path
 
 
@@ -486,6 +486,7 @@ class TestTheReleaseProofOnAPrivateRegistry:
             "products:\n  resume:\n    forge: github\n    repository: acme/resume\n    receiver: generic\n"
             "    image_registry: ghcr.io/acme\n",
             encoding="utf-8",
+            newline="\n",
         )
         http = _Oci("ghcr.io", "https://ghcr.io/token", {VERSION: DIGEST, f"sha-{SHA[:7]}": DIGEST})
         secret = _secret(PULL_TOKEN)
@@ -547,7 +548,7 @@ def test_release_contract_on_a_gitea_product_reads_through_the_adapter_and_the_p
 ) -> None:
     """The contract comes from Gitea at the tagged commit and the proof from its registry with the catalogued login."""
     products = tmp_path / "products.yaml"
-    products.write_text(_GITEA_PRODUCTS, encoding="utf-8")
+    products.write_text(_GITEA_PRODUCTS, encoding="utf-8", newline="\n")
     monkeypatch.setenv("GITEA_URL", "https://gitea.invalid")
     monkeypatch.setenv("GITEA_REPO_READER_TOKEN", "not-a-real-token")
     monkeypatch.setattr("toolkit.features.forge_adapter.GiteaClient", _GiteaReads)
@@ -685,6 +686,7 @@ class TestDockerHubThroughTheInjectedTransport:
             "products:\n  resume:\n    forge: github\n    repository: acme/resume\n    receiver: generic\n"
             "    image_registry: docker.io/acme\n",
             encoding="utf-8",
+            newline="\n",
         )
         monkeypatch.setattr(registry.httpx, "get", MagicMock(side_effect=AssertionError("a real httpx call")))
 

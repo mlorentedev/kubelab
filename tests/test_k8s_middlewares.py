@@ -139,7 +139,7 @@ def fake_project(tmp_path: Path) -> Path:
     """A project_root with a fake template file in place."""
     tpl_dir = tmp_path / "infra" / "k8s" / "overlays" / "prod" / "middlewares"
     tpl_dir.mkdir(parents=True)
-    (tpl_dir / "api-key.yaml.tpl").write_text(TestRenderMiddleware._TEMPLATE, encoding="utf-8")
+    (tpl_dir / "api-key.yaml.tpl").write_text(TestRenderMiddleware._TEMPLATE, encoding="utf-8", newline="\n")
     return tmp_path
 
 

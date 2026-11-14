@@ -32,6 +32,148 @@
       ],
       "title": "Hostnames",
       "type": "object"
+    },
+    "JobClaim": {
+      "additionalProperties": false,
+      "description": "``type: job``: a scheduled task.",
+      "properties": {
+        "class": {
+          "const": "cron",
+          "default": "cron",
+          "description": "Job kind; only cron today.",
+          "title": "Class",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/$defs/JobParams"
+        },
+        "type": {
+          "const": "job",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "params"
+      ],
+      "title": "JobClaim",
+      "type": "object"
+    },
+    "JobParams": {
+      "additionalProperties": false,
+      "description": "A scheduled run of the product's image (a CronJob; concurrency Forbid, two retries).",
+      "properties": {
+        "active_deadline_seconds": {
+          "default": 3600,
+          "description": "A run still going after this many seconds is stopped.",
+          "maximum": 86400,
+          "minimum": 1,
+          "title": "Active Deadline Seconds",
+          "type": "integer"
+        },
+        "command": {
+          "description": "Argv the job runs, e.g. [resume, daily]; no shell.",
+          "items": {
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 32,
+          "minItems": 1,
+          "title": "Command",
+          "type": "array"
+        },
+        "schedule": {
+          "description": "Five-field cron schedule, in UTC.",
+          "maxLength": 100,
+          "pattern": "^[0-9*/,-]+( [0-9*/,-]+){4}$",
+          "title": "Schedule",
+          "type": "string"
+        },
+        "volume": {
+          "description": "Name of a volume claim in this contract the job mounts.",
+          "maxLength": 31,
+          "pattern": "^[a-z][a-z0-9-]{0,30}$",
+          "title": "Volume",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schedule",
+        "command",
+        "volume"
+      ],
+      "title": "JobParams",
+      "type": "object"
+    },
+    "VolumeClaim": {
+      "additionalProperties": false,
+      "description": "``type: volume``: storage that outlives a pod.",
+      "properties": {
+        "class": {
+          "const": "local",
+          "default": "local",
+          "description": "Storage class; only local today.",
+          "title": "Class",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/$defs/VolumeParams"
+        },
+        "type": {
+          "const": "volume",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "params"
+      ],
+      "title": "VolumeClaim",
+      "type": "object"
+    },
+    "VolumeParams": {
+      "additionalProperties": false,
+      "description": "A persistent volume the product's containers mount (one PVC per claim, RWO).",
+      "properties": {
+        "fs_group": {
+          "anyOf": [
+            {
+              "maximum": 2147483647,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Group id the pod's volumes are owned by; set it to the image's non-root group.",
+          "title": "Fs Group"
+        },
+        "mount_path": {
+          "description": "Absolute path in the container.",
+          "maxLength": 256,
+          "pattern": "^(/[A-Za-z0-9_][A-Za-z0-9._-]*)+$",
+          "title": "Mount Path",
+          "type": "string"
+        },
+        "size": {
+          "description": "Positive whole quantity, e.g. 1Gi.",
+          "maxLength": 32,
+          "pattern": "^[1-9][0-9]*(Ki|Mi|Gi|Ti|Pi|Ei|k|M|G|T|P|E)?$",
+          "title": "Size",
+          "type": "string"
+        }
+      },
+      "required": [
+        "size",
+        "mount_path"
+      ],
+      "title": "VolumeParams",
+      "type": "object"
     }
   },
   "$id": "https://raw.githubusercontent.com/mlorentedev/kubelab/master/toolkit/schemas/kubelab-product.schema.json",
@@ -40,10 +182,11 @@
   "description": "What a product declares about itself to be deployed on kubelab.",
   "properties": {
     "auth": {
-      "description": "public: no auth; forwardauth: Authelia in front of every request; oidc: the app is an OIDC client.",
+      "description": "public: no auth; forwardauth: Authelia in front of every request; forwardauth-admins: the same, limited to the admins group; oidc: the app is an OIDC client.",
       "enum": [
         "public",
         "forwardauth",
+        "forwardauth-admins",
         "oidc"
       ],
       "title": "Auth",
@@ -72,6 +215,33 @@
       "minimum": 1,
       "title": "Port",
       "type": "integer"
+    },
+    "resources": {
+      "description": "Platform resources the product claims, by name: a volume, a scheduled job. Optional.",
+      "patternProperties": {
+        "^[a-z][a-z0-9-]{0,30}$": {
+          "discriminator": {
+            "mapping": {
+              "job": "#/$defs/JobClaim",
+              "volume": "#/$defs/VolumeClaim"
+            },
+            "propertyName": "type"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/VolumeClaim"
+            },
+            {
+              "$ref": "#/$defs/JobClaim"
+            }
+          ]
+        }
+      },
+      "propertyNames": {
+        "maxLength": 31
+      },
+      "title": "Resources",
+      "type": "object"
     },
     "schema_version": {
       "const": 1,

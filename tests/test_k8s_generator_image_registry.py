@@ -49,7 +49,7 @@ def _env(app: str, name: str, version: str) -> dict[str, str]:
 def images(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, str]:
     """The ``image`` of each app ``_build_context`` emits for a registry with a forge-hosted product."""
     path = tmp_path / "products.yaml"
-    path.write_text(_REGISTRY, encoding="utf-8")
+    path.write_text(_REGISTRY, encoding="utf-8", newline="\n")
     monkeypatch.setattr(product_registry, "registry_path", lambda: path)
     env_vars = {
         "REGISTRY": "docker.io/mlorentedev",

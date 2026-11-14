@@ -4,6 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 747 | [A unit that exits 0 on a refusal has to count it, or "0 failures" means nothing](lesson-747-a-unit-that-exits-0-on-a-refusal-needs-to-count-it.md) | 2026-11-14 |
 | 704 | [A time budget measured on a young repository expires as the repository grows](lesson-704-a-time-budget-measured-on-a-young-repository-expires-as-it-grows.md) | 2026-11-04 |
 | 700 | [A snapshot of a live SQLite file costs about the same whatever the gap](lesson-700-a-sqlite-snapshot-costs-the-same-whatever-the-gap.md) | 2026-11-03 |
 | 688 | [A migration leaves the old store answering, so a stale restore step succeeds](lesson-688-a-migration-leaves-the-old-store-answering-so-a-stale-restore-step-succeeds.md) | 2026-11-01 |
