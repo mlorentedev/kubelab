@@ -29,7 +29,12 @@ GITEA_API="${GITEA_API:-https://gitea.kubelab.live/api/v1}"
 GITEA_SSH_HOST="${GITEA_SSH_HOST:-beelink.kubelab.internal}"
 GITEA_SSH_PORT="${GITEA_SSH_PORT:-2222}"
 KEY_TITLE="${KEY_TITLE:-kubelab-${ACE2}-dev-node}"
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# The repository root by git, not by depth: the spec moves to specs/archive/ on archive.
+REPO_ROOT="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel 2>/dev/null)"
+if [ ! -f "${REPO_ROOT}/infra/config/values/common.yaml" ]; then
+  echo "FATAL: cannot find the repository root from $(dirname "${BASH_SOURCE[0]}")."
+  exit 1
+fi
 
 api() {
   printf 'user = "%s:%s"\n' "${ADMIN_USER}" "${ADMIN_PASSWORD}" | curl -s --config - "$@"
