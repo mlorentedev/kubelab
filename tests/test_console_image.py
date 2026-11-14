@@ -142,12 +142,15 @@ def test_dependabot_tracks_the_console_base_images() -> None:
     assert ("npm", "/apps/console") in declared
 
 
-def test_a_console_dependency_commit_releases_only_with_a_job_to_publish_it() -> None:
+def test_a_console_dependency_commit_releases_only_once_an_image_can_be_re_tagged() -> None:
     """release-please puts every releasable package in one pull request. A `fix` commit under
-    apps/console adds `console-vX.Y.Z` to the next `api` release, and unless `release.yml` re-tags
-    an image for it that tag names nothing. Dependabot writes such commits, so its prefix for the
-    app is `chore` until `publish-console` exists, and `fix` (api's) once it does."""
+    apps/console adds `console-vX.Y.Z` to the next `api` release, and `publish-console` re-tags the
+    STAGING-VALIDATED digest. Without a staging pin (`apps.platform.console.version`) that job fails
+    after the tag exists, so the prefix stays `chore` until the job AND the pin both exist, and is
+    api's `fix` after. Dependabot writes these commits."""
     release = yaml.safe_load((ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8"))
+    staging = yaml.safe_load((ROOT / "infra/config/values/staging.yaml").read_text(encoding="utf-8"))
+    pinned = bool(staging.get("apps", {}).get("platform", {}).get("console", {}).get("version"))
     cfg = yaml.safe_load((ROOT / ".github/dependabot.yml").read_text(encoding="utf-8"))
 
     def prefixes(directory: str) -> set[str]:
@@ -157,7 +160,8 @@ def test_a_console_dependency_commit_releases_only_with_a_job_to_publish_it() ->
             if u["directory"] == directory and u["package-ecosystem"] == "docker" and "commit-message" in u
         }
 
-    expected = prefixes("/apps/api") if "publish-console" in release["jobs"] else {"chore"}
+    ready = "publish-console" in release["jobs"] and pinned
+    expected = prefixes("/apps/api") if ready else {"chore"}
     assert prefixes("/apps/console") == expected, (
-        f"console dependency commits would release without a publish job: {prefixes('/apps/console')}"
+        f"console dependency commits would release without an image to re-tag: {prefixes('/apps/console')}"
     )

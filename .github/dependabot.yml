@@ -144,10 +144,12 @@ updates:
   # The same reason as apps/api above: the Node build image and the nginx runtime reach EOL,
   # and a missed base-image bump is how a Trivy HIGH/CRITICAL failure arrives.
   #
-  # `fix`, like apps/api: release.yml has the `publish-console` job that re-tags an image for the
-  # `console-vX.Y.Z` tag release-please would cut for such a commit. Until that job existed the
-  # prefix was `chore`, since release-please releases every package with a `fix` in ONE pull
-  # request and the tag would have named no image; tests/test_console_image.py holds the pairing.
+  # `chore`, not `fix` (api's), until console has both a `publish-console` job in release.yml AND
+  # a staging pin (`apps.platform.console.version` in values/staging.yaml). release-please
+  # attributes a commit to a package by path and releases every package with a `fix` in ONE pull
+  # request; the job re-tags the staging-validated digest, so a release cut before the first
+  # deploy pull request merges would fail with a `console-vX.Y.Z` tag and no image behind it.
+  # tests/test_console_image.py holds the pairing and names the line to flip.
   - package-ecosystem: "docker"
     directory: "/apps/console"
     schedule:
@@ -158,7 +160,7 @@ updates:
       - "dependencies"
       - "docker"
     commit-message:
-      prefix: "fix"
+      prefix: "chore"
       include: "scope"
     groups:
       console-docker-minor-patch:
