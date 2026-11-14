@@ -91,8 +91,10 @@ jobs:
           echo "::notice::${REGISTRY} tags once the scans pass: ${TAGS}"
 
   # CI-010: the shared publish. It pushes each platform by digest with no tag,
-  # scans each platform with Trivy (CRITICAL/HIGH, unfixed ignored) and applies
-  # the tags only when every scan passes. The layer cache is a gha cache scoped
+  # reports each platform's CRITICAL and HIGH findings to the Security tab, and
+  # applies the tags only when no platform has a fixable CRITICAL finding and
+  # every scan ran. A HIGH finding is reported, not blocking: the old job here
+  # failed on HIGH too, and CI-010 took web's CRITICAL gate instead. The layer cache is a gha cache scoped
   # to this image, so apps no longer evict each other's layers.
   docker-build-push:
     name: Build & Push ${{ inputs.app }}:${{ inputs.tag }}
