@@ -64,7 +64,7 @@ exit 0
 """,
     }
     for name, text in stubs.items():
-        (bin_dir / name).write_text(text, encoding="utf-8")
+        (bin_dir / name).write_text(text, encoding="utf-8", newline="\n")
         (bin_dir / name).chmod(0o755)
     state = tmp_path / "state"
     state.mkdir()

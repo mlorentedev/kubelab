@@ -41,6 +41,7 @@ def project_root(tmp_path: Path) -> Path:
             }
         ),
         encoding="utf-8",
+        newline="\n",
     )
     return tmp_path
 

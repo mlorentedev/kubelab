@@ -273,12 +273,12 @@ def _run_script(
     bin_dir.mkdir()
     log = root / "docker.log"
     counter = root / "curl.count"
-    counter.write_text("0", encoding="utf-8")
+    counter.write_text("0", encoding="utf-8", newline="\n")
     stubs = {
         "curl": f"""
             n=$(cat {counter}); n=$((n + 1)); echo "$n" > {counter}
             printf '%s\\n' "$*" >> {root}/curl.log
-            {"[ \"$n\" -gt " + str(probes_before_up) + " ]" if gitea_up else "false"}
+            {'[ "$n" -gt ' + str(probes_before_up) + " ]" if gitea_up else "false"}
         """,
         "docker": f"""
             printf '%s\\n' "$*" >> {log}
@@ -291,11 +291,14 @@ def _run_script(
         if name == "curl" and not with_curl:
             continue
         path = bin_dir / name
-        path.write_text("#!/bin/sh\n" + textwrap.dedent(body), encoding="utf-8")
+        path.write_text("#!/bin/sh\n" + textwrap.dedent(body), encoding="utf-8", newline="\n")
         path.chmod(path.stat().st_mode | stat.S_IEXEC)
     unit = _unit("kubelab-renovate.service.j2")
     # Without curl the PATH is the stub directory alone: the script uses nothing else.
-    env = {"PATH": f"{bin_dir}:/usr/bin:/bin" if with_curl else str(bin_dir), "RENOVATE_IMAGE": "example/renovate:1.2.3"}
+    env = {
+        "PATH": f"{bin_dir}:/usr/bin:/bin" if with_curl else str(bin_dir),
+        "RENOVATE_IMAGE": "example/renovate:1.2.3",
+    }
     for value in unit["Service"]["Environment"]:
         env.update(pair.split("=", 1) for pair in _split_env(value))
     proc = subprocess.run(  # noqa: S603 - a repo script under test
@@ -377,7 +380,9 @@ def test_the_wrapper_is_executable_posix_sh() -> None:
     ("user", "token", "enabled"),
     [("proteo", "tok", True), ("", "tok", False), ("proteo", "", False), ("", "", False)],
 )
-def test_the_run_is_enabled_only_when_the_account_and_its_token_both_exist(user: str, token: str, enabled: bool) -> None:
+def test_the_run_is_enabled_only_when_the_account_and_its_token_both_exist(
+    user: str, token: str, enabled: bool
+) -> None:
     assert _enabled(user, token) is enabled
 
 

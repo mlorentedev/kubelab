@@ -50,7 +50,7 @@ def _git_env() -> dict[str, str]:
 
 def _write(repo: Path, path: str, text: str = "change\n") -> None:
     (repo / path).parent.mkdir(parents=True, exist_ok=True)
-    (repo / path).write_text(text, encoding="utf-8")
+    (repo / path).write_text(text, encoding="utf-8", newline="\n")
 
 
 class Vault:
@@ -74,7 +74,7 @@ class Vault:
         hooks = tmp / "hooks"
         hooks.mkdir()
         (hooks / "pre-commit").write_text(
-            _render("pre-commit-zone.sh.j2", agent_stack_vault_zone=ZONE), encoding="utf-8"
+            _render("pre-commit-zone.sh.j2", agent_stack_vault_zone=ZONE), encoding="utf-8", newline="\n"
         )
         (hooks / "pre-commit").chmod(0o755)
         libexec = tmp / "libexec"
@@ -90,6 +90,7 @@ class Vault:
                 agent_stack_hermes={**HERMES, "vault_sync": {**SYNC, "remote": self.remote.as_uri()}},
             ),
             encoding="utf-8",
+            newline="\n",
         )
         self.script.chmod(0o755)
         # pgrep would see every git of this user on the machine running the tests.
@@ -103,7 +104,7 @@ class Vault:
 
     def pgrep(self, *pids: int) -> None:
         lines = "".join(f"echo {pid}\n" for pid in pids)
-        (self.bin / "pgrep").write_text(f"#!/bin/sh\n{lines}exit {0 if pids else 1}\n", encoding="utf-8")
+        (self.bin / "pgrep").write_text(f"#!/bin/sh\n{lines}exit {0 if pids else 1}\n", encoding="utf-8", newline="\n")
         (self.bin / "pgrep").chmod(0o755)
 
     def rootless_pid(self, pid: int | None) -> None:
@@ -111,7 +112,7 @@ class Vault:
         if pid is None:
             (self.state / "child_pid").unlink(missing_ok=True)
         else:
-            (self.state / "child_pid").write_text(f"{pid}\n", encoding="utf-8")
+            (self.state / "child_pid").write_text(f"{pid}\n", encoding="utf-8", newline="\n")
 
     def nsenter(self) -> None:
         """Entering a user namespace needs the real daemon; this records the call and runs the rest.
@@ -126,6 +127,7 @@ class Vault:
             'while [ "${1#-}" != "$1" ]; do case "$1" in --target) shift 2 ;; *) shift ;; esac; done\n'
             'exec "$@"\n',
             encoding="utf-8",
+            newline="\n",
         )
         (self.bin / "nsenter").chmod(0o755)
 
@@ -300,7 +302,7 @@ def test_the_push_refuses_outside_the_zone_even_without_the_recovery_step(synced
     script = synced.script.read_text(encoding="utf-8")
     begin = script.index('if [ "$(vgit rev-parse HEAD)" != "$base" ]; then')
     end = script.index("fi\n", begin) + len("fi\n")
-    synced.script.write_text(script[:begin] + script[end:], encoding="utf-8")
+    synced.script.write_text(script[:begin] + script[end:], encoding="utf-8", newline="\n")
     before = synced.head()
     _write(synced.clone, "10_projects/kubelab/roadmap.md", "ours\n")
     _git(synced.clone, "add", "-A")
@@ -330,6 +332,7 @@ def test_a_remote_that_moved_during_the_push_is_left_to_the_next_run(synced: Vau
     hook.write_text(
         f'#!/bin/sh\nenv -i PATH="$PATH" git --git-dir="$PWD" update-ref refs/heads/{BRANCH} refs/heads/side\nexit 1\n',
         encoding="utf-8",
+        newline="\n",
     )
     hook.chmod(0o755)
     _write(synced.clone, f"{ZONE}/notes.md", "ours\n")
@@ -346,7 +349,7 @@ def test_a_remote_that_moved_during_the_push_is_left_to_the_next_run(synced: Vau
 
 def test_a_refused_push_with_the_remote_unmoved_fails(synced: Vault) -> None:
     hook = synced.remote / "hooks/pre-receive"
-    hook.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+    hook.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8", newline="\n")
     hook.chmod(0o755)
     _write(synced.clone, f"{ZONE}/notes.md", "ours\n")
     assert synced.sync().returncode == 1
@@ -361,11 +364,11 @@ def test_the_token_is_in_neither_the_remote_url_nor_the_clone_config(synced: Vau
 
 def test_the_credential_helper_answers_get_from_systemds_credential(tmp_path: Path) -> None:
     helper = tmp_path / "vault-credential"
-    helper.write_text(_render("vault-credential.sh.j2"), encoding="utf-8")
+    helper.write_text(_render("vault-credential.sh.j2"), encoding="utf-8", newline="\n")
     helper.chmod(0o755)
     creds = tmp_path / "creds"
     creds.mkdir()
-    (creds / "vault-token").write_text("token-sentinel\n", encoding="utf-8")
+    (creds / "vault-token").write_text("token-sentinel\n", encoding="utf-8", newline="\n")
     env = {**os.environ, "CREDENTIALS_DIRECTORY": str(creds)}
     get = subprocess.run([str(helper), "get"], capture_output=True, text=True, encoding="utf-8", env=env, check=True)
     assert get.stdout == "username=x-access-token\npassword=token-sentinel\n"
@@ -423,7 +426,9 @@ def test_a_run_without_the_daemon_fails_and_syncs_nothing(synced: Vault) -> None
 def test_a_daemon_that_is_gone_fails_instead_of_syncing_from_the_host(synced: Vault) -> None:
     _write(synced.clone, f"{ZONE}/jobs/digest.md")
     before = synced.head()
-    (synced.bin / "nsenter").write_text("#!/bin/sh\necho 'nsenter: no such process' >&2\nexit 1\n", encoding="utf-8")
+    (synced.bin / "nsenter").write_text(
+        "#!/bin/sh\necho 'nsenter: no such process' >&2\nexit 1\n", encoding="utf-8", newline="\n"
+    )
     result = synced.sync()
     assert result.returncode != 0
     assert synced.head() == before

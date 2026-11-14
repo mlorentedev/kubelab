@@ -183,9 +183,11 @@ def test_the_inject_script_takes_the_interface_and_driver_from_the_unit(tmp_path
     bin_dir.mkdir()
     exec_start = EXEC_START.replace("wlan0", "kubelab-test-absent0")
     (bin_dir / "systemctl").write_text(
-        f'#!/bin/sh\ncase "$1" in show) echo "{exec_start}" ;; is-active) echo active ;; esac\n', encoding="utf-8"
+        f'#!/bin/sh\ncase "$1" in show) echo "{exec_start}" ;; is-active) echo active ;; esac\n',
+        encoding="utf-8",
+        newline="\n",
     )
-    (bin_dir / "sudo").write_text('#!/bin/sh\necho "$@" >> "$0.log"\nexit 1\n', encoding="utf-8")
+    (bin_dir / "sudo").write_text('#!/bin/sh\necho "$@" >> "$0.log"\nexit 1\n', encoding="utf-8", newline="\n")
     for tool in ("systemctl", "sudo"):
         (bin_dir / tool).chmod(0o755)
     env = {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}"}
@@ -219,10 +221,10 @@ def test_the_inject_script_tries_the_unload_alone_then_with_its_holders(tmp_path
     bin_dir, net, module = tmp_path / "bin", tmp_path / "net" / "wlan0", tmp_path / "module" / "brcmfmac" / "holders"
     for directory in (bin_dir, net, module):
         directory.mkdir(parents=True)
-    (net / "operstate").write_text("up\n", encoding="utf-8")
+    (net / "operstate").write_text("up\n", encoding="utf-8", newline="\n")
     (module / "brcmfmac_wcc").touch()
-    (bin_dir / "systemctl").write_text(f'#!/bin/sh\necho "{EXEC_START}"\n', encoding="utf-8")
-    (bin_dir / "sudo").write_text(FAKE_SUDO, encoding="utf-8")
+    (bin_dir / "systemctl").write_text(f'#!/bin/sh\necho "{EXEC_START}"\n', encoding="utf-8", newline="\n")
+    (bin_dir / "sudo").write_text(FAKE_SUDO, encoding="utf-8", newline="\n")
     for tool in ("systemctl", "sudo"):
         (bin_dir / tool).chmod(0o755)
     env = {

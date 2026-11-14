@@ -46,7 +46,7 @@ def gh(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch):
     """Put the stub first on PATH; return a reader for the calls it received."""
     bindir = tmp_path / "bin"
     bindir.mkdir()
-    (bindir / "gh").write_text(_GH_STUB, encoding="utf-8")
+    (bindir / "gh").write_text(_GH_STUB, encoding="utf-8", newline="\n")
     (bindir / "gh").chmod(0o755)
     calls = tmp_path / "gh_calls"
     calls.touch()
@@ -54,7 +54,7 @@ def gh(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("GH_CALLS", str(calls))
     monkeypatch.setenv("STUB_SHA", FULL)
     contract = tmp_path / "kubelab.yaml"
-    contract.write_text(WEB_CONTRACT.read_text(encoding="utf-8"), encoding="utf-8")
+    contract.write_text(WEB_CONTRACT.read_text(encoding="utf-8"), encoding="utf-8", newline="\n")
     monkeypatch.setenv("STUB_CONTRACT", str(contract))
     monkeypatch.setattr(promotion, "resolve_image_sha", lambda env, name: TAG)
     return lambda: calls.read_text(encoding="utf-8").splitlines()
@@ -89,7 +89,7 @@ def test_no_contract_at_the_pinned_commit_is_not_ready(gh, monkeypatch: pytest.M
 
 def test_an_invalid_contract_at_the_pinned_commit_is_not_ready(gh, tmp_path: pathlib.Path) -> None:
     (tmp_path / "kubelab.yaml").write_text(
-        WEB_CONTRACT.read_text(encoding="utf-8").replace("port: 8080", "port: 0"), encoding="utf-8"
+        WEB_CONTRACT.read_text(encoding="utf-8").replace("port: 8080", "port: 0"), encoding="utf-8", newline="\n"
     )
     code, answer = _ready("--app", "web")
 
@@ -102,6 +102,7 @@ def test_a_contract_for_another_product_is_not_ready(gh, tmp_path: pathlib.Path)
     (tmp_path / "kubelab.yaml").write_text(
         WEB_CONTRACT.read_text(encoding="utf-8").replace("mlorentedev/kubelab-web", "mlorentedev/kubelab-api"),
         encoding="utf-8",
+        newline="\n",
     )
     code, answer = _ready("--app", "web")
 
@@ -160,6 +161,7 @@ def test_a_product_on_another_forge_asks_github_nothing(
         + "  forged:\n    repository: mlorentedev/forged\n    forge: gitea\n    receiver: generic\n"
         "    events:\n      staging: forged-image-published\n",
         encoding="utf-8",
+        newline="\n",
     )
     with pytest.raises(ContractError, match="GITEA_URL and GITEA_REPO_READER_TOKEN not set"):
         product_ready.check_ready("forged", registry=registry)

@@ -47,7 +47,7 @@ def _env_vars() -> dict[str, str]:
 @pytest.fixture(autouse=True)
 def _registry(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     path = tmp_path / "products.yaml"
-    path.write_text(_REGISTRY, encoding="utf-8")
+    path.write_text(_REGISTRY, encoding="utf-8", newline="\n")
     monkeypatch.setattr(product_registry, "registry_path", lambda: path)
 
 

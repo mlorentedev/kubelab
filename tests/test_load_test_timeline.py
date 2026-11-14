@@ -312,7 +312,9 @@ class TestStepCarriesItsTimeline:
         assert ("close", ("node", "gen")) in seen
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="Win32 OpenSSH has no ControlMaster; see test_windows_connects_directly")
+@pytest.mark.skipif(
+    sys.platform == "win32", reason="Win32 OpenSSH has no ControlMaster; see test_windows_connects_directly"
+)
 class TestMultiplexed:
     """The step's ssh master: opened per node, closed per node, and never in the operator's ~/.ssh."""
 

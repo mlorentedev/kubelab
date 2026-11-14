@@ -260,7 +260,9 @@ def _read_through_the_command(
         seen.update(kwargs)
         return ReconcilePlan()
 
-    monkeypatch.setattr(cli, "_gitea_clients", lambda env: (_CliForge(members), None, "hefesto", "https://forge.invalid"))
+    monkeypatch.setattr(
+        cli, "_gitea_clients", lambda env: (_CliForge(members), None, "hefesto", "https://forge.invalid")
+    )
     monkeypatch.setattr(cli, "ConfigurationManager", _Config)
     monkeypatch.setattr(repos, "load_declaration", lambda merged: {"personal": []})
     monkeypatch.setattr(repos, "load_settings", lambda merged: None)
