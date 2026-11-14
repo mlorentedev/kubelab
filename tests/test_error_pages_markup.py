@@ -50,7 +50,5 @@ def test_no_asset_sits_in_the_errors_directory_unreferenced() -> None:
     }
     # A `<status>.json` next to its page is the Accept-negotiated twin (AC5), reached by an nginx rewrite.
     twins = {p.with_suffix(".json").name for p in PAGES}
-    orphans = [
-        f.name for f in (HTML / "errors").iterdir() if f.suffix != ".html" and f.name not in referenced | twins
-    ]
+    orphans = [f.name for f in (HTML / "errors").iterdir() if f.suffix != ".html" and f.name not in referenced | twins]
     assert not orphans, orphans

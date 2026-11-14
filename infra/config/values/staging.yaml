@@ -38,7 +38,7 @@ apps:
   # Platform applications (custom-built)
   platform:
     api:
-      version: sha-517b4d1
+      version: sha-20ff5f8
       domain: api.staging.kubelab.live
       site_domain: staging.kubelab.live
       site_url: https://staging.kubelab.live
@@ -52,7 +52,7 @@ apps:
       enable_blog: false
       enable_homelabs: false
       enable_contact: false
-      version: sha-9475b33
+      version: sha-5507af9
     imagesensortool:
       domain: staging.imagesensortool.com
       site_domain: staging.imagesensortool.com
@@ -62,6 +62,8 @@ apps:
       enable_auth: false
       auth_level: bypass
       version: sha-bbb4c929d205
+    console:
+      version: sha-309bdf9
 
   # Third-party services
   services:

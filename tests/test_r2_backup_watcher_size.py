@@ -28,6 +28,7 @@ import subprocess
 import time
 
 import pytest
+from tests.shells import child_env
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 SIZE = REPO / "infra/k8s/base/services/r2-backup-watcher/size.sh"
@@ -73,7 +74,7 @@ def fleet(tmp_path: pathlib.Path, request):
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     rclone = bin_dir / "rclone"
-    rclone.write_text(FAKE_RCLONE, encoding="utf-8")
+    rclone.write_text(FAKE_RCLONE, encoding="utf-8", newline="\n")
     rclone.chmod(0o755)
     targets = tmp_path / "targets.txt"
     targets.write_text(
@@ -81,23 +82,26 @@ def fleet(tmp_path: pathlib.Path, request):
         f"rpi3 {PREFIX}/rpi3 {'1' * 64} 192.0.2.6 22 always-on uptime_kuma\n"
         f"vps {PREFIX}/kubelab-vps {'2' * 64} 192.0.2.2 22 always-on authelia n8n",  # no final newline
         encoding="utf-8",
+        newline="\n",
     )
-    (fake / "kubelab-backups.bytes").write_text(f"{BUCKET_BYTES}\n", encoding="utf-8")
+    (fake / "kubelab-backups.bytes").write_text(f"{BUCKET_BYTES}\n", encoding="utf-8", newline="\n")
     for prefix, size in NODE_BYTES.items():
-        (fake / f"kubelab-backups_{prefix}.bytes").write_text(f"{size}\n", encoding="utf-8")
+        (fake / f"kubelab-backups_{prefix}.bytes").write_text(f"{size}\n", encoding="utf-8", newline="\n")
     for prefix, packs in NODE_PACKS.items():
-        (fake / f"kubelab-backups_{prefix}_data.count").write_text(f"{packs}\n", encoding="utf-8")
+        (fake / f"kubelab-backups_{prefix}_data.count").write_text(f"{packs}\n", encoding="utf-8", newline="\n")
     out = tmp_path / "sizes" / "sizes.txt"
     out.parent.mkdir()
-    env = {
-        "PATH": f"{bin_dir}:{os.environ['PATH']}",
-        "FAKE_DIR": str(fake),
-        "WATCHER_TARGETS": str(targets),
-        "WATCHER_SIZES": str(out),
-        "SIZE_TIMEOUT": "2",
-        "AWS_ACCESS_KEY_ID": "not-a-real-value-fixture",
-        "AWS_SECRET_ACCESS_KEY": "not-a-real-value-fixture",
-    }
+    env = child_env(
+        {
+            "PATH": f"{bin_dir}:{os.environ['PATH']}",
+            "FAKE_DIR": str(fake),
+            "WATCHER_TARGETS": str(targets),
+            "WATCHER_SIZES": str(out),
+            "SIZE_TIMEOUT": "2",
+            "AWS_ACCESS_KEY_ID": "not-a-real-value-fixture",
+            "AWS_SECRET_ACCESS_KEY": "not-a-real-value-fixture",
+        }
+    )
     return fake, out, env, request.param
 
 
@@ -141,9 +145,10 @@ def test_two_buckets_are_each_listed_once_at_their_root(fleet) -> None:
         targets.read_text(encoding="utf-8")
         + f"\nrpi4 s3:https://{HOST}/kubelab-backup-rpi4/rpi4 {'3' * 64} 192.0.2.10 22 on-demand pihole\n",
         encoding="utf-8",
+        newline="\n",
     )
-    (fake / "kubelab-backup-rpi4.bytes").write_text("5000\n", encoding="utf-8")
-    (fake / "kubelab-backup-rpi4_rpi4.bytes").write_text("4000\n", encoding="utf-8")
+    (fake / "kubelab-backup-rpi4.bytes").write_text("5000\n", encoding="utf-8", newline="\n")
+    (fake / "kubelab-backup-rpi4_rpi4.bytes").write_text("4000\n", encoding="utf-8", newline="\n")
     proc, entries = _run(fleet)
     assert proc.returncode == 0, proc.stderr
     assert entries[("bucket", "kubelab-backups")][0] == str(BUCKET_BYTES)
@@ -169,8 +174,9 @@ def _add_root_node(fleet, marker: str = "bytes", content: str = "7000\n") -> pat
         targets.read_text(encoding="utf-8")
         + f"\nace2 s3:https://{HOST}/kubelab-backup-ace2 {'4' * 64} 192.0.2.5 22 on-demand hermes\n",
         encoding="utf-8",
+        newline="\n",
     )
-    (fake / f"kubelab-backup-ace2.{marker}").write_text(content, encoding="utf-8")
+    (fake / f"kubelab-backup-ace2.{marker}").write_text(content, encoding="utf-8", newline="\n")
     return fake
 
 
@@ -220,7 +226,9 @@ def test_it_reaches_r2_by_the_targets_endpoint_with_no_config_file(fleet) -> Non
 @pytest.mark.parametrize("marker", ["fail", "nobytes"])
 def test_a_failed_node_listing_is_null_and_never_fails_the_pod(fleet, marker) -> None:
     fake = fleet[0]
-    (fake / f"kubelab-backups_kubelab-vps.{marker}").write_text("AccessDenied: Access Denied\n", encoding="utf-8")
+    (fake / f"kubelab-backups_kubelab-vps.{marker}").write_text(
+        "AccessDenied: Access Denied\n", encoding="utf-8", newline="\n"
+    )
     proc, entries = _run(fleet)
     assert proc.returncode == 0
     assert entries[("node", "vps")][0] == "null"
@@ -231,7 +239,7 @@ def test_a_failed_node_listing_is_null_and_never_fails_the_pod(fleet, marker) ->
 
 def test_a_failed_bucket_listing_is_null(fleet) -> None:
     fake = fleet[0]
-    (fake / "kubelab-backups.fail").write_text("AccessDenied: Access Denied\n", encoding="utf-8")
+    (fake / "kubelab-backups.fail").write_text("AccessDenied: Access Denied\n", encoding="utf-8", newline="\n")
     proc, entries = _run(fleet)
     assert proc.returncode == 0
     assert entries[("bucket", "kubelab-backups")][0] == "null"
@@ -240,7 +248,7 @@ def test_a_failed_bucket_listing_is_null(fleet) -> None:
 
 def test_a_hung_listing_is_cut_off_and_null(fleet) -> None:
     fake = fleet[0]
-    (fake / "kubelab-backups_rpi3.hang").write_text("", encoding="utf-8")
+    (fake / "kubelab-backups_rpi3.hang").write_text("", encoding="utf-8", newline="\n")
     started = time.monotonic()
     proc, entries = _run(fleet)
     assert time.monotonic() - started < 15, "SIZE_TIMEOUT must bound every listing"
@@ -286,7 +294,7 @@ def test_each_node_reports_the_packs_its_check_has_to_read(fleet) -> None:
 
 def test_a_repository_at_its_bucket_root_counts_the_packs_under_its_data(fleet) -> None:
     fake = _add_root_node(fleet)
-    (fake / "kubelab-backup-ace2_data.count").write_text("961\n", encoding="utf-8")
+    (fake / "kubelab-backup-ace2_data.count").write_text("961\n", encoding="utf-8", newline="\n")
     proc, entries = _run(fleet)
     assert proc.returncode == 0, proc.stderr
     assert entries[("packs", "ace2")][0] == "961"
@@ -296,7 +304,9 @@ def test_a_repository_at_its_bucket_root_counts_the_packs_under_its_data(fleet) 
 def test_a_failed_pack_count_is_null_and_leaves_the_size_alone(fleet, marker) -> None:
     """Null, never 0: a zero would read as "fits the budget"."""
     fake = fleet[0]
-    (fake / f"kubelab-backups_rpi3_data.{marker}").write_text("AccessDenied: Access Denied\n", encoding="utf-8")
+    (fake / f"kubelab-backups_rpi3_data.{marker}").write_text(
+        "AccessDenied: Access Denied\n", encoding="utf-8", newline="\n"
+    )
     proc, entries = _run(fleet)
     assert proc.returncode == 0
     assert entries[("packs", "rpi3")][0] == "null"

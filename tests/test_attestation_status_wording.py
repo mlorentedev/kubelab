@@ -27,6 +27,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from tests.shells import BASH
 
 REPO = Path(__file__).resolve().parent.parent
 WORKFLOW = REPO / ".github/workflows/review-attestation.yml"
@@ -140,7 +141,7 @@ def test_a_disclosed_pr_with_a_declined_notice_reports_disclosed(tmp_path: Path)
         "files": [{"path": "infra/config/secrets/prod.enc.yaml"}],
     }
     payload_file = tmp_path / "payload.json"
-    payload_file.write_text(json.dumps(payload), encoding="utf-8")
+    payload_file.write_text(json.dumps(payload), encoding="utf-8", newline="\n")
     state_file = tmp_path / "state"
 
     result = CliRunner().invoke(
@@ -160,7 +161,7 @@ def test_a_disclosed_pr_with_a_declined_notice_reports_disclosed(tmp_path: Path)
 
 def _stub(bin_dir: Path, name: str, script: str) -> None:
     path = bin_dir / name
-    path.write_text(f"#!/usr/bin/env bash\n{script}\n", encoding="utf-8")
+    path.write_text(f"#!/usr/bin/env bash\n{script}\n", encoding="utf-8", newline="\n")
     path.chmod(0o755)
 
 
@@ -169,7 +170,7 @@ def _run_step(script: str, tmp_path: Path, env: dict[str, str]) -> None:
     import subprocess
 
     full_env = {**os.environ, "PATH": f"{tmp_path / 'bin'}:{os.environ['PATH']}", **env}
-    subprocess.run(["bash", "-e", "-c", script], env=full_env, cwd=tmp_path, check=True)
+    subprocess.run([BASH, "-e", "-c", script], env=full_env, cwd=tmp_path, check=True)
 
 
 @pytest.mark.parametrize(
@@ -237,6 +238,7 @@ def test_a_state_file_the_cli_cannot_write_is_exit_2(tmp_path: Path) -> None:
             }
         ),
         encoding="utf-8",
+        newline="\n",
     )
 
     def run(state_file: Path) -> int:

@@ -28,6 +28,7 @@ import pytest
 import yaml
 
 from tests.ansible_jinja import ansible_env
+from tests.shells import child_env
 
 REPO = Path(__file__).resolve().parents[1]
 ROLE = REPO / "infra" / "ansible" / "roles" / "gateway"
@@ -88,47 +89,51 @@ class Edge:
         for name in ("fake", "bin", "leases", "etc"):
             (self.root / name).mkdir()
         for name, body in (("curl", CURL), ("dig", DIG)):
-            (self.root / "bin" / name).write_text(f"#!/bin/sh\n{body}", encoding="utf-8")
+            (self.root / "bin" / name).write_text(f"#!/bin/sh\n{body}", encoding="utf-8", newline="\n")
             (self.root / "bin" / name).chmod(0o755)
         device = self.root / "net" / UPLINK
         device.mkdir(parents=True)
-        (device / "ifindex").write_text(f"{IFINDEX}\n", encoding="utf-8")
+        (device / "ifindex").write_text(f"{IFINDEX}\n", encoding="utf-8", newline="\n")
         self.mac(UPLINK_MAC.lower())
         (self.root / "etc" / "link").write_text(
-            _render("uplink.link", gateway_uplink_mac=UPLINK_MAC, gateway_uplink_interface=UPLINK), encoding="utf-8"
+            _render("uplink.link", gateway_uplink_mac=UPLINK_MAC, gateway_uplink_interface=UPLINK),
+            encoding="utf-8",
+            newline="\n",
         )
-        (self.root / "etc" / "resolv.conf").write_text(_render("resolv.conf"), encoding="utf-8")
+        (self.root / "etc" / "resolv.conf").write_text(_render("resolv.conf"), encoding="utf-8", newline="\n")
         self.lease(dns=LEASE_DNS)
 
     def mac(self, value: str) -> None:
-        (self.root / "net" / UPLINK / "address").write_text(f"{value}\n", encoding="utf-8")
+        (self.root / "net" / UPLINK / "address").write_text(f"{value}\n", encoding="utf-8", newline="\n")
 
     def lease(self, *, dns: str | None) -> None:
         lines = ["# This is private data. Do not parse.", f"ADDRESS={LEASE_ADDRESS}"]
         if dns:
             lines.append(f"DNS={dns} 198.51.100.2")
-        (self.root / "leases" / IFINDEX).write_text("\n".join(lines) + "\n", encoding="utf-8")
+        (self.root / "leases" / IFINDEX).write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
 
     def no_lease(self) -> None:
         (self.root / "leases" / IFINDEX).unlink()
 
     def answers(self, server: str, address: str) -> None:
-        (self.root / "fake" / f"dns_{server}").write_text(f"{CHECK_HOST}.\n{address}\n", encoding="utf-8")
+        (self.root / "fake" / f"dns_{server}").write_text(f"{CHECK_HOST}.\n{address}\n", encoding="utf-8", newline="\n")
 
     def http(self, code: str) -> None:
-        (self.root / "fake" / "http_code").write_text(code, encoding="utf-8")
+        (self.root / "fake" / "http_code").write_text(code, encoding="utf-8", newline="\n")
 
     def run(self, *args: str) -> subprocess.CompletedProcess[str]:
         calls = self.root / "fake" / "calls"
         calls.unlink(missing_ok=True)
-        env = {
-            "PATH": f"{self.root / 'bin'}:/usr/bin:/bin",
-            "FAKE": str(self.root / "fake"),
-            "EDGE_SYS_NET": str(self.root / "net"),
-            "EDGE_LEASES_DIR": str(self.root / "leases"),
-            "EDGE_LINK_FILE": str(self.root / "etc" / "link"),
-            "EDGE_RESOLV_CONF": str(self.root / "etc" / "resolv.conf"),
-        }
+        env = child_env(
+            {
+                "PATH": f"{self.root / 'bin'}:/usr/bin:/bin",
+                "FAKE": str(self.root / "fake"),
+                "EDGE_SYS_NET": str(self.root / "net"),
+                "EDGE_LEASES_DIR": str(self.root / "leases"),
+                "EDGE_LINK_FILE": str(self.root / "etc" / "link"),
+                "EDGE_RESOLV_CONF": str(self.root / "etc" / "resolv.conf"),
+            }
+        )
         result = subprocess.run(
             [SHELL, str(SCRIPT), *(args or (UPLINK,))],
             capture_output=True,

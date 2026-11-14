@@ -186,7 +186,7 @@ class TestNodeCommand:
     def test_it_reads_both_cgroups_and_tolerates_one_that_is_gone(self) -> None:
         cmd = tl.node_command("0fc274d4-eab5", "1a2b")
         assert "pod0fc274d4_eab5.slice/cpu.stat" in cmd and "pod1a2b.slice/cpu.stat" in cmd
-        assert cmd.count("2>/dev/null") == 3
+        assert cmd.count("2>/dev/null") == 4  # conntrack, both cgroups and /proc/softirqs
 
     @pytest.mark.parametrize("uid", ["a b", "x;rm", "../etc", ""])
     def test_a_uid_that_is_not_a_uid_is_refused(self, uid: str) -> None:
@@ -312,7 +312,9 @@ class TestStepCarriesItsTimeline:
         assert ("close", ("node", "gen")) in seen
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="Win32 OpenSSH has no ControlMaster; see test_windows_connects_directly")
+@pytest.mark.skipif(
+    sys.platform == "win32", reason="Win32 OpenSSH has no ControlMaster; see test_windows_connects_directly"
+)
 class TestMultiplexed:
     """The step's ssh master: opened per node, closed per node, and never in the operator's ~/.ssh."""
 
@@ -408,7 +410,7 @@ class TestWhatTheShellReallyWrites:
         assert (node["conntrack"], node["edge_usec"], node["workload_usec"]) == (None, None, None)
 
     def test_every_read_but_proc_stat_tolerates_a_missing_file(self) -> None:
-        assert tl.node_command("ab", "cd").count("2>/dev/null") == 3
+        assert tl.node_command("ab", "cd").count("2>/dev/null") == 4
 
 
 def test_the_edge_read_is_bounded_by_the_apiserver_too() -> None:
@@ -474,3 +476,70 @@ def test_windows_connects_directly_without_a_master(monkeypatch: pytest.MonkeyPa
     with lt.Lab(REPO, "kc", "op", "node", "gen").multiplexed(("node", "gen"), 90) as options:
         assert options == ()
     assert argvs == []
+
+
+class TestNetRxShare:
+    """#3375: which CPU takes the network receive work, read from /proc/softirqs beside /proc/stat."""
+
+    STAT = "cpu  1 0 0 9 0 0 0\ncpu0 1 0 0 9 0 0 0\ncpu1 1 0 0 9 0 0 0\n"
+
+    @staticmethod
+    def _softirqs(*net_rx: int) -> str:
+        head = "".join(f"       CPU{i}" for i in range(len(net_rx)))
+        return f"{head}\n      NET_RX: {' '.join(str(n) for n in net_rx)}\n"
+
+    def test_the_net_rx_row_is_read_per_cpu(self) -> None:
+        node = tl.parse_node(f"{self.STAT}@@\n400\n@@\n@@\n@@\n{self._softirqs(10, 50)}")
+        assert node["net_rx"] == {"cpu0": 10, "cpu1": 50}
+
+    def test_a_node_read_without_softirqs_keeps_its_other_figures(self) -> None:
+        node = tl.parse_node(f"{self.STAT}@@\n400\n@@\n@@\n")
+        assert node["net_rx"] is None
+        assert node["conntrack"] == 400
+
+    def test_the_row_names_the_cpu_with_most_of_the_receive_work_and_its_share(self) -> None:
+        a = tl.parse_node(_node(1000, 3000, 100, None, None) + tl.SEPARATOR + self._softirqs(100, 100, 100, 100))
+        b = tl.parse_node(_node(1600, 3200, 300, None, None) + tl.SEPARATOR + self._softirqs(110, 110, 170, 110))
+        row = tl._node_row(a, b)
+        assert row["net_rx_cpu"] == "cpu2"
+        assert row["net_rx_share_pct"] == 70.0  # 70 of the 100 receive softirqs between the reads
+
+    def test_no_receive_work_between_the_reads_gives_no_share(self) -> None:
+        a = tl.parse_node(_node(1000, 3000, 100, None, None) + tl.SEPARATOR + self._softirqs(5, 5))
+        b = tl.parse_node(_node(1600, 3200, 300, None, None) + tl.SEPARATOR + self._softirqs(5, 5))
+        assert "net_rx_cpu" not in tl._node_row(a, b)
+
+    def test_the_command_reads_softirqs_and_tolerates_its_absence(self) -> None:
+        cmd = tl.node_command("ab", "cd")
+        assert "/proc/softirqs" in cmd
+        assert cmd.count("2>/dev/null") == 4
+
+
+class TestNicFacts:
+    def test_ace1s_receive_path_reads_as_one_queue_no_rps_one_cpu(self) -> None:
+        """The read taken on ace1 on 2026-11-14: r8169, one queue, RPS off, its vector on CPU2."""
+        facts = tl.parse_nic("iface=enp1s0\ndriver=r8169\nrps rx-0=0\nirq 131=2\n")
+        assert facts == {"iface": "enp1s0", "driver": "r8169", "rps_cpus": {"rx-0": "0"}, "irq_cpus": {"131": "2"}}
+
+    def test_a_multi_queue_nic_keeps_every_queue_and_vector(self) -> None:
+        text = "iface=eth0\ndriver=igb\nrps rx-0=0\nrps rx-1=0\nirq 40=0\nirq 41=1\n"
+        facts = tl.parse_nic(text)
+        assert facts["rps_cpus"] == {"rx-0": "0", "rx-1": "0"}
+        assert facts["irq_cpus"] == {"40": "0", "41": "1"}
+
+    def test_an_unreadable_node_gives_empty_facts_not_an_error(self) -> None:
+        assert tl.parse_nic("") == {"rps_cpus": {}, "irq_cpus": {}}
+
+
+class TestReviewFollowUps:
+    def test_softirq_columns_take_their_names_from_the_header_not_their_position(self) -> None:
+        """/proc/stat skips an offline CPU; /proc/softirqs' header names the columns it has."""
+        text = "                    CPU0       CPU2       CPU3\n      NET_RX:         10         20         30\n"
+        assert tl._net_rx(text) == {"cpu0": 10, "cpu2": 20, "cpu3": 30}
+
+    def test_the_nic_command_emits_every_label_the_parser_reads(self) -> None:
+        for label in ('"iface=', '"driver=', '"rps ', '"irq '):
+            assert label in tl.NIC_COMMAND
+
+    def test_an_unmatched_glob_is_not_read_as_a_queue(self) -> None:
+        assert tl.parse_nic("iface=x\nrps rx-*=\n")["rps_cpus"] == {}

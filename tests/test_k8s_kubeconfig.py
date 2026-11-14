@@ -258,6 +258,7 @@ class TestClusterSSOT:
             "    ssh_alias: aws1\n"
             "    local_port: 16445\n",
             encoding="utf-8",
+            newline="\n",
         )
         return p
 
@@ -272,7 +273,9 @@ class TestClusterSSOT:
 
     def test_missing_required_key_raises(self, tmp_path: Path) -> None:
         p = tmp_path / "common.yaml"
-        p.write_text("clusters:\n  staging:\n    node: ace1\n", encoding="utf-8")  # no ssh_alias / local_port
+        p.write_text(
+            "clusters:\n  staging:\n    node: ace1\n", encoding="utf-8", newline="\n"
+        )  # no ssh_alias / local_port
         with pytest.raises(KeyError, match="ssh_alias"):
             load_clusters(p)
 
@@ -314,7 +317,9 @@ class TestFetchKubeconfig:
     def _setup(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         common = tmp_path / "common.yaml"
         common.write_text(
-            "clusters:\n  staging:\n    node: ace1\n    ssh_alias: ace1\n    local_port: 16443\n", encoding="utf-8"
+            "clusters:\n  staging:\n    node: ace1\n    ssh_alias: ace1\n    local_port: 16443\n",
+            encoding="utf-8",
+            newline="\n",
         )
         dest = tmp_path / ".kube" / "kubelab-staging-config"
         monkeypatch.setattr(kc, "_common_path", lambda: common)

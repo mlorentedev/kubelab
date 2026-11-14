@@ -36,9 +36,11 @@ def test_a_play_that_matches_no_host_fails(tmp_path: Path) -> None:
     if shutil.which("ansible-playbook") is None:
         pytest.skip("ansible-playbook not on PATH: the zero-host run was NOT executed")
     inventory = tmp_path / "hosts.yml"
-    inventory.write_text("all:\n  hosts:\n    somebody:\n      ansible_connection: local\n", encoding="utf-8")
+    inventory.write_text(
+        "all:\n  hosts:\n    somebody:\n      ansible_connection: local\n", encoding="utf-8", newline="\n"
+    )
     play = tmp_path / "play.yml"
-    play.write_text("- hosts: nobody\n  gather_facts: false\n  tasks: []\n", encoding="utf-8")
+    play.write_text("- hosts: nobody\n  gather_facts: false\n  tasks: []\n", encoding="utf-8", newline="\n")
     result = subprocess.run(
         ["ansible-playbook", str(play), "-i", str(inventory)],
         cwd=ANSIBLE_DIR,
@@ -56,9 +58,9 @@ def test_the_runner_starts_ansible_where_the_config_lives(tmp_path: Path, monkey
     assert settings.ansible_dir.resolve() == ANSIBLE_DIR.resolve()
 
     (tmp_path / "playbooks").mkdir()
-    (tmp_path / "playbooks" / "site.yml").write_text("---\n", encoding="utf-8")
+    (tmp_path / "playbooks" / "site.yml").write_text("---\n", encoding="utf-8", newline="\n")
     (tmp_path / "generated" / "prod").mkdir(parents=True)
-    (tmp_path / "generated" / "prod" / "hosts.yml").write_text("---\n", encoding="utf-8")
+    (tmp_path / "generated" / "prod" / "hosts.yml").write_text("---\n", encoding="utf-8", newline="\n")
     monkeypatch.setattr(infra, "settings", SimpleNamespace(ansible_dir=tmp_path))
     seen: dict[str, Any] = {}
 

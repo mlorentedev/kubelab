@@ -79,7 +79,7 @@ def _dummy_secrets(secrets_dir: Path, config: dict[str, str], container: dict[st
             flags += ["-e", f"{name}={value}"]
         elif name.endswith("_FILE"):
             target = secrets_dir / Path(value).name
-            target.write_text(f"dummy-{target.name}-" + "x" * 40, encoding="utf-8")
+            target.write_text(f"dummy-{target.name}-" + "x" * 40, encoding="utf-8", newline="\n")
             flags += ["-e", f"{name}={value}"]
     for name in {n for text in config.values() for n in SECRET_REF.findall(text)}:
         key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
@@ -102,7 +102,7 @@ def _validate(root: Path, config: dict[str, str], container: dict[str, Any]) -> 
         (config_dir / sub).mkdir(parents=True, exist_ok=True)
     secrets_dir.mkdir(parents=True, exist_ok=True)
     for filename, text in config.items():
-        (config_dir / filename).write_text(text, encoding="utf-8")
+        (config_dir / filename).write_text(text, encoding="utf-8", newline="\n")
     flags = _dummy_secrets(secrets_dir, config, container)
     return subprocess.run(
         [

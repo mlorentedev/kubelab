@@ -121,12 +121,15 @@ networking:
   - "172.16.0.0/12"
   - "192.168.0.0/16"
   - "100.64.0.0/10"      # Tailscale VPN
-  # Staging DNS zones — resolved via Headscale split DNS → RPi4 CoreDNS → K3s
-  # Add new domains here; deploy-vps, Corefile, and Pi-hole all consume this list.
+  # The platform's own staging DNS zones (Headscale split DNS → RPi4 CoreDNS → K3s).
+  # A product's zone is NOT added here: `toolkit sync edge-dns` derives it from the
+  # product registry and the contract snapshots, inside a zone granted in
+  # infra/terraform/dns/zones.json, and writes the effective list to
+  # infra/config/products/edge.json, which deploy-vps, the Corefile, Pi-hole and the
+  # pod-side hairpin read (EDGE-001).
   staging_zones:
   - "staging.kubelab.live"
   - "staging.mlorente.dev"
-  - "staging.imagesensortool.com"
   # VPN-only services — Headscale extra_records for direct access via Tailscale IP.
   # Consumed by deploy-vps playbook → Headscale config.yaml template.
   vpn_extra_records:
@@ -1176,6 +1179,22 @@ apps:
       enable_blog: true
       enable_homelabs: true
       enable_contact: true
+
+    # The forge console frontend (ADR-074 D5, #3443): Astro static + React islands behind
+    # nginx, on the host `infra.forge.console_domain` (derived into `domain`, never declared
+    # twice). `/console/` stays the api's, and Authelia guards the whole host. No `version`
+    # here or in staging/prod until the first build is promoted: an app with no pin in an
+    # env is not deployed there (#3456).
+    console:
+      name: console
+      image_name: kubelab-console
+      default_port: 8080
+      health_path: /
+      enable_auth: true
+      auth_level: one_factor
+      extra_routes:
+      - path_prefix: /console/
+        service: api
 
     # Staging-only static site (IDP-053): its image lives on the Gitea registry the
     # product's entry names, so only the repository name is declared here. The rest
@@ -2342,8 +2361,12 @@ apps:
           loki: {}
           # The forge console (CONSOLE-004). It has no login of its own: Authelia is
           # its only door, so the path port-forwards the api Service and reads
-          # /console/ without one.
+          # /console/ without one. Two route names serve its host, both declared: `console`
+          # is the generated frontend route, which exists in an env only once it pins a
+          # console version (#3443), and `console-embedded` is the fallback the host keeps
+          # until then. The fallback and its entry are deleted with the embedded page.
           console: {}
+          console-embedded: {}
           uptime-kuma:
             # The private path only (#2483): the EndpointSlice address over the tailnet
             # (RPi3), never the public route or the IdP. Not an account form: Kuma's own
@@ -2394,6 +2417,44 @@ apps:
     # (NaN, ADR-042 C11b). What runs here now is the operator's agent tooling on
     # ace2 (ADR-068, spec AI-009-hermes-ace2), deployed by the `agent_stack` role.
     ai:
+      # Measured NaN capability catalog (AI-015/AI-016). Both Open WebUI and
+      # Hermes consume this one declaration. Live 2026-11-13: each chat model
+      # below answered a completion; `minimax-h3` was listed by /v1/models but
+      # returned 403 for this key, so it is deliberately absent.
+      nan:
+        models:
+          chat:
+            - qwen3.6
+            - gemma4
+            - glm5.3-flash
+            - deepseek-v4-flash
+            - mimo-v2.6-flash
+            - qwen3.8-flash
+            - glm5.3
+            - kimi-k3.1-pro
+            - qwen3.8-max
+            - deepseek-v4-pro
+            - hy4
+          # Hermes's auxiliary image-description route. Live AI-016 proof with
+          # one solid-red PNG: deepseek-v4-flash answered "White" while qwen3.6
+          # answered "Red" through the same v0.22.1 adapter, so pin the latter.
+          vision: qwen3.6
+          speech_to_text: whisper
+          text_to_speech:
+            model: kokoro
+            voice: ef_dora
+          # NaN answers image requests with a temporary URL. Both models share
+          # ONE 100-request/member/month pool (NaN docs, 2026-11-13), not 100
+          # each. Hermes stops at 50, leaving headroom for Open WebUI.
+          image_generation:
+            model: flux-2-klein
+            alternatives: [qwen-image-2.1]
+            size: 512x512
+            monthly_shared_limit: 100
+            hermes_monthly_limit: 50
+          # Open WebUI's RAG routes (4096 dimensions measured 2026-11-13).
+          embedding_model: qwen3-embedding
+          reranking_model: rerank
       open_webui:
         # ADR028-004. Chat history and accounts live only here, with no
         # promotion path, so a second instance would fork them. On-demand
@@ -2425,38 +2486,10 @@ apps:
         # `dimensions`, so NaN returns 4096-wide vectors; Chroma takes any width.
         # A batch of 16 was measured to answer (spec verification.md, PR 5a).
         rag:
-          embedding_model: qwen3-embedding
           embedding_batch_size: 16
-          reranking_model: rerank
-        # One job per NaN model (spec AI-015, #2211). NaN's key lists every model
-        # it hosts, and the picker offered embedding, reranking, speech and image
-        # models as if they could chat. Open WebUI offers these chat models from
-        # NaN and no others; the rest are wired to the feature they serve.
-        # Measured 2026-10-11 against NaN: each chat model answers 200;
-        # `minimax-h3` (listed) and `glm5.3` answered 401 then. NaN has since
-        # opened every model to every plan (one credit pool, 2026-11); these two
-        # are left out because nothing here is configured for them;
-        # `qwen-image-2.1` is a second image model on the same 100-a-month cap.
-        models:
-          chat:
-            - qwen3.6
-            - gemma4
-            - glm5.3-flash
-            - deepseek-v4-flash
-            - mimo-v2.6-flash
-            - qwen3.8-flash
-          # Transcribed a Spanish sample as `es` (2026-10-11).
-          speech_to_text: whisper
-          # NaN lists no voices; `ef_dora` is Kokoro's Spanish voice and answered
-          # 200. Each user can pick another in Open WebUI's settings.
-          text_to_speech:
-            model: kokoro
-            voice: ef_dora
-          # NaN answers an image request with a `url`, so Open WebUI must not ask
-          # for `b64_json` (IMAGE_URL_RESPONSE_MODELS_REGEX_PATTERN, webui.env.j2).
-          image_generation:
-            model: flux-2-klein
-            size: 512x512
+        # The model allowlist and speech/image routes come from
+        # apps.services.ai.nan.models (spec AI-015/AI-016). Keeping them out of
+        # this service prevents Hermes and Open WebUI drifting into two catalogs.
         # The MCP bridge that serves Open WebUI the vault, read-only (spec AI-009
         # AC9): mcpo in front of the filesystem MCP server, on Open WebUI's
         # network and no other, built on ace2 by the agent_stack role. The base

@@ -5,7 +5,7 @@
 # TARGETARCH. The output is static files, identical for every architecture, so BuildKit runs
 # the stage once and both platforms copy the same dist/. An ARG in scope is part of every
 # RUN's cache key: declaring them made `web`'s build run once per target (#376 there).
-FROM --platform=$BUILDPLATFORM node:25-bookworm-slim@sha256:81db02c4b671288a03915da9534dbd54f96d0e7c24d80ccc54f5b36b2e684370 AS build
+FROM --platform=$BUILDPLATFORM node:26-bookworm-slim@sha256:5df79989ed685e09f0a98019db4cebfb22fb9df1a53c0161664a011f7ff6b0f1 AS build
 
 WORKDIR /app
 RUN chown node:node /app
@@ -46,10 +46,13 @@ USER 0
 RUN apk update && apk upgrade --no-cache && rm -rf /usr/share/nginx/html/*
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
-# Fail the build, which pull requests run, on a config that would not start.
-RUN nginx -t
-# The base's own user (uid 101), so the pod can run with a read-only root and a tmpfs at /tmp.
+# The base's own user (uid 101). Everything after this runs as the user the pod runs as.
 USER 101
+# Fail the build, which pull requests run, on a config that would not start. It must run as
+# uid 101: as root it left a root-owned /tmp/nginx.pid in the layer, which the runtime user
+# cannot open, and every pod crash-looped (#3443). The rm is for the same reason: nothing
+# the check wrote belongs in the image.
+RUN nginx -t && rm -f /tmp/nginx.pid
 
 EXPOSE 8080
 

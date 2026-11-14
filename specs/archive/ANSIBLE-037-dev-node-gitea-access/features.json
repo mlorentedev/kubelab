@@ -1,0 +1,37 @@
+[
+  {
+    "id": "ANSIBLE-037-dev-node-gitea-access-f1",
+    "behavior": "`make provision NODE=ace2 ENV=staging` leaves ace2 able to clone and push to a Gitea repository with no manual step. Idempotence is measured on the role's forge block (`TAGS=gitea`), whose second run reports changed=0; an untagged run reports failed=0, and its whole-play changed=0 depends on #3534 (poetry reinstalls on every run), which is outside this spec",
+    "verification": "make provision NODE=ace2 ENV=staging TAGS=gitea 2>&1 | grep -E '^ace2 +: ok=[1-9][0-9]* +changed=0 +unreachable=0 +failed=0' && bash specs/ANSIBLE-037-dev-node-gitea-access/ac1_clone_push_probe.sh",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "ANSIBLE-037-dev-node-gitea-access-f2",
+    "behavior": "The account ace2 authenticates as resolves from apps.auth.identities.agent (the D1 amendment), the key is removed from apps.auth.identities.machine first, and the superadmin credential comes from the forge's own vault, not a literal or a new SECRET_CATALOG entry",
+    "verification": "poetry run pytest tests/test_dev_node_gitea_identity.py tests/test_dev_node_gitea_agent_key.py -q",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "ANSIBLE-037-dev-node-gitea-access-f3",
+    "behavior": "The Gitea host key is pinned by the role, so a first connection from a node with cleared known_hosts produces no interactive prompt",
+    "verification": "poetry run pytest tests/test_dev_node_gitea_host_key_pin.py -q && bash specs/ANSIBLE-037-dev-node-gitea-access/ac3_host_key_probe.sh",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "ANSIBLE-037-dev-node-gitea-access-f4",
+    "behavior": "Removing the node's key from Gitea makes the access fail, and re-provisioning restores it — both halves captured, since a credential that works proves only half the claim",
+    "verification": "bash specs/ANSIBLE-037-dev-node-gitea-access/ac4_revocation_probe.sh",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "ANSIBLE-037-dev-node-gitea-access-f5",
+    "behavior": "R1 is answered by a live probe from ace2 and the chosen transport recorded in verification.md with its transcript, before the role is written",
+    "verification": "bash specs/ANSIBLE-037-dev-node-gitea-access/r1_transport_probe.sh && grep -q '## Open questions, settled' specs/ANSIBLE-037-dev-node-gitea-access/verification.md",
+    "state": "pending",
+    "evidence": ""
+  }
+]

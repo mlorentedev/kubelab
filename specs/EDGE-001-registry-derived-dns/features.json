@@ -1,0 +1,44 @@
+[
+  {
+    "id": "EDGE-001-f1",
+    "behavior": "AC1: edge.json is the derivation; validate-sync passes for both envs and fails on a hand edit",
+    "verification": "make validate-sync ENV=staging && make validate-sync ENV=prod && poetry run pytest -q tests/test_edge_dns.py -k 'committed_manifest or hand_lists or accessor'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "EDGE-001-f2",
+    "behavior": "AC2: Corefile and Pi-hole forwarding render byte-identical to master's, the Headscale split item for item, the hairpin as equal YAML data",
+    "verification": "poetry run pytest -q tests/test_edge_dns_zero_diff.py tests/test_headscale_runbook_compose.py",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "EDGE-001-f3",
+    "behavior": "AC3: a fixture product on a declared apex adds its zone and probe target, removal drops both; an ungranted apex is refused naming zones.json",
+    "verification": "poetry run pytest -q tests/test_edge_dns.py tests/test_product_staging_hostname.py",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "EDGE-001-f4",
+    "behavior": "AC4: acme-token-scope probes every registered hostname's apex per env",
+    "verification": "poetry run pytest -q tests/test_acme_token_scope.py tests/test_edge_dns.py -k 'acme or probe'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "EDGE-001-f5",
+    "behavior": "AC5: the receiver regenerates and stages edge.json with the snapshot",
+    "verification": "poetry run pytest -q tests/test_product_image_receiver_workflow.py::test_the_edge_manifest_follows_the_snapshot_into_the_same_pr tests/test_receiver_pr_step.py",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "EDGE-001-f6",
+    "behavior": "AC6: a deleted derivation line turns a test red",
+    "verification": "make mutate FILE=toolkit/features/edge_dns.py FROM='            zones.append(zone)' TO='            pass' TEST=tests/test_edge_dns.py",
+    "state": "pending",
+    "evidence": ""
+  }
+]

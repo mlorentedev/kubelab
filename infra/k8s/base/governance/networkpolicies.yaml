@@ -69,6 +69,33 @@ spec:
         - protocol: TCP
           port: 8080
 ---
+# IngressRoute console (generated, ADR-074 D5): the frontend's nginx, reached only through
+# Traefik. The `/console/` rule goes to the api, whose own policy already admits Traefik.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: console-ingress
+  labels:
+    app.kubernetes.io/name: console
+    app.kubernetes.io/part-of: kubelab
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: console
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+      ports:
+        - protocol: TCP
+          port: 8080
+---
 # The error-pages middleware and the catch-all routes.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -283,6 +310,11 @@ spec:
         - podSelector:
             matchLabels:
               app.kubernetes.io/name: grafana
+        # resume's `notify` egress profile (RES-HOST-001 D7); its pods are rendered by the
+        # generator once its contract claims resources.
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: resume
       ports:
         - protocol: TCP
           port: 5678

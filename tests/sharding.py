@@ -103,7 +103,7 @@ def pytest_sessionfinish(session: pytest.Session) -> None:
     if not out or hasattr(session.config, "workerinput"):
         return
     stored = {f: max(round(s, 2), 0.01) for f, s in sorted(_seconds.items())}
-    Path(out).write_text(json.dumps(stored, indent=1) + "\n", encoding="utf-8")
+    Path(out).write_text(json.dumps(stored, indent=1) + "\n", encoding="utf-8", newline="\n")
 
 
 def merge_records(paths: Iterable[Path]) -> dict[str, float]:
@@ -118,4 +118,4 @@ if __name__ == "__main__":
     import sys
 
     out, *inputs = sys.argv[1:]
-    Path(out).write_text(json.dumps(merge_records(map(Path, inputs)), indent=1) + "\n", encoding="utf-8")
+    Path(out).write_text(json.dumps(merge_records(map(Path, inputs)), indent=1) + "\n", encoding="utf-8", newline="\n")

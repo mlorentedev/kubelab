@@ -22,7 +22,7 @@ import pytest
 import yaml
 
 from toolkit.features import break_glass as bg
-from toolkit.features import oidc_clients
+from toolkit.features import oidc_clients, product_registry
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -135,11 +135,18 @@ def test_no_declaration_outlives_its_service() -> None:
     """
     derived: set[str] = set()
     declared: set[str] = set()
+    pinned: set[str] = set()
     for env in ("staging", "prod"):
         values = oidc_clients.load_values(env)
         derived |= set(bg.dependents(env, _render(env), values))
         declared |= set(bg.declarations(values))
-    stale = bg.stale_declarations(derived, declared)
+        platform = (values.get("apps") or {}).get("platform") or {}
+        pinned |= {app for app, block in platform.items() if (block or {}).get("version")}
+    # A registered app no env pins yet is not removed, it is waiting: its generated route does not
+    # exist, and its entry is declared ahead of the first deploy pull request, which edits only
+    # values and generated/ and so could not add it (#3443). Once any env pins it, it counts.
+    waiting = set(product_registry.platform_apps()) - pinned
+    stale = [name for name in bg.stale_declarations(derived, declared) if name not in waiting]
     assert not stale, f"declared in {bg.DECLARATION_PATH} but no env routes them through Authelia: {stale}"
 
 
@@ -361,18 +368,18 @@ class TestSecretFile:
     """Where the password lives, read from SOPS key names -- which are plaintext, so no decryption."""
 
     def test_an_env_file_key_wins_over_common(self, tmp_path: Path) -> None:
-        (tmp_path / "prod.enc.yaml").write_text("a:\n  b: ENC[x]\n", encoding="utf-8")
-        (tmp_path / "common.enc.yaml").write_text("a:\n  b: ENC[y]\n", encoding="utf-8")
+        (tmp_path / "prod.enc.yaml").write_text("a:\n  b: ENC[x]\n", encoding="utf-8", newline="\n")
+        (tmp_path / "common.enc.yaml").write_text("a:\n  b: ENC[y]\n", encoding="utf-8", newline="\n")
         assert bg.secret_file("a.b", "prod", tmp_path) == "prod"
 
     def test_a_key_only_in_common_resolves_to_common(self, tmp_path: Path) -> None:
-        (tmp_path / "prod.enc.yaml").write_text("x: ENC[x]\n", encoding="utf-8")
-        (tmp_path / "common.enc.yaml").write_text("a:\n  b: ENC[y]\n", encoding="utf-8")
+        (tmp_path / "prod.enc.yaml").write_text("x: ENC[x]\n", encoding="utf-8", newline="\n")
+        (tmp_path / "common.enc.yaml").write_text("a:\n  b: ENC[y]\n", encoding="utf-8", newline="\n")
         assert bg.secret_file("a.b", "prod", tmp_path) == "common"
 
     def test_a_key_in_neither_is_an_error(self, tmp_path: Path) -> None:
-        (tmp_path / "prod.enc.yaml").write_text("x: 1\n", encoding="utf-8")
-        (tmp_path / "common.enc.yaml").write_text("y: 1\n", encoding="utf-8")
+        (tmp_path / "prod.enc.yaml").write_text("x: 1\n", encoding="utf-8", newline="\n")
+        (tmp_path / "common.enc.yaml").write_text("y: 1\n", encoding="utf-8", newline="\n")
         with pytest.raises(bg.BreakGlassError, match="a.b"):
             bg.secret_file("a.b", "prod", tmp_path)
 

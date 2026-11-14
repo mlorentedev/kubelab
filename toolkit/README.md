@@ -86,6 +86,7 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit deployment` | High-level deployment orchestration (setup, deploy, rollback). |
 | `toolkit deployment image-tag` | Print the immutable ``sha-<short>`` tag pinned for a platform app (ADR-056 build-once). |
 | `toolkit deployment promote` | Promote an app to an immutable image tag (ADR-046 D6). |
+| `toolkit deployment registered` | Print ``true`` when the app is in the product registry, ``false`` when it is not. |
 | `toolkit info` | Show toolkit information and configuration. |
 | `toolkit infra` | Infrastructure deployment and status commands |
 | `toolkit infra ansible` | Ansible management commands |
@@ -225,6 +226,7 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit sync` | Sync generated files from SSOT (common.yaml, SOPS). |
 | `toolkit sync all` | Run all sync operations. |
 | `toolkit sync branding` | Sync IDP brand CSS from common.yaml SSOT. |
+| `toolkit sync edge-dns` | Derive the edge's staging zones from the product registry into infra/config/products/edge.json (EDGE-001). |
 | `toolkit sync edge-watcher-targets` | Render the edge watcher's targets from networking (NET-005 AC12). |
 | `toolkit sync images` | Sync K8s image tags from common.yaml to kustomization.yaml. |
 | `toolkit sync oidc` | Generate the OIDC client files from the SSOT and the stored SOPS digests (SSOT-017). |

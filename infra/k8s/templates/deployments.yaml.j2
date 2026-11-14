@@ -12,10 +12,15 @@ metadata:
 spec:
   replicas: 1
   strategy:
+{% if app.volumes %}
+    # A surge pod cannot open a database the old pod still holds, nor mount an RWO claim from another node.
+    type: Recreate
+{% else %}
     type: RollingUpdate
     rollingUpdate:
       maxUnavailable: 0
       maxSurge: 1
+{% endif %}
   selector:
     matchLabels:
       app.kubernetes.io/name: {{ app.name }}
@@ -24,7 +29,24 @@ spec:
       labels:
         app.kubernetes.io/name: {{ app.name }}
         app.kubernetes.io/part-of: kubelab
+{% if app.jobs %}
+        # Keeps the Service off the CronJob pods, which carry the same name label.
+        app.kubernetes.io/component: app
+{% endif %}
     spec:
+{% if app.fs_group %}
+      securityContext:
+        fsGroup: {{ app.fs_group }}
+        fsGroupChangePolicy: OnRootMismatch
+{% endif %}
+{% if app.volumes %}
+      volumes:
+{% for volume in app.volumes %}
+        - name: {{ volume.name }}
+          persistentVolumeClaim:
+            claimName: {{ volume.claim }}
+{% endfor %}
+{% endif %}
 {% if app.image_pull_secret %}
       imagePullSecrets:
         - name: {{ app.image_pull_secret }}
@@ -61,6 +83,13 @@ spec:
             periodSeconds: 10
             timeoutSeconds: 3
             failureThreshold: 3
+{% endif %}
+{% if app.volumes %}
+          volumeMounts:
+{% for volume in app.volumes %}
+            - name: {{ volume.name }}
+              mountPath: {{ volume.mount_path }}
+{% endfor %}
 {% endif %}
           lifecycle:
             preStop:

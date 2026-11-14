@@ -27,6 +27,8 @@ from typing import Any
 import pytest
 import yaml
 
+from toolkit.features import product_registry
+
 REPO = Path(__file__).resolve().parent.parent
 OVERLAYS = ["staging", "prod"]
 WORKFLOWS = REPO / "infra/n8n/workflows"
@@ -38,6 +40,10 @@ TRAEFIK = {
     "namespaceSelector": {"matchLabels": {"kubernetes.io/metadata.name": "kube-system"}},
     "podSelector": {"matchLabels": {NAME: "traefik"}},
 }
+# Products a base policy admits before their registry entry exists (RES-HOST-001 E3): resume calls n8n's
+# webhook, and its entry lands with the onboarding. The name is allowed as a source until then; the test
+# below fails once the entry exists, so this set empties itself instead of outliving its reason.
+AHEAD_OF_THEIR_ENTRY = {"resume"}
 IMAGE = re.compile(r'"image": "[^"]*"')
 ADDRESS = re.compile(r"(?<![\w.-])([a-z][a-z0-9-]*)(?:\.kubelab(?:\.svc(?:\.cluster\.local)?)?)?:(\d{2,5})\b")
 
@@ -205,10 +211,17 @@ def test_every_workload_is_selected_by_an_ingress_policy(overlay: str) -> None:
 @pytest.mark.parametrize("overlay", OVERLAYS)
 def test_every_policy_selects_a_workload(overlay: str) -> None:
     labels = [_labels(w) for w in _workloads(overlay).values()]
+    # A registered app with no pin in this env has no workload yet, and its policy is declared ahead
+    # of it: the first deploy pull request edits only values and generated/, so it could not add
+    # one, and an app with no policy fails the check above the moment it is deployed (#3443). A
+    # policy that selects a name no registered app carries is still dead: that is a renamed label.
+    deployed = {lb.get(NAME) for lb in labels}
+    waiting = set(product_registry.platform_apps()) - deployed
     dead = [
         p["metadata"]["name"]
         for p in _policies(overlay)
         if not any(_selects(p["spec"]["podSelector"], lb) for lb in labels)
+        and p["spec"]["podSelector"].get("matchLabels", {}).get(NAME) not in waiting
     ]
     assert not dead, f"policies that select no pod (a renamed label?): {dead}"
 
@@ -217,7 +230,12 @@ def test_every_policy_selects_a_workload(overlay: str) -> None:
 def test_every_rule_names_its_sources_and_ports(overlay: str) -> None:
     """A rule without `from` or `ports` allows everyone on that axis, which
     undoes the deny without looking like it."""
-    names = {_labels(w).get(NAME) for w in _workloads(overlay).values()}
+    # A registered product with no pin in this env has no pod there yet, and a policy may already name it.
+    names = (
+        {_labels(w).get(NAME) for w in _workloads(overlay).values()}
+        | set(product_registry.platform_apps())
+        | AHEAD_OF_THEIR_ENTRY
+    )
     wrong = []
     for policy in _policies(overlay):
         for rule in policy["spec"].get("ingress", []):
@@ -239,3 +257,21 @@ def test_every_named_caller_is_allowed(overlay: str) -> None:
         if not _allowed(overlay, caller, workload, container_port):
             refused.append(f"{caller} -> {service}:{port} (pod port {container_port})")
     assert not refused, f"callers the repository names that the policies refuse: {refused}"
+
+
+def test_a_source_named_ahead_of_its_product_is_not_yet_registered() -> None:
+    """Once the registry admits the product, the allowance above has done its job: remove it."""
+    registered = AHEAD_OF_THEIR_ENTRY & set(product_registry.platform_apps())
+    assert not registered, f"remove {sorted(registered)} from AHEAD_OF_THEIR_ENTRY: the registry names them now"
+
+
+@pytest.mark.parametrize("overlay", OVERLAYS)
+def test_n8n_admits_every_product_that_notifies_through_it(overlay: str) -> None:
+    """The `notify` egress profile lets a product's pods reach n8n:5678, and n8n's ingress must let them in."""
+    notifying = {
+        name for name, entry in product_registry.load_registry().products.items() if "notify" in entry.egress
+    } | AHEAD_OF_THEIR_ENTRY
+    assert notifying, "no product notifies through n8n: this check would judge nothing"
+    workload, port = _target(overlay, "n8n", 5678)
+    refused = sorted(name for name in notifying if not _allowed(overlay, name, workload, port))
+    assert not refused, f"n8n-ingress does not admit {refused} on {port}"

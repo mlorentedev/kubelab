@@ -88,7 +88,7 @@ def _generate(kind: str, root: Path) -> Path:
     """Run `netplan generate` on the rendered file; returns where it writes networkd's units."""
     (root / "etc" / "netplan").mkdir(parents=True)
     rendered = root / "etc" / "netplan" / "10-kubelab-edge.yaml"
-    rendered.write_text(_render("netplan-edge.yaml.j2", kind), encoding="utf-8")
+    rendered.write_text(_render("netplan-edge.yaml.j2", kind), encoding="utf-8", newline="\n")
     rendered.chmod(0o600)
     subprocess.run(["netplan", "generate", "--root-dir", str(root)], check=True, capture_output=True)
     return root / "run" / "systemd" / "network"
@@ -319,9 +319,11 @@ def test_the_validate_command_accepts_the_rendered_file_and_refuses_a_broken_one
     _netplan_or_skip()
     validate = _task_writing("/etc/netplan/10-kubelab-edge.yaml")["validate"]
     good = tmp_path / "good.yaml"
-    good.write_text(_render("netplan-edge.yaml.j2"), encoding="utf-8")
+    good.write_text(_render("netplan-edge.yaml.j2"), encoding="utf-8", newline="\n")
     bad = tmp_path / "bad.yaml"
-    bad.write_text("network:\n  version: 2\n  ethernets:\n    eth0:\n      dhcp4: maybe\n", encoding="utf-8")
+    bad.write_text(
+        "network:\n  version: 2\n  ethernets:\n    eth0:\n      dhcp4: maybe\n", encoding="utf-8", newline="\n"
+    )
     for path, accepted in ((good, True), (bad, False)):
         result = subprocess.run(shlex.split(validate % path), capture_output=True, check=False)
         assert (result.returncode == 0) is accepted, result.stderr

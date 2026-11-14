@@ -312,7 +312,7 @@ def test_an_unknown_unit_is_named_not_a_key_error() -> None:
 def test_the_last_assignment_bounds_the_start(lines: str, expected: str, tmp_path: Path) -> None:
     """systemd keeps the last assignment, and `TimeoutSec=` sets the start timeout too."""
     unit = tmp_path / "unit.service"
-    unit.write_text(f"[Service]\nType=oneshot\n{lines}\n", encoding="utf-8")
+    unit.write_text(f"[Service]\nType=oneshot\n{lines}\n", encoding="utf-8", newline="\n")
     assert _start_timeout(unit) == expected
 
 
@@ -408,7 +408,7 @@ def _run_read(containers: list[dict[str, Any]], tmp_path: Path) -> tuple[int, st
         .render(compose_port_drift_file="/opt/stack/compose.yml")
     )
     stub = tmp_path / "docker"
-    stub.write_text(DOCKER_STUB, encoding="utf-8")
+    stub.write_text(DOCKER_STUB, encoding="utf-8", newline="\n")
     stub.chmod(0o755)
     env = {**os.environ, "PATH": f"{tmp_path}:{os.environ['PATH']}", "STUB_CONTAINERS": json.dumps(containers)}
     result = subprocess.run(

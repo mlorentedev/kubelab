@@ -28,6 +28,7 @@ import yaml
 from tests.loki_harness import ALERTING_DIR, REPO, Loki, rule_expr, run_loki, slot, stream_labels
 from tests.test_alerting_unwrap_grouping import CRONJOB_CONTAINERS
 from tests.test_edge_watcher_probe import FAKE_NC, PROBE
+from tests.shells import child_env
 
 RULES = ALERTING_DIR / "edge-rules.yaml"
 TARGET_DOWN = "net005-edge-target-down"
@@ -139,19 +140,23 @@ def _probe(tmp_path: pathlib.Path, down: set[str]) -> list[dict]:
     fake, bin_dir = run / "fake", run / "bin"
     fake.mkdir(parents=True)
     bin_dir.mkdir()
-    (bin_dir / "nc").write_text(FAKE_NC, encoding="utf-8")
+    (bin_dir / "nc").write_text(FAKE_NC, encoding="utf-8", newline="\n")
     (bin_dir / "nc").chmod(0o755)
     for node in down:
         (fake / f"{TARGETS[node]}.down").touch()
     targets = run / "targets.txt"
-    targets.write_text("".join(f"{node} {address} 22\n" for node, address in TARGETS.items()), encoding="utf-8")
-    env = {
-        "PATH": f"{bin_dir}:{os.environ['PATH']}",
-        "FAKE_DIR": str(fake),
-        "EDGE_TARGETS": str(targets),
-        "REACH_TIMEOUT": "1",
-        "NC": str(bin_dir / "nc"),
-    }
+    targets.write_text(
+        "".join(f"{node} {address} 22\n" for node, address in TARGETS.items()), encoding="utf-8", newline="\n"
+    )
+    env = child_env(
+        {
+            "PATH": f"{bin_dir}:{os.environ['PATH']}",
+            "FAKE_DIR": str(fake),
+            "EDGE_TARGETS": str(targets),
+            "REACH_TIMEOUT": "1",
+            "NC": str(bin_dir / "nc"),
+        }
+    )
     proc = subprocess.run(["sh", str(PROBE)], env=env, capture_output=True, text=True, encoding="utf-8", timeout=30)
     assert proc.returncode == 0, proc.stderr
     return [json.loads(line) for line in proc.stdout.splitlines() if line.strip()]

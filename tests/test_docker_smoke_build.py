@@ -28,6 +28,8 @@ import yaml
 
 from tests.ansible_jinja import ansible_env, task_runs
 from tests.conftest import system_path
+from tests.shells import BASH
+from tests.shells import child_env
 
 REPO = Path(__file__).resolve().parents[1]
 ROLE = REPO / "infra/ansible/roles/docker"
@@ -91,20 +93,22 @@ DOCKER_STUBS = {
 def _run(tmp_path: Path, behaviour: str, script: str) -> subprocess.CompletedProcess[str]:
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
-    (bin_dir / "docker").write_text(f"#!/bin/sh\n{DOCKER_STUBS[behaviour]}\n", encoding="utf-8")
+    (bin_dir / "docker").write_text(f"#!/bin/sh\n{DOCKER_STUBS[behaviour]}\n", encoding="utf-8", newline="\n")
     (bin_dir / "docker").chmod(0o755)
     rendered = (
         ansible_env(".")
         .from_string(script)
         .render(docker_smoke_build_image=DEFAULTS["docker_smoke_build_image"], docker_smoke_build_timeout_seconds=2)
     )
-    env = {
-        "PATH": system_path(bin_dir),
-        "DOCKERFILE": str(tmp_path / "Dockerfile"),
-        "ARGS": str(tmp_path / "args"),
-    }
+    env = child_env(
+        {
+            "PATH": system_path(bin_dir),
+            "DOCKERFILE": str(tmp_path / "Dockerfile"),
+            "ARGS": str(tmp_path / "args"),
+        }
+    )
     return subprocess.run(
-        ["bash", "-c", rendered],
+        [BASH, "-c", rendered],
         env=env,
         stdin=subprocess.DEVNULL,
         capture_output=True,

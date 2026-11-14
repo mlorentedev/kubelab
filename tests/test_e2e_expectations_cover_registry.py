@@ -49,6 +49,7 @@ def test_a_staging_only_product_needs_one_expectation_and_a_product_with_no_lane
         FIXTURE_REGISTRY.read_text(encoding="utf-8")
         + "  idle:\n    repository: mlorentedev/idle\n    forge: github\n    receiver: generic\n",
         encoding="utf-8",
+        newline="\n",
     )
 
     assert _deployed(FIXTURE_REGISTRY) == ("api", "web", "third")

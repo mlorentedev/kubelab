@@ -106,7 +106,9 @@ def _docker(*args: str, check: bool = True) -> str:
 
 def _corefile(path: Path, address: str) -> None:
     # Rewritten in place: a single-file bind mount follows the inode, not the name.
-    path.write_text(f"example.test {{\n  hosts {{\n    {address} {NAME}\n    ttl 3600\n  }}\n}}\n", encoding="utf-8")
+    path.write_text(
+        f"example.test {{\n  hosts {{\n    {address} {NAME}\n    ttl 3600\n  }}\n}}\n", encoding="utf-8", newline="\n"
+    )
 
 
 def _answer(container: str, server: str = "127.0.0.1") -> tuple[int, str] | None:
@@ -149,7 +151,7 @@ def test_the_flush_serves_a_moved_record_without_restarting_pihole(docker_mount_
                 "-v", f"{corefile}:/etc/coredns/Corefile:ro",
                 defaults["coredns_image"], "-conf", "/etc/coredns/Corefile")  # fmt: skip
         coredns_ip = _docker("inspect", "-f", "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}", coredns)
-        forwarding.write_text(f"server=/example.test/{coredns_ip}#53\n", encoding="utf-8")
+        forwarding.write_text(f"server=/example.test/{coredns_ip}#53\n", encoding="utf-8", newline="\n")
         _docker("run", "-d", "--name", pihole, "--network", network,
                 "-e", "FTLCONF_misc_etc_dnsmasq_d=true",
                 "-v", f"{forwarding}:/etc/dnsmasq.d/forwarding.conf:ro",

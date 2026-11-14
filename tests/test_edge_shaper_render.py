@@ -27,6 +27,7 @@ import pytest
 import yaml
 
 from tests.ansible_jinja import ansible_env
+from tests.shells import child_env
 
 REPO = Path(__file__).resolve().parents[1]
 ROLE = REPO / "infra" / "ansible" / "roles" / "gateway"
@@ -186,15 +187,17 @@ def test_the_unit_passes_systemd_analyze_verify(tmp_path: Path) -> None:
     for binary in ("/usr/sbin/tc", "/usr/sbin/ip"):
         if not Path(binary).exists():
             pytest.skip(f"{binary} is not installed")
-    (tmp_path / UNIT).write_text(_render(), encoding="utf-8")
+    (tmp_path / UNIT).write_text(_render(), encoding="utf-8", newline="\n")
     for notifier in ("kubelab-notify@.service", "kubelab-notify-recovered@.service"):
-        (tmp_path / notifier).write_text("[Service]\nType=oneshot\nExecStart=/bin/true\n", encoding="utf-8")
+        (tmp_path / notifier).write_text(
+            "[Service]\nType=oneshot\nExecStart=/bin/true\n", encoding="utf-8", newline="\n"
+        )
     proc = subprocess.run(
         ["systemd-analyze", "verify", "--man=no", str(tmp_path / UNIT)],
         capture_output=True,
         text=True,
         encoding="utf-8",
-        env={"SYSTEMD_UNIT_PATH": f"{tmp_path}:", "PATH": "/usr/bin:/bin"},
+        env=child_env({"SYSTEMD_UNIT_PATH": f"{tmp_path}:", "PATH": "/usr/bin:/bin"}),
         check=False,
     )
     assert proc.returncode == 0, proc.stderr

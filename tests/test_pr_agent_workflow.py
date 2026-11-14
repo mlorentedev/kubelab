@@ -34,6 +34,7 @@ import zipfile
 
 import pytest
 import yaml
+from tests.shells import BASH
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 REVIEWER = REPO_ROOT / ".github/workflows/pr-agent.yml"
@@ -398,7 +399,7 @@ def _run_resolve(tmp_path: pathlib.Path, **scenario: str) -> tuple[dict[str, str
     bindir = tmp_path / "bin"
     bindir.mkdir()
     stub = bindir / "gh"
-    stub.write_text(_GH_STUB, encoding="utf-8")
+    stub.write_text(_GH_STUB, encoding="utf-8", newline="\n")
     stub.chmod(0o755)
     output = tmp_path / "github_output"
     output.touch()
@@ -439,7 +440,7 @@ def _run_resolve(tmp_path: pathlib.Path, **scenario: str) -> tuple[dict[str, str
         **scenario,
     }
     proc = subprocess.run(  # noqa: S603
-        ["bash", "-c", step["run"]],
+        [BASH, "-c", step["run"]],
         cwd=tmp_path,
         env=env,
         capture_output=True,
@@ -654,8 +655,10 @@ def _evaluate(expression: str, github: dict, steps: dict | None = None) -> objec
     context a step-level `if:` reads; `always()` is true for a step that is
     reached at all.
     """
+    # An Actions string literal has no backslash escapes, so `'"\t"'` is the four
+    # characters it shows; repr() keeps them literal for Python's eval as well.
     python = "".join(
-        part if part.startswith("'") else _to_python_operators(part)
+        repr(part[1:-1]) if part.startswith("'") else _to_python_operators(part)
         for part in re.split(r"('[^']*')", expression.strip().removeprefix("${{").removesuffix("}}"))
     )
     names = {
@@ -722,8 +725,11 @@ def test_a_run_the_job_skips_cannot_cancel_one_that_reviews() -> None:
     reviewed = [
         _pull_request_run(draft=False, actor="a-maintainer"),
         _comment_run(body="/review", association="MEMBER"),
+        _comment_run(body="/review\tnow", association="MEMBER"),
+        _comment_run(body="/answer\nwhy", association="COLLABORATOR"),
     ]
     skipped = [
+        _comment_run(body="/reviewer", association="MEMBER"),
         _pull_request_run(draft=False, actor="dependabot[bot]"),
         _comment_run(body="## Review triage", association="MEMBER"),
         _comment_run(body="/review", association="NONE"),

@@ -281,7 +281,7 @@ class TestDeclaration:
         else:
             data["mechanical"] = block
         path = tmp_path / "r.json"
-        path.write_text(json.dumps(data), encoding="utf-8")
+        path.write_text(json.dumps(data), encoding="utf-8", newline="\n")
         with pytest.raises(DeclarationError):
             load_declaration(path)
 

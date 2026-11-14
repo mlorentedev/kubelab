@@ -191,12 +191,13 @@ FIXTURE_REGISTRY = Path(__file__).parent / "fixtures" / "product" / "registry.ya
 class TestImageRepositories:
     """Each app is pruned in the repository it is deployed from (#2511), never in ``<prefix>-<app>``."""
 
-    def test_the_committed_set_is_the_three_kubelab_repositories(self) -> None:
+    def test_the_committed_set_is_the_four_kubelab_repositories(self) -> None:
         from toolkit.features.product_registry import platform_apps
 
         assert image_repositories([*platform_apps(), "errors"]) == {
             "api": "kubelab-api",
             "web": "kubelab-web",
+            "console": "kubelab-console",
             "errors": "kubelab-errors",
         }
 
@@ -210,6 +211,7 @@ class TestImageRepositories:
             "  beta:\n    repository: personal/beta\n    forge: gitea\n    receiver: generic\n"
             "    image_registry: gitea.kubelab.live/personal\n",
             encoding="utf-8",
+            newline="\n",
         )
         assert image_repositories(["web", "beta"], registry=path) == {"web": "kubelab-web"}
 
@@ -219,6 +221,7 @@ class TestImageRepositories:
             "products:\n  web:\n    repository: mlorentedev/web\n    forge: github\n    receiver: generic\n"
             f"    image_registry: {platform_registry()}\n    image_name: kubelab-web\n",
             encoding="utf-8",
+            newline="\n",
         )
         assert image_repositories(["web"], registry=path) == {"web": "kubelab-web"}
 

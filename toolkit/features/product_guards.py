@@ -32,17 +32,22 @@ import re
 from collections.abc import Callable, Iterable
 from pathlib import Path
 
-import yaml
-
 from toolkit.config.settings import PROJECT_ROOT
 from toolkit.features.declared_domains import VALUES_DIR, declared_domains
+from toolkit.features.edge_dns import (
+    WILDCARD_ZONE,
+    EdgeDnsError,
+    declared_staging_zones,
+    granted_apexes,
+    staging_zone_for,
+)
 from toolkit.features.product_contract import Contract, ContractError, validate_contract
 from toolkit.features.product_registry import Product, RegistryError, derived_image, load_registry
 
 ENVIRONMENTS = ("staging", "prod")
 
-#: The platform's wildcard staging zone: a product with no domain of its own takes one label under it.
-WILDCARD_ZONE = "staging.kubelab.live"
+#: Where a product's apex is granted (EDGE-001), named in refusals.
+DNS_ZONES_RELPATH = "infra/terraform/dns/zones.json"
 _APEX = WILDCARD_ZONE.partition(".")[2]
 
 #: Values subtree a product owns; declarations under it are the product's own.
@@ -70,33 +75,50 @@ def apps_declaring(env: str, registry: Path | None = None) -> tuple[str, ...]:
 
 
 def staging_zones(values_dir: Path = VALUES_DIR) -> list[str]:
-    """``networking.staging_zones`` from ``common.yaml``: the zones the platform resolves on the VPN."""
-    data = yaml.safe_load((values_dir / "common.yaml").read_text(encoding="utf-8")) or {}
-    return [str(zone) for zone in (data.get("networking") or {}).get("staging_zones") or []]
+    """The platform's declared staging zones, ``networking.staging_zones`` in ``common.yaml``.
+
+    Not the effective list: since EDGE-001 a product's zone is derived into
+    ``infra/config/products/edge.json`` (``edge_dns.staging_zones``), and this list
+    holds only the platform's own zones.
+    """
+    return declared_staging_zones(values_dir / "common.yaml")
 
 
-def check_staging_hostname(contract: Contract, zones: Iterable[str]) -> None:
-    """Refuse a ``hostnames.staging`` that breaks the hostname convention (IDP-053 D8).
+def check_staging_hostname(contract: Contract, zones: Iterable[str], apexes: Iterable[str] | None = None) -> None:
+    """Refuse a ``hostnames.staging`` that breaks the hostname convention (IDP-053 D8, EDGE-001).
 
-    Accepted: exactly a zone in ``zones`` (``networking.staging_zones``) other than the wildcard
-    zone, or one label under the wildcard zone. A contract that also declares prod must name the
-    staging hostname ``staging_hostname_for`` derives from it. The contract model cannot read
-    ``common.yaml``, so this runs at render time.
+    Accepted: one label under the wildcard zone, a zone the platform declares in ``zones``
+    (``networking.staging_zones``), or ``staging.<domain>`` whose apex is a Cloudflare zone
+    granted in ``infra/terraform/dns/zones.json`` (``apexes``; read from there when omitted).
+    The last becomes the product's own split-DNS zone, derived into ``edge.json``. A contract
+    that also declares prod must name the staging hostname ``staging_hostname_for`` derives
+    from it. The contract model cannot read either file, so this runs at render time.
     """
     host = contract.hostnames.staging
-    listed = set(zones) - {WILDCARD_ZONE}
+    declared = list(zones)
     _, _, parent = host.partition(".")
-    if host not in listed and parent != WILDCARD_ZONE:
-        domain = host.removeprefix("staging.")
-        fix = (
-            f'add "{host}" to networking.staging_zones in infra/config/values/common.yaml'
-            if host.startswith("staging.") and "." in domain and host not in set(zones)
-            else f"name it staging.<product domain> (with that zone listed in networking.staging_zones), "
-            f"or <label>.{WILDCARD_ZONE}"
+    if parent != WILDCARD_ZONE and host not in set(declared) - {WILDCARD_ZONE}:
+        own_zone = (
+            host.startswith("staging.")
+            and "." in host.removeprefix("staging.")
+            and not any(host == zone or host.endswith(f".{zone}") for zone in declared)
         )
-        raise _staging_refusal(
-            host, f"is not a zone in networking.staging_zones or one label under {WILDCARD_ZONE}", fix
-        )
+        if not own_zone:
+            raise _staging_refusal(
+                host,
+                f"is not staging.<product domain> or one label under {WILDCARD_ZONE}",
+                f"name it staging.<product domain> (its apex declared in {DNS_ZONES_RELPATH}), "
+                f"or <label>.{WILDCARD_ZONE}",
+            )
+        try:
+            staging_zone_for(host, declared, granted_apexes() if apexes is None else apexes)
+        except EdgeDnsError as exc:
+            raise _staging_refusal(
+                host,
+                "is in no Cloudflare zone the platform declares",
+                f"declare its apex in {DNS_ZONES_RELPATH} (an operator change, reviewed), "
+                f"or use <label>.{WILDCARD_ZONE}",
+            ) from exc
     prod = contract.hostnames.prod
     if prod is not None and host != (expected := staging_hostname_for(prod)):
         raise _staging_refusal(
@@ -122,10 +144,11 @@ def staging_hostname_for(prod: str) -> str:
 
 
 def check_resources(contract: Contract) -> None:
-    """Refuse a job claim whose ``volume`` names no volume claim in the same contract (RES-HOST-001 B2).
+    """Refuse claims that only conflict as a set (RES-HOST-001 B2, C).
 
-    The schema checks each claim alone; whether one claim names another is only known with the whole
-    mapping in hand, so it is checked here, before any manifest is rendered.
+    The schema checks each claim alone. That a job's ``volume`` names a volume claim, that the volume
+    claims mount distinct paths, and that they agree on one ``fs_group`` are only known with the whole
+    mapping in hand, so they are checked here, before any manifest is rendered.
     """
     volumes = sorted(name for name, claim in contract.resources.items() if claim.type == "volume")
     for name, claim in contract.resources.items():
@@ -138,13 +161,43 @@ def check_resources(contract: Contract) -> None:
                 "an unknown name would render a CronJob whose pod can never start.",
                 f"set it to a declared volume claim (declared: {declared}), or add that volume under resources.",
             )
+    mounted: dict[str, str] = {}
+    for name, claim in contract.resources.items():
+        if claim.type != "volume":
+            continue
+        path = claim.params.mount_path
+        if path in mounted:
+            raise ContractError(
+                f"field 'resources.{name}.params.mount_path': '{path}' is already mounted by "
+                f"'resources.{mounted[path]}'",
+                "the product's containers mount every volume claim, and Kubernetes rejects a container "
+                "with two mounts at one path.",
+                "give each volume claim its own mount_path.",
+            )
+        mounted[path] = name
+    first: tuple[str, int] | None = None
+    for name, claim in contract.resources.items():
+        group = claim.params.fs_group if claim.type == "volume" else None
+        if not group:
+            continue
+        if first is None:
+            first = (name, group)
+        elif group != first[1]:
+            raise ContractError(
+                f"field 'resources.{name}.params.fs_group': {group} differs from {first[1]} "
+                f"set by 'resources.{first[0]}'",
+                "every pod that mounts the claims has a single fsGroup, so two volumes asking for different "
+                "groups cannot both be honoured and one would be owned by the wrong group.",
+                f"give every volume claim the same fs_group, or declare it on one of them only (e.g. {first[1]}).",
+            )
 
 
 def _staging_refusal(host: str, reason: str, fix: str) -> ContractError:
     return ContractError(
         f"field 'hostnames.staging': '{host}' {reason}",
-        "D8 (IDP-053): a hosted product's staging hostname is staging.<its domain>, listed as a zone so split DNS "
-        "and the pod-side hairpin resolve it; with no domain yet it takes one label under the wildcard zone.",
+        "D8 (IDP-053): a hosted product's staging hostname is staging.<its domain>, inside a Cloudflare zone the "
+        "platform grants, so split DNS and the pod-side hairpin derive its zone (EDGE-001); with no domain yet it "
+        "takes one label under the wildcard zone.",
         fix,
     )
 

@@ -33,6 +33,8 @@ import yaml
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
 from toolkit.features.generator_ansible import AnsibleGenerator
+from tests.shells import BASH
+from tests.shells import child_env
 
 REPO = Path(__file__).resolve().parent.parent
 ROLE = REPO / "infra/ansible/roles/node_backup"
@@ -354,7 +356,7 @@ def _capture(tmp_path: Path, source: dict[str, object], shims: dict[str, str] | 
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     for name, body in {"sqlite3": FAKE_SQLITE3, **(shims or {})}.items():
-        (bin_dir / name).write_text(body, encoding="utf-8")
+        (bin_dir / name).write_text(body, encoding="utf-8", newline="\n")
         (bin_dir / name).chmod(0o755)
     staging = tmp_path / "staging"
     script = tmp_path / "capture.sh"
@@ -368,11 +370,12 @@ def _capture(tmp_path: Path, source: dict[str, object], shims: dict[str, str] | 
             node_backup_capture_sentinel=str(staging / ".capture-complete"),
         ),
         encoding="utf-8",
+        newline="\n",
     )
     env = {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}"}
     # A bound, so a capture that loops fails the test instead of hanging the suite.
     result = subprocess.run(
-        ["bash", str(script)], env=env, capture_output=True, text=True, encoding="utf-8", check=False, timeout=60
+        [BASH, str(script)], env=env, capture_output=True, text=True, encoding="utf-8", check=False, timeout=60
     )
     assert result.returncode == 0, result.stderr
     assert (staging / ".capture-complete").exists()
@@ -386,7 +389,7 @@ def _files(root: Path) -> dict[str, str]:
 def _tree(tmp_path: Path, files: dict[str, str]) -> None:
     for name, content in files.items():
         (tmp_path / "src" / name).parent.mkdir(parents=True, exist_ok=True)
-        (tmp_path / "src" / name).write_text(content, encoding="utf-8")
+        (tmp_path / "src" / name).write_text(content, encoding="utf-8", newline="\n")
 
 
 def test_a_database_in_a_subdirectory_keeps_its_snapshot(tmp_path: Path) -> None:
@@ -1227,6 +1230,29 @@ def test_the_schedule_report_reads_the_wait_line_the_prune_prints() -> None:
     assert f'--grep "{phrase}"' in str(reader["ansible.builtin.command"]["cmd"])
 
 
+def test_the_schedule_report_counts_backups_from_lines_the_ship_still_prints() -> None:
+    """#3496: begun minus saved counts the runs that can leave packs in no index.
+
+    Both lines are restic's human summary. A `--quiet` or `--json` backup drops
+    them, and the report would then read 0 / 0 on every node, which looks like a
+    week with no interrupted backup rather than a reader with nothing to read.
+    """
+    script = (ROLE / "templates" / "node-backup-ship.sh.j2").read_text(encoding="utf-8")
+    lines = script.splitlines()
+    start = next(i for i, line in enumerate(lines) if line.startswith("$RESTIC backup "))
+    end = start
+    while lines[end].rstrip().endswith("\\"):
+        end += 1
+    backup = " ".join(lines[start : end + 1])
+    for flag in ("-q", "--quiet", "--json"):
+        assert flag not in backup.split(), f"the ship's backup runs with {flag}"
+    reader = next((t for t in _schedule_playbook()["tasks"] if "began" in t.get("name", "")), None)
+    assert reader is not None, "backup-schedule reads no begun/saved backup count"
+    cmd = str(reader["ansible.builtin.command"]["cmd"])
+    for unit in ("node-backup-ship.service", "node-backup-ship-check.service"):
+        assert f"-u {unit}" in cmd, f"{unit} also runs a backup and is not counted"
+
+
 def test_every_journal_read_in_the_schedule_report_covers_the_same_week() -> None:
     """A count over eight days printed beside denominators over seven pairs a
     refusal with runs it did not come from."""
@@ -1424,7 +1450,7 @@ def test_every_rendered_unit_passes_systemd_analyze_verify(tmp_path):
         "node-backup-capture.service": "[Service]\nType=oneshot\nExecStart=/bin/true\n",
     }
     for name, text in units.items():
-        (tmp_path / name).write_text(text, encoding="utf-8")
+        (tmp_path / name).write_text(text, encoding="utf-8", newline="\n")
     # Every unit the role renders; the capture unit is only a stub for `Wants=`.
     targets = [str(tmp_path / n) for n in units if n != "node-backup-capture.service"]
     proc = subprocess.run(
@@ -1432,7 +1458,7 @@ def test_every_rendered_unit_passes_systemd_analyze_verify(tmp_path):
         capture_output=True,
         text=True,
         encoding="utf-8",
-        env={"SYSTEMD_UNIT_PATH": f"{tmp_path}:", "PATH": "/usr/bin:/bin"},
+        env=child_env({"SYSTEMD_UNIT_PATH": f"{tmp_path}:", "PATH": "/usr/bin:/bin"}),
     )
     assert proc.returncode == 0, proc.stderr
 

@@ -8,6 +8,7 @@ import pytest
 import yaml
 
 from toolkit.config import settings as settings_module
+from toolkit.features.configuration import ConfigurationManager
 from toolkit.features import product_registry
 from toolkit.features.product_guards import apps_declaring
 from toolkit.features.product_registry import RegistryError, UnknownEventError
@@ -27,7 +28,7 @@ def fixture_registry(monkeypatch: pytest.MonkeyPatch) -> Path:
 
 def _write(tmp_path: Path, body: str) -> Path:
     path = tmp_path / "products.yaml"
-    path.write_text(body, encoding="utf-8")
+    path.write_text(body, encoding="utf-8", newline="\n")
     return path
 
 
@@ -53,7 +54,9 @@ class TestPlatformApps:
         held to it: a product with no ``events.prod`` does not run in prod (IDP-053 D5).
         """
         assert apps_declaring(env), f"no registered product declares a {env} lane: nothing was checked"
-        missing = _undeployable(env, _platform_blocks("common"), _platform_blocks(env))
+        # Through the loader, so a field the loader derives (the console's `domain`, #3443) counts.
+        effective = dict(ConfigurationManager(env, REPO).get_merged_config().get("apps", {}).get("platform") or {})
+        missing = _undeployable(env, effective, {})
         assert not missing, f"registered, but common.yaml + {env}.yaml lack what generator_k8s needs: {missing}"
 
     def test_a_product_with_no_prod_lane_is_not_held_to_a_prod_block(self, fixture_registry: Path) -> None:
@@ -302,6 +305,51 @@ class TestRegistryFields:
         path = _write(tmp_path, f"products:\n  api:\n    forge: in-tree\n    {line}\n")
         with pytest.raises(RegistryError, match="in-tree"):
             product_registry.load_registry(path)
+
+
+_EGRESS_ENTRY = """\
+products:
+  beta:
+    repository: personal/beta
+    forge: gitea
+    receiver: generic
+    egress: {egress}
+"""
+
+
+class TestEgressProfiles:
+    """RES-HOST-001 D7: a product's egress is named by its registry entry, never by its contract."""
+
+    def test_defaults_to_no_profile(self) -> None:
+        assert product_registry.load_registry().products["web"].egress == []
+
+    def test_the_three_profiles_parse_in_the_order_written(self, tmp_path: Path) -> None:
+        body = _EGRESS_ENTRY.format(egress="[notify, dns, public-https]")
+
+        entry = product_registry.load_registry(_write(tmp_path, body)).products["beta"]
+
+        assert entry.egress == ["notify", "dns", "public-https"]
+
+    def test_an_unknown_profile_is_refused_naming_it_and_the_known_ones(self, tmp_path: Path) -> None:
+        body = _EGRESS_ENTRY.format(egress="[dns, allow-all]")
+
+        with pytest.raises(RegistryError) as excinfo:
+            product_registry.load_registry(_write(tmp_path, body))
+
+        message = str(excinfo.value)
+        assert "ERROR: egress profile 'allow-all' is not defined" in message
+        assert "WHY:" in message and "FIX:" in message
+        assert "dns, notify, public-https" in message
+
+    def test_a_profile_named_twice_is_refused(self, tmp_path: Path) -> None:
+        with pytest.raises(RegistryError, match="dns.*twice"):
+            product_registry.load_registry(_write(tmp_path, _EGRESS_ENTRY.format(egress="[dns, dns]")))
+
+    def test_an_in_tree_entry_cannot_name_egress(self, tmp_path: Path) -> None:
+        body = "products:\n  api:\n    forge: in-tree\n    egress: [dns]\n"
+
+        with pytest.raises(RegistryError, match="remove egress"):
+            product_registry.load_registry(_write(tmp_path, body))
 
 
 class TestPrivateEntryRefusals:

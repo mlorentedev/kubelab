@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from toolkit.core import sops
+from tests.shells import child_env
 
 TOOLKIT_ROOT = Path(__file__).resolve().parents[1] / "toolkit"
 _SUBPROCESS_FUNCS = {"run", "Popen", "call", "check_call", "check_output"}
@@ -61,14 +62,14 @@ def _iter_sops_calls():
 class TestResolveAgeKeyFile:
     def test_honors_existing_override(self, tmp_path: Path) -> None:
         key = tmp_path / "explicit.txt"
-        key.write_text("k", encoding="utf-8")
+        key.write_text("k", encoding="utf-8", newline="\n")
         assert sops.resolve_age_key_file({"SOPS_AGE_KEY_FILE": str(key)}) == str(key)
 
     def test_falls_through_when_override_points_nowhere(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         conv = tmp_path / ".config" / "age" / "key.txt"
         conv.parent.mkdir(parents=True)
-        conv.write_text("k", encoding="utf-8")
+        conv.write_text("k", encoding="utf-8", newline="\n")
         env = {"SOPS_AGE_KEY_FILE": str(tmp_path / "nope.txt")}
         assert sops.resolve_age_key_file(env) == str(conv)
 
@@ -76,10 +77,10 @@ class TestResolveAgeKeyFile:
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         default = tmp_path / ".config" / "sops" / "age" / "keys.txt"
         default.parent.mkdir(parents=True)
-        default.write_text("k", encoding="utf-8")
+        default.write_text("k", encoding="utf-8", newline="\n")
         conv = tmp_path / ".config" / "age" / "key.txt"
         conv.parent.mkdir(parents=True)
-        conv.write_text("k", encoding="utf-8")
+        conv.write_text("k", encoding="utf-8", newline="\n")
         assert sops.resolve_age_key_file({}) == str(default)
 
     def test_returns_none_when_no_key_anywhere(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -94,16 +95,16 @@ class TestAgeKeyEnv:
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         conv = tmp_path / ".config" / "age" / "key.txt"
         conv.parent.mkdir(parents=True)
-        conv.write_text("k", encoding="utf-8")
-        out = sops.age_key_env({"PATH": "/x"})
+        conv.write_text("k", encoding="utf-8", newline="\n")
+        out = sops.age_key_env(child_env({"PATH": "/x"}))
         assert out["SOPS_AGE_KEY_FILE"] == str(conv)
         assert out["PATH"] == "/x"
 
     def test_returns_base_env_unchanged_when_no_key(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        out = sops.age_key_env({"PATH": "/x"})
+        out = sops.age_key_env(child_env({"PATH": "/x"}))
         assert "SOPS_AGE_KEY_FILE" not in out
-        assert out == {"PATH": "/x"}
+        assert out == child_env({"PATH": "/x"})
 
 
 class TestSopsCallsUseAgeKeyEnv:

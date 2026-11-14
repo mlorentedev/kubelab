@@ -79,7 +79,7 @@ def test_a_product_with_no_prod_lane_needs_no_prod_tile() -> None:
 
 def test_a_lane_is_checked_for_exactly_the_envs_the_product_declares(tmp_path: pathlib.Path) -> None:
     for name in ("web", "third"):
-        (tmp_path / f"{name}.yaml").write_text("schema_version: 1\n", encoding="utf-8")
+        (tmp_path / f"{name}.yaml").write_text("schema_version: 1\n", encoding="utf-8", newline="\n")
 
     assert [(path.stem, env) for path, env in _lanes(tmp_path, FIXTURE_REGISTRY)] == [
         ("third", "staging"),

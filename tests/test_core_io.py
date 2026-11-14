@@ -34,7 +34,7 @@ class TestWriteTextLf:
 
     def test_overwrites_existing_file(self, tmp_path: Path) -> None:
         target = tmp_path / "generated.yaml"
-        target.write_text("old content", encoding="utf-8")
+        target.write_text("old content", encoding="utf-8", newline="\n")
 
         write_text_lf(target, "new content\n")
 

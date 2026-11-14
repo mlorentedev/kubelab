@@ -17,6 +17,7 @@ import subprocess
 import time
 
 import pytest
+from tests.shells import child_env
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 PROBE = REPO / "infra/k8s/base/services/edge-watcher/probe.sh"
@@ -49,20 +50,23 @@ def edge(tmp_path: pathlib.Path, request):
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     nc = bin_dir / "nc"
-    nc.write_text(FAKE_NC, encoding="utf-8")
+    nc.write_text(FAKE_NC, encoding="utf-8", newline="\n")
     nc.chmod(0o755)
     targets = tmp_path / "targets.txt"
     targets.write_text(
         "# Generated header\n\n" + "".join(f"{node} {address} {port}\n" for node, (address, port) in TARGETS.items()),
         encoding="utf-8",
+        newline="\n",
     )
-    env = {
-        "PATH": f"{bin_dir}:{os.environ['PATH']}",
-        "FAKE_DIR": str(fake),
-        "EDGE_TARGETS": str(targets),
-        "REACH_TIMEOUT": "1",
-        "NC": str(nc),
-    }
+    env = child_env(
+        {
+            "PATH": f"{bin_dir}:{os.environ['PATH']}",
+            "FAKE_DIR": str(fake),
+            "EDGE_TARGETS": str(targets),
+            "REACH_TIMEOUT": "1",
+            "NC": str(nc),
+        }
+    )
 
     class Edge:
         def __init__(self) -> None:
@@ -133,7 +137,7 @@ def test_a_missing_nc_reports_every_target_down(edge) -> None:
 
 
 def test_a_row_without_a_port_is_reported_down(edge) -> None:
-    edge.targets.write_text("rpi3 192.0.2.6\nrpi4 192.0.2.10 22\n", encoding="utf-8")
+    edge.targets.write_text("rpi3 192.0.2.6\nrpi4 192.0.2.10 22\n", encoding="utf-8", newline="\n")
     result = edge.run()
     assert _up(result) == {"rpi3": 0, "rpi4": 1}
 
@@ -144,7 +148,7 @@ def test_no_targets_fails_the_job(edge, content: str | None) -> None:
     if content is None:
         edge.targets.unlink()
     else:
-        edge.targets.write_text(content, encoding="utf-8")
+        edge.targets.write_text(content, encoding="utf-8", newline="\n")
     result = edge.run()
     assert result.returncode != 0
     assert _lines(result) == []
