@@ -19,7 +19,7 @@ owner: manu
 
 - [x] Branch `feat/registry-derived-edge-dns` (worktree), gate #3495
 - [x] Owner rulings 2026-11-13: zones.json grant, #3489 separate PR, `infra/config/products/edge.json`, EDGE-001 over WIP limit
-- [ ] Confirm the other session's imagesensortool VPS/DNS applies landed (baseline for AC2 live check)
+- [x] The live edge already carries imagesensortool's zone: the owner's `CHECK=1` runs show it in the split list with `changed=0` ✓ 2026-11-14
 
 ## Implementation (PR 1: #3495 + #3482)
 
