@@ -155,3 +155,14 @@ def test_a_history_the_client_nested_inside_the_beats_is_read_as_beats(
 ) -> None:
     down = down_monitors(MONITORS, {1: [live, history]})
     assert bool(down) is expected_down
+
+
+def test_an_unexpected_shape_is_reported_with_the_frame_that_raised() -> None:
+    # The failure in #3458 read only "'list' object has no attribute 'get'": the
+    # frame had to be found by reproducing it. The message now carries it.
+    api = MagicMock()
+    api.get_monitors.return_value = MONITORS
+    api.get_heartbeats.return_value = {1: ["not a beat"]}
+    with patch.object(kuma_status, "_connect", return_value=(api, {})):
+        with pytest.raises(KumaUnavailableError, match=r"AttributeError: .* \(at kuma_status\.py:\d+ in <lambda>\)"):
+            kuma_status.ask_down_monitors()

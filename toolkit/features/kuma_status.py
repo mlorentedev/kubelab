@@ -7,6 +7,8 @@ is down" when Kuma cannot be asked.
 
 from __future__ import annotations
 
+import traceback
+from pathlib import Path
 from typing import Any
 
 from uptime_kuma_api import MonitorStatus
@@ -45,6 +47,15 @@ def down_monitors(monitors: list[dict[str, Any]], heartbeats: dict[int, list[dic
     return down
 
 
+def _where(exc: BaseException) -> str:
+    """The error with the frame that raised it, so a new shape is findable from one line (#3458)."""
+    frames = traceback.extract_tb(exc.__traceback__)
+    if not frames:
+        return f"{type(exc).__name__}: {exc}"
+    last = frames[-1]
+    return f"{type(exc).__name__}: {exc} (at {Path(last.filename).name}:{last.lineno} in {last.name})"
+
+
 def ask_down_monitors() -> list[dict[str, str]]:
     try:
         api, _ = _connect(get_settings().project_root)
@@ -53,6 +64,6 @@ def ask_down_monitors() -> list[dict[str, str]]:
     try:
         return down_monitors(api.get_monitors(), api.get_heartbeats())
     except Exception as exc:  # noqa: BLE001
-        raise KumaUnavailableError(f"Uptime Kuma did not answer: {exc}") from exc
+        raise KumaUnavailableError(f"Uptime Kuma did not answer: {_where(exc)}") from exc
     finally:
         api.disconnect()
