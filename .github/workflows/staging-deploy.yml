@@ -1,7 +1,8 @@
 ---
 name: Deploy Staging
-# Continuous delivery to staging (ADR-046 D3 — PR-per-update). On each push to
-# master that changes app code, build an immutable `sha-<short>` image per
+# Continuous delivery to staging (ADR-046 D3 — PR-per-update) for the in-tree apps, api and
+# console (ADR-074), each with its own build, its own job and its own long-lived deploy PR. On
+# each push to master that changes app code, build an immutable `sha-<short>` image per
 # changed app, run `toolkit deployment promote --env staging`, and open a PR with
 # the regenerated overlay. Merging it lets Argo CD sync staging to master HEAD.
 # deploy-merge.yml merges it without a human once it is mechanical and every
@@ -56,6 +57,7 @@ jobs:
     runs-on: ${{ fromJSON(vars.RUNNER_DOCKER || '"ubuntu-latest"') }}
     outputs:
       api: ${{ steps.filter.outputs.api }}
+      console: ${{ steps.filter.outputs.console }}
       sha: ${{ steps.sha.outputs.sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
@@ -76,6 +78,8 @@ jobs:
           filters: |
             api:
               - 'apps/api/**'
+            console:
+              - 'apps/console/**'
       - id: sha
         run: echo "sha=sha-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
 
@@ -89,6 +93,19 @@ jobs:
       tag: ${{ needs.detect-changes.outputs.sha }}
       sha: ${{ github.sha }}
       context: ./apps/api
+      runner: ${{ vars.RUNNER_DOCKER || '"ubuntu-latest"' }}
+    secrets: inherit
+
+  build-console:
+    name: Build Console
+    needs: detect-changes
+    if: needs.detect-changes.outputs.console == 'true'
+    uses: ./.github/workflows/ci-publish.yml
+    with:
+      app: console
+      tag: ${{ needs.detect-changes.outputs.sha }}
+      sha: ${{ github.sha }}
+      context: ./apps/console
       runner: ${{ vars.RUNNER_DOCKER || '"ubuntu-latest"' }}
     secrets: inherit
 
@@ -140,16 +157,20 @@ jobs:
         run: |
           if [ "$API_BUILT" != "success" ]; then exit 0; fi
 
-          CURRENT=$(poetry run toolkit deployment image-tag --env staging --app api)
-          rc=0
-          git merge-base --is-ancestor "${CURRENT#sha-}" "$GITHUB_SHA" || rc=$?
-          case "$rc" in
-            0) ;;
-            1) echo "::notice::master already pins api ${CURRENT}, a build newer than ${SHA}; nothing to promote"
-               exit 0 ;;
-            *) echo "::error::cannot place the staging pin ${CURRENT} in master's history"
-               exit 1 ;;
-          esac
+          # `--allow-unpinned`: an app with no pin at all is a first promotion, which no
+          # earlier build can precede. Only an ABSENT pin is tolerated; a malformed one fails.
+          CURRENT=$(poetry run toolkit deployment image-tag --env staging --app api --allow-unpinned)
+          if [ -n "$CURRENT" ]; then
+            rc=0
+            git merge-base --is-ancestor "${CURRENT#sha-}" "$GITHUB_SHA" || rc=$?
+            case "$rc" in
+              0) ;;
+              1) echo "::notice::master already pins api ${CURRENT}, a build newer than ${SHA}; nothing to promote"
+                 exit 0 ;;
+              *) echo "::error::cannot place the staging pin ${CURRENT} in master's history"
+                 exit 1 ;;
+            esac
+          fi
 
           poetry run toolkit deployment promote --env staging --app api --version "$SHA"
       # The same step as product-image-receiver.yml's `open-pr`, for the same
@@ -178,6 +199,125 @@ jobs:
           BODY="Staging promotion of \`${APP}\` to \`${TAG}\` (ADR-046).
 
           This pull request is long-lived: every api push force-updates it to the
+          newest \`sha-*\` and rewrites this title. Merging it moves staging.
+          deploy-merge merges it once it is mechanical and green (DELIVERY-004);
+          to hold staging, convert it to a draft (docs/runbooks/gitops-delivery-promotion.md)."
+
+          # Asked BEFORE the push, so an API failure leaves the remote untouched
+          # and the title never names a sha the branch no longer carries.
+          PR=$(gh api \
+            "repos/${GITHUB_REPOSITORY}/pulls?state=open&head=${GITHUB_REPOSITORY%%/*}:${BRANCH}" \
+            --jq '.[0].number // ""')
+
+          git checkout -B "$BRANCH"
+          git commit -m "$TITLE"
+
+          # `--force`, not `--force-with-lease`: checkout fetched only master, so
+          # a lease has nothing to compare against (lesson-430). The job's
+          # concurrency group makes this the branch's only writer.
+          git push origin "$BRANCH" --force
+
+          # `state=open` makes a closed PR read as absent, so the next push
+          # offers again: closing means "not now", never "never again".
+          if [ -n "$PR" ]; then
+            gh api -X PATCH "repos/${GITHUB_REPOSITORY}/pulls/${PR}" \
+              -f title="$TITLE" -f body="$BODY" --jq '.html_url'
+          else
+            gh api -X POST "repos/${GITHUB_REPOSITORY}/pulls" \
+              -f title="$TITLE" -f head="$BRANCH" -f base="master" \
+              -f body="$BODY" --jq '.html_url'
+          fi
+
+  open-pr-console:
+    name: Open Staging Deploy PR (console)
+    needs: [detect-changes, build-console]
+    # Run if the app built successfully (a skipped build is not a failure).
+    if: >-
+      always() &&
+      needs.detect-changes.result == 'success' &&
+      needs.build-console.result == 'success'
+    # One writer of deploy/staging-console at a time. Not cancelled: a queued run
+    # replaced by a newer one loses nothing, since only a push that changed
+    # apps/console reaches this job and the newer sha contains the older. The group
+    # orders jobs by when their build finished, not by push order, so an older
+    # build can still arrive last: the promote step refuses it (#3122).
+    concurrency:
+      group: staging-deploy-console
+      cancel-in-progress: false
+    runs-on: ${{ fromJSON(vars.RUNNER_DOCKER || '"ubuntu-latest"') }}
+    steps:
+      # master's tip when the job starts, NOT the pushed sha. The build takes
+      # minutes, and anything that merges meanwhile is missing from the pushed
+      # sha. A deploy PR written there cannot merge: #3122 was written onto
+      # 1b5e724 after #3120 had moved the same line, and it conflicted. Full
+      # history, because the promote step asks git which build is newer.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          ref: master
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7
+        with:
+          python-version: '3.12'
+      - name: Install toolkit
+        run: |
+          python -m pip install "poetry>=1.8,<2.0"
+          poetry install --only main
+      # Promotes only forward. Once the checkout is master's tip, master may
+      # already pin a build newer than this one, and promoting would write a
+      # clean downgrade that deploy-merge then merges as mechanical. A later
+      # master commit contains every earlier one, so ancestry decides. A pin
+      # git cannot place fails the job rather than guessing (tests/test_staging_deploy_forward_only.py).
+      - name: Promote built apps to staging
+        id: promote
+        env:
+          SHA: ${{ needs.detect-changes.outputs.sha }}
+          CONSOLE_BUILT: ${{ needs.build-console.result }}
+        run: |
+          if [ "$CONSOLE_BUILT" != "success" ]; then exit 0; fi
+
+          # `--allow-unpinned`: an app with no pin at all is a first promotion, which no
+          # earlier build can precede. Only an ABSENT pin is tolerated; a malformed one fails.
+          CURRENT=$(poetry run toolkit deployment image-tag --env staging --app console --allow-unpinned)
+          if [ -n "$CURRENT" ]; then
+            rc=0
+            git merge-base --is-ancestor "${CURRENT#sha-}" "$GITHUB_SHA" || rc=$?
+            case "$rc" in
+              0) ;;
+              1) echo "::notice::master already pins console ${CURRENT}, a build newer than ${SHA}; nothing to promote"
+                 exit 0 ;;
+              *) echo "::error::cannot place the staging pin ${CURRENT} in master's history"
+                 exit 1 ;;
+            esac
+          fi
+
+          poetry run toolkit deployment promote --env staging --app console --version "$SHA"
+      # The same step as product-image-receiver.yml's `open-pr`, for the same
+      # reasons, and run by the same tests (tests/test_receiver_pr_step.py).
+      - name: Open staging deploy PR
+        id: open-pr
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          APP: console
+          TAG: ${{ needs.detect-changes.outputs.sha }}
+        run: |
+          git config user.name "kubelab-bot"
+          git config user.email "bot@kubelab.live"
+          git add infra/config/values/staging.yaml infra/k8s/overlays/staging/
+          if git diff --staged --quiet; then
+            echo "No staging changes to promote (${APP} already at ${TAG})"; exit 0
+          fi
+
+          # ONE STABLE BRANCH, not one per sha (#1681). Keyed on the sha, every
+          # console push minted a PR and the older ones were closed as superseded by
+          # hand (five on 2026-11-02 alone). One long-lived offer, force-updated
+          # to the newest sha. Merging moves staging; deploy-merge merges it when
+          # it is mechanical and green, and a draft holds it (DELIVERY-004).
+          BRANCH="deploy/staging-${APP}"
+          TITLE="chore(staging): deploy ${APP} ${TAG}"
+          BODY="Staging promotion of \`${APP}\` to \`${TAG}\` (ADR-046).
+
+          This pull request is long-lived: every console push force-updates it to the
           newest \`sha-*\` and rewrites this title. Merging it moves staging.
           deploy-merge merges it once it is mechanical and green (DELIVERY-004);
           to hold staging, convert it to a draft (docs/runbooks/gitops-delivery-promotion.md)."

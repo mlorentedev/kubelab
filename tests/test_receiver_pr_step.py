@@ -64,6 +64,12 @@ def _api_step() -> dict:
     return next(s for s in steps if s.get("id") == "open-pr")
 
 
+def _console_step() -> dict:
+    """console's in-tree lane: the same job as api's, for its own app (ADR-074)."""
+    steps = _workflow("staging-deploy.yml")["jobs"]["open-pr-console"]["steps"]
+    return next(s for s in steps if s.get("id") == "open-pr")
+
+
 @dataclasses.dataclass(frozen=True)
 class Receiver:
     step: Callable[[], dict]
@@ -84,6 +90,7 @@ RECEIVERS = {
     # The job sets APP itself, but the step reads it from env like the
     # generic one, so the stub hands it the same way.
     "api": Receiver(_api_step, "deploy/staging-api", {"APP": "api"}),
+    "console": Receiver(_console_step, "deploy/staging-console", {"APP": "console"}),
 }
 
 

@@ -12,6 +12,10 @@ on:
         description: Re-publish the API image for the current release (.release-please-manifest.json)
         type: boolean
         default: false
+      republish_console:
+        description: Re-publish the console image for the current release (.release-please-manifest.json)
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -26,6 +30,8 @@ jobs:
       releases_created: ${{ steps.release.outputs.releases_created }}
       api_release_created: ${{ steps.release.outputs['apps/api--release_created'] }}
       api_version: ${{ steps.release.outputs['apps/api--version'] }}
+      console_release_created: ${{ steps.release.outputs['apps/console--release_created'] }}
+      console_version: ${{ steps.release.outputs['apps/console--version'] }}
       errors_release_created: ${{ steps.release.outputs['edge/errors--release_created'] }}
       errors_version: ${{ steps.release.outputs['edge/errors--version'] }}
     steps:
@@ -126,6 +132,93 @@ jobs:
           {
             echo "## Build-once re-tag (ADR-056)"
             echo "- App: api"
+            echo "- Staging digest: \`${SHA}\` -> \`${SHA_DIGEST}\`"
+            echo "- Promoted semver: \`${VERSION}\` -> \`${VER_DIGEST}\`"
+            echo "- Rebuild: none (manifest list copied)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # The same re-tag as publish-api, for the same reason (ADR-056); see tests/test_release_publish_api.py,
+  # which holds the two copies to each other.
+  publish-console:
+    name: Publish Console (re-tag staging digest)
+    needs: release-please
+    if: >-
+      needs.release-please.outputs.console_release_created == 'true' ||
+      (github.event_name == 'workflow_dispatch' && inputs.republish_console)
+    runs-on: ${{ fromJSON(vars.RUNNER_DOCKER || '"ubuntu-latest"') }}
+    permissions:
+      contents: read
+    env:
+      REGISTRY_PREFIX: ${{ vars.REGISTRY_PREFIX || 'kubelab' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+      - name: Resolve the version to publish
+        id: version
+        env:
+          RELEASED: ${{ needs.release-please.outputs.console_version }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # The re-tag reads the staging pin from the checked-out ref, so only master's
+          # pin may become a semver tag. A dispatch from a branch fails here, loudly.
+          if [ "$GITHUB_REF" != "refs/heads/master" ]; then
+            echo "::error::publish-console runs from master only, not $GITHUB_REF"
+            exit 1
+          fi
+          # A release run publishes what release-please just released. A re-publish
+          # (#2558) takes the current release from the manifest, and only if it exists.
+          VERSION="${RELEASED:-$(jq -r '."apps/console"' .release-please-manifest.json)}"
+          gh release view "console-v${VERSION}" --json tagName > /dev/null
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7
+        with:
+          python-version: '3.12'
+      - name: Install toolkit
+        run: |
+          python -m pip install "poetry>=1.8,<2.0"
+          poetry install --only main
+      - name: Resolve staging-validated sha
+        id: sha
+        run: |
+          # The toolkit logs to stdout (#2536), so on failure the reason is in $SHA.
+          if ! SHA="$(poetry run toolkit deployment image-tag --env staging --app console)"; then
+            echo "::error::Could not resolve the staging-validated console tag: $SHA"
+            exit 1
+          fi
+          echo "Staging-validated tag for console: $SHA"
+          echo "tag=$SHA" >> "$GITHUB_OUTPUT"
+      - name: Login registry
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550  # v4
+        with:
+          registry: docker.io
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Re-tag digest as semver (build-once)
+        env:
+          SHA: ${{ steps.sha.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          REGISTRY="${{ secrets.DOCKERHUB_USERNAME }}/${REGISTRY_PREFIX}-console"
+          # Copy the full manifest list to the semver tag. No rebuild, and no `:latest` alias:
+          # nothing deploys it, and a mutable tag nobody needs is how one gets deployed.
+          docker buildx imagetools create \
+            -t "${REGISTRY}:${VERSION}" \
+            "${REGISTRY}:${SHA}"
+          # Verify digest equality: the semver and the staging sha MUST resolve to the
+          # same manifest-list digest, or build-once parity is broken (fail the release).
+          FMT='{{.Manifest.Digest}}'
+          SHA_DIGEST="$(docker buildx imagetools inspect "${REGISTRY}:${SHA}" --format "$FMT")"
+          VER_DIGEST="$(docker buildx imagetools inspect "${REGISTRY}:${VERSION}" --format "$FMT")"
+          echo "::notice::console:${SHA} -> ${SHA_DIGEST}"
+          echo "::notice::console:${VERSION} -> ${VER_DIGEST}"
+          if [ "$SHA_DIGEST" != "$VER_DIGEST" ]; then
+            echo "::error::Digest mismatch — re-tag did not preserve the staging artifact"
+            exit 1
+          fi
+          {
+            echo "## Build-once re-tag (ADR-056)"
+            echo "- App: console"
             echo "- Staging digest: \`${SHA}\` -> \`${SHA_DIGEST}\`"
             echo "- Promoted semver: \`${VERSION}\` -> \`${VER_DIGEST}\`"
             echo "- Rebuild: none (manifest list copied)"
