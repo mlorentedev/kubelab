@@ -213,4 +213,7 @@ def test_unconfigured_hermes_stops_watching_before_taking_the_gateway_down() -> 
     assert disable["ansible.builtin.systemd"]["state"] == "stopped"
     remove = _task("Remove the Hermes liveness units")
     assert remove["ansible.builtin.file"]["state"] == "absent"
+    assert remove["ansible.builtin.file"]["path"] == "{{ item }}"
+    assert "/etc/systemd/system/agent-stack-hermes-watchdog.timer" in remove["loop"]
+    assert "/etc/systemd/system/agent-stack-hermes-watchdog.service" in remove["loop"]
     assert "{{ agent_stack_vault_libexec }}/hermes-liveness.sh" in remove["loop"]

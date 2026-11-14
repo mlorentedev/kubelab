@@ -23,7 +23,7 @@ owner: manu
 - Focused GREEN before review: same command → **19 passed** (`/tmp/ai013-green.log`); after review hardening → **20 passed** (`/tmp/ai013-review-fixes-green.log`).
 - Neighboring Compose/role/notification suites → **302 passed, 77 skipped** (`/tmp/ai013-focused.log`).
 - Cross-repository hygiene failures from the first full run were corrected: explicit UTF-8, `tests.shells.BASH`, and check-mode-safe Ansible read/wait → **34 passed** (`/tmp/ai013-hygiene.log`).
-- Final full suite after live fixes and master merges: `make test` → **10,630 passed, 96 skipped**, 30 warnings, 78% total coverage (`/tmp/ai013-make-test-live-final.log`).
+- Final full suite after live fixes and master merges: `make test` → **10,631 passed, 96 skipped**, 30 warnings, 78% total coverage (`/tmp/ai013-make-test-live-final.log`).
 - `make lint` → all checks passed; 169 files already formatted. `make type` → no issues in 168 source files. `make lint-ansible` → all 26 playbooks parse.
 - `shellcheck -s bash` and `-s sh`, `bash -n`, `zsh -n`, and `git diff --check` passed.
 - Live manual smoke test: operator approved. Clean stop/start produced exactly one failed run, one `ops-log` incident and one recovery; final gateway is `running/healthy`, timer active, both notifiers `Result=success`. No credentials were printed.
@@ -44,10 +44,10 @@ The first pooled review (`nan/deepseek-v4-flash`, reviewed `65af8dca`) returned 
 - **F1 REAL Major, applied:** `test_activation_order_waits_for_gateway_health_before_starting_the_watcher` now requires unit installation and Docker health before timer enable. Mutation: `Reproduction: reproduced (exit 1) on ce5065215b2f with probe ai013-move-health-wait.diff` moving the wait below the enable.
 - **F2 minor, applied and live-verified:** rendered-input prediction pauses an existing timer only before a gateway recreate; it is not disabled and unchanged provisions do not stop it. Live order was Pause → Start → Docker healthy → Enable, `changed=4`; next run `changed=0`; zero new Slack watchdog messages.
 - **F3 minor, applied with corrected mechanism:** the runbook now says ten minutes after boot but two minutes after mid-session activation, which `OnUnitActiveSec=2min` actually implements. The review's alternative “at once” would contradict that directive and the observed timer schedule.
-- **F4 minor, applied:** unconfigured teardown removes the probe script as well as both units, with a test assertion.
+- **F4 minor, applied and corrected after round-two inspection:** unconfigured teardown removes the probe script as well as both units. The loop uses complete paths with `path: "{{ item }}"`; a test rejects the earlier incorrect `/etc/systemd/system/{{ item }}` prefixing of an absolute script path.
 - **F5 question, applied:** the healthcheck uses `python3`, matching every other in-container invocation; the resulting recreate reached healthy.
 
-A second pooled review is required after these changes. No archive is attempted from the implementing session.
+The second reviewer (`nan/qwen3.8-flash`) timed out with `verdict: PENDING`, which is not accepted as review coverage. Its transcript exposed the absolute-path cleanup defect corrected above. A fallback review with `--fallback-reason timeout` is required. No archive is attempted from the implementing session.
 
 ## Promotion candidates
 

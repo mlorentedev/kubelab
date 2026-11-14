@@ -100,11 +100,11 @@
 
     - name: Remove the Hermes liveness units
       ansible.builtin.file:
-        path: "/etc/systemd/system/{{ item }}"
+        path: "{{ item }}"
         state: absent
       loop:
-        - agent-stack-hermes-watchdog.timer
-        - agent-stack-hermes-watchdog.service
+        - /etc/systemd/system/agent-stack-hermes-watchdog.timer
+        - /etc/systemd/system/agent-stack-hermes-watchdog.service
         - "{{ agent_stack_vault_libexec }}/hermes-liveness.sh"
       register: _agent_stack_hermes_watchdog_removed
 
