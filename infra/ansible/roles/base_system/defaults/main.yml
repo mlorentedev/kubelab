@@ -108,3 +108,14 @@ base_system_netplan_revert_unit: kubelab-netplan-revert
 base_system_netplan_revert_after: 180s
 # A name only a working resolver answers: it is in no node's /etc/hosts.
 base_system_netplan_probe_host: github.com
+
+# --- Receive packet steering (#3375) ---
+# A NIC with one receive queue delivers its one interrupt to one CPU. With RPS
+# off, every receive softirq runs there: on ace1 (r8169) that CPU is where `web`
+# runs out under load, at 97% busy with 60% of it softirq. Naming the interface
+# spreads the receive work across the node's CPUs (the mask below, every CPU).
+# Empty leaves the kernel's default, which is off. Interface names come from
+# networking.nodes.<node>.lan_interface, never a literal.
+base_system_rps_interface: ""
+base_system_rps_mask: "{{ '%x' % (2 ** (ansible_facts.processor_nproc | int) - 1) }}"
+base_system_rps_rules_path: /etc/udev/rules.d/60-kubelab-rps.rules

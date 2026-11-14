@@ -1,0 +1,37 @@
+---
+# Receive packet steering (#3375). The udev rule keeps the mask across boots and
+# NIC resets. Applying is inline, not a handler, and the mask is read back from
+# sysfs: a rule that matched nothing would otherwise report ok on a node still
+# steering nothing (lesson-620).
+- name: Render the receive packet steering rule
+  ansible.builtin.template:
+    src: rps.rules.j2
+    dest: "{{ base_system_rps_rules_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+  register: _rps_rule
+
+- name: Apply the rule to the interface's receive queues now
+  ansible.builtin.shell: >-
+    udevadm control --reload &&
+    udevadm trigger --action=change --subsystem-match=queues --sysname-match='rx-*' &&
+    udevadm settle
+  when: _rps_rule is changed
+
+- name: Read the receive queues' steering masks back
+  ansible.builtin.shell: cat /sys/class/net/{{ base_system_rps_interface | quote }}/queues/rx-*/rps_cpus
+  register: _rps_masks
+  changed_when: false
+  check_mode: false
+
+- name: Every receive queue steers across the declared CPUs
+  ansible.builtin.assert:
+    that:
+      - _rps_masks.stdout_lines | length > 0
+      - _rps_masks.stdout_lines | map('replace', ',', '') | map('int', base=16) | unique | list
+        == [base_system_rps_mask | int(base=16)]
+    fail_msg: >-
+      {{ base_system_rps_interface }} reads {{ _rps_masks.stdout_lines }}, not {{ base_system_rps_mask }}:
+      the rule in {{ base_system_rps_rules_path }} did not reach its queues.
+  when: not ansible_check_mode or not (_rps_rule is changed)

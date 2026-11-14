@@ -34,6 +34,11 @@
   import_tasks: netplan.yml
   when: netplan_address is defined
 
+- name: Steer receive work across the CPUs (RPS, #3375)
+  import_tasks: rps.yml
+  when: base_system_rps_interface | length > 0
+  tags: [base, network, rps]
+
 # --- /etc/resolv.conf ownership --------------------------------------------
 # Tailscale picks its DNS-management mode by inspecting this file. When it is
 # systemd-resolved's stub symlink, Tailscale configures resolved over D-Bus and

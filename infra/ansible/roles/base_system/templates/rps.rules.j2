@@ -1,0 +1,4 @@
+# {{ ansible_managed }}
+# Receive packet steering for {{ base_system_rps_interface }} (#3375): each receive queue's packets
+# are processed across the CPUs of this mask, not only on the CPU its interrupt lands on.
+ACTION=="add|change", SUBSYSTEM=="queues", KERNEL=="rx-*", DEVPATH=="*/net/{{ base_system_rps_interface }}/queues/rx-*", ATTR{rps_cpus}="{{ base_system_rps_mask }}"
