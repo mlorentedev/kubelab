@@ -238,6 +238,10 @@ The pull token's SOPS file is also open: Gitea tokens live in `prod.enc.yaml`
   wildcard, as the exception.
 - `web` already follows it (`staging.mlorente.dev`, `mlorente.dev`); nothing migrates.
 
+**Note, 2026-11-14 (owner, RES-HOST-001 D9):** a prod `<label>.kubelab.live` pairs with
+`<label>.staging.kubelab.live`, not `staging.<label>.kubelab.live`, which would fall under prod's
+cookie domain. Any other prod hostname keeps `staging.` + itself. Recorded under ADR-067 D2.
+
 The rule binds today's contract, so it is written as an amendment to ADR-067 D2 (accepted),
 not only in ADR-073 D8 (proposed), which replaces it with the domain registry on acceptance.
 It is enforced, not remembered: S3c's render-time check refuses a `hostnames.staging` that

@@ -291,6 +291,13 @@ def sops_can_decrypt() -> bool:
         return False
 
 
+def _mark_windows_known_failures(items: list[pytest.Item]) -> None:
+    """Mark the declared Windows failures xfail (#3409)."""
+    from tests import windows_known_failures as known
+
+    known.apply(items, known.parse(known.LIST.read_text(encoding="utf-8")))
+
+
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     """Skip tests needing real SOPS material when it cannot be decrypted.
 
@@ -307,6 +314,8 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     decision, not a test-plumbing one, and is deliberately left to a human
     (SEC-022 removed the CI recipient, so no CI key opens these files).
     """
+    if sys.platform == "win32":
+        _mark_windows_known_failures(items)
     if sops_can_decrypt():
         return
     skip = pytest.mark.skip(
@@ -317,6 +326,14 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     for item in items:
         if "requires_sops" in item.keywords:
             item.add_marker(skip)
+
+
+def pytest_deselected(items: list[pytest.Item]) -> None:
+    """Remember what `-k`/`-m` deselected: those tests exist, so their list entries are not stale."""
+    from tests import windows_known_failures as known
+
+    if items:
+        items[0].config.stash.setdefault(known.DESELECTED, []).extend(item.nodeid for item in items)
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
