@@ -13,6 +13,9 @@ spec:
   type: ClusterIP
   selector:
     app.kubernetes.io/name: {{ app.name }}
+{% if app.jobs %}
+    app.kubernetes.io/component: app
+{% endif %}
   ports:
     - name: http
       port: {{ app.port }}
