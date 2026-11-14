@@ -26,8 +26,6 @@
 products:
   api:
     forge: in-tree
-  console:
-    forge: in-tree
   web:
     repository: mlorentedev/web
     forge: github
@@ -36,6 +34,8 @@ products:
     events:
       staging: web-image-published
       prod: web-release-published
+  console:
+    forge: in-tree
   imagesensortool:
     repository: personal/imagesensortool
     forge: gitea

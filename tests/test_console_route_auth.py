@@ -105,7 +105,7 @@ def test_console_host_goes_through_authelia_to_the_backend_its_path_names(env: s
 def test_a_pinned_frontend_outranks_the_embedded_fallback_on_every_path(
     env: str, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """The fallback (`priority: 1`) must lose to every generated rule on the host, or a deployed
+    """The fallback (`priority: 10`) must lose to every generated rule on the host, or a deployed
     frontend would never be reached. Rendered here with a console pin the committed config does
     not have yet, so the check holds the day the first deploy pull request pins one."""
     from toolkit.core.templating import create_renderer

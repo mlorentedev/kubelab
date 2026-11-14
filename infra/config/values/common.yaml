@@ -2364,8 +2364,12 @@ apps:
           loki: {}
           # The forge console (CONSOLE-004). It has no login of its own: Authelia is
           # its only door, so the path port-forwards the api Service and reads
-          # /console/ without one.
+          # /console/ without one. Two route names serve its host, both declared: `console`
+          # is the generated frontend route, which exists in an env only once it pins a
+          # console version (#3443), and `console-embedded` is the fallback the host keeps
+          # until then. The fallback and its entry are deleted with the embedded page.
           console: {}
+          console-embedded: {}
           uptime-kuma:
             # The private path only (#2483): the EndpointSlice address over the tailnet
             # (RPi3), never the public route or the IdP. Not an account form: Kuma's own

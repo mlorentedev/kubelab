@@ -169,6 +169,8 @@ EXPECTATIONS: dict[str, ServiceExpectation] = {
         content_type="text/html",
         body_contains="<html",
     ),
+    # Behind Authelia on its own host: an unauthenticated probe is redirected to the portal.
+    "console": ServiceExpectation(health_status=(200, 302), auth_protected=True),
     "imagesensortool": ServiceExpectation(
         content_type="text/html",
         body_contains="<html",
