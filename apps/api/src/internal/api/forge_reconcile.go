@@ -17,6 +17,10 @@ type ForgeView struct {
 	Readers map[string]forge.Reader
 	Catalog *forge.Catalog
 	Model   store.ForgeModel
+	// CreateToken is the machine token the create accepts (AC3); empty accepts nobody.
+	CreateToken string
+	// ConsoleDomain is the console.s own host; empty serves the console nowhere.
+	ConsoleDomain string
 }
 
 // seedTimeout bounds the start-up read of the sources already stored.
@@ -34,7 +38,7 @@ func NewForgeView(ctx context.Context, conf *config.Config) *ForgeView {
 		GiteaURL:             conf.Forge.GiteaURL,
 		GiteaToken:           conf.Forge.GiteaToken,
 	})
-	view := &ForgeView{Readers: readers, Model: store.ForgeModel{Conf: conf.Postgres}}
+	view := &ForgeView{Readers: readers, Model: store.ForgeModel{Conf: conf.Postgres}, CreateToken: conf.Forge.CreateToken, ConsoleDomain: conf.Forge.ConsoleDomain}
 	declared, err := forge.ParseSources(conf.Forge.Sources)
 	if err != nil {
 		log.Printf("forge view: sources: %v", err)

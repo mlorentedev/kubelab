@@ -67,8 +67,8 @@ created: "2026-10-21"
 ### 2. Access and UI
 
 - [x] [AC3] The console on its own host behind Authelia (`console.kubelab.live`, see "The console" in `proposal.md`); the api serves `/console` only for that host ✓ 2026-11-04
-- [ ] [AC3] Authelia in front of the write routes; 401 without a credential
-- [ ] [AC3] Machine token in SOPS and `SECRET_CATALOG`, accepted on the create write only; test that every other route refuses it
+- [x] ✓ 2026-11-13 [AC3] Authelia in front of the write routes; 401 without a credential (#3425: the write routes live under `/console/issues`, and the pod answers 401 without `Remote-User`)
+- [x] ✓ 2026-11-13 [AC3] Machine token in SOPS and `SECRET_CATALOG`, accepted on the create write only; test that every other route refuses it (#3425: `POST /api/forge/issues` on the api host, because Authelia does not forward `Authorization`; `apps.platform.api.forge_create_token`)
 - [x] [AC1] Queue page, read-only, with each source's freshness visible ✓ 2026-11-04
 - [ ] [AC1] Inbox screen with the reasons, once the queue endpoint carries them
 
@@ -76,7 +76,7 @@ created: "2026-10-21"
 
 - [ ] [AC2] Outbox with an idempotency key; a write is pending until the forge confirms
 - [ ] [AC2] Create (repository chosen by `area:`, `knowledge` fallback), label, assign, close and reopen
-- [ ] [AC2] Test that no merge, review or reviewer-request route exists
+- [x] ✓ 2026-11-13 [AC2] Test that no merge, review or reviewer-request route exists (#3425, read from the engine's routes)
 - [ ] [AC2] Audit row for every write
 
 ### 4. Observability

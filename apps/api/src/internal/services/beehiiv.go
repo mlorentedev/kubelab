@@ -14,16 +14,15 @@ import (
 	"github.com/mlorentedev/kubelab/apps/api/pkg/logger"
 )
 
-var conf *config.Config
-
-func init() {
-	var err error
-	if conf == nil {
-		conf, err = config.GetConfig()
-		if err != nil {
-			panic(err)
-		}
+// settings is the configuration main loaded and validated before serving, read on use.
+// It was read in init(), which panicked on import without the full environment and left
+// every package importing this one, the routes included, without tests.
+func settings() *config.Config {
+	conf, err := config.GetConfig()
+	if err != nil {
+		panic(err)
 	}
+	return conf
 }
 
 // CheckSubscriber verifies if a subscriber exists by email
@@ -32,7 +31,7 @@ func CheckSubscriber(email string) (*struct {
 	Subscriber *models.Subscriber
 }, error) {
 	url := fmt.Sprintf("https://api.beehiiv.com/v2/publications/%s/subscriptions/by_email/%s",
-		conf.Beehiiv.PubID, email)
+		settings().Beehiiv.PubID, email)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -41,7 +40,7 @@ func CheckSubscriber(email string) (*struct {
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+conf.Beehiiv.APIKey)
+	req.Header.Set("Authorization", "Bearer "+settings().Beehiiv.APIKey)
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
@@ -96,7 +95,7 @@ func SubscribeUser(email, utmSource string) (*struct {
 		"utmSource": utmSource,
 	})
 
-	url := fmt.Sprintf("https://api.beehiiv.com/v2/publications/%s/subscriptions", conf.Beehiiv.PubID)
+	url := fmt.Sprintf("https://api.beehiiv.com/v2/publications/%s/subscriptions", settings().Beehiiv.PubID)
 
 	data := map[string]interface{}{
 		"email":               email,
@@ -118,7 +117,7 @@ func SubscribeUser(email, utmSource string) (*struct {
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+conf.Beehiiv.APIKey)
+	req.Header.Set("Authorization", "Bearer "+settings().Beehiiv.APIKey)
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
@@ -171,7 +170,7 @@ func AddTagToSubscriber(subscriptionID, tag string) bool {
 	}
 
 	url := fmt.Sprintf("https://api.beehiiv.com/v2/publications/%s/subscriptions/%s/tags",
-		conf.Beehiiv.PubID, subscriptionID)
+		settings().Beehiiv.PubID, subscriptionID)
 
 	data := map[string]interface{}{
 		"tags": []string{tag},
@@ -190,7 +189,7 @@ func AddTagToSubscriber(subscriptionID, tag string) bool {
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+conf.Beehiiv.APIKey)
+	req.Header.Set("Authorization", "Bearer "+settings().Beehiiv.APIKey)
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
@@ -256,7 +255,7 @@ func UnsubscribeUser(email string) (*models.SubscriptionResult, error) {
 	})
 
 	url := fmt.Sprintf("https://api.beehiiv.com/v2/publications/%s/subscriptions/%s",
-		conf.Beehiiv.PubID, subscriptionID)
+		settings().Beehiiv.PubID, subscriptionID)
 
 	req, err := http.NewRequest("DELETE", url, nil)
 	if err != nil {
@@ -265,7 +264,7 @@ func UnsubscribeUser(email string) (*models.SubscriptionResult, error) {
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+conf.Beehiiv.APIKey)
+	req.Header.Set("Authorization", "Bearer "+settings().Beehiiv.APIKey)
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
