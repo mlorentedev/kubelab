@@ -64,6 +64,9 @@ jobs:
         continue-on-error: ${{ inputs.audit == true }}
         env:
           AUDIT: ${{ inputs.audit == true && '--runxfail' || '' }}
+          # As in ci.yml: Rich turns colour on under GitHub Actions, and tests
+          # match its plain text.
+          TERM: dumb
         run: |
           set -o pipefail
           # shellcheck disable=SC2086  # AUDIT is empty or one flag
