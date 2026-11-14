@@ -48,7 +48,7 @@ runner:
   # #3079. How long one job may run before the runner cancels it. Equal to the shipped
   # default, declared so it is read here and ordered against Gitea's
   # ENDLESS_TASK_TIMEOUT by a test, rather than inherited from whatever image is pinned.
-  timeout: {{ act_runner_job_timeout }}
+  timeout: {{ act_runner_timeout }}
 
 cache:
   # actions/cache support. On by default in act_runner, and left on: the whole

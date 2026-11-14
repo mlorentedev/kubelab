@@ -510,7 +510,7 @@
         act_runner_log_retention_days: "{{ config.apps.services.automation.gitea_runner.log_retention_days }}"
         act_runner_artifact_retention_days: "{{ config.apps.services.automation.gitea_runner.artifact_retention_days }}"
         act_runner_run_retention_days: "{{ config.apps.services.automation.gitea_runner.run_retention_days }}"
-        act_runner_job_timeout: "{{ config.apps.services.automation.gitea_runner.job_timeout }}"
+        act_runner_timeout: "{{ config.apps.services.automation.gitea_runner.timeout }}"
         act_runner_zombie_task_timeout: "{{ config.apps.services.automation.gitea_runner.zombie_task_timeout }}"
         act_runner_endless_task_timeout: "{{ config.apps.services.automation.gitea_runner.endless_task_timeout }}"
         act_runner_abandoned_job_timeout: "{{ config.apps.services.automation.gitea_runner.abandoned_job_timeout }}"

@@ -167,7 +167,7 @@ def _config() -> dict:
             act_runner_shutdown_timeout=runner["shutdown_timeout"],
             act_runner_workdir_cleanup_age=runner["workdir_cleanup_age"],
             act_runner_idle_cleanup_interval=runner["idle_cleanup_interval"],
-            act_runner_job_timeout=runner["job_timeout"],
+            act_runner_timeout=runner["timeout"],
         )
     )
 
@@ -647,12 +647,12 @@ def test_every_bound_on_a_running_job_is_declared_and_ordered() -> None:
     """
     runner = _ssot()
     env = _gitea_env()
-    assert _config()["runner"]["timeout"] == runner["job_timeout"]
+    assert _config()["runner"]["timeout"] == runner["timeout"]
     for key in ("zombie_task_timeout", "endless_task_timeout", "abandoned_job_timeout"):
         assert env[f"GITEA__actions__{key.upper()}"] == runner[key], f"{key} is declared but not rendered"
     zombie, job, endless, abandoned = (
         _seconds(runner[k])
-        for k in ("zombie_task_timeout", "job_timeout", "endless_task_timeout", "abandoned_job_timeout")
+        for k in ("zombie_task_timeout", "timeout", "endless_task_timeout", "abandoned_job_timeout")
     )
     assert zombie < job, "the zombie sweep would fail a job that is long but alive"
     assert job <= endless, "Gitea would fail the job from outside before the runner cancels it"
