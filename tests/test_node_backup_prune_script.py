@@ -205,6 +205,7 @@ REFUSED_RUN = """removing 1 old packs
 Remove(<data/117bd07dd4>) returned error, retrying after 4.5s: client.RemoveObject: The object is locked by the bucket policy.
 Remove(<data/117bd07dd4>) failed: client.RemoveObject: The object is locked by the bucket policy.
 unable to remove data/117bd07dd48364e22f42cb878619691d33f9ef04c88434c4003b1ce28e71778b from the repository
+Remove(<data/9d7206723e>) failed: client.RemoveObject: The object is locked by the bucket policy.
 unable to remove data/9d7206723e345dc0fd13aaae67d529d6fcb9cfe9437e93f9e8a5d7fd6e30da0b from the repository
 [14:41] 0.00%  0 / 2 files deleted
 done
@@ -218,14 +219,27 @@ def test_it_counts_the_deletes_the_lock_refused_and_keeps_restic_s_exit_code(pru
     per pack, after restic's own retries."""
     proc, _calls = prune(forget_rc=rc, forget_out=REFUSED_RUN)
     assert proc.returncode == rc
-    assert "node-backup-prune: 2 deletes refused by the bucket lock" in proc.stdout
+    assert "node-backup-prune: 2 deletes refused by the bucket lock, 0 failed otherwise" in proc.stdout
     assert "unable to remove data/117bd07dd4" in proc.stderr + proc.stdout
+
+
+def test_a_delete_that_fails_for_another_reason_is_not_counted_as_the_lock(prune) -> None:
+    """A token that lost delete rights also ends in `unable to remove`; reported
+    as the lock, it would send the operator to wait out a lock that is not there."""
+    out = (
+        "Remove(<data/aa>) failed: client.RemoveObject: Access Denied.\n"
+        "unable to remove data/aa from the repository\n"
+        "Remove(<data/bb>) failed: client.RemoveObject: The object is locked by the bucket policy.\n"
+        "unable to remove data/bb from the repository\n"
+    )
+    proc, _calls = prune(forget_out=out)
+    assert "node-backup-prune: 1 deletes refused by the bucket lock, 1 failed otherwise" in proc.stdout
 
 
 def test_a_clean_prune_reports_zero_refused_deletes(prune) -> None:
     proc, _calls = prune(forget_out="removing 12 old packs\ndone\n")
     assert proc.returncode == 0
-    assert "node-backup-prune: 0 deletes refused by the bucket lock" in proc.stdout
+    assert "node-backup-prune: 0 deletes refused by the bucket lock, 0 failed otherwise" in proc.stdout
 
 
 def test_a_failed_unlock_fails_before_forget(prune) -> None:

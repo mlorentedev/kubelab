@@ -1207,13 +1207,35 @@ def test_the_schedule_report_reads_the_refused_count_the_prune_prints() -> None:
     """
     script = (ROLE / "templates" / "node-backup-prune.sh.j2").read_text(encoding="utf-8")
     phrase = "deletes refused by the bucket lock"
-    assert f'echo "node-backup-prune: $REFUSED {phrase}"' in script
+    assert f'echo "node-backup-prune: $REFUSED {phrase}, ' in script
     reader = next(
         (t for t in _schedule_playbook()["tasks"] if "refused" in t.get("name", "")),
         None,
     )
     assert reader is not None, "backup-schedule reads no refused-delete count"
     assert phrase in str(reader["ansible.builtin.shell"]["cmd"])
+
+
+def test_the_schedule_report_reads_the_wait_line_the_prune_prints() -> None:
+    """Same contract for the wait: reworded on one side only, every node would
+    report 0 waits, which reads as a week of real prunes."""
+    script = (ROLE / "templates" / "node-backup-prune.sh.j2").read_text(encoding="utf-8")
+    phrase = "forget waits"
+    assert f'; {phrase}"' in script
+    reader = next((t for t in _schedule_playbook()["tasks"] if "waited" in t.get("name", "")), None)
+    assert reader is not None, "backup-schedule reads no wait count"
+    assert f'--grep "{phrase}"' in str(reader["ansible.builtin.command"]["cmd"])
+
+
+def test_every_journal_read_in_the_schedule_report_covers_the_same_week() -> None:
+    """A count over eight days printed beside denominators over seven pairs a
+    refusal with runs it did not come from."""
+    reads = [
+        str(t.get("ansible.builtin.command", t.get("ansible.builtin.shell", {})).get("cmd", ""))
+        for t in _schedule_playbook()["tasks"]
+    ]
+    windows = {w for r in reads if "journalctl" in r for w in re.findall(r'--since "([^"]+)"', r)}
+    assert windows == {"7 days ago"}, windows
 
 
 def test_an_unrecognised_state_is_refused_rather_than_ignored() -> None:

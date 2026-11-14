@@ -102,16 +102,20 @@ $RESTIC unlock
 # --retry-lock outlasts the longest ship (TimeoutStartSec=600), so a prune that
 # starts mid-ship waits for it instead of failing on the lock.
 #
-# Not `exec`: the run ends by counting the deletes the lock refused. restic
-# prints one `unable to remove <path> from the repository` per pack, on stderr,
-# after its own retries. Everything still reaches the journal through `tee`,
-# and the unit keeps restic's exit code.
+# Not `exec`: the run ends by counting the deletes the lock refused. After its
+# own retries restic prints, per pack, `Remove(<data/..>) failed: <reason>` and
+# then `unable to remove <path> from the repository`. Only a reason naming the
+# bucket policy is the lock; any other failed delete (a token without delete
+# rights, a 5xx past the retries) is counted apart so it never reads as the
+# lock. Everything still reaches the journal through `tee`, and the unit keeps
+# restic's exit code.
 FORGET_LOG="$(mktemp)"
 trap 'rm -f "$FORGET_LOG"' EXIT
 set +e
 $RESTIC forget {{ node_backup_retention_flags }} --prune --retry-lock 10m -o s3.connections={{ node_backup_prune_connections }} 2>&1 | tee "$FORGET_LOG"
 FORGET_RC=${PIPESTATUS[0]}
 set -e
-REFUSED="$(grep -c '^unable to remove ' "$FORGET_LOG" || true)"
-echo "node-backup-prune: $REFUSED deletes refused by the bucket lock"
+FAILED="$(grep -c '^unable to remove ' "$FORGET_LOG" || true)"
+REFUSED="$(grep -c '^Remove(.*) failed: .*locked by the bucket policy' "$FORGET_LOG" || true)"
+echo "node-backup-prune: $REFUSED deletes refused by the bucket lock, $((FAILED - REFUSED)) failed otherwise"
 exit "$FORGET_RC"

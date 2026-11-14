@@ -16,7 +16,7 @@ tags: [kubelab, storage-backup, restic, r2, observability]
 
 The first guess at the orphans' origin was the week's ship failures during the edge outages. The ship script rules that out: those failed in the `snapshots --no-lock` probe, which runs before `backup`, so they uploaded nothing.
 
-**Solution**: The prune no longer `exec`s restic. It tees the output and ends every run with `node-backup-prune: N deletes refused by the bucket lock`, keeping restic's exit code. `backup-schedule` now prints, per node, how many prune runs the journal holds, how many waited, the last refused count, and how many ships found the repository locked (#3496).
+**Solution**: The prune no longer `exec`s restic. It tees the output and ends every run with `node-backup-prune: N deletes refused by the bucket lock, M failed otherwise`, keeping restic's exit code. `backup-schedule` now prints, per node, how many prune runs the journal holds, how many waited, the last refused count, and how many ships found the repository locked (#3496).
 
 **Rule**: When a unit exits 0 on purpose for an outcome that is not success, print that outcome as a count on its own line and read it next to the failure count. Report the denominator too: a failure count over a journal that kept two runs is not a week. And before blaming a failure for a side effect, check which stage the failure stopped in.
 

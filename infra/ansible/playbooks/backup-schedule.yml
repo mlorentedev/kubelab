@@ -161,7 +161,7 @@
       ansible.builtin.shell:
         cmd: >-
           set -o pipefail;
-          journalctl -u node-backup-prune.service --since "8 days ago" --output cat --no-pager
+          journalctl -u node-backup-prune.service --since "7 days ago" --output cat --no-pager
           | grep 'deletes refused by the bucket lock' | tail -n 1
       args:
         executable: /bin/bash
@@ -213,7 +213,7 @@
       ansible.builtin.debug:
         msg: >-
           {{ (prune_refused.stdout | trim) if (prune_refused.stdout | trim)
-             else 'node-backup-prune: no refused-delete count in the last 8 days (no run that reached forget since the count shipped)' }};
+             else 'node-backup-prune: no refused-delete count in the last 7 days (no run that reached forget since the count shipped)' }};
           node-backup-prune runs in the journal for the last 7 days: {{ prune_runs.stdout_lines | length }};
           node-backup-prune runs that waited instead of forgetting in the last 7 days: {{ prune_waits.stdout_lines | length }};
           node-backup-ship runs that found the repository locked in the last 7 days: {{ ship_locked.stdout_lines | length }}
