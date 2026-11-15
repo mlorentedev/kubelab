@@ -24,7 +24,7 @@ WALK = re.compile(r"""ansible\w*["']?\)?\.(?:rglob\(|glob\(f?["']\*\*)""", re.IG
 
 
 def _planted(tmp_path: Path, rel: str, text: str) -> tuple[bool, bool]:
-    """Plant `rel` in a throwaway repository, then say whether `repo_files` lists it with and without a matching pattern.
+    """Plant `rel` in a throwaway repository; say whether `repo_files` lists it with and without a matching pattern.
 
     Never in this checkout: under `pytest -n` another worker lists `infra/ansible` while a probe
     is there, and reads it after it is gone (#3445). The throwaway repository carries the real
