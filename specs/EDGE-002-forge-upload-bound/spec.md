@@ -16,7 +16,7 @@ Measured on 2026-11-14 in prod Traefik's per-line access log for the gitea route
 
 - Every 499 is a `PUT` ending at `total` = 60.000 s from the request start.
 - The paired 504s are the same cut seen from the forward side: `total` ≈ 60 s, origin a few µs.
-- They came in two bursts, 18:29 and 20:02.
+- They came in three bursts, 18:29, 20:02 and 20:34Z.
 
 The first casualty is imagesensortool's multi-arch image push. Its arm64 base layers (25.9 MB, largest blob 17 MB) cross the edge at under about 2.3 Mbit/s, so the push fails. Master cannot publish, and prod's arm64 image waits on it.
 
@@ -61,7 +61,7 @@ Owner ruling 2026-11-14: option (c), both changes, in two PRs. Order ruled the s
 
 ## Checklist
 
-- [ ] PR 1: throwaway imagesensortool run pushes a scratch tag to `gitea:3000` (BuildKit on `kubelab`, `http = true`): the 17 MB blob completes and no gitea `PUT` shows on prod Traefik for that run.
+- [x] PR 1: throwaway imagesensortool run pushes a scratch tag to `gitea:3000` (BuildKit on `kubelab`, `http = true`): the 17 MB blob completes and no gitea `PUT` shows on prod Traefik for that run.
 - [ ] PR 1: declare the endpoint in common.yaml and hand it to jobs (`runner.envs` if the pinned act_runner supports it); owner runs the Beelink provision, which restarts act_runner: no job running.
 - [ ] PR 1: runbook and product-onboarding docs name the variable; imagesensortool's workflow switches (its repo); its master push goes green.
 - [ ] PR 2: declare `readTimeout` on `websecure` and render it with a test (red before, green after).
@@ -71,6 +71,7 @@ Owner ruling 2026-11-14: option (c), both changes, in two PRs. Order ruled the s
 ## Evidence
 
 - Per-line prod Traefik read, 2026-11-14: recorded on #3550.
+- Local-push proof, 2026-11-14: imagesensortool runs 3526 and 3532 pushed over `gitea:3000` (the 50 MB layer in 3.3 s). Prod Traefik's PUT log for the gitea router, read on 2026-11-15 over 30 h, has no `PUT` between 22:55 and 23:01Z, while the failed bursts before it show as the control.
 
 ## Next
 
