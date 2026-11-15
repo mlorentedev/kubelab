@@ -160,7 +160,7 @@ def test_lessons_are_taken_from_category_folders_and_the_single_file_layout(
     counts = analyzer.fetch_github_lessons(["mlorentedev/demo"], tmp_path)
     assert counts == {"mlorentedev/demo": 2}
     taken = sorted(
-        str(p.relative_to(tmp_path / "mlorentedev_demo")) for p in (tmp_path / "mlorentedev_demo").rglob("*.md")
+        p.relative_to(tmp_path / "mlorentedev_demo").as_posix() for p in (tmp_path / "mlorentedev_demo").rglob("*.md")
     )
     assert taken == ["containers/lesson-001-a.md", "lessons.md"], "kept under their category folder"
 

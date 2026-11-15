@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
 import yaml
 
 from toolkit.config import settings as settings_module
-from toolkit.features.configuration import ConfigurationManager
 from toolkit.features import product_registry
+from toolkit.features.configuration import ConfigurationManager
 from toolkit.features.product_guards import apps_declaring
 from toolkit.features.product_registry import RegistryError, UnknownEventError
 from toolkit.features.secrets_manager import SECRET_CATALOG
@@ -223,7 +224,7 @@ products:
 
     def test_an_error_names_the_file(self, tmp_path: Path) -> None:
         path = _write(tmp_path, "products:\n  api:\n    forge: gitlab\n")
-        with pytest.raises(RegistryError, match=str(path)):
+        with pytest.raises(RegistryError, match=re.escape(str(path))):
             product_registry.load_registry(path)
 
     def test_a_repeated_product_key(self, tmp_path: Path) -> None:

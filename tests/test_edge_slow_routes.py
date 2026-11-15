@@ -133,7 +133,7 @@ class TestTheDeclaredRoutes:
         hits = subprocess.run(["git", "grep", "-l", esr.THRESHOLD_KEY, "--", "infra"], cwd=REPO,
                               capture_output=True, text=True, encoding="utf-8", check=False).stdout.split()  # fmt: skip
         assert sorted(hits) == sorted(
-            [str(esr.DEFAULTS), "infra/ansible/roles/k3s_server/templates/traefik-helmconfig.yaml.j2"]
+            [esr.DEFAULTS.as_posix(), "infra/ansible/roles/k3s_server/templates/traefik-helmconfig.yaml.j2"]
         )
 
 
