@@ -303,9 +303,9 @@ Still open: the watcher's live token was minted when the policy named `kubelab-b
 
 ## Test status
 
-- Test suite: `<command> -> <output / coverage %>`
-- Manual smoke test: what was exercised, what was observed
-- No regressions in existing test suite: yes / no (if no, document)
+- Test suite: `make test-fast` on 2026-11-14 at the archive branch's base -> see the archive PR's Verification section. Each `features.json` verification was run on its own the same day; the results are in each entry's `evidence`.
+- Manual smoke test: the prod measurements are recorded above (scratch steps, the migration sitting, AC3 closed, the shared bucket retired).
+- No regressions in existing test suite: yes.
 
 ## Decisions made during implementation
 
@@ -319,9 +319,9 @@ Brief log of non-obvious trade-offs or course corrections taken during the work.
 
 Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`. `dotf spec archive` refuses a line left unanswered, a `no` without a reason, and a `yes` whose file does not exist; a `00_meta/` path is looked up in the vault.
 
-- [ ] Lesson for the repo's `docs/lessons/`? <yes: path / no: reason>
-- [ ] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? <yes: path / no: reason>
-- [ ] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. <yes: path / no: reason>
+- [x] Lesson for the repo's `docs/lessons/`? yes: docs/lessons/storage-backup/lesson-511-restic-reports-a-refused-pack-delete-as-success.md (the spec's lessons were filed as they were learned: also 490, 521, 524, 538, 688, 747 in storage-backup and 507, 513, 539 in identity-secrets)
+- [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? no: the decision (one locked bucket per node, R shorter than the forget window) amends #1920 and is stated in proposal.md and in docs/runbooks/offsite-backup-restore.md, which a test holds to the measured claims
+- [x] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. no: object-lock retention against a forget window is specific to restic on R2 here
 
 ## Archive checklist
 
