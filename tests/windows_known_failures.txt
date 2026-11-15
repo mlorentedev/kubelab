@@ -281,13 +281,8 @@ tests/test_ssh_hardening_bootstrap_forward.py::test_sshd_itself_limits_each_user
 tests/test_ssh_hardening_lan_jump.py::test_sshd_itself_allows_the_forward_to_the_declared_nodes_only
 tests/test_tailscale_bound_boot_units.py::test_every_known_stack_unit_is_found
 tests/test_tailscale_bound_boot_units.py::test_every_shipped_oneshot_bounds_its_start
-tests/test_worktree_init.py::TestRelocatedVenv::test_a_cache_venv_is_replaced_by_one_in_the_worktree
 tests/test_worktree_init.py::TestRelocatedVenv::test_a_venv_with_its_own_shebangs_is_ready
 tests/test_worktree_init.py::TestRelocatedVenv::test_system_interpreters_and_shell_scripts_are_not_judged
-tests/test_worktree_init.py::TestRelocatedVenv::test_worktree_init_leaves_a_healthy_venv_alone
-tests/test_worktree_init.py::TestRelocatedVenv::test_worktree_init_rebuilds_a_renamed_venv
-tests/test_worktree_init.py::test_a_fresh_lock_is_left_alone
-tests/test_worktree_init.py::test_a_stale_lock_is_regenerated_before_install
 
 [perm] POSIX file modes, which NTFS does not keep
 tests/test_hermes_curator_judge.py::test_a_draft_is_never_replaced
@@ -370,6 +365,11 @@ tests/test_delivery_watcher.py::test_success_on_head_is_healthy
 tests/test_delivery_watcher.py::test_the_newest_status_of_the_context_wins
 tests/test_edge_recovery_render.py::test_a_reload_killed_by_the_timeout_reboots_at_the_next_miss
 tests/test_node_backup_role.py::test_an_excluded_path_is_not_copied
+tests/test_worktree_init.py::TestRelocatedVenv::test_a_cache_venv_is_replaced_by_one_in_the_worktree
+tests/test_worktree_init.py::TestRelocatedVenv::test_worktree_init_leaves_a_healthy_venv_alone
+tests/test_worktree_init.py::TestRelocatedVenv::test_worktree_init_rebuilds_a_renamed_venv
+tests/test_worktree_init.py::test_a_fresh_lock_is_left_alone
+tests/test_worktree_init.py::test_a_stale_lock_is_regenerated_before_install
 
 [unclassified] not yet classified; each entry needs a cause (#3409)
 tests/test_access_review.py::test_a_policy_granting_users_delete_reads_drift
