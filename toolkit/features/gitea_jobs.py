@@ -29,7 +29,9 @@ def _ts(value: Optional[str]) -> Optional[datetime]:
 
 
 def _minutes(start: datetime, end: datetime) -> float:
-    return round((end - start).total_seconds() / 60, 1)
+    # Never negative: `now` is this machine's clock and a job's start is Gitea's, so a
+    # job that starts during the request, or a skewed clock, would otherwise read -0.1.
+    return max(0.0, round((end - start).total_seconds() / 60, 1))
 
 
 @dataclass(frozen=True)

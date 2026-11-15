@@ -146,8 +146,23 @@ def test_runs_are_read_lazily_so_asking_for_the_latest_few_reads_one_page() -> N
 def test_runs_not_newest_first_are_refused_rather_than_labelled_latest() -> None:
     client = RecordingClient([{"workflow_runs": [{"id": n} for n in range(1, 4)]}])
 
-    with pytest.raises(GiteaError, match="no longer newest first"):
+    with pytest.raises(GiteaError, match="not strictly newest first"):
         client.latest_runs("teledyne", "openkm-brain", 3)
+
+
+def test_a_run_repeated_across_pages_is_refused() -> None:
+    """Offset pagination: a run created between two page reads repeats the last run of page one."""
+    first = {"workflow_runs": [{"id": n} for n in range(100, 100 - PAGE_SIZE, -1)]}
+    client = RecordingClient([first, {"workflow_runs": [{"id": 100 - PAGE_SIZE + 1}]}])
+
+    with pytest.raises(GiteaError, match="not strictly newest first"):
+        client.latest_runs("teledyne", "openkm-brain", PAGE_SIZE + 1)
+
+
+def test_a_job_that_started_after_now_reads_zero_not_negative() -> None:
+    running = _job(status="in_progress", conclusion=None, completed_at=None, started_at="2026-11-14T12:00:06Z")
+
+    assert describe_job(running, NOW).ran_minutes == 0.0
 
 
 class FakeAdmin:

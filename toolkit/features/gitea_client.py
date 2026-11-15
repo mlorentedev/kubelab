@@ -611,8 +611,14 @@ class GiteaClient:
         # newest first (measured 2026-11-14: 2714, 2628, 2075, 826). If an upgrade changes
         # that, "latest" would silently become "oldest", so refuse instead of labelling it.
         ids = [int(run["id"]) for run in runs]
-        if ids != sorted(ids, reverse=True):
-            raise GiteaError(f"Gitea API /repos/{owner}/{name}/actions/runs is no longer newest first: {ids}")
+        # Strictly descending, so a repeat fails too: the pagination is by offset, and a run
+        # created between two page requests shifts page two by one, repeating a run and
+        # dropping another.
+        if ids != sorted(set(ids), reverse=True):
+            raise GiteaError(
+                f"Gitea API /repos/{owner}/{name}/actions/runs is not strictly newest first "
+                f"(a run arrived mid-read, or the order changed); re-run: {ids}"
+            )
         return runs
 
     def list_run_jobs(self, owner: str, name: str, run_id: int) -> list[dict[str, Any]]:
