@@ -27,6 +27,7 @@ this very spec's baseline. `_paginate` walks until a short page arrives, so
 
 from __future__ import annotations
 
+from itertools import islice
 from typing import Any, Iterator, Mapping
 from urllib.parse import quote
 
@@ -86,6 +87,11 @@ SCOPE_BY_METHOD: dict[str, frozenset[str]] = {
     # `/admin/actions/runners` sits under the same admin router as `list_orgs`, so
     # `read:admin` covers it. Measured 200 with that grant before this line existed.
     "list_runners": frozenset({"read:admin"}),
+    # A repository's Actions runs and a run's jobs (#1637). Measured 200 with the admin
+    # token on 2026-11-14 against `teledyne/openkm-brain`, so `read:repository` covers
+    # both; nothing on the admin router is involved.
+    "latest_runs": frozenset({"read:repository"}),
+    "list_run_jobs": frozenset({"read:repository"}),
     # MEASURED, not assumed, because the read and the write of a webhook sit on
     # different credentials and it would have been easy to declare the write's scope
     # here. `GET /repos/{o}/{r}/hooks` answered 200 with the admin token on both
@@ -148,6 +154,9 @@ ADMIN_METHODS: tuple[str, ...] = (
     "edit_team",
     "add_team_member",
     "list_runners",
+    # The jobs reader (#1637), with this token so a private repository is visible.
+    "latest_runs",
+    "list_run_jobs",
     # The plan's webhook read. Listed even though `read:repository` already enters
     # the requirement through `list_repos`: the point of this tuple is that a method
     # the admin token performs cannot be absent from the derivation, and "its scope
@@ -587,6 +596,34 @@ class GiteaClient:
         admin router as `list_orgs`, verified 200 before the method existed.
         """
         return list(self._paginate("/admin/actions/runners", key="runners"))
+
+    def latest_runs(self, owner: str, name: str, count: int) -> list[dict[str, Any]]:
+        """The repository's `count` most recent Actions runs, newest first.
+
+        Bounded on purpose and named for it: a repository holds hundreds of runs, and
+        the caller asks about the last few. `_paginate` is lazy, so stopping at `count`
+        reads only the pages it needs. The result is "the latest N", never "all".
+        """
+        runs = list(
+            islice(self._paginate(f"/repos/{quote(owner)}/{quote(name)}/actions/runs", key="workflow_runs"), count)
+        )
+        # The endpoint sends no ordering parameter and documents none. Gitea 1.27.3 answers
+        # newest first (measured 2026-11-14: 2714, 2628, 2075, 826). If an upgrade changes
+        # that, "latest" would silently become "oldest", so refuse instead of labelling it.
+        ids = [int(run["id"]) for run in runs]
+        # Strictly descending, so a repeat fails too: the pagination is by offset, and a run
+        # created between two page requests shifts page two by one, repeating a run and
+        # dropping another.
+        if ids != sorted(set(ids), reverse=True):
+            raise GiteaError(
+                f"Gitea API /repos/{owner}/{name}/actions/runs is not strictly newest first "
+                f"(a run arrived mid-read, or the order changed); re-run: {ids}"
+            )
+        return runs
+
+    def list_run_jobs(self, owner: str, name: str, run_id: int) -> list[dict[str, Any]]:
+        """Every job of one Actions run, with its runner and its start and end times."""
+        return list(self._paginate(f"/repos/{quote(owner)}/{quote(name)}/actions/runs/{int(run_id)}/jobs", key="jobs"))
 
     def list_hooks(self, owner: str, name: str) -> list[dict[str, Any]]:
         """Every webhook on a repository. On the TOKEN class, unlike every write below.

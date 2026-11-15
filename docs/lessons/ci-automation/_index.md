@@ -4,6 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 759 | [A CI run's duration mixes waiting with running, so read its jobs before blaming a timeout](lesson-759-a-run-s-duration-mixes-waiting-with-running.md) | 2026-11-14 |
 | 758 | [A job output built from a secret is dropped, and its consumer reads an empty string](lesson-758-a-job-output-built-from-a-secret-is-dropped.md) | 2026-11-14 |
 | 731 | [A sharded check trades test time for runner wait, so measure the two apart](lesson-731-a-sharded-check-trades-test-time-for-runner-wait.md) | 2026-11-09 |
 | 723 | [A synthetic fixture in a real secret's format is an incident, and removing it does not clear the check](lesson-723-synthetic-fixture-in-a-real-secrets-format-is-an-incident.md) | 2026-11-07 |

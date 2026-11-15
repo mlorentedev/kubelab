@@ -210,6 +210,7 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit services gitea actions-secrets` | Deliver catalog-declared Actions secrets from SOPS to forge repositories (TOOL-062). |
 | `toolkit services gitea drop-empty` | Remove an EMPTY DECLARED repository, so a migration can create it in its place. |
 | `toolkit services gitea git` | Run `git` against the forge over HTTPS as the agents' authoring account. |
+| `toolkit services gitea jobs` | Read a repository's Actions runs, or one run's jobs, and tell waiting from running (#1637). |
 | `toolkit services gitea prune-runners` | Deregister Actions runners the declaration does not name. |
 | `toolkit services gitea reconcile` | Create declared organizations and repositories in Gitea; report undeclared ones. |
 | `toolkit services gitea registry-check` | Pull a manifest with a private product's pull token and report what the registry answers. |
