@@ -92,8 +92,15 @@ class TestVerify:
     def test_another_value_is_a_mismatch(self) -> None:
         assert probe_mod.verify(self.PROBE, "/kc", run=lambda *a, **k: _secret("the controller's own key")) is False
 
-    def test_a_secret_the_controller_never_made_is_a_mismatch(self) -> None:
-        assert probe_mod.verify(self.PROBE, "/kc", run=lambda *a, **k: _secret(None)) is False
+    def test_a_secret_the_controller_has_not_made_yet_is_an_error_not_a_mismatch(self) -> None:
+        """On a fresh apply the controller needs a moment: no Secret yet is not evidence of a wrong key."""
+        with pytest.raises(ProbeError, match="not unsealed the probe yet"):
+            probe_mod.verify(self.PROBE, "/kc", run=lambda *a, **k: _secret(None))
+
+    def test_a_secret_without_the_probes_key_is_a_mismatch(self) -> None:
+        """Something else made a Secret of that name: the controller did not unseal this probe."""
+        no_key = SimpleNamespace(returncode=0, stdout=json.dumps({"data": {"other": "eA=="}}), stderr="")
+        assert probe_mod.verify(self.PROBE, "/kc", run=lambda *a, **k: no_key) is False
 
     def test_kubectl_failing_is_an_error_not_a_mismatch(self) -> None:
         """A cluster that cannot be read says nothing about the key; `mismatch` would misdirect the operator."""
@@ -149,6 +156,17 @@ class TestCommand:
         assert captured.out == "mismatch\n"
         assert wrong not in captured.out + captured.err
         assert hashlib.sha256(wrong.encode()).hexdigest() not in captured.out + captured.err
+
+    def test_an_unsealed_secret_that_is_not_there_yet_exits_2_without_a_verdict(
+        self, committed, mocker, capsys
+    ) -> None:
+        self._run(mocker, _secret(None))
+
+        with pytest.raises(typer.Exit) as exc:
+            infra.k8s_verify_sealed_secrets(env="staging")
+
+        assert exc.value.exit_code == 2
+        assert capsys.readouterr().out not in {"match\n", "mismatch\n"}
 
     def test_a_cluster_error_exits_2_without_printing_a_verdict(self, committed, mocker, capsys) -> None:
         self._run(mocker, _secret(None, returncode=1, stderr="connection refused"))

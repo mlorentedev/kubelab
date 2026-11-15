@@ -59,8 +59,12 @@ def load_probe(path: Path) -> Probe:
     return Probe(meta["namespace"], meta["name"], keys[0], str(digest))
 
 
-def _decrypted_sha256(probe: Probe, kubeconfig: str, run: Runner) -> str | None:
-    """sha256 of the value the controller wrote, or None when it wrote no such Secret."""
+def _decrypted_sha256(probe: Probe, kubeconfig: str, run: Runner) -> str:
+    """sha256 of the value the controller wrote; empty when the Secret exists without the probe's key.
+
+    Raises ProbeError when there is no such Secret: on a fresh apply the controller has not had time
+    to unseal yet, and that is no evidence about its key.
+    """
     result = run(
         [
             "kubectl",
@@ -83,12 +87,18 @@ def _decrypted_sha256(probe: Probe, kubeconfig: str, run: Runner) -> str | None:
     if result.returncode != 0:
         raise ProbeError(f"kubectl could not read {probe.namespace}/{probe.name}: {(result.stderr or '').strip()}")
     if not result.stdout.strip():
-        return None
+        raise ProbeError(
+            f"the controller has not unsealed the probe yet ({probe.namespace}/{probe.name} does not exist): "
+            "retry, or check the controller is running"
+        )
     encoded = (json.loads(result.stdout).get("data") or {}).get(probe.key)
-    return hashlib.sha256(base64.b64decode(encoded)).hexdigest() if encoded else None
+    return hashlib.sha256(base64.b64decode(encoded)).hexdigest() if encoded else ""
 
 
 def verify(probe: Probe, kubeconfig: str, run: Runner | None = None) -> bool:
-    """True when the controller decrypted the probe to the committed digest."""
+    """True when the controller decrypted the probe to the committed digest, False when it made another value.
+
+    Raises ProbeError when the Secret does not exist yet or the cluster cannot be read.
+    """
     actual = _decrypted_sha256(probe, kubeconfig, run or subprocess.run)
-    return actual is not None and hmac.compare_digest(actual, probe.expected_sha256)
+    return hmac.compare_digest(actual, probe.expected_sha256)

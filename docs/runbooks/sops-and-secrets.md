@@ -366,7 +366,7 @@ rm -rf "$d"
 
 **Verify after the first apply** (prints `match` or `mismatch`, never a value): the probe `SealedSecret` is
 sealed offline against the SOPS certificate, and the controller must have decrypted it to the digest
-committed beside it.
+committed beside it. Exit 2 means no verdict yet (the controller has not created the Secret, or the cluster could not be read): wait and run it again. Only exit 1, `mismatch`, says the key is not the operator's.
 
 ```bash
 toolkit infra k8s verify-sealed-secrets --env staging

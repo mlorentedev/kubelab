@@ -1558,8 +1558,8 @@ def k8s_verify_sealed_secrets(
     """Check the Sealed Secrets controller decrypts the probe with the operator's key; prints match or mismatch.
 
     RES-HOST-001 AC8. Compares the sha256 of the decrypted probe with the digest committed beside its ciphertext and
-    prints `match` or `mismatch`, never a value. Exit 0 on match, 1 on mismatch, 2 when the probe or
-    the cluster could not be read (which says nothing about the key).
+    prints `match` or `mismatch`, never a value. Exit 0 on match, 1 on mismatch, 2 when the probe file,
+    the cluster or the unsealed Secret could not be read yet (which says nothing about the key).
     """
     from toolkit.features import sealed_secrets_probe as probe
 
