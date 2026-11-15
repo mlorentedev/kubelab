@@ -18,6 +18,7 @@ tags: [kubelab, ci-automation, pytest, xdist, testing]
 - `tests/test_host_client_barrier.py` wrote its probe file into `tests/` under a name built from `tmp_path.name`. Each xdist worker has its own basetemp, so two workers hand out the same name for the same test, and one deleted the other's file (`FileNotFoundError`, one run in two).
 - Two tests bound a port with `bind(0)`, closed the socket, and then relied on it: one handed it to `docker run -p`, one counted on nothing listening there. Once the socket is closed, any other worker can take that port.
 - `tests/test_restore_drill.py` looked for a name in logger output, and the logger wraps long lines. The xdist basetemp (`popen-gw0/`) made the path long enough that the wrap split the name itself. It failed in CI only.
+- `tests/test_repo_files.py` planted an untracked `infra/ansible/_repo_files_probe.yml` in the checkout to prove `repo_files` lists it. Every test that reads `infra/ansible` lists the tree through `repo_files` too, so a worker that listed it while the probe existed read it after it was deleted. `test_no_ansible_file_names_the_terraform_token` failed once in about 10,000 tests (#3445). It was found by polling `git ls-files --others --exclude-standard` during a full run, the one file that appeared.
 - `tests/test_every_generator_renders.py` renders every case into one module-scoped copy of the repo, so each case sees what earlier cases wrote. Spread test by test, the branch coverage depended on how the cases were split across workers.
 
 **Solution**: Each one was fixed where the problem was, and `--dist loadfile` keeps each file on one worker, in order. No test was deselected:
@@ -26,6 +27,7 @@ tags: [kubelab, ci-automation, pytest, xdist, testing]
 - The probe file is named with `uuid4`.
 - Docker picks the host port (`-p 127.0.0.1::1053/udp`, then `docker port`), and the refused-port test keeps its socket bound and not listening for the whole test.
 - The drill assertion compares the output with its whitespace removed.
+- The `repo_files` probes are planted in a throwaway repository (`git init` under `tmp_path`, with the real `infra/ansible/.gitignore`), through a `repo` argument (#3445).
 
 **Rule**: Compare a parallel run to a serial run on three things: the failure set, `lines-covered`/`branches-covered` in `coverage.xml` (not the rounded total), and the ignored files in the checkout (`git status --ignored`). A difference in any of them is shared state until proven otherwise. Grouping tests (by file or by marker) only keeps those tests off each other. It does nothing about every other worker, so a host port or a path outside `tmp_path` needs a fix in the test. Grouping does not change the length of the paths a test sees either. (Markers do not work on pytest 9.2 anyway: lesson-712.)
 
