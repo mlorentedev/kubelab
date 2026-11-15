@@ -2026,6 +2026,23 @@ SECRET_CATALOG: list[SecretSpec] = [
         services=("api",),
         rotate_note="apply-secrets for api-secrets. Regenerate in Beehiiv dashboard.",
     ),
+    # RES-HOST-001 slice H, owner ruling Q6 = B: ONE LLM key shared by staging and
+    # prod, so the same value sits in each env file and a rotation is two writes.
+    # The accepted risk (a staging load test spends prod's quota, and a leak in
+    # either env exposes both) is recorded in that spec's proposal, not repeated
+    # here. `envs` is explicit because resume has no kubelab dev target.
+    SecretSpec(
+        key_path="apps.platform.resume.llm_api_key",
+        expiry=Expiry.NEVER,
+        description="LLM provider API key resume's evaluator uses (one value for staging and prod)",
+        kind=SecretKind.EXTERNAL,
+        services=("resume",),
+        rotate_note=(
+            "Regenerate at the provider, set the same value in staging and prod, "
+            "`apply-secrets` for resume-secrets, restart resume."
+        ),
+        envs=("staging", "prod"),
+    ),
     # SSOT-012 (2026-05-23): apps.platform.api.beehiiv.pub_id moved from SOPS
     # to common.yaml — publication IDs are public (visible in every Beehiiv
     # embed URL) and were leaking into ConfigMaps via the SECRET_PATTERNS
