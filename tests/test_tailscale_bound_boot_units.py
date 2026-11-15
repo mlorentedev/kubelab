@@ -93,7 +93,7 @@ def _waiting_units() -> dict[str, dict[str, list[str]]]:
     for path in sorted(ROLES.glob("*/templates/*.service.j2")):
         directives = _directives(path)
         if any(_waits_for_the_tailnet(v) for v in directives.get("ExecStartPre", []) + directives.get("ExecStart", [])):
-            units[str(path.relative_to(ROLES))] = directives
+            units[path.relative_to(ROLES).as_posix()] = directives
     return units
 
 
@@ -182,7 +182,7 @@ def _shipped_units() -> dict[str, dict[str, list[str]]]:
     """Every unit file the repo ships to a node: role templates and plain copies alike."""
     ansible = REPO / "infra/ansible"
     return {
-        str(path.relative_to(ansible)): _directives(path) for path in repo_files(ansible, "*.service", "*.service.j2")
+        path.relative_to(ansible).as_posix(): _directives(path) for path in repo_files(ansible, "*.service", "*.service.j2")
     }
 
 

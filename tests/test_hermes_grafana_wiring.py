@@ -55,7 +55,7 @@ def test_the_token_is_named_only_where_it_must_be() -> None:
         "files/hermes-mcp/grafana-reader.py",
     }
     mentions = {
-        str(path.relative_to(ROLE))
+        path.relative_to(ROLE).as_posix()
         for path in ROLE.rglob("*")
         if path.is_file()
         and re.search("agent_stack_grafana_token|GRAFANA_TOKEN", path.read_text(errors="ignore", encoding="utf-8"))
