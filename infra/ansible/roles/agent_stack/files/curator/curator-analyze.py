@@ -209,7 +209,7 @@ def load_corpus(paths: list[Path], vault_root: Path, extra_roots: tuple[Path, ..
         source = p.name
         for root in (vault_root, *extra_roots):
             try:
-                source = str(p.relative_to(root))
+                source = p.relative_to(root).as_posix()
                 break
             except ValueError:
                 continue
