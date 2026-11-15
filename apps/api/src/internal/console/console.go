@@ -1,9 +1,8 @@
-// Package console serves the forge queue page and its data (CONSOLE-004).
+// Package console serves the forge queue's data and writes to the console frontend (CONSOLE-004).
 package console
 
 import (
 	"context"
-	_ "embed"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -22,10 +21,8 @@ import (
 // The console has its own host, which Authelia guards whole (CONSOLE-004 AC3).
 // The same binary answers the public API host, so /console is served only to a
 // request for the console's host, and to none when no host is declared: through
-// api.kubelab.live it is a 404, never the page.
-
-//go:embed console.html
-var consolePage []byte
+// api.kubelab.live it is a 404. The page itself is apps/console, served by nginx at
+// the host's root (ADR-074 D5); this package is the API behind it, under /console/.
 
 // QueueReader is the console's view of the read model.
 type QueueReader interface {
@@ -136,35 +133,26 @@ func Live(model QueueReader, catalog *forge.Catalog) Deps {
 // that identity's first visit of the day (ADR-066 A8). Nil records nothing.
 type Usage func(ctx context.Context, identity string, at time.Time) (bool, error)
 
-// usageTimeout bounds the counter's write, so a slow database delays the page by at most this.
+// usageTimeout bounds the counter's write, so a slow database delays a request by at most this.
 const usageTimeout = 2 * time.Second
 
 // Register adds the console's routes, answered only for its own host.
 func Register(r *gin.Engine, deps Deps, domain func() string, usage Usage) {
 	g := r.Group("/console", onlyHost(domain))
-	g.GET("", func(c *gin.Context) { c.Redirect(http.StatusMovedPermanently, "/console/") })
-	g.GET("/", func(c *gin.Context) {
-		recordUsage(c, usage)
-		c.Data(http.StatusOK, "text/html; charset=utf-8", consolePage)
-	})
-	// The frontend (apps/console) is served by nginx, so the page's own handler no longer sees
-	// an open: every load of it calls the queue, and the queue is where an open is counted
-	// (#3450). One row per identity per day, so the minute poll of an open tab writes the same
-	// row. The page route above keeps counting until the embedded page is deleted.
+	// Every load of the frontend calls the queue, and the queue is where an open is counted
+	// (#3450): one row per identity per day, so the minute poll of an open tab writes the same
+	// row. The frontend is nginx's, so no other route sees an open.
 	g.GET("/queue", func(c *gin.Context) {
 		recordUsage(c, usage)
 		queueHandler(c, deps)
 	})
 	registerWrites(g)
-	// The bare host opens the page until apps/console serves `/` (ADR-074 D5). A 302,
-	// not a 301: browsers keep a 301 indefinitely, and `/` will become the frontend's.
-	r.GET("/", onlyHost(domain), func(c *gin.Context) { c.Redirect(http.StatusFound, "/console/") })
 }
 
 // recordUsage counts an open of the console for the identity Authelia names in Remote-User. A request
 // that names none is not counted: the host check alone can be satisfied from inside the
 // cluster, and only a request that came through Authelia carries the header. A failed write
-// is logged and never fails the page.
+// is logged and never fails the request.
 func recordUsage(c *gin.Context, usage Usage) {
 	identity := strings.TrimSpace(c.GetHeader("Remote-User"))
 	if usage == nil || identity == "" {
