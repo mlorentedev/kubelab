@@ -31,7 +31,7 @@ Compose will mark the gateway healthy only while its unauthenticated, bounded `/
 ## Risks / open questions
 
 - Boot and container startup can make an initially healthy service look unavailable. Mitigated by Compose `start_period`, ten-minute boot grace, two-minute activation interval and no `Persistent` catch-up run.
-- A single recent startup may be transient. The probe suppresses only `starting` younger than 90 seconds with `RestartCount <= 1`; sustained startup, a repeated automatic restart, a stopped container and missing/invalid runtime state fail. Live acceptance uses a stopped gateway so no startup grace applies.
+- A single recent startup may be transient. The probe suppresses only `starting` younger than 150 seconds with `RestartCount <= 1`; sustained startup, a repeated automatic restart, a stopped container and missing/invalid runtime state fail. Live acceptance uses a stopped gateway so no startup grace applies.
 - The notification fabric can be unreachable during an agent outage. The existing node-notify spool preserves the page for ordered later delivery; this spec does not weaken that path.
 - The intentional egress kill switch stops the gateway too. The watcher remains independent so an unexpected daemon/egress death cannot disable its own detector; an operator seeking a planned silent stop stops the watcher timer first, as the runbook specifies.
 - The simple `/health` route exposes only status, platform and version and requires no credential. Slack/provider readiness remains the existing authenticated `/health/detailed` provisioning check, not a reason to page on a third-party outage.
@@ -39,7 +39,7 @@ Compose will mark the gateway healthy only while its unauthenticated, bounded `/
 ## Acceptance criteria
 
 - [x] **AC1 — detection and delivery:** with ace2 running, a stopped or unhealthy gateway fails the local health contract and the two-minute watcher emits one deduplicated incident through `kubelab-notify@` within the next probe/delivery interval, after the declared boot grace period.
-- [x] **AC2 — recovery and semantics:** a healthy probe exits successfully; failed/missing health, sustained `starting`, repeated restart and invalid runtime state fail; one recent start receives at most 90 seconds of grace, and recovery uses `kubelab-notify-recovered@`. Provider/Slack state is not part of the liveness verdict.
+- [x] **AC2 — recovery and semantics:** a healthy probe exits successfully; failed/missing health, sustained `starting`, repeated restart and invalid runtime state fail; one recent start receives at most 150 seconds of grace, and recovery uses `kubelab-notify-recovered@`. Provider/Slack state is not part of the liveness verdict.
 - [x] **AC3 — on-demand silence:** powering ace2 off cannot page: there is no external monitor, no `Persistent` timer and no always-on dependency on the gateway.
 - [x] **AC4 — configuration lifecycle:** disabling Hermes disables the watcher and removes its units and probe; enabling Hermes installs and starts the watcher only after gateway health succeeds, and a failed deployment restores any timer it paused before propagating the error.
 - [x] **AC5 — reproducible evidence:** provisioning is idempotent (`changed=0` on a second run), focused tests fail if the wiring is removed, and an operator-approved live stop/start exercise records the resulting notification evidence without exposing credentials.

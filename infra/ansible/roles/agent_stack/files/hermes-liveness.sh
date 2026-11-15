@@ -3,7 +3,8 @@
 # Only one recent start is graced; every sustained or repeated failure is fatal.
 set -eu
 
-GRACE_SECONDS=90
+# Matches Compose: 60s start_period + three 30s health intervals.
+GRACE_SECONDS=150
 container="${1:-}"
 case "$container" in
   ''|-*|*[!A-Za-z0-9_.-]*)

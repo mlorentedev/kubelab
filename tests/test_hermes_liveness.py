@@ -187,8 +187,13 @@ def test_probe_graces_one_recent_gateway_start(restart_count: int, run_probe) ->
     assert result.returncode == 0, result.stderr
 
 
+def test_probe_graces_a_start_inside_the_full_compose_window(run_probe) -> None:
+    result = run_probe("starting", started_at=datetime.now(UTC) - timedelta(seconds=149))
+    assert result.returncode == 0, result.stderr
+
+
 def test_probe_rejects_sustained_starting(run_probe) -> None:
-    result = run_probe("starting", started_at=datetime.now(UTC) - timedelta(seconds=90))
+    result = run_probe("starting", started_at=datetime.now(UTC) - timedelta(seconds=150))
     assert result.returncode != 0
 
 

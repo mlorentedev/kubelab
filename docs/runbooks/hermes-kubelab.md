@@ -53,9 +53,9 @@ retries, 60 s start grace). This is deliberately the simple, unauthenticated
 process-health route: `/health/detailed` and Slack/provider readiness are not
 liveness, and no API key enters the healthcheck. The host's
 `agent-stack-hermes-watchdog.service` reads only the resulting Docker health
-through the agent's rootless socket. Its timer waits ten minutes after boot;
-when enabled during an already-running session, `OnUnitActiveSec` makes the
-first run two minutes after activation and every two minutes thereafter.
+through the agent's rootless socket. Its timer gives ten minutes of boot
+grace and runs every two minutes; provisioning enables it only after Docker
+reports healthy, without relying on a first-fire timing assumption.
 Provisioning pauses an existing timer only when a rendered input can recreate
 the gateway, and re-enables it after Docker reports healthy; an unchanged run
 leaves it active and reports no change. If the deployment fails after the
@@ -72,7 +72,7 @@ already present: that setting hides `/run/user`; the unit deliberately uses
 A forced validation
 uses `docker stop hermes-kubelab` on the agent's daemon, starts the oneshot to
 prove the page, then starts the gateway and reruns the oneshot to prove
-recovery. A recent `starting` state receives at most 90 s of grace only while
+recovery. A recent `starting` state receives at most 150 s of grace only while
 `RestartCount <= 1`; sustained startup, a second automatic restart, a stopped
 container and missing health all fail. Thus one automatic restart can be
 silent, but a crash loop or an outage still pages. The forced validation uses
