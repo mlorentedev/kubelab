@@ -174,7 +174,7 @@
         mode: "0755"
       tags: [dev_node, mise]
 
-    - name: Render global mise config (pins node/go/python — reproducible SSOT)
+    - name: Render global mise config (pins go only — node and python are the dotfiles')
       ansible.builtin.template:
         src: mise-config.toml.j2
         dest: "{{ dev_node_home }}/.config/mise/config.toml"
@@ -193,59 +193,11 @@
       check_mode: false
       tags: [dev_node, mise]
 
-    - name: Install the pinned toolchains (node, go, python)
+    - name: Install the pinned toolchains (go)
       ansible.builtin.command:
         cmd: "{{ dev_node_home }}/.local/bin/mise install {{ dev_node_toolchains | list | join(' ') }}"
       when: _mise_missing.stdout | trim | length > 0
       tags: [dev_node, mise]
-
-    # `mise ls --missing` asks whether the version directory exists, not whether
-    # the toolchain in it works. An interrupted `npm update --global` leaves npm,
-    # npx, corepack and yarn moved aside under temporary names, with the directory
-    # intact (ace2, 2026-10-31, #3477), and the next task then calls an npm that
-    # is not there. Check the entry points this role runs (npm here, npx through
-    # its /usr/local/bin wrapper), and reinstall the pinned node alone.
-    # A reinstall empties lib/node_modules: the npm task below restores the agent
-    # CLIs, and the dotfiles bootstrap further down restores what dotfiles add.
-    - name: Check the pinned node still has its npm and npx
-      ansible.builtin.stat:
-        path: "{{ dev_node_home }}/.local/share/mise/installs/node/{{ dev_node_toolchains.node }}/bin/{{ item }}"
-      loop: [npm, npx]
-      register: _mise_node_bins
-      check_mode: false
-      tags: [dev_node, mise, agents]
-
-    - name: Reinstall the pinned node when its npm or npx is gone
-      ansible.builtin.command:
-        cmd: "{{ dev_node_home }}/.local/bin/mise install --force node@{{ dev_node_toolchains.node }}"
-      when: _mise_node_bins.results | rejectattr('stat.exists') | list | length > 0
-      tags: [dev_node, mise, agents]
-
-    # --- Agent CLI tooling (Claude Code, etc.) ---
-    # `state: present`, not a shelled `npm install -g` (#1300). npm prints
-    # `changed N packages` for a package already installed at the same version,
-    # so a changed_when parsing its output matched every pass. The module lists
-    # the global tree and installs only what is missing.
-    #
-    # Not pinned: Claude Code updates itself in place, so a pinned version would
-    # be moved forward by the updater and back by the next provision, reporting
-    # changed every time. Ansible owns that the tool exists; the updater owns its
-    # version. tests/test_dev_node_npm_converges.py.
-    - name: Install global agent CLI tools via mise node npm
-      community.general.npm:
-        name: "{{ item }}"
-        global: true
-        state: present
-        executable: "{{ _dev_node_mise_node_bin }}/npm"
-      environment:
-        # mise's bin/npm is a script that execs `node`, so the pinned node must
-        # be on PATH, not only npm's own path.
-        PATH: "{{ _dev_node_mise_node_bin }}:/usr/local/bin:/usr/bin:/bin"
-      vars:
-        _dev_node_mise_node_bin: "{{ dev_node_home }}/.local/share/mise/installs/node/{{ dev_node_toolchains.node }}/bin"
-      loop: "{{ dev_node_global_agent_npm_packages }}"
-      tags: [dev_node, mise, agents]
-
 
     # --- tmux-resurrect (vendored plugin; base tmux comes from base_system) ---
     - name: Vendor tmux-resurrect at a pinned version
@@ -290,6 +242,92 @@
       register: _dotfiles_setup
       changed_when: _dotfiles.changed
       tags: [dev_node, dotfiles]
+
+    # --- node: resolved from mise, never pinned here (#3559) ---
+    # The dotfiles' converge owns node and python: it writes them to
+    # ~/.config/mise/conf.d/dotfiles.toml from its versions.conf. mise gives
+    # config.toml precedence over conf.d/, so a node pin in the role's own
+    # config.toml shadowed the dotfiles' and failed every `dotf converge` at its
+    # tools step ("not running at their pin: node, python"). One owner per tool:
+    # the role pins neither, and what needs node asks mise which one is active.
+    #
+    # After the bootstrap, not before: setup-linux.sh runs `dotf tools sync`, which
+    # is what installs node on a fresh node. `mise where` exits non-zero when no
+    # config pins node or the pinned one is not installed: that is a state to read,
+    # and the task after it fails the play with the cause instead of at an npm path
+    # that does not exist.
+    - name: Resolve the node install mise has active
+      ansible.builtin.command:
+        cmd: "{{ dev_node_home }}/.local/bin/mise where node"
+        # Home, not the play's cwd: mise also reads a mise.toml in the cwd's tree.
+        chdir: "{{ dev_node_home }}"
+      register: _dev_node_node_where
+      changed_when: false
+      failed_when: false
+      # A read: --check would skip it and hand the next tasks an empty stdout.
+      check_mode: false
+      tags: [dev_node, mise, agents]
+
+    - name: Require a node that mise can name
+      ansible.builtin.assert:
+        that: _dev_node_node_where.rc == 0 and (_dev_node_node_where.stdout | trim | length > 0)
+        fail_msg: >-
+          mise has no installed node on {{ inventory_hostname }}
+          ({{ _dev_node_node_where.stderr | default('') | trim }}). The dotfiles own
+          node: their bootstrap (`dotf tools sync`, run by setup-linux.sh) installs the
+          version their versions.conf pins. Check that dev_node_dotfiles_run_setup is
+          true, that the bootstrap above succeeded, and that the play ran without a
+          tag that skips it, then provision again.
+        quiet: true
+      tags: [dev_node, mise, agents]
+
+    # `mise ls --missing` asks whether the version directory exists, not whether
+    # the toolchain in it works. An interrupted `npm update --global` leaves npm,
+    # npx, corepack and yarn moved aside under temporary names, with the directory
+    # intact (ace2, 2026-10-31, #3477), and the next task then calls an npm that
+    # is not there. Check the entry points this role runs (npm here, npx through
+    # its /usr/local/bin wrapper), and reinstall the active node alone.
+    # A reinstall empties lib/node_modules: the npm task below restores the agent
+    # CLIs, and what dotfiles add installs under mise's own
+    # per-tool directories, not node's lib/node_modules.
+    - name: Check the pinned node still has its npm and npx
+      ansible.builtin.stat:
+        path: "{{ _dev_node_node_where.stdout | trim }}/bin/{{ item }}"
+      loop: [npm, npx]
+      register: _mise_node_bins
+      check_mode: false
+      tags: [dev_node, mise, agents]
+
+    - name: Reinstall the active node when its npm or npx is gone
+      ansible.builtin.command:
+        cmd: "{{ dev_node_home }}/.local/bin/mise install --force node@{{ _dev_node_node_where.stdout | trim | basename }}"
+      when: _mise_node_bins.results | rejectattr('stat.exists') | list | length > 0
+      tags: [dev_node, mise, agents]
+
+    # --- Agent CLI tooling (Claude Code, etc.) ---
+    # `state: present`, not a shelled `npm install -g` (#1300). npm prints
+    # `changed N packages` for a package already installed at the same version,
+    # so a changed_when parsing its output matched every pass. The module lists
+    # the global tree and installs only what is missing.
+    #
+    # Not pinned: Claude Code updates itself in place, so a pinned version would
+    # be moved forward by the updater and back by the next provision, reporting
+    # changed every time. Ansible owns that the tool exists; the updater owns its
+    # version. tests/test_dev_node_npm_converges.py.
+    - name: Install global agent CLI tools via mise node npm
+      community.general.npm:
+        name: "{{ item }}"
+        global: true
+        state: present
+        executable: "{{ _dev_node_mise_node_bin }}/npm"
+      environment:
+        # mise's bin/npm is a script that execs `node`, so the pinned node must
+        # be on PATH, not only npm's own path.
+        PATH: "{{ _dev_node_mise_node_bin }}:/usr/local/bin:/usr/bin:/bin"
+      vars:
+        _dev_node_mise_node_bin: "{{ _dev_node_node_where.stdout | trim }}/bin"
+      loop: "{{ dev_node_global_agent_npm_packages }}"
+      tags: [dev_node, mise, agents]
 
     # --- mise activation (MUST run after the dotfiles bootstrap) ---
     # Ownership rule: Ansible owns /etc and the gitignored *.local override files;
@@ -340,7 +378,7 @@
         mode: "0755"
         follow: false
       vars:
-        wrapper_src_dir: "{{ dev_node_home }}/.local/share/mise/installs/node/{{ dev_node_toolchains.node }}/bin"
+        wrapper_mise_tool: node
       loop:
         - node
         - npm

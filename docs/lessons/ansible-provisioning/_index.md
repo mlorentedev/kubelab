@@ -4,6 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 757 | [Two writers of one mise tool fail whichever owner checks its own pin](lesson-757-two-writers-of-one-mise-tool-fail-the-owner-that-checks.md) | 2026-11-14 |
 | 748 | [A version directory says a toolchain was installed, not that it runs](lesson-748-a-version-directory-says-a-toolchain-was-installed-not-that-it-runs.md) | 2026-11-13 |
 | 729 | [A pipe into `grep -q` under `pipefail` can read a match as a miss](lesson-729-a-pipe-into-grep-q-under-pipefail-can-read-a-match-as-a-miss.md) | 2026-11-09 |
 | 726 | [A `WinError 87` at `ansible` import is not a path bug — `ansible-core` has no Windows controller](lesson-726-a-winerror-87-at-ansible-import-is-not-a-path-bug.md) | 2026-11-09 |
