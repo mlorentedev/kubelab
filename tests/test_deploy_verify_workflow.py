@@ -17,8 +17,8 @@ import subprocess
 import pytest
 import yaml
 
-from toolkit.features import delivery_health
 from tests.shells import BASH
+from toolkit.features import delivery_health
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 WORKFLOW = REPO_ROOT / ".github/workflows/deploy-verify.yml"
@@ -75,7 +75,7 @@ def test_the_sweep_budget_is_the_measured_n(wf: dict) -> None:
 
 def test_failure_messages_link_a_runbook_section_that_exists(wf: dict) -> None:
     anchor = wf["env"]["RUNBOOK"].split("#", 1)[1]
-    assert wf["env"]["RUNBOOK"].split("/blob/master/", 1)[1].split("#")[0] == str(RUNBOOK.relative_to(REPO_ROOT))
+    assert wf["env"]["RUNBOOK"].split("/blob/master/", 1)[1].split("#")[0] == RUNBOOK.relative_to(REPO_ROOT).as_posix()
     titles = re.findall(r"^## (.+)$", RUNBOOK.read_text(encoding="utf-8"), re.M)
     headings = [re.sub(r"[^a-z0-9 -]", "", t.lower()).replace(" ", "-") for t in titles]
     assert anchor in headings
