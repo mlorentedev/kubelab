@@ -235,7 +235,11 @@ jobs:
       sha: ${{ github.sha }}
       context: ./edge/errors
       runner: ${{ vars.RUNNER_DOCKER || '"ubuntu-latest"' }}
-    secrets: inherit
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+      N8N_WEBHOOK_URL: ${{ secrets.N8N_WEBHOOK_URL }}
+      N8N_DEPLOY_TOKEN: ${{ secrets.N8N_DEPLOY_TOKEN }}
 
   # DELIVERY-003: auto-pin the deployed errors tag after a release. errors is a
   # single semver shared across envs (edge.errors.version), so the bump lands as

@@ -62,8 +62,11 @@ def test_the_install_ensures_presence_and_never_chases_latest() -> None:
     )
 
 
-def test_the_install_uses_the_pinned_mise_node() -> None:
-    """The module must run the node the role pins, not whatever is first on PATH."""
+def test_the_install_uses_the_active_mise_node() -> None:
+    """The module must run the node mise has active, not whatever is first on PATH.
+
+    The version is mise's answer (`mise where node`), never a pin of the role's own:
+    the dotfiles own node, and a second pin shadows theirs (#3559)."""
     task = _npm_install_task()
 
     def resolve(value: str) -> str:
@@ -71,9 +74,9 @@ def test_the_install_uses_the_pinned_mise_node() -> None:
             value = value.replace("{{ " + name + " }}", sub)
         return value
 
-    executable = resolve(task["community.general.npm"].get("executable", ""))
-    assert "mise/installs/node/{{ dev_node_toolchains.node }}/bin/npm" in executable
-    assert "mise/installs/node/{{ dev_node_toolchains.node }}/bin" in resolve(task["environment"]["PATH"]), (
+    node_bin = "{{ _dev_node_node_where.stdout | trim }}/bin"
+    assert resolve(task["community.general.npm"].get("executable", "")) == f"{node_bin}/npm"
+    assert node_bin in resolve(task["environment"]["PATH"]), (
         "mise's bin/npm is a script that execs `node`, so node must be on PATH too"
     )
 

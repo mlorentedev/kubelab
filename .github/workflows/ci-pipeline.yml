@@ -345,10 +345,17 @@ jobs:
     # Mirroring the secrets into the Dependabot store was the alternative, and it
     # would put a registry push credential within reach of a branch no human
     # wrote.
+    #
+    # Nor for Renovate (kubelab#3344): its branches are pushed as the account
+    # owner, so its runs do hold the registry secrets, and a `renovate/` branch
+    # would publish an image built from dependencies no human reviewed. Matching
+    # the branch name is safe in this direction: a branch named to match only
+    # forfeits the publish, and the image is published from master after merge.
     if: >
       needs.app-pipeline.outputs.should_build == 'true'
       && needs.app-pipeline.outputs.docker_version != 'skip'
       && github.actor != 'dependabot[bot]'
+      && !startsWith(github.head_ref, 'renovate/')
     uses: ./.github/workflows/ci-publish.yml
     with:
       app: ${{ inputs.app }}
@@ -357,6 +364,10 @@ jobs:
       context: ${{ needs.app-pipeline.outputs.context }}
       extra_build_args: ${{ needs.app-pipeline.outputs.extra_build_args }}
       runner: ${{ inputs.runner }}
-    secrets: inherit
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+      N8N_WEBHOOK_URL: ${{ secrets.N8N_WEBHOOK_URL }}
+      N8N_DEPLOY_TOKEN: ${{ secrets.N8N_DEPLOY_TOKEN }}
 
   # GitOps update + tagging handled by release-please (release.yml)

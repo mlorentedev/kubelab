@@ -94,7 +94,11 @@ jobs:
       sha: ${{ github.sha }}
       context: ./apps/api
       runner: ${{ vars.RUNNER_DOCKER || '"ubuntu-latest"' }}
-    secrets: inherit
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+      N8N_WEBHOOK_URL: ${{ secrets.N8N_WEBHOOK_URL }}
+      N8N_DEPLOY_TOKEN: ${{ secrets.N8N_DEPLOY_TOKEN }}
 
   build-console:
     name: Build Console
@@ -107,7 +111,11 @@ jobs:
       sha: ${{ github.sha }}
       context: ./apps/console
       runner: ${{ vars.RUNNER_DOCKER || '"ubuntu-latest"' }}
-    secrets: inherit
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+      N8N_WEBHOOK_URL: ${{ secrets.N8N_WEBHOOK_URL }}
+      N8N_DEPLOY_TOKEN: ${{ secrets.N8N_DEPLOY_TOKEN }}
 
   open-pr:
     name: Open Staging Deploy PR
