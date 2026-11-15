@@ -40,35 +40,9 @@ func recording(calls *[]usageCall, err error) Usage {
 	}
 }
 
-// A8 counts days the operator opened the page, read from the identity Authelia names.
-func TestOpeningThePageCountsTheIdentityAutheliaNames(t *testing.T) {
-	var calls []usageCall
-	w := serveUsage(t, recording(&calls, nil), "/console/", http.Header{"Remote-User": {"operator"}})
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200", w.Code)
-	}
-	if len(calls) != 1 || calls[0].identity != "operator" || calls[0].at.IsZero() {
-		t.Fatalf("calls = %+v, want one for operator", calls)
-	}
-}
-
-// The host check can be met from inside the cluster; only Authelia sets Remote-User.
-func TestARequestWithNoIdentityIsNotCounted(t *testing.T) {
-	var calls []usageCall
-	for _, h := range []http.Header{{}, {"Remote-User": {"  "}}} {
-		if w := serveUsage(t, recording(&calls, nil), "/console/", h); w.Code != http.StatusOK {
-			t.Fatalf("status = %d, want 200", w.Code)
-		}
-	}
-	if len(calls) != 0 {
-		t.Fatalf("calls = %+v, want none", calls)
-	}
-}
-
 // The frontend is a static page served by nginx: the queue is the one console route every load of
 // it calls, so it is where an open is counted (#3450). Without this the A8 counter, which decides
-// whether the console survives, would go silent the day the embedded page is deleted.
+// whether the console survives, would go silent now that the embedded page is gone.
 func TestTheQueueCountsTheIdentityAutheliaNames(t *testing.T) {
 	var calls []usageCall
 	w := serveUsage(t, recording(&calls, nil), "/console/queue", http.Header{"Remote-User": {"operator"}})
@@ -82,7 +56,7 @@ func TestTheQueueCountsTheIdentityAutheliaNames(t *testing.T) {
 
 // Fails if a console data route stops recording usage, or a new one is added that does not.
 // Read from the engine's routes, not from a list here, so a route added later is held to it:
-// every GET under /console other than the embedded page is data the frontend calls.
+// every GET under /console is data the frontend calls.
 func TestEveryConsoleDataRouteCountsAnOpen(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
@@ -94,9 +68,6 @@ func TestEveryConsoleDataRouteCountsAnOpen(t *testing.T) {
 	for _, ri := range r.Routes() {
 		if ri.Method != http.MethodGet || !strings.HasPrefix(ri.Path, "/console") {
 			continue
-		}
-		if ri.Path == "/console" || ri.Path == "/console/" {
-			continue // the embedded page, deleted with its handler
 		}
 		seen++
 		calls = nil
@@ -115,7 +86,7 @@ func TestEveryConsoleDataRouteCountsAnOpen(t *testing.T) {
 }
 
 // Counting is a measurement of the signed-in operator: a request that did not come through
-// Authelia names nobody and is not counted, on the queue as on the page.
+// Authelia names nobody and is not counted.
 func TestAQueueRequestWithNoIdentityIsNotCounted(t *testing.T) {
 	var calls []usageCall
 	if w := serveUsage(t, recording(&calls, nil), "/console/queue", http.Header{}); w.Code != http.StatusOK {
@@ -126,10 +97,10 @@ func TestAQueueRequestWithNoIdentityIsNotCounted(t *testing.T) {
 	}
 }
 
-// The counter is a measurement; a database that refuses the write never takes the page down.
-func TestAFailedWriteStillServesThePage(t *testing.T) {
+// The counter is a measurement; a database that refuses the write never takes the queue down.
+func TestAFailedWriteStillServesTheQueue(t *testing.T) {
 	var calls []usageCall
-	w := serveUsage(t, recording(&calls, errors.New("down")), "/console/", http.Header{"Remote-User": {"operator"}})
+	w := serveUsage(t, recording(&calls, errors.New("down")), "/console/queue", http.Header{"Remote-User": {"operator"}})
 	if w.Code != http.StatusOK || len(calls) != 1 {
 		t.Fatalf("status = %d calls = %d, want 200 and one attempt", w.Code, len(calls))
 	}

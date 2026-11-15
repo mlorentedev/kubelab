@@ -7,7 +7,7 @@ created: "2026-05-09"
 
 # kubelab-console (component spec)
 
-> **Status:** `incubating` in this repository as `apps/console` ([ADR-074](../../adr/adr-074-console-and-rest-surface.md)). Today a read-only queue page is embedded in `apps/api` at `console.kubelab.live` (#3107); it is transitional.
+> **Status:** `incubating` in this repository as `apps/console` ([ADR-074](../../adr/adr-074-console-and-rest-surface.md)). It is served at `console.kubelab.live`; the read-only page the API used to embed (#3107) was removed once prod served it (#3443), and the API keeps `/console/queue` and the write routes behind it.
 > **Parent:** kubelab
 > **Layer:** L1-platform
 > **ADRs:** [ADR-074](../../adr/adr-074-console-and-rest-surface.md), [ADR-066](../../adr/adr-066-self-hosted-task-platform.md) (2026-10-20 amendment), [ADR-050](../../adr/adr-050-cross-context-command-center.md), [ADR-071](../../adr/adr-071-idp-branding-substrate.md)

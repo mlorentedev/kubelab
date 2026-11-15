@@ -64,13 +64,13 @@ func TestConsoleIsServedOnlyOnItsOwnHost(t *testing.T) {
 		{"neither declared nor named", "", ""},
 	}
 	for _, c := range cases {
-		for _, path := range []string{"/console/", "/console/queue", "/console"} {
+		for _, path := range []string{"/console/queue", "/console/"} {
 			if w := serveHost(t, &fakeQueue{}, "", c.domain, c.host, path); w.Code != http.StatusNotFound {
 				t.Fatalf("%s %s: status = %d, want 404", c.name, path, w.Code)
 			}
 		}
 	}
-	if w := serveHost(t, &fakeQueue{}, "", consoleHost, "Console.Kubelab.Live:443", "/console/"); w.Code != http.StatusOK {
+	if w := serveHost(t, &fakeQueue{}, "", consoleHost, "Console.Kubelab.Live:443", "/console/queue"); w.Code != http.StatusOK {
 		t.Fatalf("console host with port and case: status = %d", w.Code)
 	}
 }
@@ -189,14 +189,6 @@ func TestQueueWithoutSourcesIsEmptyNotAnError(t *testing.T) {
 	}
 }
 
-func TestConsolePageIsServed(t *testing.T) {
-	w := serve(t, &fakeQueue{}, "", "/console/")
-	if w.Code != http.StatusOK || !strings.HasPrefix(w.Header().Get("Content-Type"), "text/html") ||
-		!strings.Contains(w.Body.String(), "queue") {
-		t.Fatalf("status = %d type = %q", w.Code, w.Header().Get("Content-Type"))
-	}
-}
-
 // Every key the server can emit as `next` must be one it accepts back: an item whose
 // update time is the zero time would otherwise leave "Load more" answering 400 forever.
 func TestEveryEmittedCursorDecodes(t *testing.T) {
@@ -215,20 +207,13 @@ func TestEveryEmittedCursorDecodes(t *testing.T) {
 	}
 }
 
-// Until apps/console serves the host's root (ADR-074 D5), the bare host sends the
-// operator to the page. The redirect is temporary on purpose: a browser caches a 301
-// for good, and `/` will become the frontend's.
-func TestConsoleHostRootRedirectsToThePage(t *testing.T) {
-	w := serve(t, &fakeQueue{}, "", "/")
-	if w.Code != http.StatusFound || w.Header().Get("Location") != "/console/" {
-		t.Fatalf("console host /: status = %d, location = %q, want 302 to /console/", w.Code, w.Header().Get("Location"))
-	}
-	for _, c := range []struct{ name, domain, host string }{
-		{"public api host", consoleHost, "api.kubelab.live"},
-		{"no console host declared", "", consoleHost},
-	} {
-		if w := serveHost(t, &fakeQueue{}, "", c.domain, c.host, "/"); w.Code != http.StatusNotFound {
-			t.Fatalf("%s /: status = %d, want 404", c.name, w.Code)
+// The page is apps/console's, served by nginx at the host's root. The api answers nothing there
+// and nothing at /console/ itself: a route that came back would answer under the frontend's
+// feet (Traefik sends `/` to nginx and only `/console/` to the api, #3443).
+func TestTheApiServesNoPageOfItsOwn(t *testing.T) {
+	for _, path := range []string{"/", "/console", "/console/"} {
+		if w := serve(t, &fakeQueue{}, "", path); w.Code != http.StatusNotFound {
+			t.Fatalf("console host %s: status = %d, want 404", path, w.Code)
 		}
 	}
 }
