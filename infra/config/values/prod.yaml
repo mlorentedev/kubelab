@@ -86,6 +86,8 @@ apps:
       version: 1.16.3
 
   # Third-party services
+    console:
+      version: 1.0.0
   services:
     core:
       gitea:
