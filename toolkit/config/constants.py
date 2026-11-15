@@ -191,6 +191,9 @@ class ValidationRules:
         "AUTH",
         "JWT",
         "CLIENT",
+        # A certificate half catalogued in SOPS (infra.sealed_secrets.tls_crt): INFRA_* reaches every
+        # app's ConfigMap, so a name the list misses is printed there in plaintext (#3572).
+        "CRT",
     )
     URL_PATTERNS: Sequence[str] = ("URL", "HOST", "DOMAIN")
     SAFE_PATTERNS: Sequence[str] = (
