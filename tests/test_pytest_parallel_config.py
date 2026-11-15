@@ -59,7 +59,7 @@ def test_the_dist_mode_keeps_a_files_tests_on_one_worker_in_order(tmp_path: Path
         encoding="utf-8",
         newline="\n",
     )
-    (tmp_path / "pytest.ini").write_text("[pytest]\n", encoding="utf-8")  # /dev/null is no file on Windows
+    (tmp_path / "pytest.ini").write_text("[pytest]\n", encoding="utf-8", newline="\n")  # /dev/null is no file on Windows
     run = subprocess.run(
         [sys.executable, "-m", "pytest", "-c", str(tmp_path / "pytest.ini"), "-q", "-p", "no:cacheprovider"]
         + ["-n", "2", "--dist", dist, str(probe)],

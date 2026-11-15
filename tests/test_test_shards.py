@@ -98,7 +98,7 @@ def test_the_plugin_deselects_other_shards_and_runs_unknown_files(tmp_path: Path
     record.write_text(json.dumps(seconds), encoding="utf-8", newline="\n")
     ran: list[str] = []
     for index in (1, 2):
-        (tmp_path / "pytest.ini").write_text("[pytest]\n", encoding="utf-8")  # /dev/null is no file on Windows
+        (tmp_path / "pytest.ini").write_text("[pytest]\n", encoding="utf-8", newline="\n")  # /dev/null is no file on Windows
         run = subprocess.run(
             [sys.executable, "-m", "pytest", "-c", str(tmp_path / "pytest.ini"), "--rootdir", str(tmp_path), "-p", "tests.sharding"]
             + ["-q", "-p", "no:cacheprovider", "--collect-only", f"--shard={index}/2"]
@@ -137,7 +137,7 @@ def test_stored_durations_are_summed_per_file(tmp_path: Path) -> None:
         newline="\n",
     )
     out = tmp_path / "stored.json"
-    (tmp_path / "pytest.ini").write_text("[pytest]\n", encoding="utf-8")  # /dev/null is no file on Windows
+    (tmp_path / "pytest.ini").write_text("[pytest]\n", encoding="utf-8", newline="\n")  # /dev/null is no file on Windows
     run = subprocess.run(
         [sys.executable, "-m", "pytest", "-c", str(tmp_path / "pytest.ini"), "--rootdir", str(tmp_path), "-p", "tests.sharding"]
         + ["-q", "-p", "no:cacheprovider", f"--store-shard-durations={out}", "test_x.py"],
@@ -187,7 +187,7 @@ def test_under_xdist_the_heaviest_file_is_dispatched_first(tmp_path: Path) -> No
     (tmp_path / "test_light.py").write_text("".join(body.format(i=i) for i in range(6)), encoding="utf-8", newline="\n")
     record = tmp_path / "durations.json"
     record.write_text(json.dumps({"test_heavy.py": 100, "test_light.py": 1}), encoding="utf-8", newline="\n")
-    (tmp_path / "pytest.ini").write_text("[pytest]\n", encoding="utf-8")  # /dev/null is no file on Windows
+    (tmp_path / "pytest.ini").write_text("[pytest]\n", encoding="utf-8", newline="\n")  # /dev/null is no file on Windows
     run = subprocess.run(
         [sys.executable, "-m", "pytest", "-c", str(tmp_path / "pytest.ini"), "--rootdir", str(tmp_path), "-p", "tests.sharding"]
         + ["-q", "-p", "no:cacheprovider", "-n", "1", "--dist", "loadfile", "--shard=1/1"]
