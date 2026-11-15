@@ -113,6 +113,8 @@ class TestVerify:
         assert cmd[cmd.index("--kubeconfig") + 1] == "/kc-staging"
         assert cmd[cmd.index("-n") + 1] == "kube-system"
         assert "sealed-secrets-probe" in cmd
+        # A Secret the controller never made is a verdict (`mismatch`), not a kubectl NotFound error.
+        assert "--ignore-not-found" in cmd
 
 
 class TestCommand:
