@@ -17,18 +17,19 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 
 
-def repo_files(root: Path, *patterns: str) -> list[Path]:
+def repo_files(root: Path, *patterns: str, repo: Path = REPO) -> list[Path]:
     """Every file under `root` that git tracks or would add, sorted, with a name matching one of `patterns`.
 
     A pattern matches the file name, as one passed to `Path.rglob` does; none means every file.
+    `repo` is the checkout git lists from; only the tests of this module name another one.
     """
     listed = subprocess.run(
         ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", str(root)],
-        cwd=REPO,
+        cwd=repo,
         capture_output=True,
         check=True,
     ).stdout.decode()
-    paths = (REPO / rel for rel in listed.split("\0") if rel)
+    paths = (repo / rel for rel in listed.split("\0") if rel)
     # `is_file`: --cached also lists a tracked file deleted from the working tree.
     return sorted(
         path
