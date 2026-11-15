@@ -197,7 +197,9 @@ def test_the_merge_does_report_a_conflict(tmp_path: pathlib.Path) -> None:
 
 # What a receiver run copies: the generator reads the values and the platform tree, and the api
 # lane's migrations Job is rendered from `apps/api/migrations`.
-TREE = ("infra", "toolkit", "edge", "apps/api/migrations", "pyproject.toml")
+# .gitattributes too: without its eol=lf a Windows git (core.autocrlf=true) calls every
+# regenerated LF file modified, with an empty diff (#3409).
+TREE = ("infra", "toolkit", "edge", "apps/api/migrations", "pyproject.toml", ".gitattributes")
 PROMOTE = """
 import sys
 from unittest.mock import MagicMock
@@ -266,4 +268,5 @@ def test_the_whole_receiver_write_merges_in_either_order(committed_tree: pathlib
     # A shared line the merge got wrong, a digest or an index the generator derives from every pin,
     # shows here: the merged tree is not what the generator writes from the merged values.
     _python(tree, REGENERATE)
-    assert _git(tree, "status", "--porcelain").stdout == ""
+    status = _git(tree, "status", "--porcelain", "-uall").stdout
+    assert status == "", status + _git(tree, "diff").stdout[-3000:]

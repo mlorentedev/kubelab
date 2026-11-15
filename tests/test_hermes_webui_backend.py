@@ -177,8 +177,10 @@ def test_a_hermes_container_left_unbound_is_recreated() -> None:
     existed runs with no port, and an unchanged spec hash keeps `up -d` off it."""
     probe = _named("Read the Hermes port bindings requested vs the ones in effect")
     assert "hermes-kubelab" in probe["ansible.builtin.command"]
+    decision = _named("Hold whether the rendered inputs will recreate Hermes")["ansible.builtin.set_fact"]
+    assert "_agent_stack_hermes_unbound" in str(decision["_agent_stack_hermes_recreate_expected"])
     start = _named("Start hermes-kubelab")["ansible.builtin.command"]
-    assert "_agent_stack_hermes_unbound" in start
+    assert "_agent_stack_hermes_recreate_expected" in start
 
 
 def test_the_rule_is_closed_when_hermes_is_not_configured() -> None:

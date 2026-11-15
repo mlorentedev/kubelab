@@ -133,8 +133,8 @@ def test_the_command_counts_on_the_ssot_interface_and_its_ifb() -> None:
 def test_the_remote_script_parses_as_posix_shell() -> None:
     shell = shutil.which("dash") or "/bin/sh"
     script = m.remote_command(UPLINK, f"ifb4{UPLINK}")
-    result = subprocess.run([shell, "-n"], input=script, text=True, encoding="utf-8", capture_output=True, check=False)
-    assert result.returncode == 0, result.stderr
+    result = subprocess.run([shell, "-n"], input=script.encode(), capture_output=True, check=False)
+    assert result.returncode == 0, result.stderr.decode(errors="replace")
 
 
 def test_the_runbook_cites_the_target() -> None:

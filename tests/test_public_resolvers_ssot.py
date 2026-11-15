@@ -69,7 +69,7 @@ def test_the_tailnet_first_list_leads_with_magicdns_and_falls_back_to_a_declared
 def test_every_resolver_variable_reads_the_ssot() -> None:
     """Catches an address the SSOT does not declare, which the literal scan cannot."""
     variables = {
-        f"{path.relative_to(ROLES)}: {name}": value
+        f"{path.relative_to(ROLES).as_posix()}: {name}": value
         for path in ROLES.glob("*/defaults/*.yml")
         for name, value in (yaml.safe_load(path.read_text(encoding="utf-8")) or {}).items()
         if name.endswith(("dns_servers", "acme_dns_resolvers"))

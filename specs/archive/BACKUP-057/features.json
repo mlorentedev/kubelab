@@ -3,57 +3,57 @@
     "id": "BACKUP-057-f1",
     "behavior": "The watcher reports each repository's raw size and the fleet sum, and a Grafana rule fires above 80% of the declared free tier (AC2 prerequisite, Q3)",
     "verification": "poetry run pytest \"tests/test_r2_backup_watcher_probe.py::test_each_node_reports_its_prefix_and_the_fleet_its_buckets\" \"tests/test_r2_backup_watcher_probe.py::test_the_fleet_sums_every_bucket_once\" \"tests/test_r2_backup_watcher_probe.py::test_an_unknown_node_size_is_null_and_never_fails_a_healthy_node\" \"tests/test_r2_backup_watcher_probe.py::test_the_probe_never_walks_the_snapshots_to_size_them\" tests/test_r2_backup_alerting_rules.py --no-cov -q",
-    "state": "pending",
-    "evidence": ""
+    "state": "passing",
+    "evidence": "2026-11-14: its verification command -> 14 passed (watcher probe size reports + r2_backup_alerting_rules)."
   },
   {
     "id": "BACKUP-057-f2",
     "behavior": "The rendered R2 tfvars give one bucket per backup.sources node, lock data/ snapshots/ keys/ config and never locks/ or index/, keep R below the --keep-within days, and the retention flags forbid repacking with --max-repack-size 0 (AC2)",
     "verification": "poetry run pytest tests/test_r2_terraform.py --no-cov -q",
-    "state": "pending",
-    "evidence": ""
+    "state": "passing",
+    "evidence": "2026-11-14: tests/test_r2_terraform.py -> 35 passed."
   },
   {
     "id": "BACKUP-057-f3",
     "behavior": "SECRET_CATALOG declares a distinct R2 key pair and restic password per node plus one read-only watcher pair, and the mint command writes them without printing them (AC1)",
     "verification": "poetry run pytest tests/test_backup_node_credentials.py --no-cov -q",
-    "state": "pending",
-    "evidence": ""
+    "state": "passing",
+    "evidence": "2026-11-14: tests/test_backup_node_credentials.py -> 40 passed."
   },
   {
     "id": "BACKUP-057-f4",
     "behavior": "No two nodes render the same bucket, key pair or restic password in backup.yml, backup_destination or the watcher targets; the watcher Secret, the declared exception, carries one Object Read pair distinct from every node's pair plus each node's restic password taken from that node's own SOPS key (AC1); each node token's requested policy names exactly one bucket, and the watcher's read token names exactly the node buckets (AC3)",
     "verification": "poetry run pytest tests/test_backup_per_node_isolation.py --no-cov -q",
-    "state": "pending",
-    "evidence": ""
+    "state": "passing",
+    "evidence": "2026-11-14: tests/test_backup_per_node_isolation.py -> 22 passed."
   },
   {
     "id": "BACKUP-057-f8",
     "behavior": "forget --prune runs in its own daily unit, bounded by its own timeout and notified on failure by exit code alone; the ship no longer prunes and unlocks stale locks before backup, and a failed backup or check still fails it (AC3, Q6 amended 2026-10-03)",
     "verification": "poetry run pytest tests/test_node_backup_prune_script.py tests/test_node_backup_ship_script.py tests/test_node_backup_role.py --no-cov -q",
-    "state": "pending",
-    "evidence": ""
+    "state": "passing",
+    "evidence": "2026-11-14: prune script, ship script and role tests -> 131 passed, 1 skipped (systemd-analyze is not installed on macOS; it runs in CI)."
   },
   {
     "id": "BACKUP-057-f5",
     "behavior": "The migration copies, matches every source snapshot to exactly one copy by its original ID, reinitialises the marker with its journal line, ships and re-pins, stopping at the first mismatch (AC4)",
     "verification": "Manual, measured 2026-10-08 on all four nodes (vps 39/39, rpi3 40/40, rpi4 52/52, beelink 61/61 snapshots matched) and recorded in verification.md. The command and its test were removed in PR 5, since nothing is left to move out of the shared bucket",
-    "state": "pending",
-    "evidence": ""
+    "state": "passing",
+    "evidence": "verification.md, \"The migration sitting (AC4)\": vps 39/39, rpi3 40/40, rpi4 52/52, beelink 61/61 snapshots matched by restic original, 2026-10-08."
   },
   {
     "id": "BACKUP-057-f9",
     "behavior": "On the scratch bucket under a 1-day lock: two backups and check succeed with locks/ outside the rule; --max-repack-size 0 takes the dry-run repack list from at least one pack to none; forgetting a snapshot younger than R is refused by R2 at the snapshot's DELETE; a prune of unreferenced packs younger than R is refused at the pack's DELETE; a direct young data/ delete is refused; and the same forget is accepted once everything is older than R (AC2, AC3)",
     "verification": "Manual, tasks.md PR 2 scratch measurement steps 2, 2b, 3, 3b, 4 and 5 after make tf-r2-apply SCRATCH=1; each step's command, exit status and restic output recorded in verification.md",
-    "state": "pending",
-    "evidence": ""
+    "state": "passing",
+    "evidence": "verification.md, \"PR 2 gate\", \"Scratch steps 2, 2b and 3\", \"Scratch step 5\", \"Scratch step 6\": each step with its command, exit status and restic output; step 4 refused a young data/ delete with ObjectLockedByBucketPolicy."
   },
   {
     "id": "BACKUP-057-f6",
     "behavior": "In prod, under the lock, every node ships and the watcher reports every declared node healthy; a young data/ delete and a cross-node list are refused; no node-backup-prune.service failure in the seven days from 2026-11-07, with a forget logged on each migrated node (AC1, AC3)",
     "verification": "make backup-node NODE=all ENV=prod && make backup-isolation-probe ENV=prod && make watcher-run ENV=prod; then, manual, on or after 2026-11-14 02:30 UTC: make backup-schedule NODE=all ENV=prod reports no prune failure in that window (tasks.md PR 4), both recorded in verification.md",
-    "state": "pending",
-    "evidence": ""
+    "state": "passing",
+    "evidence": "verification.md, \"The migration sitting (AC4)\" (isolation probe rc 0 after the last first ship) and \"AC3 closed (2026-11-14)\": backup-schedule reports 0 prune failures in 7 days on all five nodes, and a hand-run prune reached forget on every node."
   },
   {
     "id": "BACKUP-057-f7",

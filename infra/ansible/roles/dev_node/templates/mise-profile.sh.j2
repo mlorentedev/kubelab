@@ -18,7 +18,7 @@ MISE_SHIMS="{{ dev_node_home }}/.local/share/mise/shims"
 # account's toolchain on root's PATH.
 if [ "$(id -un)" = "{{ dev_node_user }}" ] && [ -d "$MISE_SHIMS" ]; then
     # Shims take precedence over the system toolchain: that is what makes the
-    # `config.toml` pins (node/go/python) actually take effect. Ubuntu's own
+    # mise pins (the role's go, the dotfiles' node/python) actually take effect. Ubuntu's own
     # tooling is unaffected — it uses absolute shebangs (#!/usr/bin/python3),
     # and neither cron nor systemd reads profile.d at all.
     export PATH="$MISE_SHIMS:$PATH"

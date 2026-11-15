@@ -1,0 +1,37 @@
+[
+  {
+    "id": "AI-013-hermes-liveness-f1",
+    "behavior": "AC1: a stopped or unhealthy gateway fails the local health contract and the two-minute watcher emits one deduplicated incident through kubelab-notify@ after boot grace.",
+    "verification": "poetry run pytest -q tests/test_hermes_liveness.py -k 'healthcheck or notification_hooks or timer_interval'",
+    "state": "passing",
+    "evidence": "Clean live stop at 21:22:43Z produced unhealthy, successful notifier and one ops-log incident at 21:22:47.606959Z; restart produced recovery after exactly 1 failed run at 21:23:44.059549Z."
+  },
+  {
+    "id": "AI-013-hermes-liveness-f2",
+    "behavior": "AC2: healthy and one recent start (under 150s, RestartCount <= 1) succeed; sustained starting, repeated restart, unhealthy, missing and Docker errors fail; recovery ignores provider readiness.",
+    "verification": "poetry run pytest -q tests/test_hermes_liveness.py -k 'probe or recovery or simple_health'",
+    "state": "passing",
+    "evidence": "27 focused tests passed. Live restart observed starting with grace_rc=0, then healthy/probe success and zero new Slack messages. Grace covers the full 150s Compose window; sustained/repeated/invalid states fail; Docker RestartCount is top-level."
+  },
+  {
+    "id": "AI-013-hermes-liveness-f3",
+    "behavior": "AC3: a powered-off ace2 cannot page because there is no external monitor, persistent timer or always-on dependency.",
+    "verification": "poetry run pytest -q tests/test_hermes_liveness.py -k 'on_demand or boot_grace or external_monitor'",
+    "state": "passing",
+    "evidence": "Tests prove no Persistent/OnCalendar directive, Kuma monitor or egress dependency; ten-minute local boot grace and two-minute cadence are rendered. Power-off was not physically exercised; no external notification path exists."
+  },
+  {
+    "id": "AI-013-hermes-liveness-f4",
+    "behavior": "AC4: disabling removes all watcher artifacts; enabling follows gateway health, and a failed deployment restores a paused timer before propagating the error.",
+    "verification": "poetry run pytest -q tests/test_hermes_liveness.py -k 'unconfigured or activation_order'",
+    "state": "passing",
+    "evidence": "Role tests pin full-path unconfigured teardown before Compose shutdown and activation after unit installation plus API/Slack/Docker health. Predicted recreation pauses without disabling; a rescue restores a paused timer on failure before propagating it. All 26 playbooks parse; dry-run contracts pass."
+  },
+  {
+    "id": "AI-013-hermes-liveness-f5",
+    "behavior": "AC5: provisioning is idempotent, regression tests protect the wiring, and an approved live stop/start records alert and recovery evidence without credentials.",
+    "verification": "poetry run pytest -q tests/test_hermes_liveness.py && make lint-ansible",
+    "state": "passing",
+    "evidence": "Final suite 10676 passed/96 skipped; Ruff, mypy and 26 playbooks green. Initial pair ended changed=0 and final corrected-head provision changed=0/failed=0. Review-fix recreate measured changed=4 then changed=0 with zero new watchdog messages; direct-fix provisions also reached changed=0/failed=0 and the clean restart baseline emitted no messages. Clean drill produced one incident and recovery after 1 failed run; final gateway healthy, timer active, spool 0."
+  }
+]

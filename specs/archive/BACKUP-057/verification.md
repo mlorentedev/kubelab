@@ -9,11 +9,11 @@ created: "2026-09-30"
 
 Map every acceptance criterion from `proposal.md` to concrete proof (commit hash, test name, or observed behavior).
 
-- [ ] Criterion 1 -> commit `<hash>` / test `<name>`
-- [ ] Criterion 2 -> commit `<hash>` / test `<name>`
-- [ ] Criterion 3 -> commit `<hash>` / test `<name>`
-- [ ] Criterion 4 -> commit `<hash>` / test `<name>`
-- [ ] Criterion 5 -> commit `<hash>` / test `<name>`
+- [x] AC1 -> commits `5d3e7857` (#1959), `7504bc5b` (#2091), `6990d8fc` (#2099) / tests `test_backup_per_node_isolation.py`, `test_backup_node_credentials.py`; live: "PR 4c" and "The migration sitting (AC4)" below
+- [x] AC2 -> commits `5d3e7857` (#1959), `a1a7f300` (#2055) / tests `test_r2_terraform.py`, `test_r2_backup_alerting_rules.py`; live: "AC2: the node buckets" below
+- [x] AC3 -> commits `bf55ccbb` (#2070), `293b2b22` (#2708), `5719471f` (#3497) / tests `test_node_backup_prune_script.py`, `test_node_backup_ship_script.py`, `test_node_backup_role.py`; live: "Scratch steps" and "AC3 closed (2026-11-14)" below
+- [x] AC4 -> commits `18c76926` (#2096), `eb3d0ccb` (#2122), `7efe5e9b` (#3218) / measured: "The migration sitting (AC4)" below (192 snapshots, each matched by `original`)
+- [x] AC5 -> commits `f4737bf6` (#2925), `b84cd62f` (#2100) / tests `test_offsite_runbook_claims.py`, `test_backup_escrow_check.py`; live: "AC5: the runbooks" and "The escrow check" below
 
 ## PR 1 gate: size against the free tier (Q3)
 
@@ -303,9 +303,19 @@ Still open: the watcher's live token was minted when the policy named `kubelab-b
 
 ## Test status
 
-- Test suite: `<command> -> <output / coverage %>`
-- Manual smoke test: what was exercised, what was observed
-- No regressions in existing test suite: yes / no (if no, document)
+- Test suite: `make test-fast` on 2026-11-14 at the archive branch's base -> see the archive PR's Verification section. Each `features.json` verification was run on its own the same day; the results are in each entry's `evidence`.
+- Manual smoke test: the prod measurements are recorded above (scratch steps, the migration sitting, AC3 closed, the shared bucket retired).
+- No regressions in existing test suite: yes. `make test-fast` at dd258e77 (2026-11-15): 10599 passed, 96 skipped, exit 0. `make lint` the same day: all checks passed. The `tasks.md` box for this stays unticked because the review closed the contract set; this line is its evidence.
+
+## Test retention
+
+`tests/test_backup_migrate.py` (425 lines) and the shared-bucket verify tests were deleted in `e5a8205b` (#3087) and `c6aa4583` (#2959).
+
+- **What they guarded**: `make backup-migrate`, the one-time copy from `kubelab-backups/<node>` into each node bucket, and the verify commands that probed the shared bucket.
+- **Why removed**: the code they tested was removed with them. The migration ran once per node (2026-10-08) and the shared bucket is retired and deleted (#3218), so there is nothing left to migrate or probe.
+- **What guards the behaviour now**: the per-node isolation (`test_backup_per_node_isolation.py`, `test_backup_isolation_probe.py`) and the BACKUP-058 refusal to re-create a shipped repository (`test_node_backup_ship_script.py`).
+- **Evidence the migration held**: "The migration sitting (AC4)" above, 192 of 192 snapshots matched by `original`.
+- **Residual risk**: none for prod. A future migration between buckets would need a new command and its own tests.
 
 ## Decisions made during implementation
 
@@ -319,13 +329,13 @@ Brief log of non-obvious trade-offs or course corrections taken during the work.
 
 Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`. `dotf spec archive` refuses a line left unanswered, a `no` without a reason, and a `yes` whose file does not exist; a `00_meta/` path is looked up in the vault.
 
-- [ ] Lesson for the repo's `docs/lessons/`? <yes: path / no: reason>
-- [ ] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? <yes: path / no: reason>
-- [ ] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. <yes: path / no: reason>
+- [x] Lesson for the repo's `docs/lessons/`? yes: docs/lessons/storage-backup/lesson-511-restic-reports-a-refused-pack-delete-as-success.md (the spec's lessons were filed as they were learned: also 490, 521, 524, 538, 539, 688, 747 in storage-backup and 507, 513 in identity-secrets)
+- [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? no: the decision (one locked bucket per node, R shorter than the forget window) amends #1920 and is stated in proposal.md and in docs/runbooks/offsite-backup-restore.md, which a test holds to the measured claims
+- [x] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. no: object-lock retention against a forget window is specific to restic on R2 here
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/BACKUP-057/` -> `specs/archive/BACKUP-057/`
+- [x] `proposal.md` frontmatter set to `status: archived`
+- [x] Folder moved: `specs/BACKUP-057/` -> `specs/archive/BACKUP-057/`
 - [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
-- [ ] Promotions above executed (if any)
+- [x] Promotions above executed (if any)

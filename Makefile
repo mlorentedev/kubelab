@@ -343,6 +343,7 @@ config-generate:
 #   - infra/k8s/overlays/<env>/generated/configmaps.yaml   (CI-GATE-003)
 #   - infra/k8s/overlays/<env>/generated/hooks.yaml        (GITOPS-003 AC3)
 #   - infra/k8s/overlays/<env>/generated/claims.yaml       (RES-HOST-001 slice C)
+#   - infra/k8s/overlays/<env>/generated/networkpolicies.yaml (RES-HOST-001 slice E)
 #
 # These generators read EXCLUSIVELY from `common.yaml` + `<env>.yaml`
 # (post-SSOT-012, configmaps.yaml no longer pulls non-secret values from
@@ -445,6 +446,7 @@ config-check-drift:
 	        infra/k8s/overlays/$(ENV)/generated/configmaps.yaml \
 	        infra/k8s/overlays/$(ENV)/generated/hooks.yaml \
 	        infra/k8s/overlays/$(ENV)/generated/claims.yaml \
+	        infra/k8s/overlays/$(ENV)/generated/networkpolicies.yaml \
 	        infra/k8s/overlays/$(ENV)/generated/migrations.yaml \
 	        infra/ansible/generated/$(ENV)/hosts.yml"; \
 	if [ $$_status -ne 0 ]; then \
@@ -1747,6 +1749,15 @@ gitea-prune-runners: ## Deregister Gitea Actions runners the declaration does no
 		exit 1; \
 	}
 	@$(TOOLKIT) services gitea prune-runners --env $(ENV) $(if $(APPLY),--apply,)
+
+.PHONY: gitea-jobs
+gitea-jobs: ## Read a repo's Actions runs, or one run's jobs (RUN=id), telling waiting from running
+	@{ test "$(words $(ENV))" = 1 && test -n "$(filter $(ENV),$(GITEA_ENVS))" && test -n "$(REPO)"; } || { \
+		echo "Usage: make gitea-jobs ENV=<one of: $(GITEA_ENVS)> REPO=<owner/name> [RUN=<id>] [LAST=<n>]"; \
+		echo "  Got ENV='$(ENV)' REPO='$(REPO)'. Read-only."; \
+		exit 1; \
+	}
+	@$(TOOLKIT) services gitea jobs --env $(ENV) --repo $(REPO) $(if $(RUN),--run $(RUN),) $(if $(LAST),--last $(LAST),)
 
 .PHONY: vikunja-audit-users
 vikunja-audit-users: ## List Vikunja accounts, separating password signups from OIDC logins
