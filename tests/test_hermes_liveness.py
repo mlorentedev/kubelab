@@ -9,7 +9,6 @@ from __future__ import annotations
 import json
 import os
 import re
-import shutil
 import subprocess
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -26,10 +25,37 @@ ROLE = REPO / "infra/ansible/roles/agent_stack"
 SCRIPT = ROLE / "files/hermes-liveness.sh"
 TASKS = ROLE / "tasks/hermes.yml"
 
+def _probe_shell_has_python3() -> bool:
+    return (
+        subprocess.run(
+            [BASH, "-c", "command -v python3"],
+            env={**os.environ, "PATH": "/usr/bin:/bin"},
+            capture_output=True,
+            timeout=5,
+            check=False,
+        ).returncode
+        == 0
+    )
+
+
 requires_python3 = pytest.mark.skipif(
-    shutil.which("python3") is None,
-    reason="starting-state behavior needs python3 inside the shell environment",
+    not _probe_shell_has_python3(),
+    reason="starting-state behavior needs python3 inside the probe shell",
 )
+
+
+def test_python3_gate_uses_the_probe_shell_not_the_host(monkeypatch) -> None:
+    observed = {}
+
+    def fake_run(command, **kwargs):
+        observed["command"] = command
+        observed.update(kwargs)
+        return subprocess.CompletedProcess(command, 1)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    assert not _probe_shell_has_python3()
+    assert observed["command"] == [BASH, "-c", "command -v python3"]
+    assert observed["env"]["PATH"] == "/usr/bin:/bin"
 
 
 def _gateway() -> dict:
