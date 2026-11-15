@@ -2146,8 +2146,10 @@ deploy-k8s: apply-secrets apply-middleware-secrets provision-postgres-tenant val
 
 # Apply ONLY the cluster-wide bootstrap layer (cluster_bootstrap SSOT, ADR-047/TOOL-009):
 # CRDs/operators/kube-system config outside the Argo CD overlay, without touching workloads.
+# apply-secrets first: the Sealed Secrets controller adopts the key Secret it finds at its first
+# start and mints its own when there is none, which would orphan every offline-sealed value.
 .PHONY: bootstrap-k8s
-bootstrap-k8s:
+bootstrap-k8s: apply-secrets
 	@test -n "$(filter $(ENV),staging prod)" || (echo "Usage: make bootstrap-k8s ENV=staging|prod" && exit 1)
 	@$(TOOLKIT) infra k8s bootstrap --env $(ENV)
 

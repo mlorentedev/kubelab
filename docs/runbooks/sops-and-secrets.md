@@ -339,6 +339,46 @@ toolkit infra k8s apply-secrets --env prod
 infra/config/secrets/prod.enc.yaml     # SOPS-encrypted, committed; holds the OIDC signing key too
 ```
 
+## Sealed Secrets key (staging)
+
+> Ref: [adr-073-self-service-resource-claims](../adr/adr-073-self-service-resource-claims.md) D2, RES-HOST-001 slice A.
+
+The controller decrypts every `SealedSecret` with one key pair. The pair is held in SOPS
+(`infra.sealed_secrets.tls_crt`, `infra.sealed_secrets.tls_key`, `staging.enc.yaml`) and applied by
+`apply-secrets` as the Secret `sealed-secrets-key` in `kube-system`, labelled
+`sealedsecrets.bitnami.com/sealed-secrets-key=active`. The controller runs with `--key-renew-period=0`.
+
+**Order matters: secrets before the controller.** At its first start the controller adopts a labelled
+key Secret if it finds one and mints its own if it does not. A key it minted is not the one held in SOPS,
+so every value sealed offline against the SOPS certificate never decrypts, and nothing fails at apply time.
+`make bootstrap-k8s` and `make deploy-k8s` both run `apply-secrets` first; `toolkit infra k8s bootstrap`
+called directly does not, so do not call it first on a fresh cluster.
+
+**Generate the pair once** (the toolkit never does it, and no value belongs in git, a PR or a terminal log):
+
+```bash
+umask 077 && d=$(mktemp -d)
+openssl req -x509 -days 3650 -nodes -newkey rsa:4096 -keyout "$d/tls.key" -out "$d/tls.crt" -subj "/CN=sealed-secret/O=sealed-secret"
+toolkit secrets set infra.sealed_secrets.tls_crt --env staging --stdin < "$d/tls.crt"
+toolkit secrets set infra.sealed_secrets.tls_key --env staging --stdin < "$d/tls.key"
+rm -rf "$d"
+```
+
+**Verify after the first apply** (prints `match` or `mismatch`, never a value): the probe `SealedSecret` is
+sealed offline against the SOPS certificate, and the controller must have decrypted it to the digest
+committed beside it.
+
+```bash
+toolkit infra k8s verify-sealed-secrets --env staging
+```
+
+Run `make apply-secrets ENV=staging` and `make bootstrap-k8s ENV=staging` a second time: both must report
+nothing changed.
+
+**Rotating the pair is not routine.** A new pair invalidates every ciphertext sealed against the old
+certificate: seal everything again first, then set both halves together, apply, and restart the controller
+(it reads its keys at start).
+
 ## Terraform DNS Credentials
 
 The Cloudflare API token used by Terraform is also stored in SOPS:

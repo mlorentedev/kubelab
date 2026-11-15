@@ -26,6 +26,7 @@ from toolkit.features.argo_manager import (
 from toolkit.features.edge_dns import staging_zones
 from toolkit.features.k8s_kubeconfig import output_path
 from toolkit.features.k8s_render import BootstrapEntry, render_and_apply
+from toolkit.features.sealed_secrets_probe import PROBE_MANIFEST
 from toolkit.features.validation import (
     confirm_dangerous_operation,
     validate_environment_config,
@@ -1542,6 +1543,29 @@ def k8s_bootstrap(
     if not _apply_cluster_bootstrap(kubeconfig, dry_run=dry_run):
         raise typer.Exit(1)
     logger.success("cluster_bootstrap complete")
+
+
+@k8s_app.command("verify-sealed-secrets")
+def k8s_verify_sealed_secrets(
+    env: Annotated[str, typer.Option("--env", "-e", help="Target environment")],
+) -> None:
+    """Check the Sealed Secrets controller decrypts the probe with the operator's key; prints match or mismatch.
+
+    RES-HOST-001 AC8. Compares the sha256 of the decrypted probe with the digest committed beside its ciphertext and
+    prints `match` or `mismatch`, never a value. Exit 0 on match, 1 on mismatch, 2 when the probe or
+    the cluster could not be read (which says nothing about the key).
+    """
+    from toolkit.features import sealed_secrets_probe as probe
+
+    try:
+        found = probe.load_probe(settings.project_root / PROBE_MANIFEST)
+        matched = probe.verify(found, _get_kubeconfig(env))
+    except probe.ProbeError as exc:
+        logger.error(str(exc))
+        raise typer.Exit(2) from exc
+    typer.echo("match" if matched else "mismatch")
+    if not matched:
+        raise typer.Exit(1)
 
 
 @k8s_app.command("render-apply")

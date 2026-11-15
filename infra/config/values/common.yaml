@@ -731,6 +731,12 @@ cluster_bootstrap:
   source:                       # `make sync-operators` re-fetches this pinned release asset
     repo: kubernetes-sigs/agent-sandbox
     asset: manifest.yaml
+- name: sealed-secrets
+  namespace: kube-system
+  manifest: infra/k8s/cluster/sealed-secrets/manifest.yaml
+  # Not a `source` entry: two edits to the upstream file (digest pin, --key-renew-period=0)
+  # that `make sync-operators` would undo. The manifest header says how to upgrade it.
+  version: v0.41.2              # ADR-073 D2: decrypts product SealedSecrets with the SOPS-held key
 - name: coredns-custom
   namespace: kube-system
   manifest: infra/k8s/base/edge/coredns-custom.yaml
