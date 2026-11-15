@@ -151,3 +151,17 @@ def test_generator_names_the_authelia_middleware_that_exists() -> None:
     names = K8sGenerator._build_middlewares(object.__new__(K8sGenerator), {}, enable_auth=True)
     for env in OVERLAYS:
         assert set(names) <= _declared_middlewares(env), f"{env}: generator names {names}"
+
+
+def test_the_console_declares_no_private_break_glass_path() -> None:
+    """The api answers /console only for the console's own host, and the break-glass tunnel is
+    `http://127.0.0.1:<port>`, so a reachable declaration (`{}` or an account) for the console opens
+    a 404. `none` with a reason is the honest form; a path would be a promise nothing keeps (#3443)."""
+    common = yaml.safe_load((ROOT / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
+    declared = common["apps"]["services"]["security"]["authelia"]["break_glass"]
+    assert set(declared) >= {"console"}, "the console is an Authelia dependent and must be declared"
+    assert "console-embedded" not in declared, "the embedded route is gone; its break-glass entry goes with it"
+    assert "none" in declared["console"] and declared["console"]["none"], (
+        f"console break-glass is {declared['console']}: the api answers /console only for the console host, "
+        "which a port-forward to 127.0.0.1 never names"
+    )
