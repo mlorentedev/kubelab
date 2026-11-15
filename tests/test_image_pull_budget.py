@@ -500,7 +500,7 @@ def _artifact_runs(role: str, roles: Path = ROLES) -> list[tuple[str, str, bool]
     `--pull never`). A shell variable is read back to the value that sets it, and one that
     cannot be raises: a skipped reference is a run the guard cannot see."""
     texts = {
-        str(path.relative_to(roles / role)): _artifact_text(path)
+        path.relative_to(roles / role).as_posix(): _artifact_text(path)
         for folder in ("files", "templates")
         for path in sorted((roles / role / folder).rglob("*"))
         if path.is_file()

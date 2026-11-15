@@ -224,9 +224,9 @@ def fleet(tmp_path: pathlib.Path, request):
     sizes = tmp_path / "sizes.txt"
     sizes.write_text(_sizes(), encoding="utf-8", newline="\n")
     env = {
-        "PATH": f"{bin_dir}:{os.environ['PATH']}",
+        "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
         "FAKE_DIR": str(fake),
-        "WATCHER_TARGETS": str(targets),
+        "WATCHER_TARGETS": targets.as_posix(),
         "WATCHER_SIZES": str(sizes),
         "STAGING_DIR": STAGING,
         "SENTINEL": ".capture-complete",

@@ -48,7 +48,7 @@ def test_the_key_is_named_in_no_file_of_the_role_but_the_gateway_env() -> None:
     """
     allowed = {"templates/hermes.env.j2", "defaults/main.yml"}
     mentions = {
-        str(path.relative_to(ROLE))
+        path.relative_to(ROLE).as_posix()
         for path in ROLE.rglob("*")
         if path.is_file()
         and re.search("agent_stack_tavily_api_key|TAVILY_API_KEY", path.read_text(errors="ignore", encoding="utf-8"))

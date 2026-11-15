@@ -80,7 +80,7 @@ A fresh independent review is required after the direct contract changes.
 
 ## Latest review dispositions
 
-The next reviewer (`nan/glm5.3-flash`, reviewed `8b22f9ec`) failed that earlier head for lesson collisions and stale suite evidence, not for watcher runtime behavior. The collisions were fixed in `4c5cbb60` (the later-landed CI lesson moved to 759 and this spec's lesson to 758); the fresh full suite is 10,676 passed/96 skipped. Its 90–150s window observation is fixed by aligning the probe to 150s with a 149s/150s boundary test. The runbook no longer makes a first-fire claim beyond boot grace and post-health enablement. Transcript draft markers are audit artifacts only and do not affect the gate; the curator may omit transcripts at archive. Physical power-off remains an explicitly accepted structural limitation.
+The next reviewer (`nan/glm5.3-flash`, reviewed `8b22f9ec`) failed that earlier head for lesson collisions and stale suite evidence, not for watcher runtime behavior. The collisions were fixed in `4c5cbb60` (the later-landed CI lesson moved to 759 and this spec's lesson to 759 after master independently took CI lesson 758); the fresh full suite is 10,676 passed/96 skipped. Its 90–150s window observation is fixed by aligning the probe to 150s with a 149s/150s boundary test. The runbook no longer makes a first-fire claim beyond boot grace and post-health enablement. Transcript draft markers are audit artifacts only and do not affect the gate; the curator may omit transcripts at archive. Physical power-off remains an explicitly accepted structural limitation.
 
 ## Direct-fix live validation
 
@@ -93,7 +93,7 @@ No deliberately broken provision or host power-off was performed. Failure restor
 
 ## Promotion candidates
 
-- [x] Lesson for the repo's `docs/lessons/`? yes: `docs/lessons/observability/lesson-758-an-on-demand-liveness-watchdog-must-be-local-but-independent-of-the-agent-kill-switch.md`.
+- [x] Lesson for the repo's `docs/lessons/`? yes: `docs/lessons/observability/lesson-759-an-on-demand-liveness-watchdog-must-be-local-but-independent-of-the-agent-kill-switch.md`.
 - [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? no: implements the existing ADR-028 on-demand and ADR-044 fabric decisions; no new architecture decision.
 - [x] New pattern candidate for `00_meta/patterns/`? no: one-repo implementation evidence so far; do not promote prematurely.
 

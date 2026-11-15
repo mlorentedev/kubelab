@@ -121,7 +121,7 @@ def harness(tmp_path: pathlib.Path) -> Any:
         (bin_dir / "su").write_text(
             f"""#!/bin/sh
 cmd="$3"
-echo "su: $cmd" >> {calls}
+echo "su: $cmd" >> {calls.as_posix()}
 case "$cmd" in
   *"admin user list"*) printf 'ID\\tUsername\\tEmail\\n1\\toperator\\tops@example.test\\n{rows}' ;;
   *"admin auth list"*) printf 'ID\\tName\\n7\\tauthelia\\n' ;;
@@ -133,7 +133,7 @@ esac
         )
         (bin_dir / "curl").write_text(
             f"""#!/bin/sh
-echo "curl: $*" >> {calls}
+echo "curl: $*" >> {calls.as_posix()}
 case "$*" in
   *PATCH*) exit 0 ;;
   *) printf '{{"prohibit_login":{str(prohibited).lower()}}}' ;;
@@ -151,7 +151,7 @@ esac
     def run(**extra: str) -> subprocess.CompletedProcess[str]:
         env = {
             **os.environ,
-            "PATH": f"{bin_dir}:{os.environ['PATH']}",
+            "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
             "GITEA_ADMIN_USER": "operator",
             "GITEA_ADMIN_PASSWORD": "pw",
             "GITEA_ADMIN_EMAIL": "ops@example.test",

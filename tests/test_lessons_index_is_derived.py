@@ -408,7 +408,7 @@ class TestAnUnfinishedMergeIsRefused:
 
         assert result.exit_code == 2, result.output
         assert "alpha/_index.md" in result.output
-        assert "merge is not finished" in result.output
+        assert "merge is not finished" in " ".join(result.output.split())
         assert index.read_text(encoding="utf-8") == before
 
     def test_the_top_level_index_is_read_too(self, tmp_path: pathlib.Path) -> None:

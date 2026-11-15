@@ -20,6 +20,7 @@ from __future__ import annotations
 import re
 import subprocess
 from pathlib import Path
+
 from tests.shells import BASH
 
 REPO = Path(__file__).resolve().parents[1]
@@ -86,7 +87,7 @@ def test_the_mechanism_a_quiet_grep_fails_a_pipeline_that_matched() -> None:
 
 def test_the_detector_sees_the_files_and_matches_the_known_forms() -> None:
     """A guard that scans nothing, or matches nothing, reports the repository clean."""
-    scanned = {str(p.relative_to(REPO)) for p in _tracked()}
+    scanned = {p.relative_to(REPO).as_posix() for p in _tracked()}
     assert "Makefile" in scanned
     assert "infra/ansible/roles/node_maintenance/templates/kubelab-maintenance.sh.j2" in scanned
     assert ".github/workflows/pr-agent.yml" in scanned
