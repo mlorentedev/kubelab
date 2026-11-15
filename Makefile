@@ -1750,6 +1750,15 @@ gitea-prune-runners: ## Deregister Gitea Actions runners the declaration does no
 	}
 	@$(TOOLKIT) services gitea prune-runners --env $(ENV) $(if $(APPLY),--apply,)
 
+.PHONY: gitea-jobs
+gitea-jobs: ## Read a repo's Actions runs, or one run's jobs (RUN=id), telling waiting from running
+	@{ test "$(words $(ENV))" = 1 && test -n "$(filter $(ENV),$(GITEA_ENVS))" && test -n "$(REPO)"; } || { \
+		echo "Usage: make gitea-jobs ENV=<one of: $(GITEA_ENVS)> REPO=<owner/name> [RUN=<id>] [LAST=<n>]"; \
+		echo "  Got ENV='$(ENV)' REPO='$(REPO)'. Read-only."; \
+		exit 1; \
+	}
+	@$(TOOLKIT) services gitea jobs --env $(ENV) --repo $(REPO) $(if $(RUN),--run $(RUN),) $(if $(LAST),--last $(LAST),)
+
 .PHONY: vikunja-audit-users
 vikunja-audit-users: ## List Vikunja accounts, separating password signups from OIDC logins
 	@{ test "$(words $(ENV))" = 1 \

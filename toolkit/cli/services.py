@@ -1468,6 +1468,75 @@ def gitea_prune_runners(
             logger.info(f"runner {runner_id} was already gone")
 
 
+@gitea_app.command("jobs")
+def gitea_jobs(
+    env: Annotated[str, typer.Option("--env", "-e", help="Target environment")],
+    repo: Annotated[str, typer.Option("--repo", help="Repository as owner/name")],
+    run: Annotated[int | None, typer.Option("--run", help="One run's jobs; default lists the latest runs")] = None,
+    last: Annotated[int, typer.Option("--last", min=1, help="How many recent runs to list without --run")] = 20,
+) -> None:
+    """Read a repository's Actions runs, or one run's jobs, and tell waiting from running (#1637).
+
+    A run's duration mixes the two. A job no runner took shows `never started` and
+    holds no slot; only a job a runner took is bounded by the runner timeout and
+    Gitea's endless and zombie bounds. Read-only, with the admin token.
+    """
+    from datetime import datetime, timezone
+
+    from toolkit.features.gitea_client import GiteaError
+    from toolkit.features.gitea_jobs import describe_job, summarize_run
+
+    owner, _, name = repo.partition("/")
+    if not owner or not name:
+        logger.error(f"--repo must be owner/name, got {repo!r}")
+        raise typer.Exit(2)
+
+    admin, _bot, _bot_username, base_url = _gitea_clients(env)
+    now = datetime.now(timezone.utc)
+
+    def _m(value: float | None) -> str:
+        return "-" if value is None else f"{value:.1f}"
+
+    try:
+        if run is not None:
+            jobs = [describe_job(job, now) for job in admin.list_run_jobs(owner, name, run)]
+            console.print(f"\n[bold]{repo} run {run}[/bold] — {base_url} ({env}), {len(jobs)} job(s)\n")
+            for job in jobs:
+                if job.taken:
+                    where = job.runner or "-"
+                elif job.waiting:
+                    where = "waiting for a runner"
+                elif job.skipped:
+                    where = "skipped by the workflow"
+                else:
+                    where = "never started (no runner took it)"
+                # markup=False: job names come from workflow files, and `Test [/api]` is a
+                # Rich closing tag that would raise MarkupError mid-report.
+                console.print(
+                    f"  {job.id:>6}  {job.status:<11} {job.conclusion or '-':<10} "
+                    f"ran {_m(job.ran_minutes):>7} min  {where}  {job.name}",
+                    soft_wrap=True,
+                    markup=False,
+                )
+            return
+
+        runs = admin.latest_runs(owner, name, last)
+        console.print(f"\n[bold]{repo}[/bold] — latest {len(runs)} run(s) (asked for {last}), {base_url} ({env})\n")
+        for entry in runs:
+            summary = summarize_run(entry, admin.list_run_jobs(owner, name, int(entry["id"])), now)
+            console.print(
+                f"  run {summary.id:>6}  {summary.status:<11} {summary.conclusion or '-':<10} "
+                f"{_m(summary.minutes):>8} min  longest job ran {_m(summary.longest_ran_minutes):>7} min  "
+                f"never started {summary.never_started}/{summary.jobs}  waiting {summary.waiting}  "
+                f"skipped {summary.skipped}",
+                soft_wrap=True,
+                markup=False,
+            )
+    except GiteaError as exc:
+        logger.error(f"could not read Actions runs: {exc}")
+        raise typer.Exit(1) from exc
+
+
 @gitea_app.command(
     "git",
     context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
