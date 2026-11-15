@@ -1,0 +1,12 @@
+# {{ ansible_managed }}
+[Unit]
+Description=hermes-kubelab local gateway liveness every two minutes (AI-013)
+
+[Timer]
+# ace2 is on-demand: no Persistent/OnCalendar catch-up, hence no page while off.
+OnBootSec=10min
+OnUnitActiveSec=2min
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target

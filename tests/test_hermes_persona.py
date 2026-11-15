@@ -115,8 +115,10 @@ def test_the_persona_is_mounted_read_only_over_the_data_directorys_copy() -> Non
 
 def test_a_changed_persona_recreates_the_gateway() -> None:
     """A rename leaves a single-file bind mount on the old file."""
+    decision = _task("Hold whether the rendered inputs will recreate Hermes")["ansible.builtin.set_fact"]
+    assert "_agent_stack_hermes_soul.changed" in str(decision["_agent_stack_hermes_recreate_expected"])
     start = _task("Start hermes-kubelab")["ansible.builtin.command"]
-    assert "_agent_stack_hermes_soul.changed" in start
+    assert "_agent_stack_hermes_recreate_expected" in start
 
 
 def test_the_persona_is_joined_before_the_gateway_is_started() -> None:
