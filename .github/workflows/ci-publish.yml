@@ -28,132 +28,104 @@ on:
         default: '"ubuntu-latest"'
         description: "JSON-encoded runner label (string or array for self-hosted)"
 
+    secrets:
+      # Named, not inherited: the build reaches the registry credentials and
+      # nothing else, and the notification its own webhook (CI-010, kubelab#3344).
+      DOCKERHUB_USERNAME:
+        required: true
+      DOCKERHUB_TOKEN:
+        required: true
+      N8N_WEBHOOK_URL:
+        required: false
+      N8N_DEPLOY_TOKEN:
+        required: false
+
 jobs:
-  docker-build-push:
-    name: Build & Push ${{ inputs.app }}:${{ inputs.tag }}
+  # The tags to publish, decided before the build. The image is named from the
+  # repository owner rather than the DOCKERHUB_USERNAME secret: a `with:` cannot
+  # read `secrets`, and a job output holding a secret's value is masked to
+  # nothing. The manifests pin docker.io/mlorentedev/kubelab-<app>.
+  tags:
+    name: Tags for ${{ inputs.app }}:${{ inputs.tag }}
     runs-on: ${{ fromJSON(inputs.runner) }}
-    permissions:
-      contents: read
-      security-events: write
+    permissions: {}
     env:
       REGISTRY_PREFIX: ${{ vars.REGISTRY_PREFIX || 'kubelab' }}
     outputs:
+      tags: ${{ steps.docker_tags.outputs.tags }}
       image_tag: ${{ steps.docker_tags.outputs.final_tag }}
       registry_url: ${{ steps.docker_tags.outputs.registry }}
       full_image: ${{ steps.docker_tags.outputs.full_image }}
       tag_type: ${{ steps.docker_tags.outputs.tag_type }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
-        with:
-          fetch-depth: 0
-          fetch-tags: true
-
-      - name: Set up QEMU for multi-arch builds
-        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1  # v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4
-
-      - name: Login registry
-        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550  # v4
-        with:
-          registry: docker.io
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
       - name: Generate Docker tags
         id: docker_tags
+        env:
+          DOCKER_VERSION: ${{ inputs.tag }}
+          OWNER: ${{ github.repository_owner }}
+          APP: ${{ inputs.app }}
         run: |
-          DOCKER_VERSION="${{ inputs.tag }}"
-          REGISTRY="${{ secrets.DOCKERHUB_USERNAME }}/${{ env.REGISTRY_PREFIX }}-${{ inputs.app }}"
-          BRANCH_NAME="${{ github.ref_name }}"
-
-          echo "Processing Docker version: $DOCKER_VERSION"
-          echo "Registry: $REGISTRY"
-          echo "Branch: $BRANCH_NAME"
+          REGISTRY="docker.io/${OWNER}/${REGISTRY_PREFIX}-${APP}"
 
           case "$DOCKER_VERSION" in
             sha-*)
               # ADR-046: immutable per-commit build tag for staging. No mutable
               # alias (no :dev, no :latest) — staging tracks this exact tag.
-              FINAL_TAG="$DOCKER_VERSION"
-              DOCKER_TAGS="${REGISTRY}:${FINAL_TAG}"
+              TAGS="$DOCKER_VERSION"
               TAG_TYPE="sha"
               ;;
             *)
               # Stable semver release (release-please): immutable tag + :latest alias.
-              FINAL_TAG="$DOCKER_VERSION"
-              DOCKER_TAGS="${REGISTRY}:${FINAL_TAG},${REGISTRY}:latest"
+              TAGS="${DOCKER_VERSION},latest"
               TAG_TYPE="stable"
               ;;
           esac
 
-          echo "tags=${DOCKER_TAGS}" >> "$GITHUB_OUTPUT"
-          echo "final_tag=${FINAL_TAG}" >> "$GITHUB_OUTPUT"
-          echo "registry=${REGISTRY}" >> "$GITHUB_OUTPUT"
-          echo "full_image=${REGISTRY}:${FINAL_TAG}" >> "$GITHUB_OUTPUT"
-          echo "tag_type=${TAG_TYPE}" >> "$GITHUB_OUTPUT"
-          echo "::notice::Final Docker tags: $DOCKER_TAGS"
+          {
+            echo "tags=${TAGS}"
+            echo "final_tag=${DOCKER_VERSION}"
+            echo "registry=${REGISTRY}"
+            echo "full_image=${REGISTRY}:${DOCKER_VERSION}"
+            echo "tag_type=${TAG_TYPE}"
+          } >> "$GITHUB_OUTPUT"
+          echo "::notice::${REGISTRY} tags once the scans pass: ${TAGS}"
 
-      - name: Build and Push Image
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc  # v7
-        with:
-          context: ${{ inputs.context }}
-          file: ${{ inputs.context }}/Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.docker_tags.outputs.tags }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          build-args: |
-            BUILD_ENV=production
-            VERSION=${{ inputs.tag }}
-            COMMIT_SHA=${{ inputs.sha }}
-            TAG_TYPE=${{ steps.docker_tags.outputs.tag_type }}
-            ${{ inputs.extra_build_args }}
-          labels: |
-            org.opencontainers.image.title=${{ env.REGISTRY_PREFIX }}-${{ inputs.app }}
-            org.opencontainers.image.description=${{ inputs.app }} service for KubeLab platform
-            org.opencontainers.image.source=https://github.com/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.version=${{ inputs.tag }}
-            org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
-            org.opencontainers.image.tag-type=${{ steps.docker_tags.outputs.tag_type }}
-
-      # SEC-SCAN-001: pinned to v0.36.0 (commit SHA, not floating tag, to avoid CI breakage).
-      # Soak completed 2026-06-22 — baseline clean (0 CRITICAL/HIGH across trivy-api/web/errors).
-      - name: Trivy vulnerability scan
-        id: trivy_scan
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
-        continue-on-error: false
-        with:
-          image-ref: ${{ steps.docker_tags.outputs.full_image }}
-          format: sarif
-          output: trivy-results.sarif
-          severity: CRITICAL,HIGH
-          ignore-unfixed: true
-          exit-code: '1'
-
-      - name: Upload Trivy SARIF to GitHub Security
-        if: always() && hashFiles('trivy-results.sarif') != ''
-        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066  # v4.39.3
-        continue-on-error: true
-        with:
-          sarif_file: trivy-results.sarif
-          category: trivy-${{ inputs.app }}
-
-      - name: Log build summary
-        run: |
-          echo "## Docker Build Summary" >> $GITHUB_STEP_SUMMARY
-          echo "- App: ${{ inputs.app }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Version: ${{ inputs.tag }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Tag Type: ${{ steps.docker_tags.outputs.tag_type }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Registry: ${{ steps.docker_tags.outputs.registry }}" >> $GITHUB_STEP_SUMMARY
-          echo "- All Tags: ${{ steps.docker_tags.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Primary Image: ${{ steps.docker_tags.outputs.full_image }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Branch: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Commit SHA: ${{ inputs.sha }}" >> $GITHUB_STEP_SUMMARY
+  # CI-010: the shared publish. It pushes each platform by digest with no tag,
+  # reports each platform's CRITICAL and HIGH findings to the Security tab, and
+  # applies the tags only when no platform has a fixable CRITICAL finding and
+  # every scan ran. A HIGH finding is reported, not blocking: the old job here
+  # failed on HIGH too, and CI-010 took web's CRITICAL gate instead. The layer cache is a gha cache scoped
+  # to this image, so apps no longer evict each other's layers.
+  docker-build-push:
+    name: Build & Push ${{ inputs.app }}:${{ inputs.tag }}
+    needs: tags
+    permissions:
+      contents: read
+      security-events: write
+    uses: mlorentedev/ci-workflows/.github/workflows/docker-publish.yml@9b34f5b2815a3090d77d7589ef8bcc5087045544 # v0.8.0
+    with:
+      image: ${{ needs.tags.outputs.registry_url }}
+      tags: ${{ needs.tags.outputs.tags }}
+      sarif-category: trivy-${{ inputs.app }}
+      context: ${{ inputs.context }}
+      platforms: linux/amd64,linux/arm64
+      build-args: |
+        BUILD_ENV=production
+        VERSION=${{ inputs.tag }}
+        COMMIT_SHA=${{ inputs.sha }}
+        TAG_TYPE=${{ needs.tags.outputs.tag_type }}
+        ${{ inputs.extra_build_args }}
+      labels: |
+        org.opencontainers.image.title=${{ vars.REGISTRY_PREFIX || 'kubelab' }}-${{ inputs.app }}
+        org.opencontainers.image.description=${{ inputs.app }} service for KubeLab platform
+        org.opencontainers.image.source=https://github.com/${{ github.repository }}
+        org.opencontainers.image.revision=${{ github.sha }}
+        org.opencontainers.image.version=${{ inputs.tag }}
+        org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
+        org.opencontainers.image.tag-type=${{ needs.tags.outputs.tag_type }}
+    secrets:
+      REGISTRY_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      REGISTRY_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
 
   # ADR-044 / NOTIFY-004: envelope-shaped notification into the n8n routing
   # brain (domain/severity/title/body/source) instead of an ad-hoc payload.
@@ -169,7 +141,7 @@ jobs:
   notify-build-completion:
     name: Notify Build Completion
     runs-on: ${{ fromJSON(inputs.runner) }}
-    needs: [docker-build-push]
+    needs: [tags, docker-build-push]
     if: always()
     env:
       APP: ${{ inputs.app }}
@@ -179,8 +151,9 @@ jobs:
       REPOSITORY: ${{ github.repository }}
       RUN_ID: ${{ github.run_id }}
       RESULT: ${{ needs.docker-build-push.result }}
-      IMAGE: ${{ needs.docker-build-push.outputs.full_image }}
-      REGISTRY: ${{ needs.docker-build-push.outputs.registry_url }}
+      IMAGE: ${{ needs.tags.outputs.full_image }}
+      REGISTRY: ${{ needs.tags.outputs.registry_url }}
+      DIGEST: ${{ needs.docker-build-push.outputs.digest }}
       WEBHOOK_URL: ${{ secrets.N8N_WEBHOOK_URL }}
       WEBHOOK_TOKEN: ${{ secrets.N8N_DEPLOY_TOKEN }}
     steps:
@@ -191,7 +164,7 @@ jobs:
           if [ "$RESULT" = "success" ]; then
             SEVERITY="log"
             TITLE="Docker build completed: ${APP} ${TAG}"
-            BODY="${IMAGE} pushed to ${REGISTRY}. Branch ${REF_NAME}, commit ${SHA}. ${BUILD_URL}"
+            BODY="${IMAGE} (${DIGEST}) pushed to ${REGISTRY}. Branch ${REF_NAME}, commit ${SHA}. ${BUILD_URL}"
           elif [ "$RESULT" = "failure" ]; then
             SEVERITY="page"
             TITLE="Docker build FAILED: ${APP} ${TAG}"
