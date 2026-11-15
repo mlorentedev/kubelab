@@ -112,26 +112,33 @@ as plain HTTP. The traffic never leaves the node.
       - name: Authenticate to the forge registry, for this job only
         env:
           REGISTRY: ${{ steps.forge.outputs.registry }}
-          FORGE_USER: ${{ secrets.FORGE_USER }}
-          FORGE_TOKEN: ${{ secrets.FORGE_TOKEN }}
+          # The product's own registry credential; these are the names imagesensortool uses.
+          REGISTRY_USER: ${{ secrets.REGISTRY_USER }}
+          REGISTRY_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
         run: |
           # The host daemon cannot resolve `gitea`, so `docker login` cannot be used.
           # The credential is written to a job-scoped config, never to the runner's.
           mkdir -p "$RUNNER_TEMP/docker"
-          auth=$(printf '%s:%s' "$FORGE_USER" "$FORGE_TOKEN" | base64 -w0)
-          printf '{"auths":{"%s":{"auth":"%s"}}}' "$REGISTRY" "$auth" > "$RUNNER_TEMP/docker/config.json"
+          auth=$(printf '%s:%s' "$REGISTRY_USER" "$REGISTRY_TOKEN" | base64 -w0)
+          printf '{"auths":{"%s":{"auth":"%s"}}}\n' "$REGISTRY" "$auth" > "$RUNNER_TEMP/docker/config.json"
           echo "DOCKER_CONFIG=$RUNNER_TEMP/docker" >> "$GITHUB_ENV"
-      - uses: docker/setup-buildx-action@v3
+      # Pin by commit SHA in a real workflow; the proof ran v4.
+      - uses: docker/setup-buildx-action@v4
         with:
           driver-opts: network=${{ steps.forge.outputs.network }}
           buildkitd-config-inline: |
             [registry."${{ steps.forge.outputs.registry }}"]
               http = true
-      - uses: docker/build-push-action@v6
-        with:
-          push: true
-          tags: ${{ steps.forge.outputs.registry }}/<owner>/<image>:sha-<short>
+      - name: Build and push
+        env:
+          REGISTRY: ${{ steps.forge.outputs.registry }}
+        run: docker buildx build --push -t "$REGISTRY/<owner>/<image>:sha-<short>" .
 ```
+
+The steps above are those of the proof that ran on 2026-11-14 (imagesensortool,
+`.gitea/workflows/edge002-proof.yml`, runs 3526 and 3532), with the literals replaced by the
+runner's variables. The credential step comes before `setup-buildx-action`, so buildx
+passes it to BuildKit.
 
 - **The guard step is what makes the recipe safe.** Later steps read
   `steps.forge.outputs.*`, not `env.*`, so the recipe does not depend on whether the
@@ -199,6 +206,8 @@ GitHub-hosted product takes three changes, in this order:
 3. **The product, its contract and dispatch:** the same `kubelab.yaml` at the repository root,
    and CI that publishes an immutable `sha-<short>` image and sends
    `repository_dispatch` with `event_type: <events.staging>` and `client_payload: {tag}`.
+   A product on the Gitea forge pushes that image with `KUBELAB_FORGE_REGISTRY`, never
+   through `gitea.kubelab.live` (see *Pushing to the Gitea registry from a Gitea Actions job*).
 
 The receiver fetches `kubelab.yaml` at the image's own commit, validates it against the
 registry, renders it into `values/staging.yaml`, snapshots it at
