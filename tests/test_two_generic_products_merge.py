@@ -266,4 +266,5 @@ def test_the_whole_receiver_write_merges_in_either_order(committed_tree: pathlib
     # A shared line the merge got wrong, a digest or an index the generator derives from every pin,
     # shows here: the merged tree is not what the generator writes from the merged values.
     _python(tree, REGENERATE)
-    assert _git(tree, "status", "--porcelain").stdout == "", _git(tree, "diff").stdout[-3000:]
+    status = _git(tree, "status", "--porcelain", "-uall").stdout
+    assert status == "", status + _git(tree, "diff").stdout[-3000:]
