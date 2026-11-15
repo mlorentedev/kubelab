@@ -310,6 +310,11 @@ spec:
         - podSelector:
             matchLabels:
               app.kubernetes.io/name: grafana
+        # resume's `notify` egress profile (RES-HOST-001 D7); its pods are rendered by the
+        # generator once its contract claims resources.
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: resume
       ports:
         - protocol: TCP
           port: 5678

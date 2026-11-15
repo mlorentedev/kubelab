@@ -33,7 +33,6 @@ REPO = Path(__file__).resolve().parent.parent
 ROLE = REPO / "infra/ansible/roles/dev_node"
 
 WRAPPED = ["node", "npm", "npx", "claude"]
-MISE_NODE_BIN = "/home/manu/.local/share/mise/installs/node/24.19.0/bin"
 LOCAL_BIN = "/home/manu/.local/bin"
 DEFAULTS = ROLE / "defaults/main.yml"
 
@@ -155,20 +154,30 @@ def test_local_bin_is_not_appended_to_the_system_path_instead() -> None:
     )
 
 
-def test_the_template_renders_for_both_source_directories() -> None:
-    """One template, two `wrapper_src_dir` values — render both, do not assume."""
+def test_the_template_renders_for_both_kinds_of_wrapper() -> None:
+    """One template, two kinds — render both, do not assume.
+
+    The node tools resolve their directory through mise on every call; the
+    ~/.local/bin tools exec a fixed directory. tests/test_dev_node_mise_owner.py
+    runs the node kind.
+    """
     env = Environment(loader=FileSystemLoader(str(ROLE / "templates")), undefined=StrictUndefined)
     template = env.get_template("mise-bin-wrapper.sh.j2")
     declared = yaml.safe_load(DEFAULTS.read_text(encoding="utf-8"))["dev_node_local_bin_wrapped"]
 
-    for src_dir, items in ((MISE_NODE_BIN, WRAPPED), (LOCAL_BIN, declared)):
-        for item in items:
-            rendered = template.render(item=item, wrapper_src_dir=src_dir)
-            code = [ln for ln in rendered.splitlines() if ln.strip() and not ln.lstrip().startswith("#")]
-            assert any(f'exec "{src_dir}/{item}"' in ln for ln in code), (
-                f"{item} must exec {src_dir}/{item}; executable lines were {code}"
-            )
-            assert any('"$@"' in ln for ln in code), f"the {item} wrapper must forward its arguments"
-            assert not any("/usr/local/lib/node_modules" in ln for ln in code), (
-                "no executable line may reference the path the broken symlink resolved to"
-            )
+    for item in declared:
+        rendered = template.render(item=item, wrapper_src_dir=LOCAL_BIN)
+        code = [ln for ln in rendered.splitlines() if ln.strip() and not ln.lstrip().startswith("#")]
+        assert any(f'exec "{LOCAL_BIN}/{item}"' in ln for ln in code), (
+            f"{item} must exec {LOCAL_BIN}/{item}; executable lines were {code}"
+        )
+        assert any('"$@"' in ln for ln in code), f"the {item} wrapper must forward its arguments"
+
+    for item in WRAPPED:
+        rendered = template.render(item=item, wrapper_mise_tool="node", dev_node_home="/home/manu")
+        code = [ln for ln in rendered.splitlines() if ln.strip() and not ln.lstrip().startswith("#")]
+        assert any(f'/bin/{item}"' in ln and "exec" in ln for ln in code), f"{item}: {code}"
+        assert any('"$@"' in ln for ln in code), f"the {item} wrapper must forward its arguments"
+        assert not any("/usr/local/lib/node_modules" in ln for ln in code), (
+            "no executable line may reference the path the broken symlink resolved to"
+        )
