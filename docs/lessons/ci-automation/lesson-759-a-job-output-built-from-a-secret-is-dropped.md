@@ -1,5 +1,5 @@
 ---
-id: lesson-757-a-job-output-built-from-a-secret-is-dropped
+id: lesson-759-a-job-output-built-from-a-secret-is-dropped
 type: lesson
 status: active
 created: "2026-11-14"
