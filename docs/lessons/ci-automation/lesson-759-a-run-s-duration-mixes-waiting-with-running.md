@@ -1,5 +1,5 @@
 ---
-id: lesson-758-a-run-s-duration-mixes-waiting-with-running
+id: lesson-759-a-run-s-duration-mixes-waiting-with-running
 type: lesson
 status: active
 created: "2026-11-14"

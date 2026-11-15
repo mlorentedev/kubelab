@@ -1,6 +1,6 @@
 """The dev node's provision installs its own toolchains and nothing else (#2815).
 
-The role renders `~/.config/mise/config.toml` with node, go and python, then ran a
+The role renders `~/.config/mise/config.toml` with its toolchains, then ran a
 bare `mise install`. mise installs every tool in every config it reads, and on
 ace2 it also reads the operator's dotfiles in `~/.config/mise/conf.d/`: 42 tools,
 two of them at `@latest`. Behind the lab edge, on 2026-10-29, three of those
@@ -59,7 +59,7 @@ def test_the_install_names_exactly_the_toolchains_the_role_pins() -> None:
     assert (binary, verb) == ("/home/u/.local/bin/mise", "install")
     assert tools, "a bare `mise install` installs every config's tools, the dotfiles' included"
     pinned = tomllib.loads(_render((ROLE / "templates/mise-config.toml.j2").read_text(encoding="utf-8")))["tools"]
-    assert set(tools) == set(pinned) == {"node", "go", "python"}
+    assert set(tools) == set(pinned) == {"go"}
     assert _render(_mise("ls --missing")["ansible.builtin.command"]["cmd"]).split()[3:] == tools
 
 

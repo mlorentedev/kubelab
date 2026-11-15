@@ -474,5 +474,5 @@ def test_the_workflow_survives_a_pvc_wipe() -> None:
     restored by hand or not at all (APP-CONFIG-009)."""
     from toolkit.features.n8n_import import N8N_IMPORT_CATALOG
 
-    imported = {str(spec.workflow_path) for spec in N8N_IMPORT_CATALOG}
+    imported = {spec.workflow_path.as_posix() for spec in N8N_IMPORT_CATALOG}
     assert "infra/n8n/workflows/multi-forge-sync.json" in imported

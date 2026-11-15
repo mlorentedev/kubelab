@@ -198,7 +198,7 @@ def _run_log_command(log_dir: Path) -> list[str]:
     from toolkit.features.edge_soak import log_command
 
     result = subprocess.run(
-        [SHELL, "-c", log_command(str(log_dir / "kern.log"))],
+        [SHELL, "-c", log_command((log_dir / "kern.log").as_posix())],
         capture_output=True,
         text=True,
         encoding="utf-8",
@@ -232,7 +232,7 @@ def test_a_file_zcat_cannot_read_is_marked_in_the_lines(tmp_path: Path) -> None:
     (tmp_path / "kern.log.2.gz").write_bytes(whole[: len(whole) // 2])
     (tmp_path / "kern.log").write_text("\n".join(THIS_BOOT) + "\n", encoding="utf-8", newline="\n")
     lines = _run_log_command(tmp_path)
-    assert f"{READ_FAILED}{tmp_path / 'kern.log.2.gz'}" in lines
+    assert f"{READ_FAILED}{(tmp_path / 'kern.log.2.gz').as_posix()}" in lines
     assert lines[-len(THIS_BOOT) :] == THIS_BOOT
 
 
