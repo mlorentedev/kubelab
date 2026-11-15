@@ -86,6 +86,33 @@
         path: "{{ agent_stack_hermes_compose }}"
       register: _agent_stack_hermes_prior
 
+    - name: Disable the Hermes liveness timer
+      ansible.builtin.systemd:
+        name: agent-stack-hermes-watchdog.timer
+        enabled: false
+        state: stopped
+        daemon_reload: true
+      register: _agent_stack_hermes_watchdog_disabled
+      failed_when: >-
+        _agent_stack_hermes_watchdog_disabled is failed
+        and 'Could not find' not in (_agent_stack_hermes_watchdog_disabled.msg | default(''))
+      when: not ansible_check_mode
+
+    - name: Remove the Hermes liveness units
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/systemd/system/agent-stack-hermes-watchdog.timer
+        - /etc/systemd/system/agent-stack-hermes-watchdog.service
+        - "{{ agent_stack_vault_libexec }}/hermes-liveness.sh"
+      register: _agent_stack_hermes_watchdog_removed
+
+    - name: Reload systemd after removing the Hermes liveness units
+      ansible.builtin.systemd:
+        daemon_reload: true
+      when: _agent_stack_hermes_watchdog_removed is changed and not ansible_check_mode
+
     - name: Take the previous hermes-kubelab down
       ansible.builtin.command: >-
         docker compose -p {{ agent_stack_hermes_project }} -f {{ agent_stack_hermes_compose }} down
@@ -474,6 +501,7 @@
         owner: "{{ agent_stack_agent_user }}"
         group: "{{ agent_stack_agent_user }}"
         mode: "0644"
+      register: _agent_stack_hermes_compose_file
 
     # Same check as Open WebUI's: a binding is fixed at create time, so a gateway
     # created before the bridge had its address runs with no port, and an
@@ -496,17 +524,34 @@
              and (_agent_stack_hermes_ports.stdout | trim).split(':')[0] | int > 0
              and (_agent_stack_hermes_ports.stdout | trim).split(':')[1] | int == 0 }}
 
+    # Predict the recreate so an existing watchdog cannot page on the expected
+    # `starting` window. An unchanged provision does not stop the timer.
+    - name: Hold whether the rendered inputs will recreate Hermes
+      ansible.builtin.set_fact:
+        _agent_stack_hermes_recreate_expected: >-
+          {{ (_agent_stack_hermes_env_file.changed or _agent_stack_hermes_config.changed
+              or _agent_stack_hermes_compose_file.changed
+              or _agent_stack_hermes_soul.changed | default(false)
+              or _agent_stack_hermes_ts_env_file.changed
+              or _agent_stack_hermes_unbound | bool
+              or _agent_stack_hermes_plugins_copy.changed | default(false)) | bool }}
+
+    - name: Pause the Hermes liveness timer during gateway recreation
+      ansible.builtin.systemd:
+        name: agent-stack-hermes-watchdog.timer
+        state: stopped
+      register: _agent_stack_hermes_watchdog_paused
+      failed_when: >-
+        _agent_stack_hermes_watchdog_paused is failed
+        and 'Could not find' not in (_agent_stack_hermes_watchdog_paused.msg | default(''))
+      when: _agent_stack_hermes_recreate_expected | bool and not ansible_check_mode
+
     # A mounted config is not in Compose's spec hash. An env_file's content is
-    # (measured 2026-10-07: emptying the sidecar's recreated it at the next `up`),
-    # so the flag is only certain for the config, and harmless for the rest.
+    # (measured 2026-10-07: emptying the sidecar's recreated it at the next `up`).
     - name: Start hermes-kubelab
       ansible.builtin.command: >-
         docker compose -p {{ agent_stack_hermes_project }} -f {{ agent_stack_hermes_compose }} up -d
-        {{ '--force-recreate' if (_agent_stack_hermes_env_file.changed or _agent_stack_hermes_config.changed
-                                  or _agent_stack_hermes_soul.changed | default(false)
-                                  or _agent_stack_hermes_ts_env_file.changed
-                                  or _agent_stack_hermes_unbound | bool
-                                  or _agent_stack_hermes_plugins_copy.changed | default(false)) else '' }}
+        {{ '--force-recreate' if _agent_stack_hermes_recreate_expected | bool else '' }}
       become_user: "{{ agent_stack_agent_user }}"
       environment: "{{ agent_stack_agent_daemon_env }}"
       register: _agent_stack_hermes_up
@@ -753,3 +798,67 @@
     # changes nothing on the node.
     - name: Prove the fallback
       ansible.builtin.import_tasks: hermes_fallback_probe.yml
+
+    # The probe executable is root-owned; the oneshot runs it as the agent's
+    # uid and reads only the rootless daemon's health verdict.
+    - name: Install the Hermes liveness probe
+      ansible.builtin.copy:
+        src: hermes-liveness.sh
+        dest: "{{ agent_stack_vault_libexec }}/hermes-liveness.sh"
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Install the Hermes liveness units
+      ansible.builtin.template:
+        src: "agent-stack-hermes-watchdog.{{ item }}.j2"
+        dest: "/etc/systemd/system/agent-stack-hermes-watchdog.{{ item }}"
+        owner: root
+        group: root
+        mode: "0644"
+      loop: [service, timer]
+      register: _agent_stack_hermes_watchdog_units
+
+    - name: Wait for the Hermes healthcheck to report healthy
+      ansible.builtin.command:
+        argv:
+          - docker
+          - inspect
+          - --format
+          - "{% raw %}{{.State.Health.Status}}{% endraw %}"
+          - hermes-kubelab
+      become: true
+      become_user: "{{ agent_stack_agent_user }}"
+      environment: "{{ agent_stack_agent_daemon_env }}"
+      register: _agent_stack_hermes_docker_health
+      until: _agent_stack_hermes_docker_health.stdout == 'healthy' or ansible_check_mode
+      retries: 30
+      delay: 5
+      changed_when: false
+      check_mode: false
+      ignore_errors: "{{ ansible_check_mode }}"
+
+    - name: Enable the Hermes liveness timer
+      ansible.builtin.systemd:
+        name: agent-stack-hermes-watchdog.timer
+        enabled: true
+        state: started
+        daemon_reload: "{{ _agent_stack_hermes_watchdog_units is changed }}"
+      when: not ansible_check_mode
+
+  # Preserve the original deployment error. The always section then restores
+  # only a timer this run actually stopped, on success, failure or a graceful
+  # Ansible interruption. A SIGKILL cannot run userspace cleanup.
+  rescue:
+    - name: Propagate the failed Hermes deployment
+      ansible.builtin.fail:
+        msg: Hermes deployment failed; the always section restores any liveness timer this run paused
+
+  always:
+    - name: Restore the Hermes liveness timer after deployment
+      ansible.builtin.systemd:
+        name: agent-stack-hermes-watchdog.timer
+        enabled: true
+        state: started
+        daemon_reload: true
+      when: ((_agent_stack_hermes_watchdog_paused | default({})).changed | default(false)) and not ansible_check_mode

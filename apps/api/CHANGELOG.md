@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.12.1](https://github.com/mlorentedev/kubelab/compare/api-v1.12.0...api-v1.12.1) (2026-11-15)
+
+
+### Bug Fixes
+
+* **api:** serve the console from apps/console only and delete the embedded page ([#3579](https://github.com/mlorentedev/kubelab/issues/3579)) ([9a9d259](https://github.com/mlorentedev/kubelab/commit/9a9d259f7887647d2f9d203929fcef59afafa52e))
+
 ## [1.12.0](https://github.com/mlorentedev/kubelab/compare/api-v1.11.0...api-v1.12.0) (2026-11-14)
 
 

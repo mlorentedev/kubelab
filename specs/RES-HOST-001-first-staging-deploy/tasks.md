@@ -158,17 +158,22 @@ excluding regenerated schema and snapshot files.
 
 ## H. resume secrets (owner sets values)
 
-- [ ] Catalog `apps.platform.resume.llm_api_key`, one value shared by staging
+- [x] Catalog `apps.platform.resume.llm_api_key`, one value shared by staging
   and prod (owner ruling Q6 = B; risk recorded in the proposal).
-- [ ] `SecretMapping("resume-secrets")` with `RESUME_LLM_API_KEY` and the
+- [x] `SecretMapping("resume-secrets")` with `RESUME_LLM_API_KEY` and the
   notify bearer (`apps.services.automation.notify.webhook_secret`).
-- [ ] Test first: the generated `resume` ConfigMap carries no key whose
+- [x] Test first: the generated `resume` ConfigMap carries no key whose
   source is in `SECRET_CATALOG`. `_extract_app_env_vars` keeps every
   `APPS_PLATFORM_RESUME_*` key and has no visible catalog filter
   (`toolkit/features/generator_k8s.py:363`), so a catalogued
   `apps.platform.resume.llm_api_key` could reach the ConfigMap in plaintext if
   decrypted values enter the flattened env. If the test fails, fix the filter
   in this slice and file the root cause.
+  Result: the test passes, because `SECRET_PATTERNS` catches `KEY`, `SECRET`
+  and `TOKEN` by name. The filter still never asks the catalog; that gap is
+  guarded by the catalog-wide test in `tests/test_resume_secrets.py` and filed
+  as kubelab#3572. The bearer is mapped as `RESUME_NOTIFY_WEBHOOK_TOKEN`: resume
+  reads no notify bearer yet, so it needs a settings field of that name.
 - [ ] `toolkit secrets audit --env staging` reports both present.
 
 ## I. Onboarding (owner)

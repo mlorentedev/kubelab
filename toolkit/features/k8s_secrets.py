@@ -192,6 +192,23 @@ SECRET_DEFINITIONS: list[SecretMapping] = [
             "FORGE_CREATE_TOKEN": "APPS_PLATFORM_API_FORGE_CREATE_TOKEN",
         },
     ),
+    # RES-HOST-001 slice H. resume's pod env: its settings read `RESUME_*`.
+    # The LLM key is OPTIONAL because resume tolerates its absence: the evaluate
+    # button is disabled and the POST is refused 409, so the owner's value can
+    # arrive after the Secret without a pod that refuses to start (the rule in
+    # vikunja-secrets below: optional describes what the CONSUMER tolerates).
+    # The notify bearer is REQUIRED: without it the digest is a 403 from n8n. It
+    # is an existing, already-audited staging and prod key, never a new value.
+    # NEITHER key may reach a ConfigMap: `tests/test_resume_secrets.py`.
+    SecretMapping(
+        name="resume-secrets",
+        keys={
+            "RESUME_NOTIFY_WEBHOOK_TOKEN": "APPS_SERVICES_AUTOMATION_NOTIFY_WEBHOOK_SECRET",
+        },
+        optional_keys={
+            "RESUME_LLM_API_KEY": "APPS_PLATFORM_RESUME_LLM_API_KEY",
+        },
+    ),
     SecretMapping(
         name="pr-agent-secrets",
         keys={
