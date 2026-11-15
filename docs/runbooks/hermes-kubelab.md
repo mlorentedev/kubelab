@@ -57,9 +57,12 @@ through the agent's rootless socket. Its timer gives ten minutes of boot
 grace and runs every two minutes; provisioning enables it only after Docker
 reports healthy, without relying on a first-fire timing assumption.
 Provisioning pauses an existing timer only when a rendered input can recreate
-the gateway, and re-enables it after Docker reports healthy; an unchanged run
-leaves it active and reports no change. If the deployment fails after the
-pause, its `rescue` restores the timer before propagating the failure.
+the gateway, and re-enables it after Docker reports healthy (waiting up to
+150 s); an unchanged run leaves it active and reports no change. The block's
+`always` section restores only a timer that run paused on success, failure or
+a graceful Ansible interruption; `rescue` preserves the original failure. A
+`SIGKILL` cannot run userspace cleanup, so a stopped timer still requires a
+successful provision to restore it.
 
 A non-healthy result pages through `kubelab-notify@`; the fleet notifier sends
 one initial page per incident, hourly reminders and a recovery through

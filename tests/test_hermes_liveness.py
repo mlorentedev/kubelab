@@ -245,21 +245,20 @@ def test_activation_order_waits_for_gateway_health_before_starting_the_watcher()
     )
     wait = _task("Wait for the Hermes healthcheck to report healthy")
     assert wait["become"] is True
+    assert wait["retries"] * wait["delay"] >= 150
     timer = _task("Enable the Hermes liveness timer")["ansible.builtin.systemd"]
     assert timer["enabled"] is True and timer["state"] == "started"
 
 
 def test_failed_recreation_restores_a_paused_timer_and_preserves_the_failure() -> None:
     deploy = next(task for task in yaml.safe_load(TASKS.read_text(encoding="utf-8")) if task.get("name") == "Deploy hermes-kubelab")
-    rescue = deploy["rescue"]
-    names = [task["name"] for task in rescue]
-    restore = rescue[0]
-    assert restore["name"] == "Restore the Hermes liveness timer after a failed deployment"
+    restore = deploy["always"][0]
+    assert restore["name"] == "Restore the Hermes liveness timer after deployment"
     assert restore["ansible.builtin.systemd"]["enabled"] is True
     assert restore["ansible.builtin.systemd"]["state"] == "started"
     assert "_agent_stack_hermes_watchdog_paused" in restore["when"]
-    assert names[-1] == "Propagate the failed Hermes deployment"
-    assert "ansible.builtin.fail" in rescue[-1]
+    assert deploy["rescue"][-1]["name"] == "Propagate the failed Hermes deployment"
+    assert "ansible.builtin.fail" in deploy["rescue"][-1]
 
 
 def test_recreation_pauses_an_existing_timer_without_disabling_it() -> None:

@@ -832,7 +832,7 @@
       environment: "{{ agent_stack_agent_daemon_env }}"
       register: _agent_stack_hermes_docker_health
       until: _agent_stack_hermes_docker_health.stdout == 'healthy' or ansible_check_mode
-      retries: 24
+      retries: 30
       delay: 5
       changed_when: false
       check_mode: false
@@ -846,17 +846,19 @@
         daemon_reload: "{{ _agent_stack_hermes_watchdog_units is changed }}"
       when: not ansible_check_mode
 
-  # A failed health check or any other deployment error must not leave the
-  # detector paused. Restore only a timer this run actually stopped, then fail.
+  # Preserve the original deployment error. The always section then restores
+  # only a timer this run actually stopped, on success, failure or a graceful
+  # Ansible interruption. A SIGKILL cannot run userspace cleanup.
   rescue:
-    - name: Restore the Hermes liveness timer after a failed deployment
+    - name: Propagate the failed Hermes deployment
+      ansible.builtin.fail:
+        msg: Hermes deployment failed; the always section restores any liveness timer this run paused
+
+  always:
+    - name: Restore the Hermes liveness timer after deployment
       ansible.builtin.systemd:
         name: agent-stack-hermes-watchdog.timer
         enabled: true
         state: started
         daemon_reload: true
       when: ((_agent_stack_hermes_watchdog_paused | default({})).changed | default(false)) and not ansible_check_mode
-
-    - name: Propagate the failed Hermes deployment
-      ansible.builtin.fail:
-        msg: Hermes deployment failed; the liveness timer restoration ran before propagating the error
