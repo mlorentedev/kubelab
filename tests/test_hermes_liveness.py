@@ -213,7 +213,9 @@ def test_probe_fails_closed_for_non_healthy_health(status: str, run_probe) -> No
     started_at = datetime.now(UTC) - timedelta(minutes=5) if status == "starting" else None
     result = run_probe(status, started_at=started_at)
     assert result.returncode != 0
-    assert status in result.stderr or "not healthy" in result.stderr
+    assert "not healthy" in result.stderr
+    if status:
+        assert status in result.stderr
 
 
 @requires_python3
@@ -271,6 +273,8 @@ def test_activation_order_waits_for_gateway_health_before_starting_the_watcher()
     )
     wait = _task("Wait for the Hermes healthcheck to report healthy")
     assert wait["become"] is True
+    assert any(".State.Health.Status" in str(part) for part in wait["ansible.builtin.command"]["argv"])
+    assert "_agent_stack_hermes_docker_health.stdout == 'healthy'" in wait["until"]
     assert wait["retries"] * wait["delay"] >= 150
     timer = _task("Enable the Hermes liveness timer")["ansible.builtin.systemd"]
     assert timer["enabled"] is True and timer["state"] == "started"

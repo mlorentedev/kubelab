@@ -88,6 +88,10 @@ CI on `54134be7` exposed two test-only portability issues: the 149s case crossed
 
 `nan/deepseek-v4-flash` returned PASS-WITH-GAPS on `54134be7`, with no Blocker or REAL Major. Draft-only review copies and the transcript were moved out of the active spec folder after the review completed. Contract files have no draft markers; the final review quotes the marker names in its own housekeeping finding, so the curator must use the normal archive first and only consider its recorded bypass if the folder-wide scan includes that quotation. The 120s health wait was aligned to the 150s startup window (`30×5`) and pinned by a test. Once Compose itself reports `unhealthy`, paging immediately is accepted behavior; grace deliberately covers only `starting`. Timer restoration moved to `always`, while `rescue` still propagates the failure. A local Ansible failure drill proved the `always` debug ran after the propagated rescue failure; this verifies block semantics, not the live systemd path. SIGKILL and live disable/failure injection remain explicit coverage gaps, not claimed evidence. The reviewer could not reproduce the full-suite count in a bare environment because its dev toolchain was absent; the implementing worktree's 10,676/96 run and final CI remain the evidence.
 
+## PR reviewer dispositions
+
+PR-Agent's partial review of `6e25296d` found two test-only gaps. Applied: the activation test now requires both the Docker health format and the registered stdout `until` condition, and the empty-health case must emit `not healthy` rather than passing through an empty-string membership check. Its #1075 compliance warning is not applicable: that issue is only the required ace2 coordination lease referenced in evidence, not an implementation dependency. Codex exhausted its review quota and CodeRabbit declined the earlier draft; neither counts as review coverage. The independent PASS-WITH-GAPS review covers the runtime files excluded by PR-Agent's token budget.
+
 ## Direct-fix live validation
 
 - Corrected-head provisioning reached `changed=0`, `failed=0`; the Ansible recap reports `rescued=0` on normal runs.
