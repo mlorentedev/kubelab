@@ -38,7 +38,7 @@ owner: manu
 - [x] Knowledge hygiene and newly discovered test-contract defects are recorded in-session.
 - [x] Draft PR #3558 opened with `Closes #2175` after live acceptance; independent review findings then applied and live-verified.
 - [x] Owner chose direct fixes for the two remaining gaps instead of AI-034/AI-035 tickets: bounded startup grace and failure-path timer restoration are implemented with tests.
-- [ ] Live-verify the direct `starting` grace and provisioning; keep failure restoration covered by structure/parse tests (no deliberately broken provision), then obtain a fresh independent verdict.
+- [x] Live-verified direct `starting` grace and idempotent provisioning with zero new watchdog messages; failure restoration is covered by structure/parse tests (no deliberately broken provision). Fresh independent verdict remains the next gate.
 - [ ] CI and every reviewer output dispositioned; no merge from the implementing session.
 - [ ] Independent adversarial review before a separate curator archives the spec.
 - [ ] `/handoff` completed.

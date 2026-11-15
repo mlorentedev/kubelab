@@ -15,7 +15,7 @@ owner: manu
 - [x] **AC2 — recovery and semantics:** 26 focused tests pass. Healthy and one recent start younger than 90 seconds with `RestartCount <= 1` succeed; sustained `starting`, repeated restart, stopped/unhealthy/missing containers, invalid metadata and Docker failure return non-zero. Invalid container names exit 64 before Docker runs. The simple `/health` check contains no credential, Slack or provider readiness. `OnSuccess=kubelab-notify-recovered@%n.service` is rendered.
 - [x] **AC3 — on-demand silence:** tests prove no `Persistent`/`OnCalendar` directive, no Kuma monitor and no always-on dependency. The timer runs locally after ten minutes of boot grace or two minutes after a mid-session activation. **Power-off was not physically exercised**; no external path exists that could emit a page while ace2 is off. A powered-on but hung host is explicitly accepted as uncovered; no independent node-liveness alert is claimed. The watcher deliberately remains independent of the egress kill switch, so daemon failure cannot disable its own detector.
 - [x] **AC4 — configuration lifecycle:** role-ordering tests prove the timer starts only after unit installation plus API, Slack and Docker health checks, and the unconfigured path disables/removes the watcher before Compose teardown. Provisioning waits for Docker health before enabling the timer; the read also runs safely in check mode. A deployment failure after a pause runs `rescue`, restores the timer and then propagates the failure.
-- [x] **AC5 — reproducible evidence:** local suite and lint are green. Initial provisions measured `changed=5` then `changed=0`; the systemd socket correction measured `changed=1`, and the final post-drill provision measured **`changed=0`, `failed=0`**. In the clean drill, restart reached Docker health at `21:23:43Z`; the probe and recovery notifier returned success and `ops-log` recorded `recovered … after 1 failed runs` at `21:23:44.059549Z`. Failure-to-recovery delivery spanned 56.453 seconds. The review-fix recreation measured `changed=4` and its next provision `changed=0`, with zero new watchdog messages. No ace2 power-off was performed.
+- [x] **AC5 — reproducible evidence:** local suite and lint are green. Initial provisions measured `changed=5` then `changed=0`; the systemd socket correction measured `changed=1`, and the final post-drill provision measured **`changed=0`, `failed=0`**. In the clean drill, restart reached Docker health at `21:23:43Z`; the probe and recovery notifier returned success and `ops-log` recorded `recovered … after 1 failed runs` at `21:23:44.059549Z`. Failure-to-recovery delivery spanned 56.453 seconds. The review-fix recreation measured `changed=4` and its next provision `changed=0`, with zero new watchdog messages. Direct-fix provisions also reached `changed=0`, `failed=0`; a baseline-controlled real restart observed `starting`, returned `grace_rc=0`, then healthy/probe success with zero new watchdog messages. No ace2 power-off was performed.
 
 ## Test status
 
@@ -67,7 +67,7 @@ The second reviewer (`nan/qwen3.8-flash`) timed out with `verdict: PENDING`, whi
 The fallback (`anthropic-review/claude-haiku-5-5`, reviewed `cb4948c5`) returned PASS-WITH-GAPS. The owner then chose direct fixes rather than AI-034/AI-035 follow-up tickets; no such tickets were created.
 
 - **Restart `starting` (minor): applied in code.** One recent start receives 90 seconds of grace only for `RestartCount <= 1`; sustained startup, repeated automatic restart, stopped/missing/invalid state fail. Named tests cover each branch; proposal and runbook now describe the exact behavior.
-- **Paused timer on failed deployment (THEORETICAL Major): applied in code.** `Deploy hermes-kubelab` now has a `rescue` that restores only a timer this run paused and then executes `ansible.builtin.fail`, so the original failure is not swallowed. A named ordering/structure test protects it; live failure injection is still required.
+- **Paused timer on failed deployment (THEORETICAL Major): applied in code.** `Deploy hermes-kubelab` now has a `rescue` that restores only a timer this run paused and then executes `ansible.builtin.fail`, so the original failure is not swallowed. A named ordering/structure test protects it and all 26 playbooks parse. A deliberately broken provision was not authorized or executed, so this remains structural rather than live-failure evidence.
 - **Host hang (question): accepted and explicit.** A powered-on hung host is outside this local detector's coverage; no independent node-liveness alert is claimed.
 - **First timer run (minor): verified on the host.** The observed schedule was `LAST 21:49:48`, `NEXT 21:51:48`, confirming the two-minute mid-session activation interval. The runbook is correct; the alternative immediate-fire concern did not occur.
 - **`partial-become` (minor): applied.** The Docker-health wait declares `become: true` alongside `become_user`.
@@ -77,6 +77,15 @@ The fallback (`anthropic-review/claude-haiku-5-5`, reviewed `cb4948c5`) returned
 - **Round-two placeholders (housekeeping): preserved as audit history.** `review-round2.md` records the timed-out PENDING attempt; only a terminal `review.md` is used for archive.
 
 A fresh independent review is required after the direct contract changes.
+
+## Direct-fix live validation
+
+- Corrected-head provisioning reached `changed=0`, `failed=0`; the Ansible recap reports `rescued=0` on normal runs.
+- A real restart with `RestartCount=0` was observed in `starting` and the installed probe returned `grace_rc=0`. It then reached `running/healthy` and the systemd probe returned `Result=success`.
+- Slack read-back from immediately before that restart returned zero new watchdog messages, with timer active and watchdog spool 0. Earlier validation incidents from the inspect-field/startup defects had recovered before this clean baseline.
+- Live inspection caught and corrected Docker's top-level `.RestartCount` field; a regression test now rejects the invalid `.State.RestartCount` path.
+
+No deliberately broken provision or host power-off was performed. Failure restoration is covered structurally, not by a live injected failure.
 
 ## Promotion candidates
 

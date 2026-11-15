@@ -11,7 +11,7 @@
     "behavior": "AC2: healthy and one recent start (under 90s, RestartCount <= 1) succeed; sustained starting, repeated restart, unhealthy, missing and Docker errors fail; recovery ignores provider readiness.",
     "verification": "poetry run pytest -q tests/test_hermes_liveness.py -k 'probe or recovery or simple_health'",
     "state": "passing",
-    "evidence": "26 focused tests passed: healthy and one recent start <=90s with RestartCount <=1 succeed; sustained starting, repeated restart, stopped/unhealthy/missing/invalid state and Docker errors fail; invalid names exit 64 before Docker; recovery ignores provider readiness."
+    "evidence": "26 focused tests passed. Live restart observed starting with grace_rc=0, then healthy/probe success and zero new Slack messages. Sustained/repeated/invalid states fail in tests; Docker RestartCount is read at top level."
   },
   {
     "id": "AI-013-hermes-liveness-f3",
@@ -32,6 +32,6 @@
     "behavior": "AC5: provisioning is idempotent, regression tests protect the wiring, and an approved live stop/start records alert and recovery evidence without credentials.",
     "verification": "poetry run pytest -q tests/test_hermes_liveness.py && make lint-ansible",
     "state": "passing",
-    "evidence": "Final suite 10630 passed/96 skipped; Ruff, mypy and 26 playbooks green. Initial pair ended changed=0 and final corrected-head provision changed=0/failed=0. Review-fix recreate measured changed=4 then changed=0 with zero new watchdog messages. Clean drill produced one incident and recovery after 1 failed run; final gateway healthy, timer active, spool 0."
+    "evidence": "Final suite 10630 passed/96 skipped; Ruff, mypy and 26 playbooks green. Initial pair ended changed=0 and final corrected-head provision changed=0/failed=0. Review-fix recreate measured changed=4 then changed=0 with zero new watchdog messages; direct-fix provisions also reached changed=0/failed=0 and the clean restart baseline emitted no messages. Clean drill produced one incident and recovery after 1 failed run; final gateway healthy, timer active, spool 0."
   }
 ]
