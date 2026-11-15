@@ -208,7 +208,7 @@ def test_a_failed_heartbeat_never_fails_the_ship(tmp_path: pathlib.Path, curl_ex
     token = tmp_path / "token"
     token.write_text("Abc-123_xyz", encoding="utf-8", newline="\n")
 
-    block = _heartbeat_block().replace("/opt/node-backup-heartbeat-token", str(token))
+    block = _heartbeat_block().replace("/opt/node-backup-heartbeat-token", token.as_posix())
     proc = subprocess.run(
         [BASH, "-c", "set -euo pipefail\n" + block],
         cwd=tmp_path,
@@ -238,13 +238,13 @@ def test_the_token_never_reaches_curls_argv(tmp_path: pathlib.Path) -> None:
     seen = tmp_path / "argv"
     stub = bindir / "curl"
     stub.write_text(
-        f'#!/usr/bin/env bash\nprintf "%s\\n" "$@" > {seen}\ncat > /dev/null\n', encoding="utf-8", newline="\n"
+        f'#!/usr/bin/env bash\nprintf "%s\\n" "$@" > {seen.as_posix()}\ncat > /dev/null\n', encoding="utf-8", newline="\n"
     )
     stub.chmod(0o755)
     token = tmp_path / "token"
     token.write_text("SECRETTOKENVALUE", encoding="utf-8", newline="\n")
 
-    block = _heartbeat_block().replace("/opt/node-backup-heartbeat-token", str(token))
+    block = _heartbeat_block().replace("/opt/node-backup-heartbeat-token", token.as_posix())
     subprocess.run(
         [BASH, "-c", "set -euo pipefail\n" + block],
         cwd=tmp_path,
@@ -273,12 +273,12 @@ def test_an_implausible_token_is_refused_rather_than_posted(tmp_path: pathlib.Pa
     bindir.mkdir()
     called = tmp_path / "called"
     stub = bindir / "curl"
-    stub.write_text(f"#!/usr/bin/env bash\ntouch {called}\ncat > /dev/null\n", encoding="utf-8", newline="\n")
+    stub.write_text(f"#!/usr/bin/env bash\ntouch {called.as_posix()}\ncat > /dev/null\n", encoding="utf-8", newline="\n")
     stub.chmod(0o755)
     token = tmp_path / "token"
     token.write_text("../../evil?x=", encoding="utf-8", newline="\n")
 
-    block = _heartbeat_block().replace("/opt/node-backup-heartbeat-token", str(token))
+    block = _heartbeat_block().replace("/opt/node-backup-heartbeat-token", token.as_posix())
     proc = subprocess.run(
         [BASH, "-c", "set -euo pipefail\n" + block],
         cwd=tmp_path,

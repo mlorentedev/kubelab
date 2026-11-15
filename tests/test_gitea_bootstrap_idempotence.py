@@ -90,7 +90,7 @@ def harness(tmp_path: Path):
     (bin_dir / "su").write_text(
         f"""#!/bin/sh
 cmd="$3"
-echo "$cmd" >> {calls}
+echo "$cmd" >> {calls.as_posix()}
 case "$cmd" in
   *"admin user list"*)  printf 'ID\\tUsername\\tEmail\\n1\\t{ADMIN}\\tops@example.test\\n' ;;
   *"admin auth list"*)  printf 'ID\\tName\\tType\\tEnabled\\n7\\tauthelia\\tOAuth2\\ttrue\\n' ;;
@@ -111,7 +111,7 @@ esac
     def run(secret: str = SECRET, discovery: str = DISCOVERY, **extra: str):
         env = {
             **os.environ,
-            "PATH": f"{bin_dir}:{os.environ['PATH']}",
+            "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
             "GITEA_ADMIN_USER": ADMIN,
             "GITEA_ADMIN_PASSWORD": "pw",
             "GITEA_ADMIN_EMAIL": "ops@example.test",

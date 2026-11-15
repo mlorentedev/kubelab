@@ -8,6 +8,7 @@ reading; the shaped windows run first; and a bound, when given, judges only them
 
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -281,8 +282,8 @@ def test_the_probe_writes_one_line_per_connect(tmp_path: Path) -> None:
     )
     (bin_dir / "date").chmod(0o755)
     probe = tmp_path / "probe"
-    script = s.probe_start_script(seconds=1).replace(s.PROBE_FILE, str(probe)).replace("nohup ", "").replace(" &", "")
-    env: dict[str, Any] = child_env({"PATH": f"{bin_dir}:/usr/bin:/bin"})
+    script = s.probe_start_script(seconds=1).replace(s.PROBE_FILE, probe.as_posix()).replace("nohup ", "").replace(" &", "")
+    env: dict[str, Any] = child_env({"PATH": os.pathsep.join([str(bin_dir), "/usr/bin", "/bin"])})
     subprocess.run(["sh", "-c", script], env=env, check=True, timeout=10)
     window = s.Window("t", None, True)
     s.read_probe(probe.read_text(encoding="utf-8"), window)

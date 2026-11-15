@@ -110,7 +110,7 @@ def test_a_hostname_only_a_hand_written_route_serves_is_refused(host: str) -> No
 
     _assert_explained(err)
     assert host in err.error
-    assert "infra/k8s/" in err.why
+    assert "infra/k8s/" in err.why.replace("\\", "/")
 
 
 def test_a_product_may_keep_the_hostnames_it_already_declares() -> None:
