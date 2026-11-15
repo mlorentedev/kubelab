@@ -71,11 +71,16 @@ Owner ruling 2026-11-14: option (c), both changes, in two PRs. Order ruled the s
 ## Evidence
 
 - Per-line prod Traefik read, 2026-11-14: recorded on #3550.
-- Local-push proof, 2026-11-14: imagesensortool runs 3526 and 3532 pushed over `gitea:3000` (the 50 MB layer in 3.3 s). Prod Traefik's PUT log for the gitea router, read on 2026-11-15 over 30 h, has no `PUT` between 22:55 and 23:01Z, while the failed bursts before it show as the control.
+- Local-push proof, 2026-11-14: imagesensortool runs 3526 and 3532 pushed over `gitea:3000`, the 50 MB layer in 3.3 s, which the home uplink (under about 2.3 Mbit/s) cannot carry. Corroborated, within the access log's floor (1 s or 5xx), by prod Traefik's gitea `PUT` log read on 2026-11-15: none between 22:55 and 23:01Z, with the cut bursts before it as the control.
 
 ## Next
 
-The imagesensortool session runs the throwaway push (owner OK 2026-11-14); its result decides PR 1's shape.
+PR 1 needs an owner ruling on the variable names and the `common.yaml` key, a cross-repo contract product workflows will read. Then the order is:
+
+1. merge;
+2. owner provisions the Beelink with no job running;
+3. a job prints the variable;
+4. imagesensortool switches its workflow.
 
 ## Promotion candidates
 
