@@ -43,6 +43,9 @@ _SECRET_KEY = r"^[a-z0-9_]+(\.[a-z0-9_]+)+$"
 
 EventType = Annotated[str, StringConstraints(max_length=100, pattern=_EVENT)]
 
+# The egress a product's pods may use, as the generated NetworkPolicy renders it (RES-HOST-001 D7).
+EGRESS_PROFILES = frozenset({"dns", "public-https", "notify"})
+
 
 class RegistryError(ValueError):
     """The registry file is unreadable or invalid, or refuses what was asked of it."""
@@ -100,13 +103,49 @@ class Product(BaseModel):
     image_registry: Annotated[str, StringConstraints(max_length=200, pattern=_IMAGE_REGISTRY)] | None = None
     private: bool = False
     pull_credential: PullCredential | None = None
+    # The egress profiles of the NetworkPolicy generated for a product that claims `resources:`. Here and
+    # not in the contract, so a product cannot widen its own network (RES-HOST-001 D7).
+    egress: list[str] = Field(default_factory=list)
+
+    @field_validator("egress")
+    @classmethod
+    def _egress_names_defined_profiles_once(cls, profiles: list[str]) -> list[str]:
+        known = ", ".join(sorted(EGRESS_PROFILES))
+        for profile in profiles:
+            if profile not in EGRESS_PROFILES:
+                raise ValueError(
+                    _refusal(
+                        f"egress profile '{profile}' is not defined",
+                        "a profile is a fixed NetworkPolicy rule the platform defines; a name it does not "
+                        "know would render no rule, and the product would look allowed what it is not",
+                        f"use one of: {known}",
+                    )
+                )
+        for profile in sorted(set(profiles)):
+            if profiles.count(profile) > 1:
+                raise ValueError(
+                    _refusal(
+                        f"egress profile '{profile}' is named twice",
+                        "the rule would render twice for nothing",
+                        f"name '{profile}' once",
+                    )
+                )
+        return profiles
 
     @model_validator(mode="after")
     def _forge_decides_the_shape(self) -> Product:
         if self.forge == "in-tree":
             named = [
                 field
-                for field in ("repository", "receiver", "events", "image_registry", "private", "pull_credential")
+                for field in (
+                    "repository",
+                    "receiver",
+                    "events",
+                    "image_registry",
+                    "private",
+                    "pull_credential",
+                    "egress",
+                )
                 if field in self.model_fields_set
             ]
             if named:

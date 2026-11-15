@@ -7,8 +7,9 @@ moved them aside under temporary names and never put them back. The directory
 was still there, so the role skipped the install, and the next task called an
 `npm` that did not exist. Every untagged provision failed at that task.
 
-The role now checks the entry point the next task uses and reinstalls the pinned
-node when it is gone. Static: reads the role only.
+The role now checks the entry point the next task uses and reinstalls the active
+node (the one `mise where node` names, never a pin of the role's own: #3559) when
+it is gone. Static: reads the role only.
 """
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ import yaml
 
 REPO = Path(__file__).resolve().parent.parent
 ROLE_TASKS = REPO / "infra/ansible/roles/dev_node/tasks/main.yml"
-BIN = "{{ dev_node_home }}/.local/share/mise/installs/node/{{ dev_node_toolchains.node }}/bin/{{ item }}"
+BIN = "{{ _dev_node_node_where.stdout | trim }}/bin/{{ item }}"
 
 
 def _tasks() -> list[dict]:
@@ -61,13 +62,19 @@ def test_the_role_checks_the_node_entry_points_it_runs() -> None:
     assert stat.get("check_mode") is False, "a dry run must still see a broken toolchain"
 
 
-def test_a_missing_npm_forces_a_reinstall_of_the_pinned_node() -> None:
+def test_a_missing_npm_forces_a_reinstall_of_the_active_node() -> None:
     repair = _tasks()[_repair_index()]
     assert repair["ansible.builtin.command"]["cmd"] == (
-        "{{ dev_node_home }}/.local/bin/mise install --force node@{{ dev_node_toolchains.node }}"
-    ), "reinstall the pinned version only; a bare `--force` would rebuild every toolchain"
+        "{{ dev_node_home }}/.local/bin/mise install --force node@{{ _dev_node_node_where.stdout | trim | basename }}"
+    ), "reinstall the active version only; a bare `--force` would rebuild every toolchain"
     assert repair.get("when") == "_mise_node_bins.results | rejectattr('stat.exists') | list | length > 0"
 
 
 def test_the_repair_runs_before_anything_uses_npm() -> None:
     assert _stat_index() < _repair_index() < _npm_install_index()
+
+
+def test_the_entry_points_are_checked_in_the_node_mise_resolved() -> None:
+    """The path is mise's answer, so the answer is read first (#3559)."""
+    resolve = _index(lambda t: t.get("register") == "_dev_node_node_where")
+    assert resolve < _stat_index()
