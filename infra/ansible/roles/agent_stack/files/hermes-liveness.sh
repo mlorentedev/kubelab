@@ -12,7 +12,7 @@ case "$container" in
     ;;
 esac
 
-if ! details="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}|{{.State.Running}}|{{.State.StartedAt}}|{{.State.RestartCount}}' "$container")"; then
+if ! details="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}|{{.State.Running}}|{{.State.StartedAt}}|{{.RestartCount}}' "$container")"; then
   echo "Hermes liveness: cannot read $container from the rootless Docker daemon" >&2
   exit 1
 fi

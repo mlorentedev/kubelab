@@ -168,7 +168,8 @@ def test_probe_accepts_only_healthy(status: str, run_probe) -> None:
     assert result.returncode == 0, result.stderr
     assert ".State.Health.Status" in result.fake_args
     assert ".State.StartedAt" in result.fake_args
-    assert ".State.RestartCount" in result.fake_args
+    assert ".RestartCount" in result.fake_args
+    assert ".State.RestartCount" not in result.fake_args
 
 
 @pytest.mark.parametrize("status", ["starting", "unhealthy", "missing", ""])
