@@ -51,6 +51,16 @@ def _component_secrets() -> list[tuple[str, str]]:
 
 
 class TestConfigMapNeverCarriesACataloguedSecret:
+    def test_the_guard_has_something_to_check(self) -> None:
+        """An empty parametrize set collects zero tests and passes, so the guard could vanish silently.
+
+        The resume key is the case slice H exists for; if it is missing, so is the guard.
+        """
+        pairs = _component_secrets()
+
+        assert pairs, "no catalogued secret was paired with a component: the guard below checks nothing"
+        assert ("resume", LLM_KEY) in pairs
+
     @pytest.mark.parametrize(("component", "key_path"), _component_secrets())
     def test_catalogued_secret_is_not_in_its_components_configmap(self, component: str, key_path: str) -> None:
         env = {_flatten(key_path): SENTINEL, f"APPS_PLATFORM_{component.upper()}_PORT": "8765"}
