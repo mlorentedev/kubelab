@@ -164,7 +164,7 @@ def bot_harness(tmp_path: pathlib.Path):
         (bin_dir / "su").write_text(
             f"""#!/bin/sh
 cmd="$3"
-echo "su: $cmd" >> {calls}
+echo "su: $cmd" >> {calls.as_posix()}
 case "$cmd" in
   *"admin user list"*) printf 'ID\\tUsername\\tEmail\\n1\\toperator\\tops@example.test\\n{rows}' ;;
   *"admin auth list"*) printf 'ID\\tName\\n7\\tauthelia\\n' ;;
@@ -176,7 +176,7 @@ esac
         )
         (bin_dir / "curl").write_text(
             f"""#!/bin/sh
-echo "curl: $*" >> {calls}
+echo "curl: $*" >> {calls.as_posix()}
 case "$*" in
   *PATCH*) exit 0 ;;
   *) printf '{{"id":2,"login":"{BOT}","prohibit_login":{str(prohibited).lower()}}}' ;;
@@ -194,7 +194,7 @@ esac
     def run():
         env = {
             **os.environ,
-            "PATH": f"{bin_dir}:{os.environ['PATH']}",
+            "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
             "GITEA_ADMIN_USER": "operator",
             "GITEA_ADMIN_PASSWORD": "pw",
             "GITEA_ADMIN_EMAIL": "ops@example.test",
@@ -281,7 +281,7 @@ def test_the_bot_section_is_skipped_when_no_machine_identity_is_declared(bot_har
         ["sh", str(SCRIPT)],
         env={
             **env,
-            "PATH": f"{bot_harness.calls.parent / 'bin'}:{os.environ['PATH']}",
+            "PATH": f"{bot_harness.calls.parent / 'bin'}{os.pathsep}{os.environ['PATH']}",
             "GITEA_ADMIN_USER": "operator",
             "GITEA_ADMIN_PASSWORD": "pw",
             "GITEA_ADMIN_EMAIL": "ops@example.test",

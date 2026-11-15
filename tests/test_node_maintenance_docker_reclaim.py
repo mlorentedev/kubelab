@@ -144,7 +144,7 @@ def _run_docker_section(tmp_path: Path, group_names: list[str], reclaim_rc: int)
     log = tmp_path / "calls.log"
     for tool, rc in (("docker", 0), ("python3", reclaim_rc)):
         stub = tmp_path / tool
-        stub.write_text(f'#!/bin/sh\necho "{tool} $*" >> {log}\nexit {rc}\n', encoding="utf-8", newline="\n")
+        stub.write_text(f'#!/bin/sh\necho "{tool} $*" >> {log.as_posix()}\nexit {rc}\n', encoding="utf-8", newline="\n")
         stub.chmod(0o755)
     result = subprocess.run(
         [BASH, "-c", f'set -euo pipefail\nFAILURES=""\n{section}\necho "FAILURES=$FAILURES"'],
