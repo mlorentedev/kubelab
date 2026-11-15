@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import subprocess
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -24,6 +25,11 @@ REPO = Path(__file__).resolve().parent.parent
 ROLE = REPO / "infra/ansible/roles/agent_stack"
 SCRIPT = ROLE / "files/hermes-liveness.sh"
 TASKS = ROLE / "tasks/hermes.yml"
+
+requires_python3 = pytest.mark.skipif(
+    shutil.which("python3") is None,
+    reason="starting-state behavior needs python3 inside the shell environment",
+)
 
 
 def _gateway() -> dict:
@@ -172,7 +178,10 @@ def test_probe_accepts_only_healthy(status: str, run_probe) -> None:
     assert ".State.RestartCount" not in result.fake_args
 
 
-@pytest.mark.parametrize("status", ["starting", "unhealthy", "missing", ""])
+@pytest.mark.parametrize(
+    "status",
+    [pytest.param("starting", marks=requires_python3), "unhealthy", "missing", ""],
+)
 def test_probe_fails_closed_for_non_healthy_health(status: str, run_probe) -> None:
     # `starting` is sustained here; the bounded recent-start grace is tested below.
     started_at = datetime.now(UTC) - timedelta(minutes=5) if status == "starting" else None
@@ -181,27 +190,33 @@ def test_probe_fails_closed_for_non_healthy_health(status: str, run_probe) -> No
     assert status in result.stderr or "not healthy" in result.stderr
 
 
+@requires_python3
 @pytest.mark.parametrize("restart_count", [0, 1])
 def test_probe_graces_one_recent_gateway_start(restart_count: int, run_probe) -> None:
     result = run_probe("starting", restart_count=restart_count)
     assert result.returncode == 0, result.stderr
 
 
+@requires_python3
 def test_probe_graces_a_start_inside_the_full_compose_window(run_probe) -> None:
-    result = run_probe("starting", started_at=datetime.now(UTC) - timedelta(seconds=149))
+    # Leave subprocess startup headroom; the exact 150s rejection is tested below.
+    result = run_probe("starting", started_at=datetime.now(UTC) - timedelta(seconds=140))
     assert result.returncode == 0, result.stderr
 
 
+@requires_python3
 def test_probe_rejects_sustained_starting(run_probe) -> None:
     result = run_probe("starting", started_at=datetime.now(UTC) - timedelta(seconds=150))
     assert result.returncode != 0
 
 
+@requires_python3
 def test_probe_rejects_a_repeated_crash_loop_even_inside_the_grace(run_probe) -> None:
     result = run_probe("starting", restart_count=2)
     assert result.returncode != 0
 
 
+@requires_python3
 def test_probe_rejects_starting_when_the_container_is_not_running(run_probe) -> None:
     result = run_probe("starting", running=False)
     assert result.returncode != 0
