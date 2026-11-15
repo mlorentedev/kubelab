@@ -4,6 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 761 | [A 499 at exactly 60 s is Traefik's read deadline, not the client](lesson-761-a-499-at-exactly-60-s-is-traefik-s-read-deadline-not-the-client.md) | 2026-11-14 |
 | 717 | [A route that ties the catch-all's priority works until Traefik restarts](lesson-717-a-route-that-ties-the-catch-all-priority-works-until-traefik-restarts.md) | 2026-11-06 |
 | 709 | [A redirect regex that does not match passes the request through, silently](lesson-709-a-redirect-regex-that-does-not-match-passes-the-request-through-silently.md) | 2026-11-03 |
 | 626 | [A site network can answer DNS for any address, including the authoritative one](lesson-626-a-site-network-can-answer-dns-for-any-address-including-the-authoritative-one.md) | 2026-10-26 |

@@ -62,7 +62,8 @@ Owner ruling 2026-11-14: option (c), both changes, in two PRs. Order ruled the s
 ## Checklist
 
 - [x] PR 1: throwaway imagesensortool run pushes a scratch tag to `gitea:3000` (BuildKit on `kubelab`, `http = true`): the 17 MB blob completes and no gitea `PUT` shows on prod Traefik for that run.
-- [ ] PR 1: declare the endpoint in common.yaml and hand it to jobs (`runner.envs` if the pinned act_runner supports it); owner runs the Beelink provision, which restarts act_runner: no job running.
+- [x] PR 1: declare the endpoint in common.yaml and hand it to jobs through `runner.envs` (supported by the pinned `gitea/runner:4.1.0`).
+- [ ] PR 1: owner runs the Beelink provision, which restarts act_runner: no job running; a job prints the variables.
 - [ ] PR 1: runbook and product-onboarding docs name the variable; imagesensortool's workflow switches (its repo); its master push goes green.
 - [ ] PR 2: declare `readTimeout` on `websecure` and render it with a test (red before, green after).
 - [ ] PR 2: reproduce the cut in staging (an upload of about 90 s through the staging edge: 499 at 60 s before, completes after, if the value is raised).
@@ -84,6 +85,6 @@ PR 1 needs an owner ruling on the variable names and the `common.yaml` key, a cr
 
 ## Promotion candidates
 
-- [ ] Lesson? `yes`: Traefik v3's default `readTimeout` of 60 s cuts any request body longer than that, and the 499 it logs reads as a client abort.
+- [x] Lesson? `yes` (lesson-761): Traefik v3's default `readTimeout` of 60 s cuts any request body longer than that, and the 499 it logs reads as a client abort.
 - [ ] ADR? `yes`: ADR-076 amendment (PR 2).
 - [ ] Pattern? `no`

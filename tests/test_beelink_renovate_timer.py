@@ -41,6 +41,8 @@ REPO = Path(__file__).resolve().parent.parent
 ROLE = REPO / "infra/ansible/roles/beelink_services"
 PLAYBOOK = REPO / "infra/ansible/playbooks/provision-bee.yml"
 COMMON = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text(encoding="utf-8"))
+#: Gitea on the compose network (EDGE-002): what act_runner, its jobs and Renovate all use.
+FORGE_ENDPOINT = COMMON["apps"]["services"]["automation"]["gitea_runner"]["forge_endpoint"]
 SCRIPT = ROLE / "files/renovate-run.sh"
 
 SERVICE = "kubelab-renovate.service"
@@ -81,6 +83,7 @@ def _context(**overrides: Any) -> dict[str, Any]:
         "renovate_github_com_token": GITHUB_TOKEN,
         "gitea_renovate_user": COMMON["apps"]["auth"]["identities"]["renovate"],
         "renovate_engine": {"image": "example/renovate", "version": "1.2.3"},
+        "act_runner_forge_endpoint": FORGE_ENDPOINT,
     }
     context.update({k: v for k, v in _defaults().items() if k.startswith("renovate_") and k not in context})
     context.update(overrides)
@@ -160,7 +163,8 @@ def test_the_endpoint_is_the_forge_on_the_compose_network_like_act_runner() -> N
     which does not depend on DNS, TLS or the tailnet being up (compose.yml.j2)."""
     compose = (ROLE / "templates/compose.yml.j2").read_text(encoding="utf-8")
     (instance,) = re.findall(r'GITEA_INSTANCE_URL:\s*"([^"]+)"', compose)
-    assert _env_file()["RENOVATE_ENDPOINT"] == f"{instance}/api/v1"
+    assert instance == "http://{{ act_runner_forge_endpoint }}", "act_runner reads the declared endpoint"
+    assert _env_file()["RENOVATE_ENDPOINT"] == f"http://{FORGE_ENDPOINT}/api/v1"
     assert re.search(r"container_name:\s*gitea\s*$", compose, re.M), "the endpoint names the container"
 
 

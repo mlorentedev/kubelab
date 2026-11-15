@@ -80,6 +80,72 @@ runners instead of letting stale builds occupy the fleet.
   for a contract-managed product, and `edge.errors.image_name` for errors. The generators deploy
   from these, and `toolkit registry prune` (`ci-cleanup.yml`) prunes them (#2511).
 
+### Pushing to the Gitea registry from a Gitea Actions job (EDGE-002)
+
+A product on the Gitea forge pushes its image over the Beelink's compose network, never
+through `gitea.kubelab.live`. The public name sends every blob out of the home uplink to
+the VPS edge and back over the tailnet to the same node. Prod Traefik cuts any request
+body longer than 60 s, so a multi-arch push failed with 499s (#3550).
+
+The runner hands every job two variables, declared in
+`apps.services.automation.gitea_runner` (`common.yaml`):
+
+| Variable | Value | From |
+| --- | --- | --- |
+| `KUBELAB_FORGE_REGISTRY` | `gitea:3000` | `forge_endpoint` |
+| `KUBELAB_FORGE_NETWORK` | `kubelab` | `job_network` |
+
+The push comes from the BuildKit container that `setup-buildx-action` starts, not from the
+job container. So the recipe attaches that container to the network and marks the endpoint
+as plain HTTP. The traffic never leaves the node.
+
+```yaml
+    steps:
+      - id: forge
+        name: Read the forge endpoint
+        run: |
+          # Empty means the runner predates EDGE-002. An empty registry host makes the
+          # tags resolve to Docker Hub, so fail here instead.
+          test -n "$KUBELAB_FORGE_REGISTRY" && test -n "$KUBELAB_FORGE_NETWORK"
+          echo "registry=$KUBELAB_FORGE_REGISTRY" >> "$GITHUB_OUTPUT"
+          echo "network=$KUBELAB_FORGE_NETWORK" >> "$GITHUB_OUTPUT"
+      - name: Authenticate to the forge registry, for this job only
+        env:
+          REGISTRY: ${{ steps.forge.outputs.registry }}
+          FORGE_USER: ${{ secrets.FORGE_USER }}
+          FORGE_TOKEN: ${{ secrets.FORGE_TOKEN }}
+        run: |
+          # The host daemon cannot resolve `gitea`, so `docker login` cannot be used.
+          # The credential is written to a job-scoped config, never to the runner's.
+          mkdir -p "$RUNNER_TEMP/docker"
+          auth=$(printf '%s:%s' "$FORGE_USER" "$FORGE_TOKEN" | base64 -w0)
+          printf '{"auths":{"%s":{"auth":"%s"}}}' "$REGISTRY" "$auth" > "$RUNNER_TEMP/docker/config.json"
+          echo "DOCKER_CONFIG=$RUNNER_TEMP/docker" >> "$GITHUB_ENV"
+      - uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: network=${{ steps.forge.outputs.network }}
+          buildkitd-config-inline: |
+            [registry."${{ steps.forge.outputs.registry }}"]
+              http = true
+      - uses: docker/build-push-action@v6
+        with:
+          push: true
+          tags: ${{ steps.forge.outputs.registry }}/<owner>/<image>:sha-<short>
+```
+
+- **The guard step is what makes the recipe safe.** Later steps read
+  `steps.forge.outputs.*`, not `env.*`, so the recipe does not depend on whether the
+  runner's variables reach the expression context.
+- **Pull references do not change.** Kubelab composes them from `products.yaml`
+  `image_registry` (`gitea.kubelab.live/<owner>`), and both names point at the same
+  storage.
+- **The token request still crosses the edge.** Gitea 1.27.3 answers the registry's
+  `WWW-Authenticate` realm with `ROOT_URL` (`PUBLIC_URL_DETECTION: legacy`). That GET is
+  small and fits the 60 s bound, but the push still needs the edge to be up.
+- **Delivering a change to the variables restarts the runner.** The config change notifies
+  `Recreate act-runner`, so run `make provision NODE=bee ENV=prod TAGS=runner` with no job
+  running.
+
 ## Versioning
 
 Full detail in [versioning-strategy.md](../architecture/versioning-strategy.md). In short:

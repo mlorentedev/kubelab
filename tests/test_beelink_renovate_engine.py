@@ -57,6 +57,7 @@ def _render_env(engine: dict) -> str:
         gitea_renovate_token="not-a-token",  # noqa: S106 - the template needs one; only RENOVATE_IMAGE is read here
         renovate_github_com_token="not-a-token",  # noqa: S106 - likewise
         renovate_config_container_path="/config.yaml",
+        act_runner_forge_endpoint="gitea:3000",  # only RENOVATE_IMAGE is read here
     )
 
 
