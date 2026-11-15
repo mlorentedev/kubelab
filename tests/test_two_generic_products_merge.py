@@ -197,7 +197,9 @@ def test_the_merge_does_report_a_conflict(tmp_path: pathlib.Path) -> None:
 
 # What a receiver run copies: the generator reads the values and the platform tree, and the api
 # lane's migrations Job is rendered from `apps/api/migrations`.
-TREE = ("infra", "toolkit", "edge", "apps/api/migrations", "pyproject.toml")
+# .gitattributes too: without its eol=lf a Windows git (core.autocrlf=true) calls every
+# regenerated LF file modified, with an empty diff (#3409).
+TREE = ("infra", "toolkit", "edge", "apps/api/migrations", "pyproject.toml", ".gitattributes")
 PROMOTE = """
 import sys
 from unittest.mock import MagicMock
