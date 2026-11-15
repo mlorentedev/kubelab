@@ -182,7 +182,7 @@ def _shipped_units() -> dict[str, dict[str, list[str]]]:
     """Every unit file the repo ships to a node: role templates and plain copies alike."""
     ansible = REPO / "infra/ansible"
     return {
-        str(path.relative_to(ansible)): _directives(path) for path in repo_files(ansible, "*.service", "*.service.j2")
+        path.relative_to(ansible).as_posix(): _directives(path) for path in repo_files(ansible, "*.service", "*.service.j2")
     }
 
 
