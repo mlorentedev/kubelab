@@ -36,7 +36,7 @@ def _planted(tmp_path: Path, rel: str, text: str) -> tuple[bool, bool]:
     shutil.copyfile(ANSIBLE / ".gitignore", ansible / ".gitignore")
     path = tmp_path / rel
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
+    path.write_text(text, encoding="utf-8", newline="\n")
     return (
         path in repo_files(ansible, "*.yml", repo=tmp_path),
         path in repo_files(ansible, "*.j2", repo=tmp_path),
