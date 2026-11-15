@@ -1506,6 +1506,8 @@ def gitea_jobs(
                     where = job.runner or "-"
                 elif job.waiting:
                     where = "waiting for a runner"
+                elif job.skipped:
+                    where = "skipped by the workflow"
                 else:
                     where = "never started (no runner took it)"
                 # markup=False: job names come from workflow files, and `Test [/api]` is a
@@ -1525,7 +1527,8 @@ def gitea_jobs(
             console.print(
                 f"  run {summary.id:>6}  {summary.status:<11} {summary.conclusion or '-':<10} "
                 f"{_m(summary.minutes):>8} min  longest job ran {_m(summary.longest_ran_minutes):>7} min  "
-                f"never started {summary.never_started}/{summary.jobs}  waiting {summary.waiting}",
+                f"never started {summary.never_started}/{summary.jobs}  waiting {summary.waiting}  "
+                f"skipped {summary.skipped}",
                 soft_wrap=True,
                 markup=False,
             )

@@ -43,6 +43,8 @@ class Job:
     #: Not taken and not finished: still waiting for a runner. It may start any second,
     #: so it is not evidence that no runner will take it.
     waiting: bool
+    #: Never meant to run: `needs:` failed upstream or `if:` was false. Not a missing runner.
+    skipped: bool
     runner: Optional[str]
     #: Minutes from start to completion, or to `now` while it runs. None if never started.
     ran_minutes: Optional[float]
@@ -59,6 +61,8 @@ class RunSummary:
     never_started: int
     #: Not taken yet, run still live.
     waiting: int
+    #: Skipped by the workflow itself; excluded from `never_started`.
+    skipped: int
     longest_ran_minutes: Optional[float]
 
 
@@ -75,6 +79,7 @@ def describe_job(job: Mapping[str, Any], now: datetime) -> Job:
         conclusion=job.get("conclusion") or None,
         taken=taken,
         waiting=not taken and job.get("status") != "completed",
+        skipped=not taken and job.get("conclusion") == "skipped",
         runner=job.get("runner_name") if taken else None,
         ran_minutes=ran,
     )
@@ -91,7 +96,8 @@ def summarize_run(run: Mapping[str, Any], jobs: Sequence[Mapping[str, Any]], now
         conclusion=run.get("conclusion") or None,
         minutes=minutes,
         jobs=len(described),
-        never_started=sum(1 for job in described if not job.taken and not job.waiting),
+        never_started=sum(1 for job in described if not (job.taken or job.waiting or job.skipped)),
         waiting=sum(1 for job in described if job.waiting),
+        skipped=sum(1 for job in described if job.skipped),
         longest_ran_minutes=max(ran) if ran else None,
     )

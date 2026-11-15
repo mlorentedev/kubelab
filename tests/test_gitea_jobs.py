@@ -80,6 +80,17 @@ def test_a_waiting_job_with_no_runner_is_not_taken_even_before_its_epoch_start()
     assert job.waiting is True, "a live job no runner took yet is waiting, not never started"
 
 
+def test_a_skipped_job_is_not_counted_as_never_started() -> None:
+    """`needs:` failed or `if:` was false: no start, `completed`, and nothing to do with runners."""
+    skipped = {**NEVER_TAKEN, "id": 7, "conclusion": "skipped"}
+    run = {"id": 1, "status": "completed", "started_at": "2026-10-09T02:20:39Z", "completed_at": "2026-10-09T02:30:00Z"}
+
+    summary = summarize_run(run, [skipped, NEVER_TAKEN], NOW)
+
+    assert describe_job(skipped, NOW).skipped is True
+    assert (summary.never_started, summary.skipped) == (1, 1)
+
+
 def test_a_finished_job_no_runner_took_is_not_waiting() -> None:
     assert describe_job(NEVER_TAKEN, NOW).waiting is False
 
