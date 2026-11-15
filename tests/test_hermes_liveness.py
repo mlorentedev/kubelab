@@ -10,6 +10,7 @@ import json
 import os
 import re
 import subprocess
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -60,7 +61,7 @@ def test_healthcheck_uses_bounded_simple_health_without_credentials() -> None:
 
 def test_simple_health_does_not_turn_provider_readiness_into_liveness() -> None:
     command = " ".join(_gateway()["healthcheck"]["test"])
-    assert command.rstrip().endswith("/health'") or "/health'" in command
+    assert "urlopen('http://127.0.0.1:8642/health', timeout=5)" in command
     assert "/health/detailed" not in command
     assert "slack" not in command.lower() and "readiness" not in command.lower()
 
@@ -86,6 +87,9 @@ def test_unexpected_agent_manager_death_cannot_disable_its_own_detector() -> Non
     timer = _render("agent-stack-hermes-watchdog.timer.j2")
     assert "agent-stack-egress" not in unit
     assert "agent-stack-egress" not in timer
+    combined = unit + timer
+    for directive in ("Requires", "Requisite", "BindsTo", "PartOf", "ConditionActive"):
+        assert not re.search(rf"(?m)^{directive}=", combined)
 
 
 def test_timer_interval_and_boot_grace_match_the_contract() -> None:
@@ -112,12 +116,21 @@ def test_no_external_monitor_or_always_on_dependency_is_added() -> None:
 
 @pytest.fixture
 def run_probe(tmp_path: Path):
-    def run(status: str, *, docker_rc: int = 0, name: str = "hermes-kubelab") -> subprocess.CompletedProcess[str]:
+    def run(
+        status: str,
+        *,
+        docker_rc: int = 0,
+        name: str = "hermes-kubelab",
+        running: bool = True,
+        started_at: datetime | None = None,
+        restart_count: int = 0,
+    ) -> subprocess.CompletedProcess[str]:
         docker = tmp_path / "docker"
         docker.write_text(
             "#!/bin/sh\n"
             "printf '%s\\n' \"$*\" > \"$FAKE_DOCKER_ARGS\"\n"
-            "printf '%s\\n' \"$FAKE_DOCKER_STATUS\"\n"
+            "printf '%s|%s|%s|%s\\n' \"$FAKE_DOCKER_STATUS\" \"$FAKE_DOCKER_RUNNING\" "
+            "\"$FAKE_DOCKER_STARTED_AT\" \"$FAKE_DOCKER_RESTART_COUNT\"\n"
             "exit \"$FAKE_DOCKER_RC\"\n",
             encoding="utf-8",
             newline="\n",
@@ -128,6 +141,9 @@ def run_probe(tmp_path: Path):
             **os.environ,
             "PATH": f"{tmp_path}:/usr/bin:/bin",
             "FAKE_DOCKER_STATUS": status,
+            "FAKE_DOCKER_RUNNING": "true" if running else "false",
+            "FAKE_DOCKER_STARTED_AT": (started_at or datetime.now(UTC)).isoformat(),
+            "FAKE_DOCKER_RESTART_COUNT": str(restart_count),
             "FAKE_DOCKER_RC": str(docker_rc),
             "FAKE_DOCKER_ARGS": str(args),
         }
@@ -151,13 +167,38 @@ def test_probe_accepts_only_healthy(status: str, run_probe) -> None:
     result = run_probe(status)
     assert result.returncode == 0, result.stderr
     assert ".State.Health.Status" in result.fake_args
+    assert ".State.StartedAt" in result.fake_args
+    assert ".State.RestartCount" in result.fake_args
 
 
 @pytest.mark.parametrize("status", ["starting", "unhealthy", "missing", ""])
 def test_probe_fails_closed_for_non_healthy_health(status: str, run_probe) -> None:
-    result = run_probe(status)
+    # `starting` is sustained here; the bounded recent-start grace is tested below.
+    started_at = datetime.now(UTC) - timedelta(minutes=5) if status == "starting" else None
+    result = run_probe(status, started_at=started_at)
     assert result.returncode != 0
     assert status in result.stderr or "not healthy" in result.stderr
+
+
+@pytest.mark.parametrize("restart_count", [0, 1])
+def test_probe_graces_one_recent_gateway_start(restart_count: int, run_probe) -> None:
+    result = run_probe("starting", restart_count=restart_count)
+    assert result.returncode == 0, result.stderr
+
+
+def test_probe_rejects_sustained_starting(run_probe) -> None:
+    result = run_probe("starting", started_at=datetime.now(UTC) - timedelta(seconds=90))
+    assert result.returncode != 0
+
+
+def test_probe_rejects_a_repeated_crash_loop_even_inside_the_grace(run_probe) -> None:
+    result = run_probe("starting", restart_count=2)
+    assert result.returncode != 0
+
+
+def test_probe_rejects_starting_when_the_container_is_not_running(run_probe) -> None:
+    result = run_probe("starting", running=False)
+    assert result.returncode != 0
 
 
 def test_probe_fails_when_the_rootless_docker_daemon_cannot_answer(run_probe) -> None:
@@ -181,8 +222,23 @@ def test_activation_order_waits_for_gateway_health_before_starting_the_watcher()
     assert names.index("Enable the Hermes liveness timer") > names.index(
         "Wait for the Hermes healthcheck to report healthy"
     )
+    wait = _task("Wait for the Hermes healthcheck to report healthy")
+    assert wait["become"] is True
     timer = _task("Enable the Hermes liveness timer")["ansible.builtin.systemd"]
     assert timer["enabled"] is True and timer["state"] == "started"
+
+
+def test_failed_recreation_restores_a_paused_timer_and_preserves_the_failure() -> None:
+    deploy = next(task for task in yaml.safe_load(TASKS.read_text(encoding="utf-8")) if task.get("name") == "Deploy hermes-kubelab")
+    rescue = deploy["rescue"]
+    names = [task["name"] for task in rescue]
+    restore = rescue[0]
+    assert restore["name"] == "Restore the Hermes liveness timer after a failed deployment"
+    assert restore["ansible.builtin.systemd"]["enabled"] is True
+    assert restore["ansible.builtin.systemd"]["state"] == "started"
+    assert "_agent_stack_hermes_watchdog_paused" in restore["when"]
+    assert names[-1] == "Propagate the failed Hermes deployment"
+    assert "ansible.builtin.fail" in rescue[-1]
 
 
 def test_recreation_pauses_an_existing_timer_without_disabling_it() -> None:

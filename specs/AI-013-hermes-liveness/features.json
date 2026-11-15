@@ -8,10 +8,10 @@
   },
   {
     "id": "AI-013-hermes-liveness-f2",
-    "behavior": "AC2: healthy succeeds; starting, unhealthy, missing and Docker errors fail closed; recovery uses kubelab-notify-recovered@ and ignores provider readiness.",
+    "behavior": "AC2: healthy and one recent start (under 90s, RestartCount <= 1) succeed; sustained starting, repeated restart, unhealthy, missing and Docker errors fail; recovery ignores provider readiness.",
     "verification": "poetry run pytest -q tests/test_hermes_liveness.py -k 'probe or recovery or simple_health'",
     "state": "passing",
-    "evidence": "19 focused tests passed: only healthy succeeds; starting/unhealthy/missing/Docker failures fail closed; invalid names exit 64 before Docker; recovery hook is rendered; simple health excludes provider readiness."
+    "evidence": "26 focused tests passed: healthy and one recent start <=90s with RestartCount <=1 succeed; sustained starting, repeated restart, stopped/unhealthy/missing/invalid state and Docker errors fail; invalid names exit 64 before Docker; recovery ignores provider readiness."
   },
   {
     "id": "AI-013-hermes-liveness-f3",
@@ -22,10 +22,10 @@
   },
   {
     "id": "AI-013-hermes-liveness-f4",
-    "behavior": "AC4: disabling Hermes disables and removes the watcher; enabling it starts the watcher only after gateway health verification.",
+    "behavior": "AC4: disabling removes all watcher artifacts; enabling follows gateway health, and a failed deployment restores a paused timer before propagating the error.",
     "verification": "poetry run pytest -q tests/test_hermes_liveness.py -k 'unconfigured or activation_order'",
     "state": "passing",
-    "evidence": "Role tests pin full-path unconfigured teardown (including the probe script) before Compose shutdown, and timer activation after unit installation plus API/Slack/Docker health. A predicted recreation pauses an existing timer without disabling it; unchanged runs do not stop it. All 26 playbooks parse; dry-run contracts pass."
+    "evidence": "Role tests pin full-path unconfigured teardown before Compose shutdown and activation after unit installation plus API/Slack/Docker health. Predicted recreation pauses without disabling; a rescue restores a paused timer on failure before propagating it. All 26 playbooks parse; dry-run contracts pass."
   },
   {
     "id": "AI-013-hermes-liveness-f5",

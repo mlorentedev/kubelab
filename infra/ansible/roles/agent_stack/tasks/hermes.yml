@@ -799,8 +799,8 @@
     - name: Prove the fallback
       ansible.builtin.import_tasks: hermes_fallback_probe.yml
 
-    # The probe is root's and reads only the rootless daemon's health verdict.
-    # It starts after the gateway checks so provisioning cannot page on startup.
+    # The probe executable is root-owned; the oneshot runs it as the agent's
+    # uid and reads only the rootless daemon's health verdict.
     - name: Install the Hermes liveness probe
       ansible.builtin.copy:
         src: hermes-liveness.sh
@@ -827,6 +827,7 @@
           - --format
           - "{% raw %}{{.State.Health.Status}}{% endraw %}"
           - hermes-kubelab
+      become: true
       become_user: "{{ agent_stack_agent_user }}"
       environment: "{{ agent_stack_agent_daemon_env }}"
       register: _agent_stack_hermes_docker_health
@@ -844,3 +845,18 @@
         state: started
         daemon_reload: "{{ _agent_stack_hermes_watchdog_units is changed }}"
       when: not ansible_check_mode
+
+  # A failed health check or any other deployment error must not leave the
+  # detector paused. Restore only a timer this run actually stopped, then fail.
+  rescue:
+    - name: Restore the Hermes liveness timer after a failed deployment
+      ansible.builtin.systemd:
+        name: agent-stack-hermes-watchdog.timer
+        enabled: true
+        state: started
+        daemon_reload: true
+      when: ((_agent_stack_hermes_watchdog_paused | default({})).changed | default(false)) and not ansible_check_mode
+
+    - name: Propagate the failed Hermes deployment
+      ansible.builtin.fail:
+        msg: Hermes deployment failed; the liveness timer restoration ran before propagating the error

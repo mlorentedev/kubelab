@@ -58,7 +58,8 @@ when enabled during an already-running session, `OnUnitActiveSec` makes the
 first run two minutes after activation and every two minutes thereafter.
 Provisioning pauses an existing timer only when a rendered input can recreate
 the gateway, and re-enables it after Docker reports healthy; an unchanged run
-leaves it active and reports no change.
+leaves it active and reports no change. If the deployment fails after the
+pause, its `rescue` restores the timer before propagating the failure.
 
 A non-healthy result pages through `kubelab-notify@`; the fleet notifier sends
 one initial page per incident, hourly reminders and a recovery through
@@ -71,8 +72,11 @@ already present: that setting hides `/run/user`; the unit deliberately uses
 A forced validation
 uses `docker stop hermes-kubelab` on the agent's daemon, starts the oneshot to
 prove the page, then starts the gateway and reruns the oneshot to prove
-recovery. Do not use `docker kill` for this check: Compose can restart a
-transient kill between polls, which is intentionally not an incident.
+recovery. A recent `starting` state receives at most 90 s of grace only while
+`RestartCount <= 1`; sustained startup, a second automatic restart, a stopped
+container and missing health all fail. Thus one automatic restart can be
+silent, but a crash loop or an outage still pages. The forced validation uses
+`docker stop`, which is always `unhealthy`, never that bounded startup grace.
 
 There is no Kuma monitor, `Persistent` timer or always-on dependency. Powering
 ace2 off therefore pages nobody. The watcher also stays independent of
