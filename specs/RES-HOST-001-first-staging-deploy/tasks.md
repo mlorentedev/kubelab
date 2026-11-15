@@ -172,7 +172,7 @@ excluding regenerated schema and snapshot files.
   Result: the test passes, because `SECRET_PATTERNS` catches `KEY`, `SECRET`
   and `TOKEN` by name. The filter still never asks the catalog; that gap is
   guarded by the catalog-wide test in `tests/test_resume_secrets.py` and filed
-  as a ticket. The bearer is mapped as `RESUME_NOTIFY_WEBHOOK_TOKEN`: resume
+  as kubelab#3572. The bearer is mapped as `RESUME_NOTIFY_WEBHOOK_TOKEN`: resume
   reads no notify bearer yet, so it needs a settings field of that name.
 - [ ] `toolkit secrets audit --env staging` reports both present.
 
