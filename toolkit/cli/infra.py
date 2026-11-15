@@ -1500,8 +1500,11 @@ def _staging_zones() -> list[str]:
     return staging_zones(settings.project_root / "infra" / "config" / "products" / "edge.json")
 
 
-def _apply_cluster_bootstrap(kubeconfig: str, *, dry_run: bool) -> bool:
-    """Render + (validate or apply) every cluster_bootstrap entry, in declared order.
+def _apply_cluster_bootstrap(kubeconfig: str, *, env: str, dry_run: bool) -> bool:
+    """Render + (validate or apply) every cluster_bootstrap entry for ENV, in declared order.
+
+    An entry that names `envs` is skipped for any other environment: the Sealed Secrets controller
+    must not reach a cluster that holds no key Secret for it (RES-HOST-001 slice A).
 
     Shared by `k8s deploy` (step 3), `k8s dry-run`, and `k8s bootstrap`. Returns False on
     the first hard failure (an `optional` entry whose render target is unreachable is a
@@ -1509,6 +1512,9 @@ def _apply_cluster_bootstrap(kubeconfig: str, *, dry_run: bool) -> bool:
     """
     zones = _staging_zones()
     for entry in _load_cluster_bootstrap():
+        if entry.envs is not None and env not in entry.envs:
+            logger.info(f"Skipping cluster_bootstrap '{entry.name}': declared for {', '.join(entry.envs)} only")
+            continue
         verb = "Validating" if dry_run else "Applying"
         logger.info(f"{verb} cluster_bootstrap '{entry.name}' (ns: {entry.namespace})...")
         if not render_and_apply(
@@ -1540,7 +1546,7 @@ def k8s_bootstrap(
         confirm_dangerous_operation(env_config, "Apply cluster-wide bootstrap layer")
 
     kubeconfig = _get_kubeconfig(env)
-    if not _apply_cluster_bootstrap(kubeconfig, dry_run=dry_run):
+    if not _apply_cluster_bootstrap(kubeconfig, env=env, dry_run=dry_run):
         raise typer.Exit(1)
     logger.success("cluster_bootstrap complete")
 
@@ -1806,7 +1812,7 @@ def k8s_deploy(
     #    resources (ADR-041), so they are applied imperatively via the shared
     #    render-and-apply primitive driven by the cluster_bootstrap SSOT
     #    (ADR-047 / TOOL-009) — no hardcoded per-component branches.
-    if not _apply_cluster_bootstrap(kubeconfig, dry_run=False):
+    if not _apply_cluster_bootstrap(kubeconfig, env=env, dry_run=False):
         raise typer.Exit(1)
 
     # 4. Apply namespace-scoped manifests
@@ -1861,7 +1867,7 @@ def k8s_dry_run(
     # Dry-run the cluster-wide bootstrap layer (ADR-047 / TOOL-009). Each manifest is
     # rendered and then validated client-side: a server dry-run cannot validate an
     # object whose namespace the same manifest creates (see `_kubectl_apply`).
-    if not _apply_cluster_bootstrap(kubeconfig, dry_run=True):
+    if not _apply_cluster_bootstrap(kubeconfig, env=env, dry_run=True):
         raise typer.Exit(1)
 
     # Dry-run namespace-scoped resources

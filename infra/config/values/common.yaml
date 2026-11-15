@@ -737,6 +737,7 @@ cluster_bootstrap:
   # Not a `source` entry: two edits to the upstream file (digest pin, --key-renew-period=0)
   # that `make sync-operators` would undo. The manifest header says how to upgrade it.
   version: v0.41.2              # ADR-073 D2: decrypts product SealedSecrets with the SOPS-held key
+  envs: [staging]               # the key Secret exists only there (`sealed-secrets-key`, envs=staging)
 - name: coredns-custom
   namespace: kube-system
   manifest: infra/k8s/base/edge/coredns-custom.yaml
