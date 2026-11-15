@@ -12,7 +12,11 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from toolkit.features.gitea_client import PAGE_SIZE, GiteaClient
+import pytest
+from typer.testing import CliRunner
+
+from toolkit.cli import services
+from toolkit.features.gitea_client import PAGE_SIZE, GiteaClient, GiteaError
 from toolkit.features.gitea_jobs import describe_job, summarize_run
 
 NOW = datetime(2026, 11, 14, 12, 0, tzinfo=timezone.utc)
@@ -73,6 +77,11 @@ def test_a_waiting_job_with_no_runner_is_not_taken_even_before_its_epoch_start()
     job = describe_job({**waiting, "runner_name": None}, NOW)
 
     assert job.taken is False
+    assert job.waiting is True, "a live job no runner took yet is waiting, not never started"
+
+
+def test_a_finished_job_no_runner_took_is_not_waiting() -> None:
+    assert describe_job(NEVER_TAKEN, NOW).waiting is False
 
 
 def test_run_810_reads_as_three_jobs_that_waited_not_one_that_hung() -> None:
@@ -89,6 +98,7 @@ def test_run_810_reads_as_three_jobs_that_waited_not_one_that_hung() -> None:
 
     assert summary.minutes == 1674.8
     assert summary.never_started == 3
+    assert summary.waiting == 0
     assert summary.longest_ran_minutes == 4.0
 
 
@@ -114,9 +124,43 @@ def test_a_run_s_jobs_are_read_from_every_page() -> None:
 
 
 def test_runs_are_read_lazily_so_asking_for_the_latest_few_reads_one_page() -> None:
-    client = RecordingClient([{"workflow_runs": [{"id": n} for n in range(PAGE_SIZE)]}])
+    client = RecordingClient([{"workflow_runs": [{"id": n} for n in range(PAGE_SIZE, 0, -1)]}])
 
     runs = client.latest_runs("teledyne", "openkm-brain", 5)
 
-    assert [r["id"] for r in runs] == [0, 1, 2, 3, 4]
+    assert [r["id"] for r in runs] == [50, 49, 48, 47, 46]
     assert len(client.requested) == 1
+
+
+def test_runs_not_newest_first_are_refused_rather_than_labelled_latest() -> None:
+    client = RecordingClient([{"workflow_runs": [{"id": n} for n in range(1, 4)]}])
+
+    with pytest.raises(GiteaError, match="no longer newest first"):
+        client.latest_runs("teledyne", "openkm-brain", 3)
+
+
+class FakeAdmin:
+    def list_run_jobs(self, owner: str, name: str, run_id: int) -> list[dict[str, Any]]:
+        return [_job(name="Test [/api]"), NEVER_TAKEN]
+
+    def latest_runs(self, owner: str, name: str, count: int) -> list[dict[str, Any]]:
+        return [{"id": 810, "status": "completed", "started_at": "2026-10-09T02:20:39Z"}]
+
+
+@pytest.fixture
+def cli(monkeypatch: pytest.MonkeyPatch) -> CliRunner:
+    monkeypatch.setattr(services, "_gitea_clients", lambda env: (FakeAdmin(), None, "", "https://forge.invalid"))
+    return CliRunner()
+
+
+@pytest.mark.parametrize("args", [["--run", "810"], []])
+def test_a_job_name_that_looks_like_rich_markup_is_printed_not_parsed(cli: CliRunner, args: list[str]) -> None:
+    result = cli.invoke(services.app, ["gitea", "jobs", "--env", "prod", "--repo", "teledyne/openkm-brain", *args])
+
+    assert result.exit_code == 0, result.output
+
+
+def test_last_below_one_is_refused_as_bad_input(cli: CliRunner) -> None:
+    result = cli.invoke(services.app, ["gitea", "jobs", "--env", "prod", "--repo", "a/b", "--last", "-1"])
+
+    assert result.exit_code == 2

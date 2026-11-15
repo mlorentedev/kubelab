@@ -1473,7 +1473,7 @@ def gitea_jobs(
     env: Annotated[str, typer.Option("--env", "-e", help="Target environment")],
     repo: Annotated[str, typer.Option("--repo", help="Repository as owner/name")],
     run: Annotated[int | None, typer.Option("--run", help="One run's jobs; default lists the latest runs")] = None,
-    last: Annotated[int, typer.Option("--last", help="How many recent runs to list without --run")] = 20,
+    last: Annotated[int, typer.Option("--last", min=1, help="How many recent runs to list without --run")] = 20,
 ) -> None:
     """Read a repository's Actions runs, or one run's jobs, and tell waiting from running (#1637).
 
@@ -1502,11 +1502,19 @@ def gitea_jobs(
             jobs = [describe_job(job, now) for job in admin.list_run_jobs(owner, name, run)]
             console.print(f"\n[bold]{repo} run {run}[/bold] — {base_url} ({env}), {len(jobs)} job(s)\n")
             for job in jobs:
-                where = job.runner if job.taken else "never started (no runner took it)"
+                if job.taken:
+                    where = job.runner or "-"
+                elif job.waiting:
+                    where = "waiting for a runner"
+                else:
+                    where = "never started (no runner took it)"
+                # markup=False: job names come from workflow files, and `Test [/api]` is a
+                # Rich closing tag that would raise MarkupError mid-report.
                 console.print(
                     f"  {job.id:>6}  {job.status:<11} {job.conclusion or '-':<10} "
                     f"ran {_m(job.ran_minutes):>7} min  {where}  {job.name}",
                     soft_wrap=True,
+                    markup=False,
                 )
             return
 
@@ -1517,8 +1525,9 @@ def gitea_jobs(
             console.print(
                 f"  run {summary.id:>6}  {summary.status:<11} {summary.conclusion or '-':<10} "
                 f"{_m(summary.minutes):>8} min  longest job ran {_m(summary.longest_ran_minutes):>7} min  "
-                f"never started {summary.never_started}/{summary.jobs}",
+                f"never started {summary.never_started}/{summary.jobs}  waiting {summary.waiting}",
                 soft_wrap=True,
+                markup=False,
             )
     except GiteaError as exc:
         logger.error(f"could not read Actions runs: {exc}")

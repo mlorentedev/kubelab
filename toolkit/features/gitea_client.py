@@ -604,8 +604,16 @@ class GiteaClient:
         the caller asks about the last few. `_paginate` is lazy, so stopping at `count`
         reads only the pages it needs. The result is "the latest N", never "all".
         """
-        runs = self._paginate(f"/repos/{quote(owner)}/{quote(name)}/actions/runs", key="workflow_runs")
-        return list(islice(runs, count))
+        runs = list(
+            islice(self._paginate(f"/repos/{quote(owner)}/{quote(name)}/actions/runs", key="workflow_runs"), count)
+        )
+        # The endpoint sends no ordering parameter and documents none. Gitea 1.27.3 answers
+        # newest first (measured 2026-11-14: 2714, 2628, 2075, 826). If an upgrade changes
+        # that, "latest" would silently become "oldest", so refuse instead of labelling it.
+        ids = [int(run["id"]) for run in runs]
+        if ids != sorted(ids, reverse=True):
+            raise GiteaError(f"Gitea API /repos/{owner}/{name}/actions/runs is no longer newest first: {ids}")
+        return runs
 
     def list_run_jobs(self, owner: str, name: str, run_id: int) -> list[dict[str, Any]]:
         """Every job of one Actions run, with its runner and its start and end times."""

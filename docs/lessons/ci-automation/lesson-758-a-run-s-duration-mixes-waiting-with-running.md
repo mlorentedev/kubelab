@@ -16,6 +16,6 @@ tags: [kubelab, ci-automation, gitea, actions, diagnosis]
 
 **Solution**: `make gitea-jobs ENV=prod REPO=<owner/name> [RUN=<id>]` (#1637). It reads a run's jobs and prints each job's runner and running time, or `never started`. Without `RUN` it lists the latest runs, each with its longest job's running time and how many of its jobs never started. Gitea 1.27.3 reports an unset `started_at` as the Unix epoch, and older versions as `0001-01-01`. The reader treats both as never started.
 
-**Rule**: Before you tune a timeout for a "stuck" CI run, read which of its jobs a runner took. A long run with jobs that never started is a label no runner matches (the #1076 shape), not a hang. Lowering a timeout over it changes nothing.
+**Rule**: Before you tune a timeout for a "stuck" CI run, read which of its jobs a runner took. A job that never started can mean a `runs-on` label no runner matches (the #1076 shape, as here), a dependency that never finished, or a runner that was busy or off. Check the labels against the registered runners and the job's `needs` before you rule out a hang. Lowering a timeout changes nothing for a job that never started.
 
 **Tags**: `#gitea` `#actions` `#issue-3079` `#issue-1637`
