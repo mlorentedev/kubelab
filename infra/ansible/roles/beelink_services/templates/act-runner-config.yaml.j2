@@ -31,6 +31,14 @@ runner:
   # value it documents disagreeing, with nothing to notice. It says the number
   # only by pointing at where the number lives.
   capacity: {{ act_runner_capacity }}
+  # EDGE-002 (#3550). Handed to every job: a product workflow pushes its image to
+  # KUBELAB_FORGE_REGISTRY from a BuildKit container attached to
+  # KUBELAB_FORGE_NETWORK, so the blobs stay on this node instead of crossing the
+  # edge, which cuts any upload longer than 60 s. The names are a contract product
+  # workflows read; the values are `gitea_runner.forge_endpoint` and `.job_network`.
+  envs:
+    KUBELAB_FORGE_REGISTRY: "{{ act_runner_forge_endpoint }}"
+    KUBELAB_FORGE_NETWORK: "{{ act_runner_job_network }}"
   # `<label>:docker://<image>`. Gitea has no hosted runners, so `ubuntu-latest`
   # is only ever what is declared here -- and a job whose `runs-on` matches no
   # runner is QUEUED FOREVER rather than failed. No error, no red check.
@@ -69,7 +77,7 @@ container:
   # the instance over the compose network rather than out through the public
   # domain and back. If left empty act_runner creates a network per job, and the
   # checkout would then depend on DNS, TLS and the tailnet being up.
-  network: kubelab
+  network: {{ act_runner_job_network }}
   # NOT privileged. Docker-in-Docker would need it; this runner builds through
   # the mounted socket instead, which is the trade-off ADR-030 already accepted
   # for the GitHub runner on this same node.

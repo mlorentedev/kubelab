@@ -1904,6 +1904,17 @@ apps:
         # deregister by NOT matching it. A literal in any one of them keeps matching
         # after a rename and quietly protects or destroys the wrong record.
         runner_name: kubelab-bee-gitea
+        # EDGE-002 (#3550). Gitea's address on the compose network: the service name and
+        # the CONTAINER port, never `gitea_http_port`, which is the host-side
+        # publication on the Tailscale IP. The runner polls Gitea here, and every job
+        # gets it as KUBELAB_FORGE_REGISTRY so an image push stays on this node's
+        # bridge network. Through `gitea.kubelab.live` the blobs leave the home
+        # uplink for the VPS edge, which cuts any request body longer than 60 s.
+        forge_endpoint: "gitea:3000"
+        # The network job containers join, handed to jobs as KUBELAB_FORGE_NETWORK so
+        # a workflow can attach its BuildKit container to it. It must be a network
+        # Gitea is on; `tests/test_gitea_actions_runner.py` checks the render.
+        job_network: kubelab
         # OPS-034: `gitea/runner` is act_runner under its new name. 0.2.13 left a cancelled
         # job's two named volumes behind (lesson-521); 3.5.0 added the sweep that removes
         # volumes the runner labelled itself, and 4.1.0 is the newest release that is not

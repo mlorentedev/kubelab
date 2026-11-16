@@ -132,6 +132,7 @@ def _template_vars(runner: dict) -> dict:
         act_runner_zombie_task_timeout=runner["zombie_task_timeout"],
         act_runner_endless_task_timeout=runner["endless_task_timeout"],
         act_runner_abandoned_job_timeout=runner["abandoned_job_timeout"],
+        act_runner_forge_endpoint=runner["forge_endpoint"],
         docker_dns_servers=common["networking"]["tailnet_first_resolvers"],
         gitea_dns_servers=common["networking"]["public_resolvers"],
     )
@@ -168,6 +169,8 @@ def _config() -> dict:
             act_runner_workdir_cleanup_age=runner["workdir_cleanup_age"],
             act_runner_idle_cleanup_interval=runner["idle_cleanup_interval"],
             act_runner_timeout=runner["timeout"],
+            act_runner_forge_endpoint=runner["forge_endpoint"],
+            act_runner_job_network=runner["job_network"],
         )
     )
 
@@ -663,3 +666,58 @@ def _gitea_env() -> dict:
     services = _render()["services"]
     gitea = next(svc for name, svc in services.items() if "GITEA__actions__ENABLED" in (svc.get("environment") or {}))
     return gitea["environment"]
+
+
+# --- EDGE-002 (#3550): jobs reach the forge's registry without crossing the edge ---
+#
+# A job that pushes to `gitea.kubelab.live` resolves the public name, so every blob
+# leaves the home uplink for the VPS edge and comes back over the tailnet to the Gitea
+# on this same node. Prod Traefik cuts any request body longer than 60 s, so a
+# multi-arch push failed with 499s (#3550). The runner hands every job the in-network
+# address instead. The names are a contract that product workflows read, so they are
+# asserted here; the values come from the declaration, never from a literal.
+
+#: The variables a product workflow reads. Renaming one breaks every product that
+#: switched to the local push, silently: an empty registry host falls back to Docker Hub.
+FORGE_JOB_ENV = ("KUBELAB_FORGE_REGISTRY", "KUBELAB_FORGE_NETWORK")
+
+
+def test_jobs_are_handed_the_in_network_forge_endpoint() -> None:
+    runner = _ssot()
+    envs = _config()["runner"].get("envs") or {}
+    assert envs == {
+        "KUBELAB_FORGE_REGISTRY": runner["forge_endpoint"],
+        "KUBELAB_FORGE_NETWORK": runner["job_network"],
+    }, (
+        "`runner.envs` must hand every job exactly the declared forge endpoint and "
+        "job network under the KUBELAB_FORGE_* names (EDGE-002). A product workflow "
+        "reads them to push over the compose network instead of through the edge."
+    )
+
+
+def test_the_job_network_is_the_one_gitea_is_on() -> None:
+    runner = _ssot()
+    assert _config()["container"]["network"] == runner["job_network"], (
+        "job containers must join the declared network, the same value handed to "
+        "jobs as KUBELAB_FORGE_NETWORK; two copies of the name drift apart."
+    )
+    compose = _render()
+    networks = {spec.get("name", key) for key, spec in compose["networks"].items()}
+    assert runner["job_network"] in networks
+    assert runner["job_network"] in compose["services"]["gitea"]["networks"], (
+        "the job network must be one Gitea is attached to, or the declared endpoint "
+        "does not resolve from a job."
+    )
+
+
+def test_the_forge_endpoint_names_gitea_s_container_port() -> None:
+    host, _, port = _ssot()["forge_endpoint"].partition(":")
+    services = _render()["services"]
+    assert host in services, f"`{host}` is not a compose service on the Beelink"
+    assert any(str(p).endswith(f":{port}") for p in services[host]["ports"]), (
+        f"`{port}` is not the container port Gitea listens on; the endpoint names the "
+        "container side, never the host-side publication."
+    )
+    assert _runner()["environment"]["GITEA_INSTANCE_URL"] == f"http://{host}:{port}", (
+        "the runner polls Gitea at the same declared endpoint the jobs push to."
+    )
