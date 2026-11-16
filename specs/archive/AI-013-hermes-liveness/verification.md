@@ -109,7 +109,7 @@ No deliberately broken provision or host power-off was performed. Failure restor
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`.
-- [ ] Folder moved to `specs/archive/AI-013-hermes-liveness/`.
-- [ ] Bitácora #2175 closed by the merged implementation PR.
-- [ ] Promotions above executed; independent adversarial review completed before archive.
+- [x] `proposal.md` frontmatter set to `status: archived`.
+- [x] Folder moved to `specs/archive/AI-013-hermes-liveness/`.
+- [x] Bitácora #2175 closed by the merged implementation PR (#3558).
+- [x] Promotions above executed; independent adversarial review completed before archive.

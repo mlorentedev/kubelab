@@ -1,7 +1,7 @@
 ---
 id: "AI-013-hermes-liveness"
 type: spec
-status: implementing
+status: archived
 created: "2026-11-14"
 issue: "mlorentedev/kubelab#2175"
 tags: [spec, proposal]
