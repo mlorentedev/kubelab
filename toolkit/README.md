@@ -136,6 +136,7 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit infra k8s render-apply` | Render RESOLVE_* placeholders (MagicDNS) in a single manifest, then server-side apply. |
 | `toolkit infra k8s restart` | Restart any K8s deployment (rollout restart + wait) on the env's cluster. |
 | `toolkit infra k8s status` | Show K8s resource status for the kubelab namespace. |
+| `toolkit infra k8s verify-sealed-secrets` | Check the Sealed Secrets controller decrypts the probe with the operator's key; prints match or mismatch. |
 | `toolkit infra load-test` | Measure staging's capacity (OPS-054); never prod |
 | `toolkit infra load-test clear` | Remove the route a run that died left behind. Idempotent. |
 | `toolkit infra load-test run` | Measure staging: a baseline under the limiter, then ramps to the first degraded step. |

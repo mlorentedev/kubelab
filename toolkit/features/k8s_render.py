@@ -51,6 +51,8 @@ class BootstrapEntry:
     ``render`` maps each ``RESOLVE_*`` placeholder to a MagicDNS hostname resolved at
     deploy time. ``optional`` lets an entry be skipped (not failed) when a render
     target is unreachable — e.g. RPi4 is an on-demand node and may be powered off.
+    ``envs`` names the environments the entry is applied to; ``None`` is every one (the
+    mirror of ``SecretMapping.envs``). Read by ``_apply_cluster_bootstrap``.
     """
 
     name: str
@@ -59,10 +61,14 @@ class BootstrapEntry:
     version: str | None = None
     optional: bool = False
     render: dict[str, str] = field(default_factory=dict)
+    envs: tuple[str, ...] | None = None
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> BootstrapEntry:
         """Build an entry from a parsed ``cluster_bootstrap`` list item."""
+        envs = raw.get("envs")
+        if envs is not None and not envs:
+            raise ValueError(f"cluster_bootstrap '{raw.get('name')}': `envs` is empty, so it would apply nowhere")
         return cls(
             name=str(raw["name"]),
             namespace=str(raw["namespace"]),
@@ -70,6 +76,7 @@ class BootstrapEntry:
             version=(str(raw["version"]) if raw.get("version") is not None else None),
             optional=bool(raw.get("optional", False)),
             render={str(k): str(v) for k, v in dict(raw.get("render") or {}).items()},
+            envs=tuple(str(e) for e in envs) if envs is not None else None,
         )
 
 

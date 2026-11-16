@@ -44,6 +44,10 @@ class SecretMapping:
     # token, so a missing or placeholder token is refused like any other; the
     # `.dockerconfigjson` is rendered from the three at apply time (IDP-053 D6).
     registry_login: tuple[str, str] | None = None
+    # Labels on the Secret itself. Empty renders no `labels` key at all, so a mapping
+    # that never declared any sends the cluster the same object as before. The Sealed
+    # Secrets controller adopts a key Secret only by label (RES-HOST-001 A3).
+    labels: dict[str, str] = field(default_factory=dict)
 
 
 DOCKERCONFIGJSON = "kubernetes.io/dockerconfigjson"
@@ -116,6 +120,21 @@ SECRET_DEFINITIONS: list[SecretMapping] = [
     # no longer resolve under staging — trip the placeholder guard above on
     # every `apply-secrets ENV=staging`. Its values are now rendered into the
     # Compose file by `roles/beelink_services`.
+    # The key the Sealed Secrets controller decrypts with (ADR-073 D2, RES-HOST-001 A4). In the
+    # controller's namespace and labelled active, so the controller adopts this pair at its first
+    # start instead of minting its own. Applied by `apply-secrets`, which `bootstrap-k8s` and
+    # `deploy-k8s` both run before the controller is applied. The operator generates the values.
+    SecretMapping(
+        name="sealed-secrets-key",
+        keys={
+            "tls.crt": "INFRA_SEALED_SECRETS_TLS_CRT",
+            "tls.key": "INFRA_SEALED_SECRETS_TLS_KEY",
+        },
+        namespace="kube-system",
+        envs=("staging",),
+        secret_type="kubernetes.io/tls",
+        labels={"sealedsecrets.bitnami.com/sealed-secrets-key": "active"},
+    ),
     SecretMapping(
         name="n8n-secrets",
         keys={
@@ -699,7 +718,13 @@ def _build_users_database(cm: ConfigurationManager) -> str:
     return yaml.safe_dump({"users": db}, sort_keys=False, default_flow_style=False, allow_unicode=True)
 
 
-def _render_secret_manifest(name: str, namespace: str, data: dict[str, str], secret_type: str = "Opaque") -> str:
+def _render_secret_manifest(
+    name: str,
+    namespace: str,
+    data: dict[str, str],
+    secret_type: str = "Opaque",
+    labels: dict[str, str] | None = None,
+) -> str:
     """Render a Secret (Opaque unless SECRET_TYPE says otherwise) as YAML with base64-encoded `data` — in-process.
 
     The single delivery primitive (audit C5 / Design Tension #2): building the
@@ -711,7 +736,7 @@ def _render_secret_manifest(name: str, namespace: str, data: dict[str, str], sec
     manifest = {
         "apiVersion": "v1",
         "kind": "Secret",
-        "metadata": {"name": name, "namespace": namespace},
+        "metadata": {"name": name, "namespace": namespace, **({"labels": labels} if labels else {})},
         "type": secret_type,
         "data": {k: base64.b64encode(v.encode("utf-8")).decode("ascii") for k, v in data.items()},
     }
@@ -801,7 +826,7 @@ def _apply_single_secret(
     # Render in-process (no secret in argv) and apply via stdin. A dry run asks
     # the API server what a real apply would do (#1810): kubectl answers with a
     # verdict per object and never echoes a value.
-    manifest = _render_secret_manifest(mapping.name, namespace, data, mapping.secret_type)
+    manifest = _render_secret_manifest(mapping.name, namespace, data, mapping.secret_type, mapping.labels)
     apply_args = ["apply", "--dry-run=server", "-f", "-"] if dry_run else ["apply", "-f", "-"]
     try:
         apply_result = subprocess.run(
