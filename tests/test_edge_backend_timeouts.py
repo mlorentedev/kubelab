@@ -89,9 +89,27 @@ def test_the_edge_bounds_how_long_it_waits_for_any_backend(acme: bool) -> None:
     assert not any(a.startswith(f"{timeouts}.idleConnTimeout") for a in arguments), "ADR-076 D4 keeps the default"
 
 
+@pytest.mark.parametrize("acme", [False, True])
+def test_the_edge_declares_how_long_it_reads_a_request(acme: bool) -> None:
+    """EDGE-002 (#3550): the client-side bound is declared, never Traefik's silent default.
+
+    `respondingTimeouts.readTimeout` covers the whole request, body included, and Traefik
+    v3 defaults it to 60 s. Nothing declared it, so an upload longer than that was cut
+    with a 499 that read as a client abort. It has no per-router form: the value applies
+    to every route on the entrypoint (ADR-076 amendment).
+    """
+    read = _defaults()["k3s_traefik_websecure_read_timeout"]
+    flag = "--entrypoints.websecure.transport.respondingTimeouts.readTimeout"
+    assert [a for a in _arguments(acme) if a.startswith(f"{flag}=")] == [f"{flag}={read}"]
+
+
 def test_the_default_bounds_are_bounds() -> None:
     defaults = _defaults()
-    for key in ("k3s_traefik_response_header_timeout", "k3s_traefik_dial_timeout"):
+    for key in (
+        "k3s_traefik_response_header_timeout",
+        "k3s_traefik_dial_timeout",
+        "k3s_traefik_websecure_read_timeout",
+    ):
         assert str(defaults[key]).rstrip("s").isdigit() and int(str(defaults[key]).rstrip("s")) > 0, key
 
 
