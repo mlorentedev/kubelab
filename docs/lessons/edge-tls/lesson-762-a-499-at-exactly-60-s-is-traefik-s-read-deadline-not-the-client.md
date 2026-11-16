@@ -1,5 +1,5 @@
 ---
-id: lesson-761-a-499-at-exactly-60-s-is-traefik-s-read-deadline-not-the-client
+id: lesson-762-a-499-at-exactly-60-s-is-traefik-s-read-deadline-not-the-client
 type: lesson
 status: active
 created: "2026-11-14"

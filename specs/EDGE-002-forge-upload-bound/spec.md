@@ -85,6 +85,6 @@ PR 1 needs an owner ruling on the variable names and the `common.yaml` key, a cr
 
 ## Promotion candidates
 
-- [x] Lesson? `yes` (lesson-761): Traefik v3's default `readTimeout` of 60 s cuts any request body longer than that, and the 499 it logs reads as a client abort.
+- [x] Lesson? `yes` (lesson-762): Traefik v3's default `readTimeout` of 60 s cuts any request body longer than that, and the 499 it logs reads as a client abort.
 - [ ] ADR? `yes`: ADR-076 amendment (PR 2).
 - [ ] Pattern? `no`
