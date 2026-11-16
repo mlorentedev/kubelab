@@ -8,6 +8,8 @@ failed on one machine and passed in CI. `tests/repo_files.py` lists by git inste
 from __future__ import annotations
 
 import re
+import shutil
+import subprocess
 from pathlib import Path
 
 from tests.repo_files import REPO, repo_files
@@ -21,29 +23,33 @@ ANSIBLE = REPO / "infra/ansible"
 WALK = re.compile(r"""ansible\w*["']?\)?\.(?:rglob\(|glob\(f?["']\*\*)""", re.IGNORECASE)
 
 
-def _planted(rel: str, text: str) -> tuple[bool, bool]:
-    """Write `rel`, then say whether `repo_files` lists it with and without a matching pattern."""
-    path = REPO / rel
-    created = [d for d in path.parents if not d.exists()]
+def _planted(tmp_path: Path, rel: str, text: str) -> tuple[bool, bool]:
+    """Plant `rel` in a throwaway repository; say whether `repo_files` lists it with and without a matching pattern.
+
+    Never in this checkout: under `pytest -n` another worker lists `infra/ansible` while a probe
+    is there, and reads it after it is gone (#3445). The throwaway repository carries the real
+    `infra/ansible/.gitignore`, so what is ignored there is what is ignored here.
+    """
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    ansible = tmp_path / "infra/ansible"
+    ansible.mkdir(parents=True)
+    shutil.copyfile(ANSIBLE / ".gitignore", ansible / ".gitignore")
+    path = tmp_path / rel
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("x", encoding="utf-8") as probe:  # never over a file that is already there
-        probe.write(text)
-    try:
-        return path in repo_files(ANSIBLE, "*.yml"), path in repo_files(ANSIBLE, "*.j2")
-    finally:
-        path.unlink()
-        for directory in created:  # innermost first, as `parents` yields them
-            directory.rmdir()
+    path.write_text(text, encoding="utf-8", newline="\n")
+    return (
+        path in repo_files(ansible, "*.yml", repo=tmp_path),
+        path in repo_files(ansible, "*.j2", repo=tmp_path),
+    )
 
 
-def test_a_file_git_ignores_is_not_listed() -> None:
-    # Planted, so it is measured on a fresh CI clone too, where `generated/` does not exist.
-    listed, _ = _planted("infra/ansible/generated/_repo_files_probe/play.yml", "- {{ not yaml\n")
+def test_a_file_git_ignores_is_not_listed(tmp_path: Path) -> None:
+    listed, _ = _planted(tmp_path, "infra/ansible/generated/_repo_files_probe/play.yml", "- {{ not yaml\n")
     assert not listed, "repo_files listed gitignored output"
 
 
-def test_a_file_written_for_a_change_is_listed_before_it_is_added() -> None:
-    listed, by_other_pattern = _planted("infra/ansible/_repo_files_probe.yml", "---\n")
+def test_a_file_written_for_a_change_is_listed_before_it_is_added(tmp_path: Path) -> None:
+    listed, by_other_pattern = _planted(tmp_path, "infra/ansible/_repo_files_probe.yml", "---\n")
     assert listed, "repo_files missed an untracked file git would add"
     assert not by_other_pattern, "repo_files ignored the name pattern"
 

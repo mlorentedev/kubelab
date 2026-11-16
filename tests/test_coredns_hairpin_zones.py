@@ -182,7 +182,7 @@ def test_the_cluster_bootstrap_hands_the_committed_zone_list_to_the_hairpin(monk
         lambda entry, **kw: real(entry, **{**kw, "resolver": lambda host: RPI4_IP, "runner": kubectl}),
     )
 
-    assert infra._apply_cluster_bootstrap("kubeconfig", dry_run=True)
+    assert infra._apply_cluster_bootstrap("kubeconfig", env="staging", dry_run=True)
 
     hairpin = next(m for m in kubectl.manifests if "kubelab-hairpin.server" in m)
     zones = edge_dns.staging_zones()

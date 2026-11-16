@@ -6,6 +6,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
+import typer
 import yaml
 
 from toolkit.cli.infra import _load_cluster_bootstrap
@@ -78,7 +79,7 @@ def test_the_loop_applies_every_entry_in_declared_order(monkeypatch: pytest.Monk
         return True
 
     monkeypatch.setattr(infra, "render_and_apply", _record)
-    assert infra._apply_cluster_bootstrap("/kc", dry_run=dry_run) is True
+    assert infra._apply_cluster_bootstrap("/kc", env="staging", dry_run=dry_run) is True
     assert seen == [(e.name, dry_run) for e in _load_cluster_bootstrap()]
 
 
@@ -95,5 +96,72 @@ def test_the_loop_stops_at_the_first_hard_failure(monkeypatch: pytest.MonkeyPatc
         return entry.name != entries[0]
 
     monkeypatch.setattr(infra, "render_and_apply", _fail_first)
-    assert infra._apply_cluster_bootstrap("/kc", dry_run=False) is False
+    assert infra._apply_cluster_bootstrap("/kc", env="staging", dry_run=False) is False
     assert seen == entries[:1]
+
+
+def test_an_entry_scoped_to_one_environment_is_applied_only_there(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`envs` is read by the loop: the Sealed Secrets controller must not reach a cluster that holds no key for it."""
+    from toolkit.cli import infra
+
+    applied: dict[str, list[str]] = {}
+    for env in ("staging", "prod"):
+        seen: list[str] = []
+
+        def _record(entry: BootstrapEntry, _seen: list[str] = seen, **_kw: object) -> bool:
+            _seen.append(entry.name)
+            return True
+
+        monkeypatch.setattr(infra, "render_and_apply", _record)
+        assert infra._apply_cluster_bootstrap("/kc", env=env, dry_run=False) is True
+        applied[env] = seen
+
+    assert "sealed-secrets" in applied["staging"]
+    assert "sealed-secrets" not in applied["prod"]
+    everywhere = [e.name for e in _load_cluster_bootstrap() if e.envs is None]
+    assert everywhere, "an unscoped entry must still reach every environment"
+    assert all(name in applied["prod"] for name in everywhere)
+    assert all(name in applied["staging"] for name in everywhere)
+
+
+def test_the_sealed_secrets_controller_is_declared_for_staging_only() -> None:
+    assert next(e for e in _load_cluster_bootstrap() if e.name == "sealed-secrets").envs == ("staging",)
+
+
+def test_envs_parse_and_default_to_every_environment() -> None:
+    base = {"name": "x", "namespace": "n", "manifest": "m.yaml"}
+    assert BootstrapEntry.from_dict(base).envs is None
+    assert BootstrapEntry.from_dict({**base, "envs": ["staging"]}).envs == ("staging",)
+
+
+def test_an_empty_envs_list_is_refused_not_read_as_never_applied() -> None:
+    """`envs: []` would silently install nowhere; a typo must fail where it is written."""
+    with pytest.raises(ValueError, match="envs"):
+        BootstrapEntry.from_dict({"name": "x", "namespace": "n", "manifest": "m.yaml", "envs": []})
+
+
+@pytest.mark.parametrize("command", ["bootstrap", "deploy", "dry-run"])
+def test_every_caller_of_the_loop_passes_its_own_environment(mocker: pytest.MockerFixture, command: str) -> None:
+    """The three commands that run the loop name their env, or `envs` would silently scope nothing."""
+    from types import SimpleNamespace
+
+    from toolkit.cli import infra
+
+    mocker.patch.object(infra, "validate_environment_config", return_value=SimpleNamespace())
+    mocker.patch.object(infra, "confirm_dangerous_operation")
+    mocker.patch.object(infra, "_get_kubeconfig", return_value="/kc")
+    mocker.patch.object(infra, "_kubectl_cmd", return_value="kubectl")
+    mocker.patch.object(infra, "_generate_k8s_manifests", return_value=True)
+    mocker.patch.object(infra.Path, "exists", return_value=True)
+    mocker.patch.object(infra.command, "run", return_value=SimpleNamespace(returncode=0, stdout="", stderr=""))
+    loop = mocker.patch.object(infra, "_apply_cluster_bootstrap", return_value=False)  # stop right after it
+
+    call = {
+        "bootstrap": lambda: infra.k8s_bootstrap(env="prod", dry_run=True),
+        "deploy": lambda: infra.k8s_deploy(env="prod", skip_generate=True),
+        "dry-run": lambda: infra.k8s_dry_run(env="prod"),
+    }[command]
+    with pytest.raises(typer.Exit):
+        call()
+
+    assert loop.call_args.kwargs["env"] == "prod"
