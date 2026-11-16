@@ -174,12 +174,27 @@ node_backup_stuck_request_timeout: "45s"
 # Seconds the ship script's first R2 call (`restic snapshots`) may take before
 # it is stopped and its last refusal reported. Above one stuck request (45s),
 # so a slow but working link still answers; at most a quarter of the unit's
-# TimeoutStartSec=600, so the verdict is logged while the unit is alive and
+# bound (node_backup_ship_timeout), so the verdict is logged while the unit is alive and
 # the backup still has its time.
 node_backup_probe_timeout: 120
 
+# How long the SHIP unit gets before systemd kills it: TimeoutStartSec, and the
+# prune's --retry-lock, which must wait out a running ship. 600s until #3586:
+# on 2026-11-15 a beelink ship that added 247.9 MiB was killed at 600s after
+# uploading packs and before restic wrote the index, which leaves packs in no
+# index that the bucket lock then refuses to let the prune delete (#3496).
+# Stopping restic early is not a way out: restic's documentation and the
+# 2026-11-15 journal both show an interrupted backup ends with no snapshot and
+# leaves what it uploaded unindexed (not probed locally). The killed run had
+# not finished 247.9 MiB in 592s, so under 0.42 MiB/s; the whole staged tree
+# (480.7 MiB) at that rate is about 19 minutes, the first ship after a node was off or after a capture change.
+# The rate was measured on the hotel uplink, which moves site after 2026-11-18;
+# re-measure there. The prune's 3600s now keeps 1800s for refused packs after
+# a full wait (tests/test_node_backup_role.py pins both).
+node_backup_ship_timeout: 1800
+
 # How long the CAPTURE unit gets before systemd kills it. Separate from ship's
-# 600s because capture never talks to R2 -- it is a local copy, and on this
+# bound because capture never talks to R2 -- it is a local copy, and on this
 # fleet it moves 29 MB in about a second.
 #
 # It was 120s, raised to 300s after rpi4 timed out on a cold boot
@@ -260,7 +275,8 @@ node_backup_check: false
 # cost about ceil(k / connections) x 15 minutes. 3600 s with 20 connections
 # covers about 80 refused packs (~1.3 GB of interrupted upload); past that the
 # unit times out and notifies, which an interruption that large deserves.
-# tests/test_node_backup_role.py pins that arithmetic.
+# A prune that first waits out a full ship (node_backup_ship_timeout) keeps
+# 1800 s, about 40 packs. tests/test_node_backup_role.py pins both.
 #
 # Daily is enough: `forget` only reaches the prune phase on a run that removes
 # a snapshot. Persistent=true, like the weekly check, so an on-demand node
@@ -289,8 +305,11 @@ node_backup_prune_connections: 20
 # uplink, under MemoryMax=128M: a plain check took 55s on rpi3 and 107s on rpi4,
 # and reading 1/8 of the packs took another 109s and 383s. At 1/16 the check
 # runs for about 110s and 300s. With the ~100s ship in front of it, rpi4 keeps
-# about 200s of the 600s spare, and its repository shrinks once the Pi-hole
-# telemetry is pruned (#3035). The check stays inside the ship's 600s, not under a longer
+# about 200s of the 600s spare. The unit's bound rose to 1800s for uploads
+# (#3586); the check is still sized to 600s, and the check-budget alert is now
+# its only bound below 1800s.
+# and its repository shrinks once the Pi-hole telemetry is pruned (#3035).
+# The check stays inside the ship's bound, not under a longer
 # timeout of its own, because `restic check` holds the exclusive lock, and ship
 # and prune wait for a lock only about that long. Every pack is read once every
 # 16 weeks.
@@ -362,8 +381,8 @@ node_backup_randomized_delay: "5min"
 # up a missed week at boot, so after the homelab powers on, every on-demand
 # node would start its check in the same minute and read from R2 over one
 # uplink (#2920: rpi3, rpi4 and beelink all within two minutes, 2026-11-01).
-# One hour is more than the 600s budget of each on-demand node laid end to end,
-# and still well inside a 3-4h homelab session.
+# One hour is more than the 600s check budget of each on-demand node laid end
+# to end (tests/test_backup_check_budget.py), and still well inside a 3-4h homelab session.
 node_backup_check_randomized_delay: "1h"
 
 # `restic check` weekly, not per-run (Part 3's script already supports the

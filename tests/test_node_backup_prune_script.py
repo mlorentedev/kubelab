@@ -122,7 +122,7 @@ LISTING = "snapshots -q --json --no-lock"
 def _forget_call() -> str:
     defaults = _defaults()
     return (
-        f"forget {defaults['node_backup_retention_flags']} --prune --retry-lock 10m"
+        f"forget {defaults['node_backup_retention_flags']} --prune --retry-lock {int(defaults['node_backup_ship_timeout']) // 60}m"
         f" -o s3.connections={defaults['node_backup_prune_connections']}"
     )
 
