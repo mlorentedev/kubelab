@@ -63,7 +63,7 @@
 
     - name: Run the backup
       # Type=oneshot: `started` blocks until it finishes, so the read below is
-      # not a race. The unit's own TimeoutStartSec=600 bounds it.
+      # not a race. The unit's own TimeoutStartSec (node_backup_ship_timeout) bounds it.
       ansible.builtin.systemd:
         name: "{{ backup_unit }}"
         state: started

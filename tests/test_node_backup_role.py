@@ -1376,10 +1376,20 @@ def test_the_prune_unit_fails_loudly_within_its_own_bound():
 
 def test_the_prune_bound_covers_the_refusals_the_spec_names():
     """Q6's arithmetic: about 15 minutes per batch of refused packs, batches as
-    wide as the S3 connection count, and the bound sized for ~80 packs."""
+    wide as the S3 connection count, and the bound sized for ~80 packs.
+
+    The wait for a running ship comes out of the same bound, so it is subtracted
+    first. With the ship bound at 1800 s (#3586) the worst case, a prune that
+    waits out a full ship and then meets refused packs, keeps 1800 s: two
+    batches, about 40 packs. Past that the unit times out and notifies, which an
+    interruption that large deserves (2026-11-15 left one ship's worth).
+    """
     defaults = _defaults()
-    batches = int(defaults["node_backup_prune_timeout"]) // 900
-    assert batches * int(defaults["node_backup_prune_connections"]) >= 80
+    connections = int(defaults["node_backup_prune_connections"])
+    bound = int(defaults["node_backup_prune_timeout"])
+    assert bound // 900 * connections >= 80
+    left = bound - int(defaults["node_backup_ship_timeout"])
+    assert left // 900 * connections >= 40
 
 
 def test_the_prune_carries_the_ship_s_memory_cap():
@@ -1395,6 +1405,28 @@ def test_a_ship_queued_during_a_prune_waits_for_it():
     for check in (False, True):
         lines = _directive_lines(_render("node-backup-ship.service.j2", node_backup_check=check))
         assert f"After={defaults['node_backup_prune_service_name']}" in lines
+
+
+def test_the_ship_bound_is_the_role_variable():
+    """One value, read by the unit, the prune's wait and the tests (#3586)."""
+    defaults = _defaults()
+    lines = _directive_lines(_render("node-backup-ship.service.j2"))
+    assert f"TimeoutStartSec={defaults['node_backup_ship_timeout']}" in lines
+    script = _render("node-backup-prune.sh.j2")
+    assert f"--retry-lock {int(defaults['node_backup_ship_timeout']) // 60}m" in script
+
+
+def test_the_ship_bound_clears_the_upload_that_was_killed():
+    """beelink, 2026-11-15 00:54: a ship that added 247.9 MiB was killed by
+    TimeoutStartSec=600 after it had uploaded packs and before restic wrote the
+    index, which left packs in no index (#3496, #3586). The retry uploaded the
+    same change in 8:31; the killed run had not finished it in 592s, so under
+    0.42 MiB/s. Guarded against the whole staged tree at that slower rate
+    (480.7 MiB measured after the redeploy, about 19 minutes), the
+    first ship after a node was off or after a capture change, not against the
+    killed run alone."""
+    staged_mib, mib_per_second = 480.7, 247.928 / 592
+    assert int(_defaults()["node_backup_ship_timeout"]) > staged_mib / mib_per_second
 
 
 def test_the_prune_waits_out_a_running_ship():

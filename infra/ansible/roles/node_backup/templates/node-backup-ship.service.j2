@@ -48,6 +48,6 @@ ExecStart={{ node_backup_ship_script_path }}{{ ' --check' if node_backup_check e
 MemoryMax={{ node_backup_memory_max }}
 MemorySwapMax={{ node_backup_memory_swap_max }}
 {% endif %}
-TimeoutStartSec=600
+TimeoutStartSec={{ node_backup_ship_timeout }}
 StandardOutput=journal
 StandardError=journal
