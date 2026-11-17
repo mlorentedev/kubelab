@@ -51,13 +51,14 @@ def _repair_index() -> int:
     return _index(lambda t: "mise install --force node@" in str(_module(t, "ansible.builtin.command").get("cmd", "")))
 
 
-def _npm_install_index() -> int:
-    return _index(lambda t: t.get("loop") == "{{ dev_node_global_agent_npm_packages }}")
+def _wrapper_index() -> int:
+    """The task that exposes npm and npx on /usr/local/bin: the first thing a caller runs them through."""
+    return _index(lambda t: t.get("loop") == ["node", "npm", "npx", "claude"])
 
 
 def test_the_role_checks_the_node_entry_points_it_runs() -> None:
     stat = _tasks()[_stat_index()]
-    assert stat.get("loop") == ["npm", "npx"], "npm runs the next task; npx is wrapped into /usr/local/bin"
+    assert stat.get("loop") == ["npm", "npx"], "both are exposed through the /usr/local/bin wrappers"
     assert stat.get("register") == "_mise_node_bins"
     assert stat.get("check_mode") is False, "a dry run must still see a broken toolchain"
 
@@ -70,8 +71,8 @@ def test_a_missing_npm_forces_a_reinstall_of_the_active_node() -> None:
     assert repair.get("when") == "_mise_node_bins.results | rejectattr('stat.exists') | list | length > 0"
 
 
-def test_the_repair_runs_before_anything_uses_npm() -> None:
-    assert _stat_index() < _repair_index() < _npm_install_index()
+def test_the_repair_runs_before_npm_is_exposed() -> None:
+    assert _stat_index() < _repair_index() < _wrapper_index()
 
 
 def test_the_entry_points_are_checked_in_the_node_mise_resolved() -> None:

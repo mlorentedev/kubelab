@@ -285,11 +285,11 @@
     # the toolchain in it works. An interrupted `npm update --global` leaves npm,
     # npx, corepack and yarn moved aside under temporary names, with the directory
     # intact (ace2, 2026-10-31, #3477), and the next task then calls an npm that
-    # is not there. Check the entry points this role runs (npm here, npx through
-    # its /usr/local/bin wrapper), and reinstall the active node alone.
-    # A reinstall empties lib/node_modules: the npm task below restores the agent
-    # CLIs, and what dotfiles add installs under mise's own
-    # per-tool directories, not node's lib/node_modules.
+    # is not there. Check the entry points the /usr/local/bin wrappers below expose
+    # (npm and npx), and reinstall the active node alone.
+    # A reinstall empties lib/node_modules, which holds nothing this role owns:
+    # what the dotfiles add (claude among it) installs under mise's own per-tool
+    # directories, not node's lib/node_modules.
     - name: Check the pinned node still has its npm and npx
       ansible.builtin.stat:
         path: "{{ _dev_node_node_where.stdout | trim }}/bin/{{ item }}"
@@ -304,29 +304,23 @@
       when: _mise_node_bins.results | rejectattr('stat.exists') | list | length > 0
       tags: [dev_node, mise, agents]
 
-    # --- Agent CLI tooling (Claude Code, etc.) ---
-    # `state: present`, not a shelled `npm install -g` (#1300). npm prints
-    # `changed N packages` for a package already installed at the same version,
-    # so a changed_when parsing its output matched every pass. The module lists
-    # the global tree and installs only what is missing.
-    #
-    # Not pinned: Claude Code updates itself in place, so a pinned version would
-    # be moved forward by the updater and back by the next provision, reporting
-    # changed every time. Ansible owns that the tool exists; the updater owns its
-    # version. tests/test_dev_node_npm_converges.py.
-    - name: Install global agent CLI tools via mise node npm
+    # Claude Code has one owner: the dotfiles' converge installs it through mise
+    # (#3566). This role used to install it with npm into the node's global tree.
+    # Dropping that task does not remove what it installed, and the package's
+    # `bin/claude` would stay a second `claude` inside mise until a node bump
+    # reinstalls that node. `absent` reports ok once it is gone, so this converges
+    # and can be deleted when no node the role provisioned before this change is left.
+    # tests/test_dev_node_npm_converges.py.
+    - name: Retire the npm-installed Claude Code the role used to provision
       community.general.npm:
-        name: "{{ item }}"
+        name: "@anthropic-ai/claude-code"
         global: true
-        state: present
-        executable: "{{ _dev_node_mise_node_bin }}/npm"
+        state: absent
+        executable: "{{ _dev_node_node_where.stdout | trim }}/bin/npm"
       environment:
         # mise's bin/npm is a script that execs `node`, so the pinned node must
         # be on PATH, not only npm's own path.
-        PATH: "{{ _dev_node_mise_node_bin }}:/usr/local/bin:/usr/bin:/bin"
-      vars:
-        _dev_node_mise_node_bin: "{{ _dev_node_node_where.stdout | trim }}/bin"
-      loop: "{{ dev_node_global_agent_npm_packages }}"
+        PATH: "{{ _dev_node_node_where.stdout | trim }}/bin:/usr/local/bin:/usr/bin:/bin"
       tags: [dev_node, mise, agents]
 
     # --- mise activation (MUST run after the dotfiles bootstrap) ---
@@ -351,8 +345,10 @@
 
     # Non-interactive SSH sessions (e.g. Orca ADE remote relay, non-interactive CI
     # runners, remote agent harnesses) bypass /etc/profile.d/ and ~/.bashrc (early
-    # return on [ -z "$PS1" ]). Symlinking the pinned mise node/npm/npx binaries
-    # to /usr/local/bin exposes them on standard non-interactive $PATH cleanly.
+    # return on [ -z "$PS1" ]). Exposing the mise-managed node, npm, npx and claude
+    # in /usr/local/bin puts them on the standard non-interactive $PATH.
+    # All four are the dotfiles' tools (their converge installs them); this role
+    # installs none and only asks mise where each one is, on every call (#3566).
     # A wrapper, not a symlink, and the earlier symlink was measured broken.
     # mise ships `bin/npm` as a bash script that finds npm's JS relative to
     # ITSELF via `dirname "${BASH_SOURCE[0]}"` — and `pwd -P` there normalises
@@ -368,6 +364,9 @@
     # npx-cli.js, so resolution landed on a real JS file. Same task, same loop,
     # opposite outcome, decided by how upstream happened to package each entry.
     #
+    # `claude` is the aqua build: one binary at the install root, no bin/. The
+    # wrapper therefore asks `mise which <tool>` rather than assuming node's layout.
+    #
     # `follow: false` matters: without it the template writes THROUGH the
     # existing symlink and corrupts mise's own bin/npm, which is the file this
     # wrapper needs to keep working.
@@ -378,7 +377,7 @@
         mode: "0755"
         follow: false
       vars:
-        wrapper_mise_tool: node
+        wrapper_via_mise: true
       loop:
         - node
         - npm
