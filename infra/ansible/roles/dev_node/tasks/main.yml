@@ -223,53 +223,6 @@
           run-shell {{ dev_node_tmux_plugins_dir }}/tmux-resurrect/resurrect.tmux
       tags: [dev_node, tmux]
 
-    # --- poetry: the dotfiles' (#3577) ---
-    # The dotfiles' bootstrap installs poetry as a uv tool into ~/.local/bin/poetry.
-    # This role used to `pipx install --force` its own version over that path, the
-    # next bootstrap put the dotfiles' back, and every provision reported changed.
-    # The role installs none now; what is left is the pipx install an earlier
-    # provision made. It goes BEFORE the bootstrap, whose own link then replaces
-    # it: retired after, a node would have no poetry until the next converge.
-    # Not `pipx uninstall`: it unlinks whatever it finds at ~/.local/bin/poetry,
-    # which after a bootstrap is the dotfiles' uv-tool link. Here the link goes only
-    # when it points into pipx's venv, and the uv tool is never named.
-    # Drop these four tasks once every dev node has provisioned past #3577.
-    # tests/test_dev_node_poetry_owner.py.
-    - name: Look for the poetry venv pipx created
-      ansible.builtin.stat:
-        path: "{{ dev_node_home }}/.local/share/pipx/venvs/poetry"
-      register: _dev_node_pipx_poetry
-      check_mode: false
-      tags: [dev_node, dotfiles]
-
-    - name: Look at what ~/.local/bin/poetry points to
-      ansible.builtin.stat:
-        path: "{{ dev_node_home }}/.local/bin/poetry"
-        follow: false
-        get_checksum: false
-      register: _dev_node_poetry_link
-      check_mode: false
-      tags: [dev_node, dotfiles]
-
-    - name: Retire the ~/.local/bin/poetry link that points into the pipx venv
-      ansible.builtin.file:
-        path: "{{ dev_node_home }}/.local/bin/poetry"
-        state: absent
-      when:
-        - dev_node_dotfiles_run_setup | bool
-        - _dev_node_poetry_link.stat.islnk | default(false)
-        - "'/.local/share/pipx/venvs/poetry/' in (_dev_node_poetry_link.stat.lnk_source | default(''))"
-      tags: [dev_node, dotfiles]
-
-    - name: Retire the pipx poetry venv
-      ansible.builtin.file:
-        path: "{{ dev_node_home }}/.local/share/pipx/venvs/poetry"
-        state: absent
-      when:
-        - dev_node_dotfiles_run_setup | bool
-        - _dev_node_pipx_poetry.stat.exists
-      tags: [dev_node, dotfiles]
-
     # --- dotfiles bootstrap ---
     - name: Clone/update the dotfiles repo
       ansible.builtin.git:
@@ -288,6 +241,45 @@
       when: dev_node_dotfiles_run_setup | bool
       register: _dotfiles_setup
       changed_when: _dotfiles.changed
+      tags: [dev_node, dotfiles]
+
+    # --- poetry: the dotfiles' (#3577) ---
+    # The dotfiles' bootstrap installs poetry as a uv tool into ~/.local/bin/poetry.
+    # This role used to `pipx install --force` its own version over that path, the
+    # next bootstrap put the dotfiles' back, and every provision reported changed.
+    # The role installs none now; what is left is the pipx venv an earlier
+    # provision made. It is retired AFTER the bootstrap, and only once nothing
+    # points into it: the role never touches ~/.local/bin/poetry, and a bootstrap
+    # that stopped early (or has not yet replaced a link into the venv) leaves a
+    # working poetry and defers the retirement to the next pass. The path under
+    # ~/.local/share/uv/tools is never named.
+    # Drop these three tasks once every dev node has provisioned past #3577.
+    # tests/test_dev_node_poetry_owner.py.
+    - name: Look for the poetry venv pipx created
+      ansible.builtin.stat:
+        path: "{{ dev_node_home }}/.local/share/pipx/venvs/poetry"
+      register: _dev_node_pipx_poetry
+      check_mode: false
+      tags: [dev_node, dotfiles]
+
+    - name: Look at what ~/.local/bin/poetry points to
+      ansible.builtin.stat:
+        path: "{{ dev_node_home }}/.local/bin/poetry"
+        follow: false
+        get_checksum: false
+      register: _dev_node_poetry_link
+      check_mode: false
+      tags: [dev_node, dotfiles]
+
+    - name: Retire the pipx poetry venv once nothing points into it
+      ansible.builtin.file:
+        path: "{{ dev_node_home }}/.local/share/pipx/venvs/poetry"
+        state: absent
+      when:
+        - _dev_node_pipx_poetry.stat.exists
+        - >-
+          not ((_dev_node_poetry_link.stat.islnk | default(false))
+          and ('/.local/share/pipx/venvs/poetry/' in (_dev_node_poetry_link.stat.lnk_source | default(''))))
       tags: [dev_node, dotfiles]
 
     # --- node: resolved from mise, never pinned here (#3559) ---

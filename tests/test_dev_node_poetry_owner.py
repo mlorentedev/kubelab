@@ -9,8 +9,9 @@ reported `changed` (ace2, 2026-11-15, three consecutive passes). Two installers 
 one binary cannot both be right. The role installs no poetry; the drills use
 whatever version the dotfiles pin, and the role says so when it is missing.
 
-The pipx install an earlier provision left behind is retired once, before the
-bootstrap, so the bootstrap's own `~/.local/bin/poetry` is the one that remains.
+The pipx venv an earlier provision left behind is retired once, after the
+bootstrap and only when nothing points into it. The role never touches
+`~/.local/bin/poetry`: that link is the dotfiles' to write.
 """
 
 from __future__ import annotations
@@ -119,63 +120,55 @@ def test_a_node_without_poetry_stops_the_play_with_the_cause() -> None:
     assert set(require["tags"]) == set(probe["tags"])
 
 
-# --- the retirement of the pipx install an earlier provision left ------------
+# --- the retirement of the pipx venv an earlier provision left ----------------
 
 STAT_VENV = "Look for the poetry venv pipx created"
 STAT_LINK = "Look at what ~/.local/bin/poetry points to"
-RM_LINK = "Retire the ~/.local/bin/poetry link that points into the pipx venv"
-RM_VENV = "Retire the pipx poetry venv"
+RM_VENV = "Retire the pipx poetry venv once nothing points into it"
 
 
 def test_the_pipx_venv_is_looked_for_by_path_without_running_pipx() -> None:
-    stat = _by_name(STAT_VENV)["ansible.builtin.stat"]
-    assert stat["path"] == PIPX_VENV
-    assert _by_name(STAT_VENV)["check_mode"] is False, "a dry run must still see what would be retired"
+    stat = _by_name(STAT_VENV)
+    assert stat["ansible.builtin.stat"]["path"] == PIPX_VENV
+    assert stat["check_mode"] is False, "a dry run must still see what would be retired"
 
 
-def test_the_link_is_removed_only_when_it_points_into_the_pipx_venv() -> None:
-    """After a pass the bootstrap's uv-tool link may be the one at that path: leave it."""
-    stat = _by_name(STAT_LINK)
-    assert stat["ansible.builtin.stat"]["path"] == POETRY_LINK
-    assert stat["ansible.builtin.stat"]["follow"] is False, "a followed link answers about its target"
-    rm = _by_name(RM_LINK)
-    assert rm["ansible.builtin.file"] == {"path": POETRY_LINK, "state": "absent"}
-    cond = " ".join(rm["when"] if isinstance(rm["when"], list) else [rm["when"]])
-    assert "islnk" in cond, "a regular file at that path is not pipx's"
-    assert "/.local/share/pipx/venvs/poetry/" in cond, "only a link into the pipx venv is retired"
-
-
-def test_the_venv_is_removed_only_when_it_exists() -> None:
+def test_the_venv_goes_only_when_it_exists_and_no_link_points_into_it() -> None:
+    """While the link still points into the venv, removing it would leave a node with no poetry."""
+    link = _by_name(STAT_LINK)
+    assert link["ansible.builtin.stat"]["path"] == POETRY_LINK
+    assert link["ansible.builtin.stat"]["follow"] is False, "a followed link answers about its target"
     rm = _by_name(RM_VENV)
     assert rm["ansible.builtin.file"] == {"path": PIPX_VENV, "state": "absent"}
-    assert "exists" in str(rm["when"]), "the venv-exists condition is what makes the second pass `changed=0`"
+    cond = " ".join(rm["when"])
+    assert "exists" in cond, "the venv-exists condition is what makes the second pass `changed=0`"
+    assert "islnk" in cond and "/.local/share/pipx/venvs/poetry/" in cond
 
 
-def test_the_retirement_never_touches_the_uv_tool_poetry() -> None:
-    for name in (STAT_VENV, STAT_LINK, RM_LINK, RM_VENV):
+def test_the_role_never_touches_the_poetry_link_or_the_uv_tool() -> None:
+    """Whatever sits at ~/.local/bin/poetry is the dotfiles' to write."""
+    for task in _tasks():
+        for key in ("ansible.builtin.file", "file"):
+            body = task.get(key)
+            if body is not None:
+                assert body.get("path") != POETRY_LINK, f"{task.get('name')!r} writes the poetry link"
+    for name in (STAT_VENV, STAT_LINK, RM_VENV):
         assert UV_TOOL_POETRY not in str(_by_name(name)), f"{name!r} reaches the dotfiles' poetry"
-    assert "pipx uninstall" not in " ".join(_command_text(t) for t in _tasks()), (
-        "`pipx uninstall` unlinks whatever it finds at ~/.local/bin/poetry, the dotfiles' included"
-    )
 
 
-def test_the_link_goes_before_the_bootstrap_which_puts_the_dotfiles_one_back() -> None:
-    """Retiring after the bootstrap would leave a node with no poetry until the next converge."""
-    order = [_index(n) for n in (STAT_VENV, STAT_LINK, RM_LINK, RM_VENV)]
-    assert order == sorted(order), "look before removing, and the link before the venv it points into"
-    assert order[-1] < _index(BOOTSTRAP)
-    assert _index(BOOTSTRAP) < _index("Read the poetry version the dev user has")
+def test_the_venv_is_retired_after_the_bootstrap_has_had_its_turn() -> None:
+    """Before it, the link may still point into the venv; after it, the dotfiles' link is the one there."""
+    order = [_index(n) for n in (STAT_VENV, STAT_LINK, RM_VENV)]
+    assert order == sorted(order), "look before removing"
+    assert _index(BOOTSTRAP) < order[0]
+    assert order[-1] < _index("Read the poetry version the dev user has")
 
 
 def test_a_run_that_retires_also_runs_the_bootstrap() -> None:
-    """`--tags drill` must not remove poetry and then skip the step that restores it."""
+    """`--tags dotfiles` runs both, so the link the retirement reads is the bootstrap's."""
     bootstrap = _by_name(BOOTSTRAP)
-    for name in (STAT_VENV, STAT_LINK, RM_LINK, RM_VENV):
+    for name in (STAT_VENV, STAT_LINK, RM_VENV):
         assert set(_by_name(name)["tags"]) <= set(bootstrap["tags"]), f"{name!r} can run without the bootstrap"
-    for name in (RM_LINK, RM_VENV):
-        assert "dev_node_dotfiles_run_setup" in str(_by_name(name)["when"]), (
-            f"{name!r} removes poetry while the bootstrap that restores it is switched off"
-        )
 
 
 # --- the effect: run the real tasks against a stand-in home ------------------
@@ -183,8 +176,8 @@ def test_a_run_that_retires_also_runs_the_bootstrap() -> None:
 # is what Ansible does with those keys, so run them.
 
 
-def _run_retirement(home: Path, setup: bool = True) -> subprocess.CompletedProcess[str]:
-    names = (STAT_VENV, STAT_LINK, RM_LINK, RM_VENV)
+def _run_retirement(home: Path) -> subprocess.CompletedProcess[str]:
+    names = (STAT_VENV, STAT_LINK, RM_VENV)
     tasks = [t for t in _load("main.yml") if t.get("name") in names]
     assert [t["name"] for t in tasks] == list(names)
     play = [
@@ -192,7 +185,7 @@ def _run_retirement(home: Path, setup: bool = True) -> subprocess.CompletedProce
             "hosts": "localhost",
             "gather_facts": False,
             "connection": "local",
-            "vars": {"dev_node_home": str(home), "dev_node_dotfiles_run_setup": setup},
+            "vars": {"dev_node_home": str(home)},
             "tasks": tasks,
         }
     ]
@@ -240,15 +233,15 @@ needs_ansible = pytest.mark.skipif(
 
 @needs_ansible
 @pytest.mark.allow_host_clients(reason="runs ansible-playbook against localhost and a temporary home")
-def test_a_pipx_poetry_is_retired_once_and_the_second_pass_changes_nothing(tmp_path: Path) -> None:
-    home = _host(tmp_path, link_into="pipx")
+def test_the_venv_is_retired_once_the_bootstrap_has_replaced_the_link(tmp_path: Path) -> None:
+    home = _host(tmp_path, link_into="uv")
 
     first = _run_retirement(home)
     assert first.returncode == 0, first.stdout + first.stderr
-    assert not (home / ".local/bin/poetry").is_symlink(), "the link into the pipx venv must go"
     assert not (home / ".local/share/pipx/venvs/poetry").exists()
+    assert (home / ".local/bin/poetry").resolve() == (home / UV_TOOL_POETRY / "bin/poetry").resolve()
     assert (home / UV_TOOL_POETRY / "bin/poetry").read_text(encoding="utf-8") == "uv poetry 2.5.1\n"
-    assert _changed(first) == 2
+    assert _changed(first) == 1
 
     second = _run_retirement(home)
     assert second.returncode == 0, second.stdout + second.stderr
@@ -257,28 +250,15 @@ def test_a_pipx_poetry_is_retired_once_and_the_second_pass_changes_nothing(tmp_p
 
 @needs_ansible
 @pytest.mark.allow_host_clients(reason="runs ansible-playbook against localhost and a temporary home")
-def test_the_dotfiles_link_survives_the_retirement(tmp_path: Path) -> None:
-    """The bootstrap already put its link back: only the leftover venv is retired."""
-    home = _host(tmp_path, link_into="uv")
+def test_the_venv_stays_while_the_link_still_points_into_it(tmp_path: Path) -> None:
+    """A bootstrap that stopped early leaves the pipx poetry as the only one: do not remove it."""
+    home = _host(tmp_path, link_into="pipx")
 
     result = _run_retirement(home)
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert (home / ".local/bin/poetry").resolve() == (home / UV_TOOL_POETRY / "bin/poetry").resolve()
-    assert not (home / ".local/share/pipx/venvs/poetry").exists()
-    assert _changed(result) == 1
-
-
-@needs_ansible
-@pytest.mark.allow_host_clients(reason="runs ansible-playbook against localhost and a temporary home")
-def test_nothing_is_removed_while_the_bootstrap_that_restores_poetry_is_off(tmp_path: Path) -> None:
-    home = _host(tmp_path, link_into="pipx")
-
-    result = _run_retirement(home, setup=False)
-
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert (home / ".local/bin/poetry").is_symlink()
-    assert (home / ".local/share/pipx/venvs/poetry").exists()
+    assert (home / ".local/bin/poetry").resolve() == (home / ".local/share/pipx/venvs/poetry/bin/poetry").resolve()
+    assert (home / ".local/share/pipx/venvs/poetry/bin/poetry").exists()
     assert _changed(result) == 0
 
 
@@ -292,3 +272,61 @@ def test_a_node_that_never_had_pipx_poetry_changes_nothing(tmp_path: Path) -> No
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert _changed(result) == 0
+
+
+# --- the assert that replaced the install, run for real -----------------------
+
+
+def _run_assert(home: Path) -> subprocess.CompletedProcess[str]:
+    names = ("Read the poetry version the dev user has", "The dev user has the poetry the dotfiles install")
+    tasks = [{k: v for k, v in t.items() if k not in ("become", "become_user")} for t in _load("drill_runtime.yml")]
+    tasks = [t for t in tasks if t.get("name") in names]
+    assert [t["name"] for t in tasks] == list(names)
+    play = [
+        {
+            "hosts": "localhost",
+            "gather_facts": False,
+            "connection": "local",
+            "vars": {"dev_node_home": str(home)},
+            "tasks": tasks,
+        }
+    ]
+    playbook = home.parent / "assert.yml"
+    playbook.write_text(yaml.safe_dump(play), encoding="utf-8", newline="\n")
+    env = {**os.environ, "ANSIBLE_LOCALHOST_WARNING": "False", "ANSIBLE_NOCOLOR": "1", "ANSIBLE_FORCE_COLOR": "0"}
+    return subprocess.run(
+        ["ansible-playbook", str(playbook), "-i", "localhost,"],
+        cwd=home.parent,
+        env=env,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+    )
+
+
+@needs_ansible
+@pytest.mark.allow_host_clients(reason="runs ansible-playbook against localhost and a temporary home")
+def test_a_node_without_poetry_fails_the_play_naming_the_dotfiles(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    (home / ".local/bin").mkdir(parents=True)
+
+    result = _run_assert(home)
+
+    assert result.returncode != 0, result.stdout
+    assert "dotf converge" in result.stdout + result.stderr
+
+
+@needs_ansible
+@pytest.mark.allow_host_clients(reason="runs ansible-playbook against localhost and a temporary home")
+def test_a_node_with_the_dotfiles_poetry_passes_whatever_its_version(tmp_path: Path) -> None:
+    """The pin is gone: any version the dotfiles install is the right one."""
+    home = tmp_path / "home"
+    poetry = home / ".local/bin/poetry"
+    poetry.parent.mkdir(parents=True)
+    poetry.write_text('#!/bin/sh\necho "Poetry (version 9.9.9)"\n', encoding="utf-8", newline="\n")
+    poetry.chmod(0o755)
+
+    result = _run_assert(home)
+
+    assert result.returncode == 0, result.stdout + result.stderr
