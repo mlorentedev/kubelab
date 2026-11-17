@@ -2338,10 +2338,11 @@ def ansible_doctor(
 ) -> None:
     """Diagnose the Ansible controller this checkout needs — offline, no host contact.
 
-    Four local checks, no network and no SSH, so this is safe to run before a
-    host window is agreed: `ansible-playbook` resolves, the Galaxy collections
-    are the ones `requirements.yml` pins, the config file in effect is this
-    repo's, and the static inventory parses.
+    Five local checks, no network and no SSH, so this is safe to run before a
+    host window is agreed: `ansible-playbook` resolves, its ansible-core is inside
+    the range `pyproject.toml` pins (#3623), the Galaxy collections are the ones
+    `requirements.yml` pins, the config file in effect is this repo's, and the
+    static inventory parses.
 
     `make setup-ansible` ends by running this, which is what turns that target
     from a report into a gate — it printed `skipping` and exited 0 on a machine

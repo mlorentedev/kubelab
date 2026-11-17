@@ -36,7 +36,14 @@ certifi = ">=2026.10.19" # Transitive (httpx); floor past the compromised emSign
 optional = true
 
 [tool.poetry.group.ansible.dependencies]
-ansible-core = "^2.19"
+# Capped below 2.22: on 2.22.0 the git module crashes with `'NoneType' object has no
+# attribute 'startswith'` when it updates an existing shallow clone checked out at a
+# tag, which fails every provision of an existing dev node (`ansible.builtin.git`,
+# `depth: 1`, `version: v4.0.0` on tmux-resurrect; 2.21.4 passes on the same clone
+# and 2.22.0 passes without `depth`; #3623). `make check-ansible` refuses a controller
+# outside this range. Lift the cap once a release fixes the module's shallow-tag
+# update and the reproduction in #3623 passes on it.
+ansible-core = ">=2.19,<2.22"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.17.5"

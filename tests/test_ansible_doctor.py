@@ -340,7 +340,7 @@ def test_an_empty_inventory_fails(tmp_path):
 def test_an_inventory_that_cannot_be_read_is_a_check_not_a_traceback(tmp_path):
     """A directory in the file's place, a permission bit, a broken symlink: none
     of them raise `YAMLError`, so the guard has to be wider than the parser.
-    `diagnose()` promises four checks, not an exception."""
+    `diagnose()` promises its checks, not an exception."""
     inventory = tmp_path / "infra/ansible/inventories/homelab.yml"
     inventory.mkdir(parents=True)
     check = doctor._check_inventory(tmp_path)
@@ -348,16 +348,118 @@ def test_an_inventory_that_cannot_be_read_is_a_check_not_a_traceback(tmp_path):
     assert "cannot be read" in check.detail
 
 
+# --- check 1b: the controller runs the ansible-core the roles were run with (#3623) ----
+
+
+def _pinned(version: str, root: Path = REPO) -> doctor.Check:
+    probe = doctor.Probe(output=_banner().replace("2.21.6", version), located=True, error="")
+    return doctor._check_core_pin(root, _core(), probe)
+
+
+@pytest.mark.parametrize("version", ["2.19.0", "2.21.4", "2.21.6", "2.21.99"])
+def test_a_core_inside_the_pin_passes(version):
+    check = _pinned(version)
+    assert check.ok, check
+    assert version in check.detail
+
+
+@pytest.mark.parametrize("version", ["2.22.0", "2.22.1", "2.23.0", "3.0.0", "2.18.9"])
+def test_a_core_outside_the_pin_is_refused_with_the_cause_and_the_repair(version):
+    """2.22.0 crashes `ansible.builtin.git` on an existing shallow clone at a tag, so
+    every provision of an existing dev node fails at its first git task."""
+    check = _pinned(version)
+    assert not check.ok
+    assert version in check.detail
+    assert ">=2.19,<2.22" in check.detail, "the range the operator must be inside"
+    assert "#3623" in check.detail, "name the reproduction, so the cap is not folklore"
+    assert check.fix == doctor.SETUP_FIX, "`poetry install` syncs to the lock, which holds 2.21.x"
+
+
+def test_the_pin_is_read_from_pyproject_and_not_copied_into_the_doctor(tmp_path):
+    (tmp_path / "pyproject.toml").write_text(
+        '[tool.poetry.group.ansible.dependencies]\nansible-core = ">=2.19,<2.20"\n', encoding="utf-8", newline="\n"
+    )
+    assert not _pinned("2.21.6", tmp_path).ok, "the range in the checkout decides, not a constant here"
+    assert _pinned("2.19.3", tmp_path).ok
+
+
+@pytest.mark.parametrize(
+    "toml",
+    [
+        "",
+        "[tool.poetry.group.ansible.dependencies]\n",
+        '[tool.poetry.group.ansible.dependencies]\nansible-core = "^2.19"\n',
+        '[tool.poetry.group.ansible.dependencies]\nansible-core = ">=2.19"\n',
+        "not toml [",
+    ],
+)
+def test_a_pin_the_doctor_cannot_read_or_that_has_no_ceiling_is_a_failed_check(tmp_path, toml):
+    """An uncapped range is the bug: `^2.19` is what let a fresh 3.13 venv take 2.22.0."""
+    (tmp_path / "pyproject.toml").write_text(toml, encoding="utf-8", newline="\n")
+    check = _pinned("2.21.6", tmp_path)
+    assert not check.ok
+    assert "pyproject.toml" in check.detail
+
+
+def test_a_missing_pyproject_is_a_failed_check_not_a_traceback(tmp_path):
+    check = _pinned("2.21.6", tmp_path)
+    assert not check.ok
+    assert "pyproject.toml" in check.detail
+
+
+def test_the_pin_is_not_claimed_verified_without_a_working_core():
+    probe = doctor.Probe(output=None, located=False, error="")
+    check = doctor._check_core_pin(REPO, _core(ok=False, fix=doctor.SETUP_FIX), probe)
+    assert not check.ok
+    assert check.fix == doctor.SETUP_FIX
+
+
+def test_the_repo_pins_a_range_with_a_ceiling_below_2_22():
+    """The pin in the checkout is what the doctor enforces: it must be the capped one."""
+    low, high = doctor.core_range(REPO)
+    assert low == (2, 19)
+    assert high == (2, 22)
+
+
+def test_every_ansible_core_in_the_lock_is_inside_the_pin():
+    """`poetry.lock` is what `make setup-ansible` installs. A range alone is satisfied by a lock
+    that still holds 2.22.0 for Python 3.13: that is the controller #3623 was measured on."""
+    import tomllib
+
+    lock = tomllib.loads((REPO / "poetry.lock").read_text(encoding="utf-8"))
+    versions = [p["version"] for p in lock["package"] if p["name"] == "ansible-core"]
+    assert versions, "ansible-core is the controller"
+    for version in versions:
+        assert doctor.in_core_range(version, REPO), f"poetry.lock resolves ansible-core {version}, outside the pin"
+
+
+def test_the_pin_check_runs_between_the_core_and_the_collections(monkeypatch):
+    """The collections check reads through a working core; the pin is about the same binary."""
+    monkeypatch.setattr(doctor.shutil, "which", lambda _name: "/usr/bin/ansible-playbook")
+    monkeypatch.setattr(doctor.command, "run", lambda *a, **k: _completed(stdout=_banner().replace("2.21.6", "2.22.0")))
+    monkeypatch.setattr(doctor, "declared_collections", lambda _root: {"community.docker": "5.4.0"})
+    monkeypatch.setattr(doctor, "collections_off_declaration", lambda _declared: [])
+    checks = {c.name: c for c in doctor.diagnose(REPO)}
+    assert checks["ansible-core"].ok, "2.22.0 runs; it is the pin that refuses it"
+    assert not checks["ansible-core pin"].ok
+
+
 # --- the whole diagnosis ---------------------------------------------------
 
 
-def test_a_healthy_controller_passes_all_four(monkeypatch):
+def test_a_healthy_controller_passes_every_check(monkeypatch):
     monkeypatch.setattr(doctor.shutil, "which", lambda _name: "/usr/bin/ansible-playbook")
     monkeypatch.setattr(doctor.command, "run", lambda *a, **k: _completed(stdout=_banner()))
     monkeypatch.setattr(doctor, "declared_collections", lambda _root: {"community.docker": "5.4.0"})
     monkeypatch.setattr(doctor, "collections_off_declaration", lambda _declared: [])
     checks = doctor.diagnose(REPO)
-    assert [c.name for c in checks] == ["ansible-core", "galaxy collections", "ansible.cfg", "static inventory"]
+    assert [c.name for c in checks] == [
+        "ansible-core",
+        "ansible-core pin",
+        "galaxy collections",
+        "ansible.cfg",
+        "static inventory",
+    ]
     assert all(c.ok for c in checks), [c for c in checks if not c.ok]
 
 
@@ -368,7 +470,7 @@ def test_the_inventory_check_answers_with_nothing_else_working(monkeypatch):
     monkeypatch.setattr(doctor.command, "run", lambda *a, **k: _completed(returncode=127))
     monkeypatch.setattr(sys, "platform", "win32")
     checks = doctor.diagnose(REPO)
-    assert [c.ok for c in checks] == [False, False, False, True]
+    assert [c.ok for c in checks] == [False, False, False, False, True]
 
 
 # --- the entry points that must not drift ----------------------------------
