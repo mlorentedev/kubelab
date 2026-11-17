@@ -127,6 +127,7 @@ is the procedure; this table only says which ones the console depends on.
 |---|---|---|
 | `apps.services.core.github_app.private_key` (common) | signs the `kubelab-console` App's installation tokens | none (GitHub App keys do not expire) |
 | `apps.services.core.gitea.issue_reader_token` (prod, staging) | reads Gitea issues and pull requests; a token per env, `kubelab-issue-reader` and `kubelab-issue-reader-staging` | none (Gitea tokens carry no expiry) |
+| `apps.services.core.gitea.issue_writer_token` (prod only) | writes Gitea issues for the outbox worker, on the machine account; `kubelab-issue-writer`, `write:issue`. Staging has none (ADR-066, 2026-11-17) | none (Gitea tokens carry no expiry) |
 | `apps.platform.api.forge_github_webhook_secret` (prod) | GitHub signs deliveries with it | none (random, ours) |
 | `apps.platform.api.forge_gitea_webhook_secret` (prod) | Gitea signs deliveries with it | none (random, ours) |
 
@@ -148,6 +149,13 @@ staging's token and clears the key in `staging.enc.yaml`, then
 `make apply-secrets ENV=staging` delivers it. Staging reaches Gitea through the
 `gitea` Service in `overlays/staging/gitea.yaml`, which has no route: the forge
 keeps one public name.
+
+The writer is prod's alone. Mint it with `make provision NODE=bee ENV=prod TAGS=gitea`
+(gated on the key being absent, so a converged run does nothing), deliver it with
+`make apply-secrets ENV=prod`, and rotate it with
+`make gitea-rotate-token TOKEN=issue_writer ENV=prod APPLY=1`. Never record it in
+staging's or common's SOPS file: staging's API would then deliver a Gitea write
+credential, which `tests/test_gitea_issue_writer_token.py` fails on.
 
 The installation tokens the API mints from the App key last one hour and are
 renewed by the API; nothing to rotate.

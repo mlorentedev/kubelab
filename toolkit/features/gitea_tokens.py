@@ -105,6 +105,14 @@ ROTATABLE_TOKENS: dict[str, RotatableToken] = {
         identity="reviewer",
         store_env="staging",
     ),
+    # The forge task view's writer (CONSOLE-004 AC2, #2570; ADR-066 amendments of 2026-11-13 and
+    # 2026-11-17): a second token on the MACHINE account, not the reviewer's, so the reader's
+    # account stays unable to write. Prod only: staging has no forge writer.
+    "issue_writer": RotatableToken(
+        secret_key="apps.services.core.gitea.issue_writer_token",
+        token_name="kubelab-issue-writer",
+        identity="machine",
+    ),
     # The cluster's image pull credential (IDP-053 S2c, D2): a token on the reviewer's
     # account, `read:package` only, rendered into the `pull-<host-slug>` Secret. Both
     # clusters pull with it, so its value lives in common's file; Gitea is prod's, so
@@ -159,6 +167,13 @@ REVIEW_NOTICE_SCOPES: frozenset[str] = frozenset({"write:issue"})
 #: requests with `type=pulls`, so no repository scope is asked for. Not yet measured
 #: against a live Gitea; the first read is, and a 403 widens this deliberately.
 ISSUE_READER_SCOPES: frozenset[str] = frozenset({"read:issue"})
+
+#: What the forge task view's writer must hold -- exactly (CONSOLE-004 AC2). A decision
+#: (ADR-066, 2026-11-13): the API creates issues, comments, labels and assigns, and closes or
+#: reopens them, which is the issue scope's whole write half; no repository scope is asked for
+#: and nothing reads `/user`. Not yet measured against a live Gitea: the first prod smoke write
+#: is, and a 403 widens this deliberately.
+ISSUE_WRITER_SCOPES: frozenset[str] = frozenset({"write:issue"})
 
 #: What the cluster's image pull token must hold -- exactly (IDP-053 S2c, AC4). A decision
 #: (owner, D2): the kubelet reads a manifest and its blobs from the forge's container

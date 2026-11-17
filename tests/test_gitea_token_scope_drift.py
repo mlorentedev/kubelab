@@ -158,6 +158,7 @@ DECLARED = {
     "review_notice": "write:issue",
     "issue_reader": "read:issue",
     "issue_reader_staging": "read:issue",
+    "issue_writer": "write:issue",
     "registry_pull": "read:package",
     "repo_reader": "read:repository",
     "agent": "write:issue,write:repository",
@@ -174,7 +175,17 @@ def _listing(username: str, scopes: str, label: str) -> tuple[tuple[str, str], F
 def _all_converged() -> dict[tuple[str, str], FakeResponse]:
     return dict(
         [
-            _listing("hefesto", DECLARED["bot"], "bot"),
+            # One account, two tokens: the bot's provisioning token and the forge view's writer.
+            (
+                ("GET", "/users/hefesto/tokens"),
+                FakeResponse(
+                    200,
+                    [
+                        _token(ROTATABLE_TOKENS["bot"].token_name, DECLARED["bot"].split(",")),
+                        _token(ROTATABLE_TOKENS["issue_writer"].token_name, DECLARED["issue_writer"].split(","), 7),
+                    ],
+                ),
+            ),
             _listing("manu", DECLARED["admin"], "admin"),
             _listing("dedalo", DECLARED["agent"], "agent"),
             _listing("rnv", DECLARED["renovate"], "renovate"),

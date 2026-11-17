@@ -432,6 +432,10 @@
         # gated on staging's own file, which is where the record task writes it.
         gitea_issue_reader_staging_scopes: "{{ gitea_config.apps.services.core.gitea.token_scopes.issue_reader_staging }}"
         gitea_issue_reader_staging_token: "{{ gitea_staging_reader_secrets.apps.services.core.gitea.issue_reader_token | default('') }}"
+        # CONSOLE-004 AC2 -- the forge task view's WRITER, on the machine account (not the
+        # reviewer's), prod only. Its mint gate reads prod's store, where the record writes.
+        gitea_issue_writer_scopes: "{{ gitea_config.apps.services.core.gitea.token_scopes.issue_writer }}"
+        gitea_issue_writer_token: "{{ gitea_secrets.apps.services.core.gitea.issue_writer_token | default('') }}"
         # IDP-053 S2c -- the cluster's image pull token on the reviewer's account,
         # read:package only. Stored in common's file (both clusters pull with it), so its
         # mint gate is read from that file's own store, where the record task writes.
