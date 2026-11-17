@@ -75,9 +75,11 @@ created: "2026-10-21"
 ### 3. Narrow writes
 
 - [ ] [AC2] Outbox with an idempotency key; a write is pending until the forge confirms
+  - [x] ✓ 2026-11-16 Schema: `forge_outbox` and `forge_write_audit`, no foreign key to the read model, store tests against Postgres; decisions in the ADR-066 amendment of 2026-11-16. The worker and the routes are the next slices
 - [ ] [AC2] Create (repository chosen by `area:`, `knowledge` fallback), label, assign, close and reopen
 - [x] ✓ 2026-11-13 [AC2] Test that no merge, review or reviewer-request route exists (#3425, read from the engine's routes)
 - [ ] [AC2] Audit row for every write
+  - [x] ✓ 2026-11-16 Table (`forge_write_audit`); the row is written by the worker, which is not built yet
 
 ### 4. Observability
 
@@ -96,6 +98,7 @@ created: "2026-10-21"
 ### 5. Operations
 
 - [ ] [P] [AC7] Declare the read model in the Postgres backup coverage and rehearse one restore
+  - [x] ✓ 2026-11-16 Coverage: the `postgres` source of `backup.sources` is a `pg_dumpall` of the whole cluster, so every table of the `api` database, the outbox and audit tables included, is in the node backup with no per-table declaration. The restore rehearsal is still to do
   - [x] ✓ 2026-11-02 Covered: the prod dump is `pg_dumpall`, so the `api` database is in it without a change
   - [ ] Rehearse one restore
 - [x] [AC7] Test that the read model rebuilds from the forges alone ✓ 2026-11-06
