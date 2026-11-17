@@ -313,12 +313,14 @@ def mint(
     expiration: str = "1h",
     ssh_target: str | None = None,
     container: str = "headscale",
+    ephemeral: bool = False,
 ) -> MintedKey:
     """Mint one single-use tagged pre-auth key and deliver it to an owner-only file.
 
     The tag comes from the SOPS segment declaration for `segment_name`; the
     role picks which of the segment's two tags the key carries (hosts keys are
-    persistent, client keys ephemeral). The key material is written to
+    persistent unless `ephemeral` opts in, client keys are always ephemeral).
+    The key material is written to
     `out_path` and returned to nobody: the summary names the id, the expiry and
     the file, and nothing else. Run from the authorized deploy controller
     (OPS-051) -- this module performs a mutating VPS operation.
@@ -334,7 +336,7 @@ def mint(
         raise MintUnavailableError(f"could not ask headscale on {ssh_target}: {users.stderr.strip()}")
     user_id = resolve_owner_id(users.stdout, segment.owner)
 
-    create_command = build_create_command(user_id, tag, expiration, ephemeral=(role == "clients"))
+    create_command = build_create_command(user_id, tag, expiration, ephemeral=(role == "clients" or ephemeral))
     create = _run_headscale(ssh_target, container, f"preauthkeys create {create_command} --output json")
     if create.returncode != 0:
         # A transport death can land after headscale ran, with the key already in
