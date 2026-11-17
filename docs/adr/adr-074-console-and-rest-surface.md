@@ -147,7 +147,7 @@ The API derives each of the following and exposes them under D5. The console ren
 
   "Merged unreviewed" is shown on merged pull requests.
   - **Sources:** forge pull-request reads; check runs and commit statuses; review comments; the `## Review triage` marker (the contract `dotf pr triage-queue` reads); the unreviewed declaration of the shared `pr-agent.yml`.
-  - **Operator step:** the GitHub App `kubelab-console` reads Issues, Pull requests and Metadata today. It needs **Checks: read** and **Commit statuses: read** added and the installation's acceptance before this slice ships.
+  - **Operator step (done 2026-11-16):** the GitHub App `kubelab-console` was widened to **Checks: read** and **Commit statuses: read** (and Issues: write, ADR-066) and the installation accepted them. `make forge-github-hook` reads the installation's grant and exits non-zero if any permission is short or the installation is not "All repositories" (runbook: forge-console-operations).
 - **Inbox reasons.** Mine; review requested from me; CI red on mine; triage owed on mine; rollout pull requests waiting on the owner (the `ci/bitacora-workflows` pull requests that `bitacora-rollout.sh` opens). An item can carry several reasons. The JSON already leaves room for a `reasons` field (#3107).
 - **Notices.** What reaches Slack is read where it passes, never from Slack. Two candidate taps:
   - a fan-out from n8n's `notify-router` into the API, recorded as events;

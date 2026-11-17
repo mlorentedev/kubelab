@@ -206,7 +206,7 @@ The table is generated from the command tree, never edited by hand. `toolkit too
 | `toolkit services clean` | Clean application artifacts and resources. |
 | `toolkit services down` | Stop one or more services or applications. |
 | `toolkit services forge` | The console's forge integrations (CONSOLE-004) |
-| `toolkit services forge github-hook` | Converge the kubelab-console GitHub App's webhook to the API's receiver. |
+| `toolkit services forge github-hook` | Converge the kubelab-console GitHub App's webhook to the API's receiver, and check the installation's permissions and repository access. |
 | `toolkit services gitea` | Reconcile the Gitea forge against its declaration |
 | `toolkit services gitea actions-secrets` | Deliver catalog-declared Actions secrets from SOPS to forge repositories (TOOL-062). |
 | `toolkit services gitea drop-empty` | Remove an EMPTY DECLARED repository, so a migration can create it in its place. |

@@ -1261,7 +1261,9 @@ def forge_github_hook(
     """Converge the kubelab-console GitHub App's webhook to the API's receiver.
 
     Plan only by default. The events the App subscribes to and the hook's Active
-    toggle are App settings the API cannot set: the operator's step.
+    toggle are App settings the API cannot set: the operator's step. So is the
+    installation's grant: its permissions and "All repositories" are read from the
+    installation, not the App, and reported when short.
 
     Prod only, with no --env: the App has one hook, and staging is VPN-only, so
     pointing it at staging would stop every delivery.
@@ -1270,6 +1272,7 @@ def forge_github_hook(
 
     merged = ConfigurationManager("prod", get_settings().project_root).get_merged_config()
     app_id = merged["infra"]["forge"]["github"]["app_id"]
+    installation_id = merged["infra"]["forge"]["github"]["installation_id"]
     key = merged.get("apps", {}).get("services", {}).get("core", {}).get("github_app", {}).get("private_key", "")
     secret = merged.get("apps", {}).get("platform", {}).get("api", {}).get("forge_github_webhook_secret", "") or ""
     if not key:
@@ -1279,7 +1282,11 @@ def forge_github_hook(
     console.print(f"webhook URL: {spec.url}")
     try:
         result = converge(
-            GitHubAppHooks(app_id, key), spec, secret=str(secret), apply=apply, resend_secret=resend_secret
+            GitHubAppHooks(app_id, installation_id, key),
+            spec,
+            secret=str(secret),
+            apply=apply,
+            resend_secret=resend_secret,
         )
     except HookConfigError as e:
         logger.error(str(e))
@@ -1297,7 +1304,24 @@ def forge_github_hook(
             f"[yellow]not subscribed[/yellow]: {', '.join(result.missing_events)}. In the App's settings, "
             "Permissions & events > Subscribe to events, tick them and save; the API cannot set this."
         )
-    if result.missing_events or (result.changes and not result.wrote):
+    for name, need, live in result.permission_gaps:
+        console.print(
+            f"[yellow]permission short[/yellow]: {name} needs {need}, installation has {live or 'none'}. "
+            "Set it in the App's Permissions & events, then accept the request on the installation."
+        )
+    if result.selection_problem:
+        console.print(
+            f"[yellow]repository access[/yellow]: {result.selection_problem}. "
+            "Installed GitHub Apps > kubelab-console > Repository access > All repositories."
+        )
+    if not (result.missing_events or result.permission_gaps or result.selection_problem):
+        console.print("[green]grant ok[/green]: permissions and repository access as declared")
+    if (
+        result.missing_events
+        or result.permission_gaps
+        or result.selection_problem
+        or (result.changes and not result.wrote)
+    ):
         raise typer.Exit(2)
 
 

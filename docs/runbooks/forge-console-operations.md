@@ -69,7 +69,8 @@ repository created on GitHub is read from the next cycle, within
 
 That holds only while the `kubelab-console` App is installed with
 **All repositories**: with "Only select repositories" the listing returns those
-alone and new repositories never appear. Check it at
+alone and new repositories never appear. `make forge-github-hook` checks it (see
+[The App's permissions](#the-apps-permissions)); by hand, it is at
 GitHub > Settings > Applications > Installed GitHub Apps > kubelab-console >
 Repository access.
 
@@ -86,6 +87,36 @@ keeps failing (a revoked key), the reads fail on the same credential: every
 GitHub source shows unreachable in the console and its `as_of` stops moving. The
 Grafana alert on that bound is still to build (AC6 in the spec), so until then the
 console's reachability column is the signal.
+
+## The App's permissions
+
+The `kubelab-console` installation must hold these repository permissions, named
+as the API names them:
+
+| Permission | Level | Why |
+|---|---|---|
+| `metadata` | read | listing the installation's repositories |
+| `issues` | write | the GitHub outbox (ADR-066, "the existing App is widened"); reads need only read |
+| `pull_requests` | read | pull-request state and reviews |
+| `checks` | read | CI state from check runs (ADR-074 D7) |
+| `statuses` | read | CI state from commit statuses, which is what `pr-agent` publishes |
+
+A widened permission is a request until the installation's owner accepts it:
+GitHub mails the request, and until it is accepted the installation keeps the old
+grant. `GET /app` lists what the App requests, so it cannot show that; the check
+reads the installation (`GET /app/installations/{id}`).
+
+```bash
+make forge-github-hook         # plan, read-only: also checks the grant
+```
+
+It prints `grant ok`, or one `permission short` line per permission the
+installation lacks or holds below the level above, or `repository access` when
+the installation is not "All repositories", and exits 2 in either case. Fix
+a short permission at GitHub > Settings > Developer settings > GitHub Apps >
+kubelab-console > Permissions & events, then accept the request at Settings >
+Applications > Installed GitHub Apps > kubelab-console. Run the command again;
+`grant ok` is the proof, since the settings page shows the request, not the grant.
 
 ## Rotate the credentials
 
@@ -188,6 +219,7 @@ successful read. A source never read since the api started writes no
 
 ```bash
 make secrets-audit             # each key above present for prod
+make forge-github-hook         # the App's hook, permissions and repository access
 ```
 
 Then open the console and check every declared source reads reachable.
