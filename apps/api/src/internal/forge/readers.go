@@ -10,7 +10,8 @@ type Credentials struct {
 	GitHubInstallationID string
 	GitHubPrivateKey     string // PEM; empty reads GitHub anonymously
 	GiteaURL             string // the Gitea root; empty wires no Gitea reader
-	GiteaToken           string
+	GiteaToken           string // read:issue, the reader's
+	GiteaWriteToken      string // write:issue, the writer's; empty wires no Gitea writer
 }
 
 // NewReaders builds one reader per forge the environment can reach, each behind
@@ -19,16 +20,9 @@ type Credentials struct {
 // without one a gitea: source reads as unreachable ("no reader for this forge").
 func NewReaders(c Credentials) map[string]Reader {
 	client := &http.Client{Transport: &Ceiling{Limit: HourlyCallCeiling}}
-	github := &GitHub{BaseURL: "https://api.github.com", HTTP: client}
+	github := &GitHub{BaseURL: githubAPI, HTTP: client}
 	if c.GitHubPrivateKey != "" {
-		tokens := &AppTokens{
-			BaseURL:        github.BaseURL,
-			AppID:          c.GitHubAppID,
-			InstallationID: c.GitHubInstallationID,
-			PrivateKeyPEM:  c.GitHubPrivateKey,
-			HTTP:           client,
-		}
-		github.Tokens = tokens.Token
+		github.Tokens = newAppTokens(c, client).Token
 	}
 	readers := map[string]Reader{"github": github}
 	if c.GiteaURL != "" {
@@ -39,6 +33,17 @@ func NewReaders(c Credentials) map[string]Reader {
 		}
 	}
 	return readers
+}
+
+// newAppTokens is the App installation's token source, over the client whose ceiling it spends.
+func newAppTokens(c Credentials, client *http.Client) *AppTokens {
+	return &AppTokens{
+		BaseURL:        githubAPI,
+		AppID:          c.GitHubAppID,
+		InstallationID: c.GitHubInstallationID,
+		PrivateKeyPEM:  c.GitHubPrivateKey,
+		HTTP:           client,
+	}
 }
 
 // Listers picks the readers that can also list an owner's repositories. They are
