@@ -313,3 +313,24 @@ def test_the_command_exits_nonzero_on_only_select_repositories() -> None:
     assert result.exit_code == 2, result.output
     assert "repository access" in result.output
     assert "grant ok" not in result.output
+
+
+class _BrokenInstallation(FakeHooks):
+    def installation(self) -> dict[str, Any]:
+        raise HookConfigError("GET /app/installations/2 answered 404")
+
+
+def test_an_unreadable_installation_does_not_stop_the_hook_converging() -> None:
+    # A wrong installation_id must not leave a drifted hook unwritten, as it was fine before the check.
+    hooks = _BrokenInstallation({"url": "", "content_type": "json", "insecure_ssl": "0"})
+    result = converge(hooks, SPEC, secret="s", apply=True)
+    assert result.wrote and hooks.sent
+    assert "answered 404" in result.installation_error
+    assert result.permission_gaps == () and result.selection_problem == ""
+
+
+def test_the_command_exits_nonzero_when_the_grant_could_not_be_read() -> None:
+    result = _run_command(_BrokenInstallation(dict(CORRECT)))
+    assert result.exit_code == 2, result.output
+    assert "grant not checked" in result.output and "answered 404" in result.output
+    assert "grant ok" not in result.output

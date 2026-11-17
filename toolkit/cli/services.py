@@ -1314,12 +1314,15 @@ def forge_github_hook(
             f"[yellow]repository access[/yellow]: {result.selection_problem}. "
             "Installed GitHub Apps > kubelab-console > Repository access > All repositories."
         )
-    if not (result.missing_events or result.permission_gaps or result.selection_problem):
+    if result.installation_error:
+        console.print(f"[yellow]grant not checked[/yellow]: {result.installation_error}")
+    if not (result.missing_events or result.permission_gaps or result.selection_problem or result.installation_error):
         console.print("[green]grant ok[/green]: permissions and repository access as declared")
     if (
         result.missing_events
         or result.permission_gaps
         or result.selection_problem
+        or result.installation_error
         or (result.changes and not result.wrote)
     ):
         raise typer.Exit(2)

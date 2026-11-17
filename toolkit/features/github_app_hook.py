@@ -154,6 +154,8 @@ class ConvergeResult:
     # problem if it is not "All repositories": both the operator's step, like the events.
     permission_gaps: tuple[tuple[str, str, str | None], ...] = ()
     selection_problem: str = ""
+    # Set when the installation could not be read: the grant is then unchecked, not fine.
+    installation_error: str = ""
 
 
 def converge(
@@ -167,7 +169,13 @@ def converge(
         )
     subscribed = hooks.subscribed_events()
     missing = tuple(e for e in REQUIRED_EVENTS if e not in subscribed)
-    gaps, selection_problem = installation_gaps(hooks.installation())
+    # The grant check never stops the hook converging: a wrong installation id was harmless before it.
+    gaps: tuple[tuple[str, str, str | None], ...] = ()
+    selection_problem = installation_error = ""
+    try:
+        gaps, selection_problem = installation_gaps(hooks.installation())
+    except HookConfigError as e:
+        installation_error = str(e)
     changes = hook_changes(hooks.get_config(), spec)
     if not apply or not (changes or resend_secret):
         return ConvergeResult(
@@ -176,6 +184,7 @@ def converge(
             missing_events=missing,
             permission_gaps=gaps,
             selection_problem=selection_problem,
+            installation_error=installation_error,
         )
     # The whole config every time: a hook with a URL and no secret would deliver
     # unsigned bodies the receiver refuses.
@@ -187,7 +196,12 @@ def converge(
             "rerunning sends it again, which is safe (the secret is the same value)"
         )
     return ConvergeResult(
-        changes=changes, wrote=True, missing_events=missing, permission_gaps=gaps, selection_problem=selection_problem
+        changes=changes,
+        wrote=True,
+        missing_events=missing,
+        permission_gaps=gaps,
+        selection_problem=selection_problem,
+        installation_error=installation_error,
     )
 
 
