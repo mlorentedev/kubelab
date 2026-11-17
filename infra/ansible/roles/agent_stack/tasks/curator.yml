@@ -60,6 +60,10 @@
     - name: Run the analyzer once
       ansible.builtin.command:
         argv: [systemctl, start, --wait, "{{ agent_stack_curator_unit }}.service"]
+      register: _agent_stack_curator_run
+      # A unit that ends failed makes --wait exit non-zero; the verdict below reads what
+      # systemd recorded, so it is the one message whichever way the run was started.
+      failed_when: false
       changed_when: false
       when: not ansible_check_mode
 
@@ -88,9 +92,11 @@
     - name: Verify the analyzer run succeeded
       ansible.builtin.assert:
         that:
+          - _agent_stack_curator_run.rc | default(0) == 0
           - _agent_stack_curator_result.stdout | trim == 'success'
         fail_msg: >-
-          {{ agent_stack_curator_unit }}.service ended with Result={{ _agent_stack_curator_result.stdout | trim }};
+          {{ agent_stack_curator_unit }}.service ended with Result={{ _agent_stack_curator_result.stdout | trim }}
+          (systemctl start --wait exited {{ _agent_stack_curator_run.rc | default(0) }});
           see journalctl -u {{ agent_stack_curator_unit }}.service
         quiet: true
       when: not ansible_check_mode

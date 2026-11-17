@@ -43,6 +43,9 @@ WRITES_THAT_REPORT_NO_CHANGE = {
     ("docker", "Smoke-build an image on this engine"): (
         "a smoke build: it runs a build step on the engine, which a dry run must not"
     ),
+    ("agent_stack", "Run the analyzer once"): (
+        "it starts the analyzer unit, which writes the corpus summary into the agent's zone; a dry run must not"
+    ),
 }
 
 

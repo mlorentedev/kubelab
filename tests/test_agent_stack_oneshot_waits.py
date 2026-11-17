@@ -315,6 +315,10 @@ if args[:2] == ["start", "--wait"]:
     # An unit already activating queues no job: --wait returns at once.
     if cfg["scenario"] in ("inflight", "inflight_failed", "stuck"):
         sys.exit(0)
+    if cfg["scenario"] == "start_failed":
+        (home / "result").write_text("exit-code")
+        print("Job for unit failed.", file=sys.stderr)
+        sys.exit(1)
     run_unit("success")
     sys.exit(0)
 
@@ -475,3 +479,16 @@ def test_a_dry_run_makes_one_attempt_instead_of_waiting_out_a_busy_unit(tmp_path
     assert result.returncode == 0, result.stdout + result.stderr
     assert _polls(env) == 1
     assert "start --wait" not in (Path(env["STUB_HOME"]) / "calls.log").read_text(encoding="utf-8")
+
+
+@needs_ansible
+@pytest.mark.allow_host_clients(reason="runs ansible-playbook against localhost and a stand-in systemctl")
+def test_a_run_of_our_own_that_fails_is_reported_by_the_result_assert(tmp_path: Path) -> None:
+    """`start --wait` exits non-zero for a unit that ends failed: the verdict must still carry
+    the Result and the journal hint, as it does when the run was already in flight."""
+    env = _stand_in(tmp_path, "start_failed")
+
+    result = _run(tmp_path, env)
+
+    assert result.returncode != 0
+    assert "Result=exit-code" in result.stdout and "journalctl -u " + UNIT in result.stdout, result.stdout
