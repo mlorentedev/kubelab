@@ -51,10 +51,12 @@
       changed_when: false
       when: not ansible_check_mode
 
-    # `state: started` is not a run: it guarantees the unit is active or activating, and
-    # does nothing at all when its timer already started it (#3575). `--wait` has the same
-    # hole, since an unit already activating queues no job to wait for. So start it, then
-    # poll until whatever is running has finished, then ask systemd how it ended.
+    # `state: started` does nothing when the unit is already activating (its timer fired,
+    # or another caller started it), so the checks below read a run still in flight (#3575).
+    # `--wait` has the same hole: a unit already activating queues no job to wait for. So
+    # start it, poll until whatever is running has finished, then ask systemd how it ended.
+    # The analyzer writes candidates.json as its last act (an atomic rename), so a run already
+    # in flight has moved the mtime before the note above only in the milliseconds before it exits.
     - name: Run the analyzer once
       ansible.builtin.command:
         argv: [systemctl, start, --wait, "{{ agent_stack_curator_unit }}.service"]

@@ -1,12 +1,12 @@
 """A oneshot the play starts is waited for before the play reads what it left (#3575).
 
-`ansible.builtin.systemd: state: started` guarantees a unit is active or activating, not
-that a oneshot has finished. When the unit is already `activating` (its timer fired, or
-another caller started it) the module issues no `systemctl start` at all and returns at
-once, so the `stat` that followed read a half-finished run: ace2, 2026-11-16, the curator's
-analyzer (~64 s) was still running when `candidates.json` was checked. `systemctl start
---wait` has the same hole, for the same reason: it waits for the job it queued, and an
-unit already activating queues none.
+`ansible.builtin.systemd: state: started` blocks on a oneshot only when it issues the start
+itself. When the unit is already `activating` (its timer fired, or another caller started
+it) the module counts it as running, issues no `systemctl start` and returns at once, so the
+`stat` that followed read a half-finished run: ace2, 2026-11-16, the curator's analyzer
+(~64 s) was still running when `candidates.json` was checked. `systemctl start --wait` has
+the same hole, for the same reason: it waits for the job it queued, and a unit already
+activating queues none.
 
 So the run is `start --wait`, then a poll of `ActiveState` until the unit has settled,
 then `Result=success` read from systemd, and only then the file. These tests read the YAML
@@ -47,6 +47,11 @@ MTIME_OK = "Verify this run wrote the candidates"
 RUN_SECONDS = 64
 SETTLED_STATES = {"inactive", "failed"}
 
+# The guard reads the `agent_stack` role only. `playbooks/backup-node.yml` and
+# `playbooks/maintenance-notify-test.yml` also start a oneshot with `state: started` and read
+# its result, but both `state: stopped` the unit first, so nothing can have it activating when
+# the start is issued (bar the ms between the two tasks) and `started` does block there.
+#
 # Run-once tasks of the same shape that still start their oneshot without waiting for it
 # (#3630). A set that only shrinks: `test_the_known_gaps_are_still_gaps` fails for an entry
 # whose task has since been fixed, so the exemption cannot outlive the defect.
@@ -113,9 +118,13 @@ def _oneshot_unit_vars() -> set[str]:
     return found
 
 
-def _is_poll(task: dict) -> bool:
-    """A task that re-reads ActiveState until it changes."""
-    return "until" in task and "ActiveState" in " ".join(_command_argv(task))
+def _is_poll(task: dict, unit_var: str) -> bool:
+    """A task that re-reads this unit's ActiveState until it changes.
+
+    It must name the unit it waits for: a poll of another unit in the same file excuses nothing.
+    """
+    argv = _command_argv(task)
+    return "until" in task and "ActiveState" in argv and argv[-1:] == [f"{{{{ {unit_var} }}}}.service"]
 
 
 def _unwaited(tasks: list[dict], oneshots: set[str]) -> list[str]:
@@ -124,7 +133,7 @@ def _unwaited(tasks: list[dict], oneshots: set[str]) -> list[str]:
     for i, task in enumerate(tasks):
         name = _systemd_started(task) or ""
         match = re.fullmatch(r"\{\{ (\w+) \}\}\.service", name)
-        if match and match.group(1) in oneshots and not any(_is_poll(t) for t in tasks[i + 1 :]):
+        if match and match.group(1) in oneshots and not any(_is_poll(t, match.group(1)) for t in tasks[i + 1 :]):
             gaps.append(match.group(1))
     return gaps
 
@@ -174,13 +183,28 @@ def test_the_guard_sees_a_started_oneshot_with_nothing_after_it() -> None:
 
 
 def test_the_guard_accepts_a_poll_and_ignores_one_that_comes_before() -> None:
-    poll = {"name": "Wait", "ansible.builtin.command": {"argv": ["systemctl", "show", "-p", "ActiveState", "u"]}}
+    def poll(unit: str) -> dict:
+        argv = ["systemctl", "show", "-p", "ActiveState", "--value", f"{{{{ {unit} }}}}.service"]
+        return {"name": "Wait", "ansible.builtin.command": {"argv": argv}}
+
     start = {"name": "Run", "ansible.builtin.systemd": {"name": "{{ a_unit }}.service", "state": "started"}}
-    assert _unwaited([start, {**poll, "until": "x"}], {"a_unit"}) == []
-    assert _unwaited([{**poll, "until": "x"}, start], {"a_unit"}) == ["a_unit"], (
-        "a poll before the start waits for nothing"
+    assert _unwaited([start, {**poll("a_unit"), "until": "x"}], {"a_unit"}) == []
+    assert _unwaited([{**poll("a_unit"), "until": "x"}, start], {"a_unit"}) == ["a_unit"], (
+        "a poll before waits for nothing"
     )
-    assert _unwaited([start, poll], {"a_unit"}) == ["a_unit"], "without `until` it reads the state once and goes on"
+    assert _unwaited([start, poll("a_unit")], {"a_unit"}) == ["a_unit"], "without `until` it reads the state once"
+
+
+def test_a_poll_of_another_unit_does_not_excuse_this_one() -> None:
+    def started(unit: str) -> dict:
+        return {"name": "Run", "ansible.builtin.systemd": {"name": f"{{{{ {unit} }}}}.service", "state": "started"}}
+
+    other = {
+        "name": "Wait",
+        "until": "x",
+        "ansible.builtin.command": {"argv": ["systemctl", "show", "-p", "ActiveState", "{{ b_unit }}.service"]},
+    }
+    assert _unwaited([started("a_unit"), started("b_unit"), other], {"a_unit", "b_unit"}) == ["a_unit"]
 
 
 # --- the curator's analyzer: the shape of the wait -----------------------------
