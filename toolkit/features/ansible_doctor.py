@@ -24,16 +24,23 @@ The checks, and why each one is here:
    which raises `OSError: [WinError 87]` on `os.get_blocking` (measured on 2.21.6,
    TOOL-131). Telling someone to `make setup-ansible` there sends them to reinstall
    a package that will fail again.
-2. **The Galaxy collections match `requirements.yml`.** The pins are exact by
+2. **`ansible-core` is inside the range `pyproject.toml` pins.** The roles run
+   whatever core the controller has. 2.22.0 crashes `ansible.builtin.git` on an
+   existing shallow clone checked out at a tag (`'NoneType' object has no attribute
+   'startswith'`), so every provision of an existing dev node failed at its first git
+   task; 2.21.4 passes on the same clone (#3623). `^2.19` let a venv built fresh on
+   Python 3.13 take 2.22.0 while an older one stayed on 2.21.x, so the cap is in the
+   range and this check refuses a controller outside it.
+3. **The Galaxy collections match `requirements.yml`.** The pins are exact by
    design (ANSIBLE-070, #2735): with floors, `ansible-galaxy collection install
    -r` is a no-op when the installed version satisfies the range, and a controller
    sat one release behind a privilege-escalation fix in `authorized_key`.
-3. **The config file in effect is this repo's `infra/ansible/ansible.cfg`.**
+4. **The config file in effect is this repo's `infra/ansible/ansible.cfg`.**
    Ansible reads exactly one config file, the first it finds, and the repo's
    turns a host-pattern mismatch into a failure (lesson-356, #1228). A raw
    `ansible-playbook` run from another directory silently gets the default
    (warning, exit 0) and reports success having touched nothing.
-4. **The static inventory parses and carries hosts.** It is what
+5. **The static inventory parses and carries hosts.** It is what
    `make lint-ansible` and CI use, and what an offline controller can be checked
    against. This one needs neither `ansible-playbook` nor `ansible-galaxy`, so it
    still answers on a machine where nothing else runs.
@@ -44,6 +51,7 @@ from __future__ import annotations
 import re
 import shutil
 import sys
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -76,6 +84,19 @@ POSIX_FIX = "run this from WSL or a Linux host; ansible-core has no Windows cont
 #: The version banner is flush left; every line after it is indented two spaces.
 _VERSION_LINE = re.compile(r"^ansible-playbook \[core ([^\]]+)\]", re.MULTILINE)
 _CONFIG_LINE = re.compile(r"^[ \t]*config file = (.+)$", re.MULTILINE)
+
+
+#: Where the controller's `ansible-core` range is declared: the one place the cap lives.
+PYPROJECT = "pyproject.toml"
+
+#: The reproduction and the reason for the cap. Lift it when a release passes it.
+PIN_ISSUE = "#3623"
+
+_RELEASE = re.compile(r"^\d+(?:\.\d+)*")
+
+
+class CorePinError(Exception):
+    """The range in `pyproject.toml` cannot be read, or has no ceiling."""
 
 
 @dataclass(frozen=True)
@@ -146,6 +167,76 @@ def _check_ansible_core(probe: Probe) -> Check:
         ok=False,
         detail=f"`ansible-playbook` is installed but does not run: {probe.error}",
         fix=fix,
+    )
+
+
+def _release(version: str) -> tuple[int, ...]:
+    found = _RELEASE.match(version.strip())
+    if found is None:
+        raise ValueError(f"{version!r} is not a version")
+    return tuple(int(part) for part in found.group(0).split("."))
+
+
+def core_range(root: Path) -> tuple[tuple[int, ...], tuple[int, ...]]:
+    """The `[low, high)` the checkout pins `ansible-core` to, read from `pyproject.toml`.
+
+    Only `>=LOW,<HIGH` is accepted. A caret or a floor alone is what let a controller
+    built later take a core nobody ran the roles with, so a range without a ceiling is
+    refused here rather than guessed at.
+    """
+    path = root / PYPROJECT
+    try:
+        data = tomllib.loads(path.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError) as exc:
+        raise CorePinError(f"{PYPROJECT} cannot be read: {exc}") from exc
+    try:
+        spec = data["tool"]["poetry"]["group"]["ansible"]["dependencies"]["ansible-core"]
+    except KeyError as exc:
+        raise CorePinError(f"{PYPROJECT} declares no ansible-core under the ansible group") from exc
+    clauses = [clause.strip() for clause in str(spec).split(",")]
+    floors = [c[2:] for c in clauses if c.startswith(">=")]
+    ceilings = [c[1:] for c in clauses if c.startswith("<") and not c.startswith("<=")]
+    if len(clauses) != 2 or len(floors) != 1 or len(ceilings) != 1:
+        raise CorePinError(f"{PYPROJECT} pins ansible-core to {spec!r}; it must be '>=LOW,<HIGH', with a ceiling")
+    try:
+        return _release(floors[0]), _release(ceilings[0])
+    except ValueError as exc:
+        raise CorePinError(f"{PYPROJECT} pins ansible-core to {spec!r}: {exc}") from exc
+
+
+def in_core_range(version: str, root: Path) -> bool:
+    low, high = core_range(root)
+    return low <= _release(version) < high
+
+
+def _check_core_pin(root: Path, core: Check, probe: Probe) -> Check:
+    name = "ansible-core pin"
+    found = _VERSION_LINE.search(probe.output) if probe.output is not None else None
+    if not core.ok or found is None:
+        return Check(
+            name=name,
+            ok=False,
+            detail=f"cannot be read without a working `ansible-playbook`; the {PYPROJECT} range is unverified",
+            fix=core.fix or SETUP_FIX,
+        )
+    version = found.group(1)
+    try:
+        low, high = core_range(root)
+        inside = low <= _release(version) < high
+    except (CorePinError, ValueError) as exc:
+        return Check(name=name, ok=False, detail=str(exc), fix=f"repair the ansible-core line in {PYPROJECT}")
+    spec = f">={'.'.join(map(str, low))},<{'.'.join(map(str, high))}"
+    if inside:
+        return Check(name=name, ok=True, detail=f"ansible-core {version} is inside {spec} ({PYPROJECT})")
+    return Check(
+        name=name,
+        ok=False,
+        detail=(
+            f"ansible-core {version} is outside {spec} ({PYPROJECT}). WHY: 2.22.0 crashes "
+            "`ansible.builtin.git` on an existing shallow clone at a tag, which fails every provision "
+            f"of an existing dev node; the roles were run on 2.21.x ({PIN_ISSUE})"
+        ),
+        fix=SETUP_FIX,
     )
 
 
@@ -281,6 +372,7 @@ def diagnose(root: Path) -> list[Check]:
     core = _check_ansible_core(probe)
     return [
         core,
+        _check_core_pin(root, core, probe),
         _check_collections(root, core),
         _check_config_file(ansible_dir, core, probe),
         _check_inventory(root),

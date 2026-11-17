@@ -17,8 +17,10 @@ anything with it.
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -238,3 +240,27 @@ def test_setup_ansible_shows_the_install_and_fails_with_it() -> None:
     install = next(line for line in recipe.splitlines() if "collection install" in line)
     assert "/dev/null" not in install, "the install output is the only report of what it did"
     assert re.search(r"collection install -r \S+requirements\.yml\s*&&", install), "success must follow the install"
+
+
+# --- a verbose run must not corrupt the listing the check parses (#3623) -----------------
+
+STAND_IN_GALAXY = """#!/bin/sh
+# ansible-galaxy at ANSIBLE_VERBOSITY>=1 prints a banner on STDOUT before the JSON.
+if [ -n "$ANSIBLE_VERBOSITY" ]; then
+    echo "No config file found; using defaults"
+fi
+echo '{"/c": {"ansible.posix": {"version": "2.2.2"}}}'
+"""
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX stand-in for ansible-galaxy")
+def test_a_verbose_run_still_reads_the_listing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """`ANSIBLE_VERBOSITY=1 make provision` is how a failing provision is diagnosed, and it failed the
+    controller check with `ansible-galaxy collection list is not JSON` before the play started."""
+    galaxy = tmp_path / "ansible-galaxy"
+    galaxy.write_text(STAND_IN_GALAXY, encoding="utf-8", newline="\n")
+    galaxy.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{tmp_path}{os.pathsep}{os.environ['PATH']}")
+    monkeypatch.setenv("ANSIBLE_VERBOSITY", "1")
+
+    assert provision_freshness.collections_off_declaration({"ansible.posix": "2.2.2"}) == []

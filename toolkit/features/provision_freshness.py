@@ -24,6 +24,7 @@ controller on an `authorized_key` with a known privilege escalation.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -169,6 +170,9 @@ def collections_off_declaration(declared: dict[str, str]) -> list[str]:
     try:
         done = subprocess.run(  # noqa: S603 - fixed argv, no shell
             ["ansible-galaxy", "collection", "list", "--format", "json"],
+            # At ANSIBLE_VERBOSITY>=1 the tool writes a banner to stdout ahead of the JSON, which
+            # then fails to parse: the diagnostic run was refused by the check it was diagnosing (#3623).
+            env={k: v for k, v in os.environ.items() if k != "ANSIBLE_VERBOSITY"},
             capture_output=True,
             text=True,
             encoding="utf-8",

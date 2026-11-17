@@ -4,6 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 765 | [A lock split by Python version gives a fresh controller a different ansible-core than the old one](lesson-765-a-lock-split-by-python-version-gives-a-fresh-controller-a-different-core.md) | 2026-11-17 |
 | 764 | [Retire a second installer's leftover after the owner has run, and only when nothing points into it](lesson-764-retire-a-second-installers-leftover-after-the-owner-and-only-when-nothing-points-in.md) | 2026-11-16 |
 | 763 | [Ask mise for the executable, not for the install directory plus a layout](lesson-763-ask-the-tool-manager-for-the-executable-not-the-install-and-a-layout.md) | 2026-11-16 |
 | 757 | [Two writers of one mise tool fail whichever owner checks its own pin](lesson-757-two-writers-of-one-mise-tool-fail-the-owner-that-checks.md) | 2026-11-14 |
