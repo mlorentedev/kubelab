@@ -191,8 +191,8 @@ claim. The rule opens `docs/runbooks/resume-daily-pipeline.md#no-success-alert`,
   `events.staging` only, `image_registry: ghcr.io/mlorentedev`, `private: true`,
   `pull_credential: {username: mlorentedev, secret: ghcr.pull_token}`,
   `egress: [dns, public-https, notify]`.
-- [x] Contract snapshot for staging, with `hostnames.prod` declared and the
-  volume claim named `data` (PVC `resume-data`, as proposal D11 assumes).
+- [x] Contract snapshot for staging, ~~with `hostnames.prod` declared~~ (see the
+  deviation below) and the volume claim named `data` (PVC `resume-data`, as proposal D11 assumes).
 - [x] Staging values: `resume_web_host: 0.0.0.0`, the public URL, the notify
   URL `http://n8n:5678/webhook/notify`, and the fixture seed setting that
   https://gitea.kubelab.live/personal/resume/issues/810 defines (Q5). That
