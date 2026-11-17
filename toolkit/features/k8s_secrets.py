@@ -182,6 +182,10 @@ SECRET_DEFINITIONS: list[SecretMapping] = [
             # so a separate Secret would never reach the pod.
             "FORGE_GITEA_TOKEN": "APPS_SERVICES_CORE_GITEA_ISSUE_READER_TOKEN",
             "FORGE_GITHUB_PRIVATE_KEY": "APPS_SERVICES_CORE_GITHUB_APP_PRIVATE_KEY",
+            # The outbox worker's Gitea write token (CONSOLE-004 AC2). Prod only, by catalog and by
+            # SOPS: staging has no forge writer, and an optional key is delivered whenever the env's
+            # merged SOPS holds it, which `tests/test_gitea_issue_writer_token.py` keeps from happening.
+            "FORGE_GITEA_WRITE_TOKEN": "APPS_SERVICES_CORE_GITEA_ISSUE_WRITER_TOKEN",
             # The API's Postgres tenant (DATA-007). Optional for the same reason: without it the
             # API omits the check and starts.
             "POSTGRES_TENANT_PASSWORD": "APPS_PLATFORM_API_DB_PASSWORD",

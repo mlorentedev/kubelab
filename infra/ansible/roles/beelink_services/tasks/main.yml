@@ -655,6 +655,7 @@
   become: false
   when: >-
     not gitea_bot_token or not gitea_admin_token or not act_runner_token
+    or not gitea_issue_writer_token
     or (gitea_reviewer_user | length > 0
         and (not gitea_reviewer_token or not gitea_review_notice_token
              or not gitea_issue_reader_token or not gitea_issue_reader_staging_token
@@ -680,6 +681,7 @@
     status_code: [200]
   loop: &gitea_named_tokens
     - {name: kubelab-provisioning, user: "{{ gitea_bot_user }}", recorded: "{{ gitea_bot_token | length > 0 }}"}
+    - {name: kubelab-issue-writer, user: "{{ gitea_bot_user }}", recorded: "{{ gitea_issue_writer_token | length > 0 }}"}
     - {name: kubelab-reviewer, user: "{{ gitea_reviewer_user }}", recorded: "{{ gitea_reviewer_token | length > 0 }}"}
     - {name: kubelab-review-notice, user: "{{ gitea_reviewer_user }}", recorded: "{{ gitea_review_notice_token | length > 0 }}"}
     - {name: kubelab-issue-reader, user: "{{ gitea_reviewer_user }}", recorded: "{{ gitea_issue_reader_token | length > 0 }}"}
@@ -957,6 +959,51 @@
   delegate_to: localhost
   become: false
   when: gitea_reviewer_user | length > 0 and not gitea_issue_reader_staging_token
+  changed_when: true
+  no_log: true
+  tags: [gitea]
+
+# --- Forge task view: the issue-writing token (CONSOLE-004 AC2, #2570) --------------
+# The API's outbox worker writes issues to Gitea (ADR-066, amendments of 2026-11-13
+# and 2026-11-17). On the MACHINE account, the counterpart of the GitHub App's bot,
+# and not on the reviewer's: the reader above is the reviewer's, and a reader's
+# account that also wrote would void the separation. Prod only. Staging has no forge
+# writer, so no second mint exists and no staging record task. A distinct token name,
+# since Gitea refuses two of one name on an account (the bot's own is
+# `kubelab-provisioning`).
+
+- name: Mint the issue-writer token on the machine account
+  # Gated on the recorded secret being absent and `argv`, for the reasons the bot's
+  # mint task above records. Unlike the reviewer's tokens it needs no account guard:
+  # `gitea_bot_user` is always declared.
+  command:
+    argv:
+      - docker
+      - exec
+      - gitea
+      - su
+      - git
+      - -c
+      - >-
+        gitea admin user generate-access-token
+        --username {{ gitea_bot_user }}
+        --token-name kubelab-issue-writer
+        --scopes {{ gitea_issue_writer_scopes }}
+        --raw
+  register: _gitea_issue_writer_token
+  when: not gitea_issue_writer_token
+  changed_when: _gitea_issue_writer_token.rc == 0
+  no_log: true
+  tags: [gitea]
+
+- name: Record the issue-writer token in SOPS
+  # Controller-side, over STDIN, never argv -- as the bot's record task. Prod's file.
+  command: "{{ playbook_dir }}/../../../.venv/bin/toolkit secrets set apps.services.core.gitea.issue_writer_token --env {{ gitea_identity_env }} --stdin"
+  args:
+    stdin: "{{ _gitea_issue_writer_token.stdout }}"
+  delegate_to: localhost
+  become: false
+  when: not gitea_issue_writer_token
   changed_when: true
   no_log: true
   tags: [gitea]

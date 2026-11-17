@@ -554,8 +554,10 @@ infra:
     # (#2588) read this block, hence `infra.*` (ADR-036) and not a per-app namespace.
     # `github` names the `kubelab-console` GitHub App: two public identifiers, not
     # credentials. Its private key lives in SOPS at `apps.services.core.github_app.private_key`
-    # and the API's Gitea token at `apps.services.core.gitea.issue_reader_token`; both reach
-    # the API through `api-secrets`, never a ConfigMap (`tests/test_forge_credentials_delivery.py`).
+    # and the API's Gitea tokens at `apps.services.core.gitea.issue_reader_token` (read, both
+    # envs) and `issue_writer_token` (write, prod only: staging has no forge writer, ADR-066
+    # 2026-11-17); all reach the API through `api-secrets`, never a ConfigMap
+    # (`tests/test_forge_credentials_delivery.py`, `tests/test_gitea_issue_writer_token.py`).
     # The generator emits these as INFRA_FORGE_GITHUB_APP_ID and INFRA_FORGE_GITHUB_INSTALLATION_ID.
     github:
       app_id: 5573076
@@ -1372,6 +1374,14 @@ apps:
           # Staging's reader (#3267): its own token, the same grant, held equal to
           # the one above by `tests/test_gitea_issue_reader_staging.py`.
           issue_reader_staging: "read:issue"
+          # What the forge task view's API WRITES Gitea issues with (CONSOLE-004 AC2,
+          # ADR-066 amendments of 2026-11-13 and 2026-11-17), pinned by EQUALITY: it
+          # creates, labels, assigns, closes and comments on issues, all of the issue
+          # scope's write half, and reads no code. On the MACHINE account, not the
+          # reviewer's, so the reader's account stays unable to write. Prod only:
+          # staging has no forge writer, and no staging token is declared.
+          # `tests/test_gitea_issue_writer_token.py` ties it to `ISSUE_WRITER_SCOPES`.
+          issue_writer: "write:issue"
           # What the cluster pulls a private product's image with (IDP-053 S2c, D2),
           # pinned by EQUALITY: the kubelet reads a manifest and its blobs and never
           # pushes. A token on the reviewer's account, stored in common's file because
@@ -3188,8 +3198,11 @@ backup:
           claim: authelia-data
         sqlite: db.sqlite3
       postgres:
-        # Every Vikunja user, project and task, and the API's forge read model
-        # (the `api` database). A logical dump, never a file
+        # The whole cluster, by `pg_dumpall`: every Vikunja user, project and task, and
+        # every table of the API's `api` database, which is the forge read model AND what
+        # the read model is not (`forge_outbox`, `forge_write_audit`: an accepted write no
+        # forge has seen yet, and who asked for it; ADR-066 W6, #3616). A table added to
+        # either database needs no declaration here. A logical dump, never a file
         # copy: a running Postgres's data directory is not consistent on disk,
         # the same reason SQLite sources use `.backup`. `pvc` names the claim
         # this protects (the coverage guards read it); `pg_dumpall` replaces the

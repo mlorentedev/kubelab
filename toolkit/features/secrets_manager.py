@@ -821,6 +821,29 @@ SECRET_CATALOG: list[SecretSpec] = [
         envs=("prod", "staging"),
     ),
     SecretSpec(
+        key_path="apps.services.core.gitea.issue_writer_token",
+        description=(
+            "Gitea API token on the machine account (apps.auth.identities.machine); write:issue, used by "
+            "the forge task view's API to create and change issues through its outbox worker "
+            "(CONSOLE-004 AC2, ADR-066 amendments of 2026-11-13 and 2026-11-17). Prod only: staging has no "
+            "forge writer"
+        ),
+        # EXTERNAL for the reason `bot_token` gives: only Gitea honours what it mints.
+        kind=SecretKind.EXTERNAL,
+        services=("gitea", "api"),
+        rotate_note=(
+            "`make gitea-rotate-token TOKEN=issue_writer ENV=prod APPLY=1` (revoke, then unset), then "
+            "`make provision NODE=bee ENV=prod TAGS=gitea` to re-mint, then `make apply-secrets ENV=prod` "
+            "so the API Secret carries the new value. The mint task is gated on this key being absent; "
+            "never mint a second token by hand. Never record it in staging's or common's file: the API "
+            "delivers an optional key whenever its env's merged SOPS holds it, and "
+            "`tests/test_gitea_issue_writer_token.py` fails on it."
+        ),
+        # NEVER, for the reason measured on `bot_token`: Gitea's token API has no expiry field.
+        expiry=Expiry.NEVER,
+        envs=("prod",),
+    ),
+    SecretSpec(
         key_path="apps.services.core.gitea.registry_pull_token",
         description=(
             "Read-only Gitea API token on the reviewer's account (apps.auth.identities.reviewer); "

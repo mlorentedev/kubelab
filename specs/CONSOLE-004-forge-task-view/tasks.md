@@ -76,6 +76,8 @@ created: "2026-10-21"
 
 - [ ] [AC2] Outbox with an idempotency key; a write is pending until the forge confirms
   - [x] ✓ 2026-11-16 Schema: `forge_outbox` and `forge_write_audit`, no foreign key to the read model, store tests against Postgres; decisions in the ADR-066 amendment of 2026-11-16. The worker and the routes are the next slices
+  - [x] ✓ 2026-11-17 Credential: `issue_writer_token` (`write:issue`) on the machine account, prod only, minted by `beelink_services` from `token_scopes.issue_writer`, catalogued, rotatable (`TOKEN=issue_writer`), delivered as `FORGE_GITEA_WRITE_TOKEN` in `api-secrets`. Staging has no forge writer (ADR-066 amendment of 2026-11-17, W7), and a test fails if the key reaches staging's or common's SOPS. Minted when the owner runs `make provision NODE=bee ENV=prod TAGS=gitea`; the worker change reads the env var
+  - [ ] Decisions to build in the worker: an unknown-outcome create goes through the marker search (W8); one audit row per forge call, which needs `forge_write_audit.outcome` widened by a migration (W9); full-loop integration test (fake forge, real Postgres); first live write is a prod smoke on `personal/sandbox`
 - [ ] [AC2] Create (repository chosen by `area:`, `knowledge` fallback), label, assign, close and reopen
 - [x] ✓ 2026-11-13 [AC2] Test that no merge, review or reviewer-request route exists (#3425, read from the engine's routes)
 - [ ] [AC2] Audit row for every write
