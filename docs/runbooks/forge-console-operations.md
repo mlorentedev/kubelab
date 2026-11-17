@@ -3,7 +3,7 @@ id: forge-console-operations
 type: runbook
 status: active
 created: "2026-11-06"
-updated: "2026-11-06"
+updated: "2026-11-16"
 owner: manu
 ---
 
@@ -95,15 +95,14 @@ as the API names them:
 
 | Permission | Level | Why |
 |---|---|---|
-| `metadata` | read | listing the installation's repositories |
-| `issues` | write | the GitHub outbox (ADR-066, "the existing App is widened"); reads need only read |
+| `metadata` | read | listing the installation's repositories (the App's baseline) |
+| `issues` | write | the GitHub outbox (ADR-066, 2026-11-13 amendment); today's reads need only read |
 | `pull_requests` | read | pull-request state and reviews |
 | `checks` | read | CI state from check runs (ADR-074 D7) |
 | `statuses` | read | CI state from commit statuses, which is what `pr-agent` publishes |
 
-A widened permission is a request until the installation's owner accepts it:
-GitHub mails the request, and until it is accepted the installation keeps the old
-grant. `GET /app` lists what the App requests, so it cannot show that; the check
+A widened permission is a request until the installation's owner accepts it,
+and until then the installation keeps the old grant. `GET /app` lists what the App requests, so it cannot show that; the check
 reads the installation (`GET /app/installations/{id}`).
 
 ```bash

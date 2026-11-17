@@ -267,3 +267,49 @@ def test_the_runbook_names_every_required_permission_and_the_check() -> None:
     for name in REQUIRED_PERMISSIONS:
         assert f"`{name}`" in runbook, name
     assert "make forge-github-hook" in runbook
+
+
+def _run_command(hooks: FakeHooks, *args: str) -> Any:
+    """`toolkit services forge github-hook` against a fake App, with no SOPS and no network."""
+    from unittest import mock
+
+    from typer.testing import CliRunner
+
+    from toolkit.cli.services import app
+
+    merged = {
+        "infra": {"forge": {"github": {"app_id": 1, "installation_id": 2}}},
+        "apps": {
+            "platform": {"api": {"domain": "api.example", "forge_github_webhook_secret": "s"}},
+            "services": {"core": {"github_app": {"private_key": "pem"}}},
+        },
+    }
+    hooks.live.update({"url": "https://api.example/api/forge/webhooks/github"})
+    with (
+        mock.patch("toolkit.cli.services.ConfigurationManager") as config,
+        mock.patch("toolkit.features.github_app_hook.GitHubAppHooks", return_value=hooks) as api,
+    ):
+        config.return_value.get_merged_config.return_value = merged
+        result = CliRunner().invoke(app, ["forge", "github-hook", *args])
+    api.assert_called_once_with(1, 2, "pem")
+    return result
+
+
+def test_the_command_exits_zero_and_says_the_grant_is_ok() -> None:
+    result = _run_command(FakeHooks(dict(CORRECT)))
+    assert result.exit_code == 0, result.output
+    assert "grant ok" in result.output
+
+
+def test_the_command_exits_nonzero_on_a_pending_acceptance() -> None:
+    result = _run_command(FakeHooks(dict(CORRECT), permissions={**GRANTED, "issues": "read"}))
+    assert result.exit_code == 2, result.output
+    assert "permission short" in result.output and "issues needs write" in result.output
+    assert "grant ok" not in result.output
+
+
+def test_the_command_exits_nonzero_on_only_select_repositories() -> None:
+    result = _run_command(FakeHooks(dict(CORRECT), selection="selected"))
+    assert result.exit_code == 2, result.output
+    assert "repository access" in result.output
+    assert "grant ok" not in result.output

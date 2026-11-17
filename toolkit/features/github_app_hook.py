@@ -38,12 +38,13 @@ RECEIVER_PATH = "/api/forge/webhooks/github"
 #: App setting the API cannot change, so the plan reports a missing one instead.
 REQUIRED_EVENTS = ("issues", "pull_request")
 
-#: What the console needs from the installation, by GitHub's permission name. Read
-#: from the code that calls the API: `metadata` and `pull_requests` are the reads of
-#: apps/api `forge`, `checks` and `statuses` give a pull request its CI state (ADR-074
-#: D7), and `issues: write` is the GitHub outbox (ADR-066 A8, "the existing App is
-#: widened"). Beside REQUIRED_EVENTS rather than in common.yaml: it describes what this
-#: code calls, not an environment's value, and no other consumer reads it.
+#: What the console needs from the installation, by GitHub's permission name. Today the
+#: API reads `/repos/{o}/{r}/issues` (issues and pull requests) and `/installation/repositories`
+#: (`metadata`, `issues`, `pull_requests`); `checks` and `statuses` are for a pull request's
+#: CI state (ADR-074 D7) and `issues: write` for the GitHub outbox (ADR-066, amendment
+#: 2026-11-13, "the existing App is widened"), neither called yet. Beside REQUIRED_EVENTS
+#: rather than in common.yaml: it describes what this code calls, not an environment's value,
+#: and no other consumer reads it.
 REQUIRED_PERMISSIONS = {
     "metadata": "read",
     "issues": "write",
