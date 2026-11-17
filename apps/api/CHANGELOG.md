@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.13.0](https://github.com/mlorentedev/kubelab/compare/api-v1.12.1...api-v1.13.0) (2026-11-17)
+
+
+### Features
+
+* **api:** add the forge write outbox and audit tables ([#3616](https://github.com/mlorentedev/kubelab/issues/3616)) ([5657e2f](https://github.com/mlorentedev/kubelab/commit/5657e2fce171293a928e38088bdb496ae72416a9))
+
 ## [1.12.1](https://github.com/mlorentedev/kubelab/compare/api-v1.12.0...api-v1.12.1) (2026-11-15)
 
 

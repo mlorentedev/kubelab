@@ -67,7 +67,7 @@ CREATE_OUTPUT_JSON = json.dumps(
 )
 
 
-def _mock_mint(mocker, tmp_path, role="hosts", segment=SEGMENT_JSON, create_stdout=CREATE_OUTPUT_JSON):
+def _mock_mint(mocker, tmp_path, role="hosts", segment=SEGMENT_JSON, create_stdout=CREATE_OUTPUT_JSON, **mint_kwargs):
     """Run mint() with SOPS and ssh mocked; return (result, subprocess.run mock)."""
     mocker.patch(
         "toolkit.features.headscale_authkey.SecretsManager",
@@ -83,7 +83,7 @@ def _mock_mint(mocker, tmp_path, role="hosts", segment=SEGMENT_JSON, create_stdo
         ],
     )
     out = tmp_path / "key.out"
-    result = mint("prod", "tenant-example", role, out, ssh_target="deployer@vps")
+    result = mint("prod", "tenant-example", role, out, ssh_target="deployer@vps", **mint_kwargs)
     return result, run, out
 
 
@@ -299,6 +299,25 @@ class TestKeyDelivery:
         _result, run, _out = _mock_mint(mocker, tmp_path, role="clients")
         create_command = run.call_args_list[1].args[0][-1]
         assert "--ephemeral" in create_command
+
+    def test_a_host_mint_is_persistent_by_default(self, mocker, tmp_path) -> None:
+        """Tenant onboarding relies on hosts keys staying persistent (#3610)."""
+        _result, run, _out = _mock_mint(mocker, tmp_path, role="hosts")
+        create_command = run.call_args_list[1].args[0][-1]
+        assert "--ephemeral" not in create_command
+
+    def test_a_host_mint_with_the_flag_is_ephemeral(self, mocker, tmp_path) -> None:
+        """Disposable acceptance hosts opt in to a key that dies with the node (#3610)."""
+        _result, run, _out = _mock_mint(mocker, tmp_path, role="hosts", ephemeral=True)
+        create_command = run.call_args_list[1].args[0][-1]
+        assert "--tags tag:tenant-example-hosts" in create_command
+        assert "--ephemeral" in create_command
+
+    @pytest.mark.parametrize("flag", [False, True])
+    def test_a_client_mint_is_ephemeral_whatever_the_flag(self, mocker, tmp_path, flag) -> None:
+        _result, run, _out = _mock_mint(mocker, tmp_path, role="clients", ephemeral=flag)
+        create_command = run.call_args_list[1].args[0][-1]
+        assert create_command.count("--ephemeral") == 1
 
     def test_the_create_call_maps_every_argument(self, mocker, tmp_path) -> None:
         """AC1 end to end: tag from the segment, numeric owner id, expiration
@@ -568,3 +587,65 @@ class TestTransport:
             }
         }
         assert default_ssh_target() == "deployer@203.0.113.7"
+
+
+class TestCliAndMakeSurface:
+    """The consumer is the operator's command line, not the Python signature (#3610)."""
+
+    @pytest.mark.parametrize(
+        ("extra", "expected"),
+        [([], False), (["--ephemeral"], True)],
+    )
+    def test_the_cli_option_reaches_mint(self, mocker, tmp_path, extra, expected) -> None:
+        from typer.testing import CliRunner
+
+        from toolkit.cli.infra import headscale_app
+
+        minted = mocker.Mock(key_id="7", role="hosts", tag="tag:t-hosts", expiration="1h", out_path="k")
+        mint_mock = mocker.patch("toolkit.features.headscale_authkey.mint", return_value=minted)
+        result = CliRunner().invoke(
+            headscale_app,
+            ["authkey", "--segment", "t", "--role", "hosts", "--out", str(tmp_path / "k"), *extra],
+        )
+        assert result.exit_code == 0, result.output
+        assert mint_mock.call_args.kwargs["ephemeral"] is expected
+
+    @pytest.mark.parametrize(
+        ("make_args", "expected"),
+        [([], False), (["EPHEMERAL="], False), (["EPHEMERAL=1"], True)],
+    )
+    def test_the_make_target_passes_the_flag_through(self, make_args, expected) -> None:
+        dry_run = subprocess.run(
+            ["make", "-n", "headscale-authkey", "SEGMENT=t", "ROLE=hosts", "OUT=/dev/null", *make_args],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            cwd=Path(__file__).resolve().parents[1],
+            check=True,
+        ).stdout
+        command = next(line for line in dry_run.splitlines() if "infra headscale authkey" in line)
+        assert ("--ephemeral" in command) is expected
+
+    @pytest.mark.parametrize("value", ["0", "true", "yes", "TRUE"])
+    def test_the_make_target_refuses_any_other_spelling(self, value) -> None:
+        """A near-miss must not silently mint a persistent key (#3610 review).
+
+        TOOLKIT is overridden so that a broken guard runs `true`, never a mint.
+        """
+        result = subprocess.run(
+            [
+                "make",
+                "headscale-authkey",
+                "SEGMENT=t",
+                "ROLE=hosts",
+                "OUT=/dev/null",
+                "TOOLKIT=true",
+                f"EPHEMERAL={value}",
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            cwd=Path(__file__).resolve().parents[1],
+        )
+        assert result.returncode != 0
+        assert "EPHEMERAL must be 1 or unset" in result.stdout + result.stderr

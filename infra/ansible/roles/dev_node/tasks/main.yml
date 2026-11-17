@@ -243,6 +243,60 @@
       changed_when: _dotfiles.changed
       tags: [dev_node, dotfiles]
 
+    # --- poetry: the dotfiles' (#3577) ---
+    # The dotfiles' bootstrap installs poetry as a uv tool into ~/.local/bin/poetry.
+    # This role used to `pipx install --force` its own version over that path, the
+    # next bootstrap put the dotfiles' back, and every provision reported changed.
+    # The role installs none now; what is left is the pipx venv an earlier
+    # provision made. It is retired AFTER the bootstrap, and only once nothing
+    # points into it: the role never touches ~/.local/bin/poetry, and a bootstrap
+    # that stopped early (or has not yet replaced a link into the venv) leaves a
+    # working poetry and defers the retirement to the next pass. The path under
+    # ~/.local/share/uv/tools is never named.
+    # Drop these four tasks once every dev node has provisioned past #3577.
+    # tests/test_dev_node_poetry_owner.py.
+    - name: Look for the poetry venv pipx created
+      ansible.builtin.stat:
+        path: "{{ dev_node_home }}/.local/share/pipx/venvs/poetry"
+      register: _dev_node_pipx_poetry
+      check_mode: false
+      tags: [dev_node, dotfiles]
+
+    # The link and the venv's own poetry are compared by inode, not by the link's
+    # text: `stat` reports a link's target as a resolved path, so a symlinked home
+    # or ~/.local/share/pipx would spell the same file differently from the path
+    # the venv is named by here.
+    - name: Look at the poetry ~/.local/bin/poetry runs
+      ansible.builtin.stat:
+        path: "{{ dev_node_home }}/.local/bin/poetry"
+        follow: true
+        get_checksum: false
+      register: _dev_node_poetry_link
+      check_mode: false
+      tags: [dev_node, dotfiles]
+
+    - name: Look at the poetry the pipx venv holds
+      ansible.builtin.stat:
+        path: "{{ dev_node_home }}/.local/share/pipx/venvs/poetry/bin/poetry"
+        follow: true
+        get_checksum: false
+      register: _dev_node_pipx_poetry_bin
+      check_mode: false
+      tags: [dev_node, dotfiles]
+
+    - name: Retire the pipx poetry venv once nothing points into it
+      ansible.builtin.file:
+        path: "{{ dev_node_home }}/.local/share/pipx/venvs/poetry"
+        state: absent
+      when:
+        - _dev_node_pipx_poetry.stat.exists
+        - >-
+          not (_dev_node_poetry_link.stat.exists | default(false)
+          and _dev_node_pipx_poetry_bin.stat.exists | default(false)
+          and _dev_node_poetry_link.stat.inode | default(0) == _dev_node_pipx_poetry_bin.stat.inode | default(-1)
+          and _dev_node_poetry_link.stat.dev | default(0) == _dev_node_pipx_poetry_bin.stat.dev | default(-1))
+      tags: [dev_node, dotfiles]
+
     # --- node: resolved from mise, never pinned here (#3559) ---
     # The dotfiles' converge owns node and python: it writes them to
     # ~/.config/mise/conf.d/dotfiles.toml from its versions.conf. mise gives

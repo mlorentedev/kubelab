@@ -782,7 +782,10 @@ def headscale_recycle_stale(
 @headscale_app.command("authkey")
 def headscale_authkey(
     segment: Annotated[str, typer.Option("--segment", help="Segment name in apps.services.core.headscale.segments")],
-    role: Annotated[str, typer.Option("--role", help="hosts (persistent) or clients (ephemeral)")],
+    role: Annotated[
+        str,
+        typer.Option("--role", help="hosts (persistent unless --ephemeral) or clients (always ephemeral)"),
+    ],
     out: Annotated[Path, typer.Option("--out", "-o", help="Owner-only file to write the key to")],
     env: Annotated[str, typer.Option("--env", "-e", help="Environment whose SOPS segment declares the tag")] = "prod",
     expiration: Annotated[str, typer.Option("--expiration", help="Headscale duration, e.g. 1h, 30m")] = "1h",
@@ -791,11 +794,19 @@ def headscale_authkey(
         typer.Option("--ssh-target", help="user@host running Headscale; defaults to the VPS from the SSOT"),
     ] = None,
     container: Annotated[str, typer.Option("--container", help="Headscale container name")] = "headscale",
+    ephemeral: Annotated[
+        bool,
+        typer.Option(
+            "--ephemeral",
+            help="Make a hosts key ephemeral (for disposable hosts); clients keys always are",
+        ),
+    ] = False,
 ) -> None:
     """Mint one single-use tagged pre-auth key from the segment declaration (VPN-ACL-016, #2863).
 
     The tag comes from the SOPS segment for --segment; --role picks hosts or
-    clients. The key material is written to --out (owner-only, never
+    clients (--ephemeral makes a hosts key ephemeral too, for disposable hosts;
+    tenant hosts stay persistent without it). The key material is written to --out (owner-only, never
     overwritten) and printed nowhere: this output names the id, the tag, the
     expiry and the file. Run it from the authorized deploy controller (OPS-051)
     -- it performs a mutating operation on the VPS.
@@ -812,6 +823,7 @@ def headscale_authkey(
             expiration=expiration,
             ssh_target=ssh_target,
             container=container,
+            ephemeral=ephemeral,
         )
     except AuthKeyRefused as exc:
         logger.error(str(exc))
@@ -2338,10 +2350,11 @@ def ansible_doctor(
 ) -> None:
     """Diagnose the Ansible controller this checkout needs — offline, no host contact.
 
-    Four local checks, no network and no SSH, so this is safe to run before a
-    host window is agreed: `ansible-playbook` resolves, the Galaxy collections
-    are the ones `requirements.yml` pins, the config file in effect is this
-    repo's, and the static inventory parses.
+    Five local checks, no network and no SSH, so this is safe to run before a
+    host window is agreed: `ansible-playbook` resolves, its ansible-core is inside
+    the range `pyproject.toml` pins (#3623), the Galaxy collections are the ones
+    `requirements.yml` pins, the config file in effect is this repo's, and the
+    static inventory parses.
 
     `make setup-ansible` ends by running this, which is what turns that target
     from a report into a gate — it printed `skipping` and exited 0 on a machine
