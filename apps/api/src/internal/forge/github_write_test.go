@@ -94,6 +94,19 @@ func TestGitHubWriter(t *testing.T) {
 				Want: wantResult{Outcome: forge.OutcomeApplied, Status: 200},
 			},
 			{
+				// Only a 404 is ambiguous. Any other refusal is what it says, with no second call.
+				Name:  "remove_label refused with 403 is terminal after one call",
+				Write: forge.Write{Action: forge.ActionRemoveLabel, Source: ghSrc, Number: 5, Label: "x"},
+				Calls: []exchange{{Method: "DELETE", Path: "/repos/o/r/issues/5/labels/x", Status: 403, Answer: `{"message":"Forbidden"}`}},
+				Want:  wantResult{Outcome: forge.OutcomeFailed, Status: 403},
+			},
+			{
+				Name:  "remove_label answered 502 is retryable after one call",
+				Write: forge.Write{Action: forge.ActionRemoveLabel, Source: ghSrc, Number: 5, Label: "x"},
+				Calls: []exchange{{Method: "DELETE", Path: "/repos/o/r/issues/5/labels/x", Status: 502, Answer: `{}`}},
+				Want:  wantResult{Outcome: forge.OutcomeRetry, Status: 502},
+			},
+			{
 				Name:  "remove_label 404 then the issue is gone: terminal failure",
 				Write: forge.Write{Action: forge.ActionRemoveLabel, Source: ghSrc, Number: 5, Label: "x"},
 				Calls: []exchange{

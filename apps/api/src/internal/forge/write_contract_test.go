@@ -171,6 +171,9 @@ func statusRows() []statusRow {
 		{Name: "307 is refused, not followed", Status: 307, Create: f, Other: f},
 		{Name: "429", Status: 429, Create: u, Other: r},
 		{Name: "429 with Retry-After", Status: 429, Header: map[string]string{"Retry-After": "30"}, Create: u, Other: r, RetryAfter: 30 * time.Second},
+		// A negative or unreadable wait is no wait: the worker's backoff decides.
+		{Name: "429 with a negative Retry-After", Status: 429, Header: map[string]string{"Retry-After": "-5"}, Create: u, Other: r},
+		{Name: "429 with an unreadable Retry-After", Status: 429, Header: map[string]string{"Retry-After": "Wed, 18 Nov 2026 00:00:00 GMT"}, Create: u, Other: r},
 		{Name: "500", Status: 500, Create: u, Other: r},
 		{Name: "502", Status: 502, Create: u, Other: r},
 		{Name: "503", Status: 503, Create: u, Other: r},
