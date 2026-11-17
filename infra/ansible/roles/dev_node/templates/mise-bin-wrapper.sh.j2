@@ -18,9 +18,8 @@
 # script resolves against the mise install where its JS actually lives.
 #
 # Symlinking to npm-cli.js directly would also work and is deliberately not
-# done: mise's wrapper runs `mise reshim` after a global install, and this role
-# installs the agent CLIs with `npm i -g`. Dropping the wrapper would leave
-# those shims stale.
+# done: the wrapper stays the one mechanism for every tool, so nothing here has
+# to know which upstream entry point is a script and which is a binary.
 #
 # node and claude are real binaries and survive a symlink, but they use the same
 # wrapper anyway — one mechanism that is correct for both kinds beats two
@@ -36,20 +35,27 @@
 # Deliberately NOT solved by appending ~/.local/bin to /etc/environment: that is
 # a user-writable directory on root's PATH, and a wrapper says exactly which
 # tools are exposed instead of exposing whatever happens to land in that dir.
-{% if wrapper_mise_tool is defined %}
+{% if wrapper_via_mise is defined %}
 #
-# `wrapper_mise_tool` set: the directory is asked of mise on every call, never
+# `wrapper_via_mise` set: the executable is asked of mise on every call, never
 # written into this file. The dotfiles' converge prunes the mise installs no
 # config pins any more, so the day it bumps NODE_VERSION the tree a provision saw
 # is gone, and a wrapper that exec'd that path would point at nothing until the
 # next provision (#3559). Asked from the developer user's home, with its HOME, so
 # it answers the same for any caller and a mise.toml in the caller's cwd cannot
-# choose a different node.
-node_dir="$(cd "{{ dev_node_home }}" && HOME="{{ dev_node_home }}" "{{ dev_node_home }}/.local/bin/mise" where {{ wrapper_mise_tool }})" || {
-    echo "{{ item }}: mise has no node installed for {{ dev_node_user | default('the dev user') }}; the dotfiles' tools step installs it (dotf converge)" >&2
+# choose a different install.
+#
+# `mise which`, not `mise where` plus `/bin/<item>`: where an executable sits in
+# an install is the backend's business. node keeps its entry points under bin/;
+# the aqua claude is a single binary at the install root, with no bin/ at all
+# (#3566). `which` answers with the real file, never a shim, which is what npm's
+# BASH_SOURCE resolution above needs. Only stdout is captured: mise may talk on
+# stderr, and that must not become part of the path.
+mise_tool="$(cd "{{ dev_node_home }}" && HOME="{{ dev_node_home }}" "{{ dev_node_home }}/.local/bin/mise" which {{ item }})" || {
+    echo "{{ item }}: mise has no {{ item }} for {{ dev_node_user | default('the dev user') }}; the dotfiles' tools step installs it (dotf converge)" >&2
     exit 127
 }
-exec "$node_dir/bin/{{ item }}" "$@"
+exec "$mise_tool" "$@"
 {% else %}
 exec "{{ wrapper_src_dir }}/{{ item }}" "$@"
 {% endif %}

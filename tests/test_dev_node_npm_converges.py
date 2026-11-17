@@ -1,21 +1,17 @@
-"""The dev node's global agent CLIs are installed once, not on every provision (#1300).
+"""Claude Code has one owner on the dev node, and it is not npm (#3566).
 
-The role used to run `mise exec -- npm install -g <pkg>` with
-`changed_when: "'added' in stdout or 'changed' in stdout"`. npm prints
-`changed 2 packages` for a package that is already installed at the same
-version, because it rewrites the shims and calls that a change. So the guard
-matched the case it was written to exclude, the task reported `changed` on every
-pass, and every provision reinstalled Claude Code.
+The role used to install `@anthropic-ai/claude-code` with the npm module into the
+mise node's global tree (#1300 made that converge). The dotfiles' converge also
+installs `claude` through mise (`claude = "latest"` in
+`~/.config/mise/conf.d/dotfiles.toml`, aqua backend). Two installs of one tool
+land in different paths, so which one a shell or an agent launcher runs depends on
+PATH order, the two drift to different versions, and nothing reports it. It also
+tied the binary to the node that npm ran in: a `NODE_VERSION` bump left
+`/usr/local/bin/claude` with nothing behind it until the next provision.
 
-The fix declares the state instead of parsing npm's prose: the `npm` module with
-`state: present` lists the global tree first and installs only what is missing.
-
-Not pinned, deliberately. `@anthropic-ai/claude-code` updates itself in place
-(measured on ace2 2026-10-01: npm-installed, 2.1.241). A pinned version would
-make Ansible and the updater take turns: the updater moves it forward, the next
-provision moves it back and reports `changed`. That is the same unconverging role
-under a different cause. `present` leaves the version to the updater and the
-existence of the tool to Ansible.
+The role now only exposes the mise-managed binary: its `/usr/local/bin/claude`
+wrapper asks mise (tests/test_dev_node_mise_owner.py runs it). Nothing here may
+install an agent CLI of its own again.
 """
 
 from __future__ import annotations
@@ -27,6 +23,9 @@ import yaml
 REPO = Path(__file__).resolve().parent.parent
 ROLE = REPO / "infra/ansible/roles/dev_node"
 
+NPM_MODULES = ("community.general.npm", "npm")
+COMMANDS = ("ansible.builtin.command", "command", "ansible.builtin.shell", "shell")
+
 
 def _tasks() -> list[dict]:
     """Every task in the role, including those nested in a block."""
@@ -37,53 +36,77 @@ def _tasks() -> list[dict]:
     return flat
 
 
-def _npm_install_task() -> dict:
+def _role_files() -> list[Path]:
+    return [p for p in ROLE.rglob("*") if p.is_file()]
+
+
+def test_no_task_installs_a_package_with_npm() -> None:
+    """The npm module with anything but `absent` is an install the dotfiles do not know about."""
     for task in _tasks():
-        if task.get("loop") == "{{ dev_node_global_agent_npm_packages }}":
-            return task
-    raise AssertionError("no task loops over dev_node_global_agent_npm_packages")
-
-
-def test_global_agent_clis_use_the_npm_module_not_a_command() -> None:
-    task = _npm_install_task()
-    module = task.get("community.general.npm")
-    assert module is not None, (
-        "the global agent CLI install must use community.general.npm; a command "
-        "task depends on parsing npm's output, which says `changed` for a no-op"
-    )
-    assert module.get("global") is True
-    assert module.get("name") == "{{ item }}"
-
-
-def test_the_install_ensures_presence_and_never_chases_latest() -> None:
-    module = _npm_install_task()["community.general.npm"]
-    assert module.get("state", "present") == "present", (
-        "state must be present: `latest` reinstalls whenever the registry moves, and the CLI already updates itself"
-    )
-
-
-def test_the_install_uses_the_active_mise_node() -> None:
-    """The module must run the node mise has active, not whatever is first on PATH.
-
-    The version is mise's answer (`mise where node`), never a pin of the role's own:
-    the dotfiles own node, and a second pin shadows theirs (#3559)."""
-    task = _npm_install_task()
-
-    def resolve(value: str) -> str:
-        for name, sub in (task.get("vars") or {}).items():
-            value = value.replace("{{ " + name + " }}", sub)
-        return value
-
-    node_bin = "{{ _dev_node_node_where.stdout | trim }}/bin"
-    assert resolve(task["community.general.npm"].get("executable", "")) == f"{node_bin}/npm"
-    assert node_bin in resolve(task["environment"]["PATH"]), (
-        "mise's bin/npm is a script that execs `node`, so node must be on PATH too"
-    )
+        for key in NPM_MODULES:
+            module = task.get(key)
+            if module is not None:
+                assert module.get("state") == "absent", (
+                    f"{task.get('name')!r} installs with npm: a tool the role needs belongs to the dotfiles' mise set"
+                )
 
 
 def test_no_task_runs_npm_install_as_a_raw_command() -> None:
     for task in _tasks():
-        for key in ("ansible.builtin.command", "command", "ansible.builtin.shell", "shell"):
+        for key in COMMANDS:
             body = task.get(key)
             cmd = body.get("cmd", "") if isinstance(body, dict) else (body or "")
-            assert "npm install -g" not in cmd, f"{task.get('name')!r} still shells out to npm install -g"
+            assert "npm install" not in cmd and "npm i " not in cmd, f"{task.get('name')!r} shells out to npm install"
+
+
+def test_claude_code_is_not_installed_by_the_role() -> None:
+    """`absent` is the only way the package may appear: a migration that removes the old install."""
+    for task in _tasks():
+        if "block" in task:
+            continue  # its children are listed on their own
+        module = next((task[k] for k in NPM_MODULES if k in task), None)
+        if module is not None and "claude-code" in str(module.get("name")):
+            assert module.get("state") == "absent"
+            continue
+        assert "claude-code" not in str(task), f"{task.get('name')!r} still mentions the npm package"
+
+
+def test_the_defaults_declare_no_agent_npm_packages() -> None:
+    for path in _role_files():
+        text = path.read_text(encoding="utf-8")
+        assert "dev_node_global_agent_npm_packages" not in text, f"{path.relative_to(REPO)} still reads the npm list"
+    defaults = (ROLE / "defaults/main.yml").read_text(encoding="utf-8")
+    assert "@anthropic-ai/claude-code" not in defaults
+
+
+# --- the npm install an earlier provision left behind ------------------------
+# Dropping the install task does not remove what it installed: the package stays
+# in the mise node's lib/node_modules, and its `bin/claude` is a second `claude`
+# inside mise until a node bump reinstalls that node. One task retires it.
+
+RETIRE_TASK = "Retire the npm-installed Claude Code the role used to provision"
+
+
+def _index(name: str) -> int:
+    (i,) = [i for i, t in enumerate(_tasks()) if t.get("name") == name]
+    return i
+
+
+def test_the_old_npm_install_is_retired_not_left_as_a_second_claude() -> None:
+    task = _tasks()[_index(RETIRE_TASK)]
+    module = task["community.general.npm"]
+    assert module["name"] == "@anthropic-ai/claude-code"
+    assert module["global"] is True
+    assert module["state"] == "absent", "present would reinstall the second owner"
+    assert module["executable"] == "{{ _dev_node_node_where.stdout | trim }}/bin/npm"
+    node_bin = "{{ _dev_node_node_where.stdout | trim }}/bin"
+    assert node_bin in task["environment"]["PATH"], "npm is a script that execs node"
+
+
+def test_the_retirement_runs_after_node_is_resolved_and_repaired_and_carries_their_tags() -> None:
+    tasks = _tasks()
+    retire = tasks[_index(RETIRE_TASK)]
+    resolve = tasks[_index("Resolve the node install mise has active")]
+    repair = tasks[_index("Reinstall the active node when its npm or npx is gone")]
+    assert tasks.index(resolve) < tasks.index(repair) < tasks.index(retire)
+    assert set(retire["tags"]) - {"dev_node"} <= set(resolve["tags"]), "`--tags mise` would read an undefined register"
