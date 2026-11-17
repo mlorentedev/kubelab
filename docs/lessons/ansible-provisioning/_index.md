@@ -4,6 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 764 | [Retire a second installer's leftover before the owner runs, and by path, not with the old tool's uninstall](lesson-764-retire-a-second-installers-leftover-before-the-owner-runs-and-by-path.md) | 2026-11-16 |
 | 763 | [Ask mise for the executable, not for the install directory plus a layout](lesson-763-ask-the-tool-manager-for-the-executable-not-the-install-and-a-layout.md) | 2026-11-16 |
 | 757 | [Two writers of one mise tool fail whichever owner checks its own pin](lesson-757-two-writers-of-one-mise-tool-fail-the-owner-that-checks.md) | 2026-11-14 |
 | 748 | [A version directory says a toolchain was installed, not that it runs](lesson-748-a-version-directory-says-a-toolchain-was-installed-not-that-it-runs.md) | 2026-11-13 |
