@@ -61,7 +61,7 @@ apps:
       health_path: /healthz
       enable_auth: false
       auth_level: bypass
-      version: sha-bbb4c929d205
+      version: sha-9c6d2af18237
     console:
       version: sha-a07adfd
 
