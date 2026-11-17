@@ -123,7 +123,8 @@ def test_a_node_without_poetry_stops_the_play_with_the_cause() -> None:
 # --- the retirement of the pipx venv an earlier provision left ----------------
 
 STAT_VENV = "Look for the poetry venv pipx created"
-STAT_LINK = "Look at what ~/.local/bin/poetry points to"
+STAT_LINK = "Look at the poetry ~/.local/bin/poetry runs"
+STAT_VENV_BIN = "Look at the poetry the pipx venv holds"
 RM_VENV = "Retire the pipx poetry venv once nothing points into it"
 
 
@@ -137,12 +138,14 @@ def test_the_venv_goes_only_when_it_exists_and_no_link_points_into_it() -> None:
     """While the link still points into the venv, removing it would leave a node with no poetry."""
     link = _by_name(STAT_LINK)
     assert link["ansible.builtin.stat"]["path"] == POETRY_LINK
-    assert link["ansible.builtin.stat"]["follow"] is False, "a followed link answers about its target"
+    assert link["ansible.builtin.stat"]["follow"] is True, "the link is compared by what it runs, not by its text"
+    assert _by_name(STAT_VENV_BIN)["ansible.builtin.stat"]["follow"] is True
     rm = _by_name(RM_VENV)
     assert rm["ansible.builtin.file"] == {"path": PIPX_VENV, "state": "absent"}
     cond = " ".join(rm["when"])
     assert "exists" in cond, "the venv-exists condition is what makes the second pass `changed=0`"
-    assert "islnk" in cond and "/.local/share/pipx/venvs/poetry/" in cond
+    assert "inode" in cond and "dev" in cond, "the same file is told by its inode, whatever path spells it"
+    assert "lnk_source" not in cond, "a link's text is resolved by stat and spelled differently from the venv's path"
 
 
 def test_the_role_never_touches_the_poetry_link_or_the_uv_tool() -> None:
@@ -152,13 +155,13 @@ def test_the_role_never_touches_the_poetry_link_or_the_uv_tool() -> None:
             body = task.get(key)
             if body is not None:
                 assert body.get("path") != POETRY_LINK, f"{task.get('name')!r} writes the poetry link"
-    for name in (STAT_VENV, STAT_LINK, RM_VENV):
+    for name in (STAT_VENV, STAT_LINK, STAT_VENV_BIN, RM_VENV):
         assert UV_TOOL_POETRY not in str(_by_name(name)), f"{name!r} reaches the dotfiles' poetry"
 
 
 def test_the_venv_is_retired_after_the_bootstrap_has_had_its_turn() -> None:
     """Before it, the link may still point into the venv; after it, the dotfiles' link is the one there."""
-    order = [_index(n) for n in (STAT_VENV, STAT_LINK, RM_VENV)]
+    order = [_index(n) for n in (STAT_VENV, STAT_LINK, STAT_VENV_BIN, RM_VENV)]
     assert order == sorted(order), "look before removing"
     assert _index(BOOTSTRAP) < order[0]
     assert order[-1] < _index("Read the poetry version the dev user has")
@@ -167,7 +170,7 @@ def test_the_venv_is_retired_after_the_bootstrap_has_had_its_turn() -> None:
 def test_a_run_that_retires_also_runs_the_bootstrap() -> None:
     """`--tags dotfiles` runs both, so the link the retirement reads is the bootstrap's."""
     bootstrap = _by_name(BOOTSTRAP)
-    for name in (STAT_VENV, STAT_LINK, RM_VENV):
+    for name in (STAT_VENV, STAT_LINK, STAT_VENV_BIN, RM_VENV):
         assert set(_by_name(name)["tags"]) <= set(bootstrap["tags"]), f"{name!r} can run without the bootstrap"
 
 
@@ -177,7 +180,7 @@ def test_a_run_that_retires_also_runs_the_bootstrap() -> None:
 
 
 def _run_retirement(home: Path) -> subprocess.CompletedProcess[str]:
-    names = (STAT_VENV, STAT_LINK, RM_VENV)
+    names = (STAT_VENV, STAT_LINK, STAT_VENV_BIN, RM_VENV)
     tasks = [t for t in _load("main.yml") if t.get("name") in names]
     assert [t["name"] for t in tasks] == list(names)
     play = [
@@ -259,6 +262,27 @@ def test_the_venv_stays_while_the_link_still_points_into_it(tmp_path: Path) -> N
     assert result.returncode == 0, result.stdout + result.stderr
     assert (home / ".local/bin/poetry").resolve() == (home / ".local/share/pipx/venvs/poetry/bin/poetry").resolve()
     assert (home / ".local/share/pipx/venvs/poetry/bin/poetry").exists()
+    assert _changed(result) == 0
+
+
+@needs_ansible
+@pytest.mark.allow_host_clients(reason="runs ansible-playbook against localhost and a temporary home")
+def test_a_link_spelled_through_a_symlinked_pipx_dir_still_keeps_the_venv(tmp_path: Path) -> None:
+    """`stat` resolves a link's target, so a text match on the venv's path misses a symlinked parent."""
+    home = tmp_path / "home"
+    (home / ".local/bin").mkdir(parents=True)
+    real_pipx = tmp_path / "elsewhere/pipx"
+    venv_bin = real_pipx / "venvs/poetry/bin"
+    venv_bin.mkdir(parents=True)
+    (venv_bin / "poetry").write_text("pipx poetry 2.2.1\n", encoding="utf-8", newline="\n")
+    (home / ".local/share").mkdir(parents=True)
+    (home / ".local/share/pipx").symlink_to(real_pipx)
+    (home / ".local/bin/poetry").symlink_to(venv_bin / "poetry")
+
+    result = _run_retirement(home)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (venv_bin / "poetry").exists(), "the link still runs this file"
     assert _changed(result) == 0
 
 
