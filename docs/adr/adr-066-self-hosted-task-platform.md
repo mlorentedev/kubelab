@@ -232,7 +232,7 @@ A2 says every quick action is an outbox row with an idempotency key, shown as pe
 
 **W2 · The forge confirms.** A write stops being pending when the forge answers 2xx. The worker then applies the change to the read model. Webhooks and the reconcile read only reconcile; they do not settle an outbox row.
 
-**W3 · Failure classes.** A network error, a 5xx and a 429 leave the row `pending` and move `next_attempt_at` out by a backoff. A 4xx is `failed`, terminal. The audit row's `outcome` is `applied` or `failed`.
+**W3 · Failure classes.** A network error, a 5xx and a 429 leave the row `pending` and move `next_attempt_at` out by a backoff. Any other 4xx is `failed`, terminal. The audit row's `outcome` is `applied` or `failed`.
 
 **W4 · An unknown outcome of a create is resolved before it is retried.** The row is set `in_flight` and committed before the forge is called, and the created issue's body carries a hidden marker, `<!-- kubelab-write:<outbox id> -->`. A row found `in_flight` after a crash is resolved by searching the forge for that marker before posting again, so a crash between the forge's 2xx and the commit never opens a second issue. The marker exists for a create because a create has no issue number to look up until the forge answers.
 

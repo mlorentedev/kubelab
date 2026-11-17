@@ -40,7 +40,7 @@ CREATE TABLE forge_outbox (
 -- What the worker scans: rows still owed to a forge, oldest due first.
 CREATE INDEX forge_outbox_due ON forge_outbox (next_attempt_at) WHERE status IN ('pending', 'in_flight');
 
--- One row per write the forge settled, applied or refused for good. A record, not a
+-- What the forge settled for a write, applied or refused for good. A record, not a
 -- cache: it is never deleted by a rebuild and has no foreign key, so removing an
 -- outbox row cannot take its audit with it.
 CREATE TABLE forge_write_audit (

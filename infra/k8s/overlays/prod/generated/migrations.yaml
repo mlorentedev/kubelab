@@ -6,7 +6,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: api-migrations-b56aa0f1a5
+  name: api-migrations-26026eee3a
   namespace: kubelab
   labels:
     app.kubernetes.io/name: api-migrate
@@ -163,7 +163,7 @@ data:
     -- What the worker scans: rows still owed to a forge, oldest due first.
     CREATE INDEX forge_outbox_due ON forge_outbox (next_attempt_at) WHERE status IN ('pending', 'in_flight');
 
-    -- One row per write the forge settled, applied or refused for good. A record, not a
+    -- What the forge settled for a write, applied or refused for good. A record, not a
     -- cache: it is never deleted by a rebuild and has no foreign key, so removing an
     -- outbox row cannot take its audit with it.
     CREATE TABLE forge_write_audit (
@@ -184,17 +184,17 @@ data:
     );
 
   atlas.sum: |
-    h1:X2bBOjHZranDNN1TEcvhxOMJAkKI6YU6mi9PKri8As4=
+    h1:t+aoWbtaFbpEL8JWSscO8p82SXE3BUsrY7hdJfNq56A=
     20261102000000_forge_read_model.sql h1:vPcaxFZHALwGGJMNHjzj5XrHFyU4Z5wbwn1FFpvksdI=
     20261112000000_console_usage.sql h1:rTi+cJev6TDu65OL/U5FmGzxmeJkyrxlmPQCKS7ZmMI=
     20261113000000_forge_stats.sql h1:BhsPLYv+8HYAmBbhSwQbEALEbiQmsdvpyZ4UG4PVfqI=
-    20261116000000_forge_write_outbox.sql h1:qFvNa3xdEglIrHgVNDBAX0a3KXTNut7QhwpDXpxHulo=
+    20261116000000_forge_write_outbox.sql h1:dhxYKSxzM3H+K3T4SYyNiFDjcENeyhPdrdQqjtLiMpE=
 
 ---
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: api-migrate-b56aa0f1a5
+  name: api-migrate-26026eee3a
   namespace: kubelab
   labels:
     app.kubernetes.io/name: api-migrate
@@ -220,7 +220,7 @@ spec:
       volumes:
         - name: migrations
           configMap:
-            name: api-migrations-b56aa0f1a5
+            name: api-migrations-26026eee3a
       containers:
         - name: atlas
           image: arigaio/atlas:1.3.0
