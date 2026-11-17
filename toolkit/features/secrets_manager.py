@@ -873,15 +873,15 @@ SECRET_CATALOG: list[SecretSpec] = [
         key_path="apps.services.core.gitea.agent_token",
         description=(
             "Gitea API token of the agents' authoring account (apps.auth.identities.agent); "
-            "write:issue + write:repository, copied to the workstation's Bitwarden for dotf (AUTH-022)"
+            "write:issue + write:repository, read from SOPS by unattended agents only (AUTH-022, ADR-062 2026-11-16)"
         ),
         # EXTERNAL for the reason `bot_token` gives: only Gitea honours what it mints.
         kind=SecretKind.EXTERNAL,
         services=("gitea",),
         rotate_note=(
             "`make gitea-rotate-token TOKEN=agent ENV=prod APPLY=1` (revoke, then unset), then "
-            "`make provision NODE=bee ENV=prod TAGS=gitea` to re-mint, then `make "
-            "secrets-copy-gitea-agent-token` so the Bitwarden copy dotf reads carries the new value. "
+            "`make provision NODE=bee ENV=prod TAGS=gitea` to re-mint; its consumers read SOPS, so "
+            "nothing else is copied. "
             "The mint task is gated on this key being absent; never mint a second token by hand."
         ),
         # NEVER, for the reason measured on `bot_token`: Gitea's token API has no expiry field.
