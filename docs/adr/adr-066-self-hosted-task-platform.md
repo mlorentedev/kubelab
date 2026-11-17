@@ -224,6 +224,26 @@ A2's narrow writes said every write is attributed to the signed-in identity and 
 
 **Gitea: a write token on the bot account.** `issue_writer` (`write:issue`) is a new token in `token_scopes`, minted on the machine account and held in SOPS at `apps.services.core.gitea.issue_writer_token`. It is separate from the reviewer's `issue_reader`, so A2's separation holds on Gitea. A writer on the bot is the counterpart of the GitHub App's bot, and the audit row carries the person here too. That token is minted with the outbox change, not this one.
 
+### 2026-11-16 — The write path: outbox, idempotency and failure classes (CONSOLE-004, #2570)
+
+A2 says every quick action is an outbox row with an idempotency key, shown as pending until the forge confirms, and the 2026-11-13 amendment says who authenticates it. This one records how a write is accepted, retried and recovered. It ships with the schema (`forge_outbox`, `forge_write_audit`); the worker and the routes are later changes. The decisions are numbered W1 to W6 so they do not collide with the D-numbers of the original decision.
+
+**W1 · Idempotency is the client's, and required.** Every write route requires a client-supplied `Idempotency-Key` header. A missing key is a 400. The key is unique per actor (`UNIQUE (actor, idempotency_key)`, both columns `NOT NULL`, since Postgres treats NULLs as distinct and a nullable key would escape the constraint), the actor being `Remote-User` on the operator's route and the machine identity on the token route. A row stores a hash of the request (`request_hash`): the same key with a different request is a 422, as in the IETF Idempotency-Key draft, and a replay returns the stored `response` (a created issue's number and URL).
+
+**W2 · The forge confirms.** A write stops being pending when the forge answers 2xx. The worker then applies the change to the read model. Webhooks and the reconcile read only reconcile; they do not settle an outbox row.
+
+**W3 · Failure classes.** A network error, a 5xx and a 429 leave the row `pending` and move `next_attempt_at` out by a backoff. A 4xx is `failed`, terminal. The audit row's `outcome` is `applied` or `failed`.
+
+**W4 · An unknown outcome of a create is resolved before it is retried.** The row is set `in_flight` and committed before the forge is called, and the created issue's body carries a hidden marker, `<!-- kubelab-write:<outbox id> -->`. A row found `in_flight` after a crash is resolved by searching the forge for that marker before posting again, so a crash between the forge's 2xx and the commit never opens a second issue. The marker exists for a create because a create has no issue number to look up until the forge answers.
+
+**W5 · Staging writes to a Gitea sandbox only.** Prod reads `github:mlorentedev/*`, so a GitHub sandbox repository would appear in the real queue. Staging writes only to a Gitea sandbox repository, whose name a later change declares. With none declared, staging writes fail closed. GitHub writes are covered by contract tests, not exercised from staging.
+
+**W6 · The outbox and the audit are not a cache.** A2's read model is rebuildable from the forges; these two tables are not, because an accepted write no forge has seen yet and the record of who asked for it exist nowhere else. Neither has a foreign key to `forge_source` or `forge_item`, so a create may name a repository the read model has not met and a rebuild that empties the read model, even with `CASCADE`, does not reach them. The audit has no foreign key to the outbox either. A rebuild of the read model never deletes an audit row. `store/forge_outbox_test.go` empties the read model with `TRUNCATE ... CASCADE` and asserts both tables survive.
+
+**Backup.** The node backup's `postgres` source is a `pg_dumpall` of the whole cluster (`backup.sources.postgres` in `common.yaml`; `tests/test_node_backup_capture_postgres.py` runs the capture and refuses a dump without its completion trailer). Every table of the `api` database is in it, these two included, with no per-table declaration to forget. The restore rehearsal AC7 asks for is not done by this change.
+
+**Not decided here.** The worker's backoff schedule, the route shapes, the Gitea sandbox's name, and whether a create that ends in a network error with no answer goes through W4's marker search before its retry, as a row found `in_flight` after a crash does. The 2026-11-13 amendment has the `issue_writer` token minted "with the outbox change"; this change is the schema only, so the token comes with the worker.
+
 ## References
 
 - [ADR-016](adr-016-oidc-centralized-auth.md) (OIDC Centralized Auth)
