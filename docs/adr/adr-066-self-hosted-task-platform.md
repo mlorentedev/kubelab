@@ -242,7 +242,7 @@ A2 says every quick action is an outbox row with an idempotency key, shown as pe
 
 **Backup.** The node backup's `postgres` source is a `pg_dumpall` of the whole cluster (`backup.sources.postgres` in `common.yaml`; `tests/test_node_backup_capture_postgres.py` runs the capture and refuses a dump without its completion trailer). Every table of the `api` database is in it, these two included, with no per-table declaration to forget. The restore rehearsal AC7 asks for is not done by this change.
 
-**Not decided here.** The worker's backoff schedule, the route shapes, the Gitea sandbox's name, and whether a create that ends in a network error with no answer goes through W4's marker search before its retry, as a row found `in_flight` after a crash does. The 2026-11-13 amendment has the `issue_writer` token minted "with the outbox change"; this change is the schema only, so the token comes with the worker.
+**Not decided here.** The worker's backoff schedule, the route shapes, the Gitea sandbox's name, whether the audit holds one row per write or one per attempt (the schema allows both; a `UNIQUE (outbox_id)` is the change if it is one per write, and the tables are empty until the worker lands), and whether a create that ends in a network error with no answer goes through W4's marker search before its retry, as a row found `in_flight` after a crash does. The 2026-11-13 amendment has the `issue_writer` token minted "with the outbox change"; this change is the schema only, so the token comes with the worker.
 
 ## References
 
