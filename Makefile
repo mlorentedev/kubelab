@@ -1238,6 +1238,7 @@ headscale-authkey: ## Mint a one-off tagged pre-auth key (SEGMENT=... ROLE=hosts
 	@test -n "$(OUT)" || (echo "Usage: make headscale-authkey SEGMENT=<name> ROLE=hosts|clients OUT=<file> [ENV=prod] [EXPIRATION=1h] [EPHEMERAL=1]" && exit 1)
 	@test -n "$(ROLE)" || (echo "Usage: make headscale-authkey SEGMENT=<name> ROLE=hosts|clients OUT=<file> [ENV=prod] [EXPIRATION=1h] [EPHEMERAL=1]" && exit 1)
 	@test -n "$(filter hosts clients,$(ROLE))" || (echo "ROLE must be hosts or clients" && exit 1)
+	@test -z "$(EPHEMERAL)" -o "$(EPHEMERAL)" = "1" || (echo "EPHEMERAL must be 1 or unset, got '$(EPHEMERAL)': any other spelling would silently mint a persistent key" && exit 1)
 	@$(TOOLKIT) infra headscale authkey --segment $(SEGMENT) --role $(ROLE) --out $(OUT) --env $(or $(filter staging prod,$(ENV)),prod) $(if $(EXPIRATION),--expiration $(EXPIRATION),) $(if $(filter 1,$(EPHEMERAL)),--ephemeral,)
 
 # Disk ceiling on a live node (GCP-001 AC8). Random 4K, `--direct=1`, bounded

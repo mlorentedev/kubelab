@@ -612,7 +612,7 @@ class TestCliAndMakeSurface:
 
     @pytest.mark.parametrize(
         ("make_args", "expected"),
-        [([], False), (["EPHEMERAL=0"], False), (["EPHEMERAL=1"], True)],
+        [([], False), (["EPHEMERAL="], False), (["EPHEMERAL=1"], True)],
     )
     def test_the_make_target_passes_the_flag_through(self, make_args, expected) -> None:
         dry_run = subprocess.run(
@@ -625,3 +625,27 @@ class TestCliAndMakeSurface:
         ).stdout
         command = next(line for line in dry_run.splitlines() if "infra headscale authkey" in line)
         assert ("--ephemeral" in command) is expected
+
+    @pytest.mark.parametrize("value", ["0", "true", "yes", "TRUE"])
+    def test_the_make_target_refuses_any_other_spelling(self, value) -> None:
+        """A near-miss must not silently mint a persistent key (#3610 review).
+
+        TOOLKIT is overridden so that a broken guard runs `true`, never a mint.
+        """
+        result = subprocess.run(
+            [
+                "make",
+                "headscale-authkey",
+                "SEGMENT=t",
+                "ROLE=hosts",
+                "OUT=/dev/null",
+                "TOOLKIT=true",
+                f"EPHEMERAL={value}",
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            cwd=Path(__file__).resolve().parents[1],
+        )
+        assert result.returncode != 0
+        assert "EPHEMERAL must be 1 or unset" in result.stdout + result.stderr

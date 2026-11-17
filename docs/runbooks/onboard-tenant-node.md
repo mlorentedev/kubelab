@@ -169,7 +169,8 @@ ssh vps-pub "sudo docker exec headscale headscale preauthkeys create \
   that is torn down afterwards: headscale then drops the node on its own once it
   goes offline, so no stale entry is left to clean up. Never use it for a tenant
   host that must survive a reboot or an outage. Clients keys are always
-  ephemeral; the flag changes nothing for them.
+  ephemeral; the flag changes nothing for them. `EPHEMERAL` accepts only `1`
+  (or unset); any other value is refused rather than minting a persistent key.
 - **Record the key's ID at mint**: `preauthkeys list` shows it in the ID column;
   the tenant inventory keeps it (step 7) — revocation expires by ID, not by owner.
 - **One-time**: consumed by a *successful* registration; a rejected attempt does
