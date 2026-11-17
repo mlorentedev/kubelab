@@ -19,7 +19,7 @@ from typing import Any
 
 import yaml
 
-from toolkit.features.gitea_tokens import ISSUE_WRITER_SCOPES, ROTATABLE_TOKENS
+from toolkit.features.gitea_tokens import ISSUE_WRITER_SCOPES, ROTATABLE_TOKENS, plan_rotation, rotation_store_env
 from toolkit.features.k8s_secrets import SECRET_DEFINITIONS
 from toolkit.features.secrets_manager import SECRET_CATALOG, Expiry, SecretKind
 
@@ -88,6 +88,19 @@ class TestRotation:
         assert writer.secret_key == WRITER_KEY
         assert writer.secret_key not in {t.secret_key for t in others}, "a shared key would make one rotation clear another"
         assert writer.store_env is None, "Gitea is prod's, and the token is recorded in prod's file"
+
+
+    def test_a_rotation_plan_names_the_machine_login_and_prods_file(self) -> None:
+        """`make gitea-rotate-token TOKEN=issue_writer ENV=prod` resolves through exactly these two calls."""
+        identities = {"machine": "hefesto", "reviewer": "mentor"}
+
+        store_env = rotation_store_env("issue_writer", "prod")
+        plan = plan_rotation("issue_writer", identities, secret_present=True, store_env=store_env)
+
+        assert plan.username == "hefesto", "the machine account, not the reviewer's"
+        assert plan.token_name == "kubelab-issue-writer"
+        assert plan.secret_key == WRITER_KEY
+        assert plan.store_env == "prod"
 
 
 class TestCatalog:
@@ -161,6 +174,8 @@ class TestStagingHasNoForgeWriter:
         """`_secret_data` delivers an optional key whenever the env's merged SOPS holds it, and staging merges common."""
         for name in ("staging", "common"):
             paths = _key_names(yaml.safe_load((SECRETS / f"{name}.enc.yaml").read_text(encoding="utf-8")))
+            # A walker that sees nothing would pass this test forever, so staging's file must show its reader.
+            assert name != "staging" or "apps.services.core.gitea.issue_reader_token" in paths, "the key walker is blind"
             assert WRITER_KEY not in paths, f"{name}.enc.yaml holds {WRITER_KEY}: staging would deliver a forge writer"
 
     def test_no_configmap_carries_it(self) -> None:
