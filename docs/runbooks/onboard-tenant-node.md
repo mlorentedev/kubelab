@@ -139,8 +139,9 @@ repurposed:
 # Preferred: the toolkit mints from the SOPS segment declaration — the tag and
 # owner come from SOPS, never from argv (VPN-ACL-016). Run from the authorized
 # deploy controller (OPS-051); the key lands in OUT owner-only and is printed
-# nowhere. ROLE is hosts (persistent) or clients (ephemeral).
-make headscale-authkey SEGMENT=<segment> ROLE=hosts|clients OUT=<file> [ENV=prod] [EXPIRATION=1h]
+# nowhere. ROLE is hosts (persistent) or clients (ephemeral). Add EPHEMERAL=1 for an
+# ephemeral hosts key — only for disposable hosts (see below).
+make headscale-authkey SEGMENT=<segment> ROLE=hosts|clients OUT=<file> [ENV=prod] [EXPIRATION=1h] [EPHEMERAL=1]
 
 # Manual equivalent (controller without the toolkit): <owner-id> from checklist
 # 0.3; <hosts_tag> or <clients_tag> from the segment entry in SOPS — the tag
@@ -161,6 +162,15 @@ ssh vps-pub "sudo docker exec headscale headscale preauthkeys create \
   ssh vps-pub "sudo docker exec headscale headscale preauthkeys list"
   ssh vps-pub "sudo docker exec headscale headscale preauthkeys expire --id <preauth-key-id>"
   ```
+- **Hosts keys are persistent by default**: the node they enrol stays in the
+  tailnet until someone removes it, which is what a tenant host wants. Pass
+  `EPHEMERAL=1` (`--ephemeral` on `toolkit infra headscale authkey`) with
+  `ROLE=hosts` only for a **disposable** host, such as an acceptance-test box
+  that is torn down afterwards: headscale then drops the node on its own once it
+  goes offline, so no stale entry is left to clean up. Never use it for a tenant
+  host that must survive a reboot or an outage. Clients keys are always
+  ephemeral; the flag changes nothing for them. `EPHEMERAL` accepts only `1`
+  (or unset); any other value is refused rather than minting a persistent key.
 - **Record the key's ID at mint**: `preauthkeys list` shows it in the ID column;
   the tenant inventory keeps it (step 7) — revocation expires by ID, not by owner.
 - **One-time**: consumed by a *successful* registration; a rejected attempt does
