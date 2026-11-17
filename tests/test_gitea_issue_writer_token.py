@@ -143,6 +143,15 @@ class TestMint:
         assert "token_scopes.issue_writer" in playbook, "the grant must come from common.yaml, not a literal"
         assert f"gitea_secrets.{WRITER_KEY}" in playbook, "the mint gate reads prod's store, where the record writes"
 
+    def test_the_gate_reads_the_file_the_record_writes(self) -> None:
+        """Gate and record must name one file, or every run mints a new live token and records nothing (#3632 review)."""
+        playbook = PLAYBOOK.read_text(encoding="utf-8")
+        record = _task(RECORD_TASK)["command"]
+
+        assert "config/secrets/{{ gitea_identity_env }}.enc.yaml" in playbook, "gitea_secrets is read from this env's file"
+        assert "combine(sops_gitea_env.stdout | from_yaml" in playbook, "gitea_secrets is built from that file"
+        assert "--env {{ gitea_identity_env }}" in record, "the record writes the file the gate reads"
+
     def test_the_controller_check_and_the_revoke_recovery_cover_it(self) -> None:
         """A token the mint knows and the recovery does not is the #2902 trap: minted, unrecorded, never converging."""
         text = (ROLE / "tasks/main.yml").read_text(encoding="utf-8")
@@ -182,5 +191,5 @@ class TestStagingHasNoForgeWriter:
         for env in ("staging", "prod"):
             path = OVERLAYS / env / "generated/configmaps.yaml"
             for doc in yaml.safe_load_all(path.read_text(encoding="utf-8")):
-                names = set((doc or {}).get("data") or {})
+                names = set((doc or {}).get("data") or {}) | set((doc or {}).get("binaryData") or {})
                 assert ENV_VAR not in names and _flattened(WRITER_KEY) not in names, f"{env}: a ConfigMap holds the token"
