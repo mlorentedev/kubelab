@@ -8,6 +8,11 @@ What the API can set is the delivery config: URL, content type, TLS check and
 secret (`PATCH /app/hook/config`). Which events the App subscribes to, and whether
 the hook is active, live in the App's settings page and are the operator's step.
 
+The same goes for the App's permissions, and there the declaration is not the grant:
+a widened permission is a request until the installation's owner accepts it. So the
+check reads the INSTALLATION (`GET /app/installations/{id}`), never the App (`GET /app`),
+which lists only what is requested and cannot see a pending acceptance.
+
 GitHub never returns the secret, so a rotation cannot show as drift: the plan
 compares the visible fields only, and `resend_secret` writes it on purpose. The
 secret is verified by consequence, a delivery the API accepts, never by reading it.
@@ -32,6 +37,24 @@ RECEIVER_PATH = "/api/forge/webhooks/github"
 #: The events the API projects (apps/api `forge.ItemFromEvent`). Subscribing is an
 #: App setting the API cannot change, so the plan reports a missing one instead.
 REQUIRED_EVENTS = ("issues", "pull_request")
+
+#: What the console needs from the installation, by GitHub's permission name. Today the
+#: API reads `/repos/{o}/{r}/issues` (issues and pull requests) and `/installation/repositories`
+#: (`metadata`, `issues`, `pull_requests`); `checks` and `statuses` are for a pull request's
+#: CI state (ADR-074 D7) and `issues: write` for the GitHub outbox (ADR-066, amendment
+#: 2026-11-13, "the existing App is widened"), neither called yet. Beside REQUIRED_EVENTS
+#: rather than in common.yaml: it describes what this code calls, not an environment's value,
+#: and no other consumer reads it.
+REQUIRED_PERMISSIONS = {
+    "metadata": "read",
+    "issues": "write",
+    "pull_requests": "read",
+    "checks": "read",
+    "statuses": "read",
+}
+
+#: GitHub's permission levels, weakest first. `write` includes `read`; `admin` both.
+_LEVELS = {"read": 1, "write": 2, "admin": 3}
 
 #: What `GET /app/hook/config` answering 404 means, and what to do about it.
 NO_HOOK = (
@@ -91,10 +114,34 @@ def hook_changes(live: Mapping[str, Any], spec: HookSpec) -> tuple[tuple[str, An
     return tuple((k, live.get(k), v) for k, v in spec.visible().items() if str(live.get(k) or "") != v)
 
 
+def installation_gaps(installation: Mapping[str, Any]) -> tuple[tuple[tuple[str, str, str | None], ...], str]:
+    """What the installation lacks: (permission, required, live or None) and a selection problem.
+
+    A level above the required one is not a gap; an unknown level counts as none.
+    """
+    granted = installation.get("permissions") or {}
+    gaps = tuple(
+        (name, need, granted.get(name))
+        for name, need in REQUIRED_PERMISSIONS.items()
+        if _LEVELS.get(str(granted.get(name)), 0) < _LEVELS[need]
+    )
+    selection = installation.get("repository_selection")
+    problem = (
+        ""
+        if selection == "all"
+        else (
+            f"repository_selection is {selection!r}, not 'all': "
+            "the wildcard source github:<owner>/* lists only the selected repositories"
+        )
+    )
+    return gaps, problem
+
+
 class HookAPI(Protocol):
     def get_config(self) -> dict[str, Any]: ...
     def patch_config(self, body: dict[str, Any]) -> None: ...
     def subscribed_events(self) -> set[str]: ...
+    def installation(self) -> dict[str, Any]: ...
 
 
 @dataclass(frozen=True)
@@ -103,6 +150,12 @@ class ConvergeResult:
     wrote: bool
     # Events the API needs that the App does not subscribe to: the operator's step.
     missing_events: tuple[str, ...] = ()
+    # (permission, required, live) the installation has not accepted, and the selection
+    # problem if it is not "All repositories": both the operator's step, like the events.
+    permission_gaps: tuple[tuple[str, str, str | None], ...] = ()
+    selection_problem: str = ""
+    # Set when the installation could not be read: the grant is then unchecked, not fine.
+    installation_error: str = ""
 
 
 def converge(
@@ -116,9 +169,23 @@ def converge(
         )
     subscribed = hooks.subscribed_events()
     missing = tuple(e for e in REQUIRED_EVENTS if e not in subscribed)
+    # The grant check never stops the hook converging: a wrong installation id was harmless before it.
+    gaps: tuple[tuple[str, str, str | None], ...] = ()
+    selection_problem = installation_error = ""
+    try:
+        gaps, selection_problem = installation_gaps(hooks.installation())
+    except HookConfigError as e:
+        installation_error = str(e)
     changes = hook_changes(hooks.get_config(), spec)
     if not apply or not (changes or resend_secret):
-        return ConvergeResult(changes=changes, wrote=False, missing_events=missing)
+        return ConvergeResult(
+            changes=changes,
+            wrote=False,
+            missing_events=missing,
+            permission_gaps=gaps,
+            selection_problem=selection_problem,
+            installation_error=installation_error,
+        )
     # The whole config every time: a hook with a URL and no secret would deliver
     # unsigned bodies the receiver refuses.
     hooks.patch_config({**spec.visible(), "secret": secret})
@@ -128,14 +195,24 @@ def converge(
             f"the write was sent and GitHub accepted it, but the read back still differs: {after}; "
             "rerunning sends it again, which is safe (the secret is the same value)"
         )
-    return ConvergeResult(changes=changes, wrote=True, missing_events=missing)
+    return ConvergeResult(
+        changes=changes,
+        wrote=True,
+        missing_events=missing,
+        permission_gaps=gaps,
+        selection_problem=selection_problem,
+        installation_error=installation_error,
+    )
 
 
 class GitHubAppHooks:
-    """`/app/hook/config`, authenticated as the App."""
+    """`/app/hook/config` and the installation, authenticated as the App."""
 
-    def __init__(self, app_id: int | str, private_key_pem: str, *, timeout: float = 15.0) -> None:
+    def __init__(
+        self, app_id: int | str, installation_id: int | str, private_key_pem: str, *, timeout: float = 15.0
+    ) -> None:
         self._app_id = app_id
+        self._installation_id = installation_id
         self._key = private_key_pem
         self._timeout = timeout
 
@@ -163,6 +240,16 @@ class GitHubAppHooks:
         if r.status_code != 200:
             raise HookConfigError(f"GET /app answered {r.status_code}")
         return set(r.json().get("events") or [])
+
+    def installation(self) -> dict[str, Any]:
+        """What the installation has accepted. `GET /app` would list only what the App requests."""
+        import requests
+
+        path = f"/app/installations/{self._installation_id}"
+        r = requests.get(f"{GITHUB_API}{path}", headers=self._headers(), timeout=self._timeout)
+        if r.status_code != 200:
+            raise HookConfigError(f"GET {path} answered {r.status_code}")
+        return dict(r.json())
 
     def patch_config(self, body: dict[str, Any]) -> None:
         import requests

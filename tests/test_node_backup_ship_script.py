@@ -407,13 +407,11 @@ def test_the_probe_timeout_sits_between_one_stuck_request_and_the_unit() -> None
     defaults = yaml.safe_load((role / "defaults" / "main.yml").read_text(encoding="utf-8"))
     stuck = int(str(defaults["node_backup_stuck_request_timeout"]).rstrip("s"))
     probe = int(defaults["node_backup_probe_timeout"])
-    unit = re.search(
-        r"^TimeoutStartSec=(\d+)$",
-        (role / "templates" / "node-backup-ship.service.j2").read_text(encoding="utf-8"),
-        re.M,
+    unit = (role / "templates" / "node-backup-ship.service.j2").read_text(encoding="utf-8")
+    assert re.search(r"^TimeoutStartSec=\{\{ node_backup_ship_timeout \}\}$", unit, re.M), (
+        "the ship unit's TimeoutStartSec is no longer node_backup_ship_timeout"
     )
-    assert unit, "the ship unit declares no TimeoutStartSec"
-    assert stuck < probe <= int(unit.group(1)) // 4
+    assert stuck < probe <= int(defaults["node_backup_ship_timeout"]) // 4
 
 
 def _check_call(calls: list[str]) -> str:

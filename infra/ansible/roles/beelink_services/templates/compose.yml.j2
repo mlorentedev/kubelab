@@ -211,7 +211,8 @@ services:
       # host-side publication bound to the Tailscale IP, and it does not exist on
       # this network. Using it here would fail only at runtime, and only on a node
       # where the two happen to differ.
-      GITEA_INSTANCE_URL: "http://gitea:3000"
+{# EDGE-002: GITEA_INSTANCE_URL is `gitea_runner.forge_endpoint`, the address jobs push images to. #}
+      GITEA_INSTANCE_URL: "http://{{ act_runner_forge_endpoint }}"
       # Minted by `gitea actions generate-runner-token` and recorded in SOPS. Never
       # a literal here -- this template is committed.
       GITEA_RUNNER_REGISTRATION_TOKEN: "{{ act_runner_token }}"

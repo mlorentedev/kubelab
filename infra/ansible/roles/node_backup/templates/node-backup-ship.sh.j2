@@ -106,7 +106,7 @@ fi
 # request in time. R2 answers a bad credential with 401 `Unauthorized` (400
 # `InvalidArgument` for a malformed key), restic 0.19.1's S3 backend treats
 # only `AccessDenied` and `InvalidRange` as permanent, and it retries anything
-# else for 15 minutes -- past the unit's 600s, so systemd used to kill it with
+# else for 15 minutes -- past the unit's bound then (600s), so systemd used to kill it with
 # a journal full of retries and no verdict (measured 2026-09-30, #1939). Each
 # retry line names R2's reason, so on timeout the last one IS the verdict.
 #

@@ -605,6 +605,8 @@ acme-token-scope:
 # Plan only. `APPLY=1` points the kubelab-console GitHub App's webhook at the
 # API's receiver (CONSOLE-004); `SECRET=1` also resends the secret after a
 # rotation. Prod only: the App has one hook. Events and Active are App settings.
+# It also reads the installation's permissions and repository access and exits 2
+# when either is short, with or without APPLY.
 .PHONY: forge-github-hook
 forge-github-hook:
 	@$(TOOLKIT) services forge github-hook $(if $(APPLY),--apply,) $(if $(SECRET),--resend-secret,)

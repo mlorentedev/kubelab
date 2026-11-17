@@ -1,6 +1,6 @@
 """BACKUP-078 (#2920): the weekly integrity check has to finish to say anything.
 
-The check instance shares the ship unit's 600s budget on purpose: `restic
+The check instance runs inside the ship unit on purpose: `restic
 check` holds the repository's exclusive lock, and ship and prune only wait for
 a lock about that long. So the check is kept inside the budget by reading a
 subset of packs (`node_backup_check_read_data_groups`), and the on-demand nodes
@@ -31,9 +31,21 @@ def _seconds(value: str) -> int:
 
 def _ship_timeout() -> int:
     unit = (ROLE / "templates/node-backup-ship.service.j2").read_text(encoding="utf-8")
-    match = re.search(r"^TimeoutStartSec=(\d+)$", unit, re.MULTILINE)
-    assert match, "the ship unit declares no literal TimeoutStartSec"
-    return int(match.group(1))
+    assert re.search(r"^TimeoutStartSec=\{\{ node_backup_ship_timeout \}\}$", unit, re.MULTILINE), (
+        "the ship unit's TimeoutStartSec is no longer node_backup_ship_timeout"
+    )
+    return int(DEFAULTS["node_backup_ship_timeout"])
+
+
+# The check's own budget. It runs in the ship unit, whose bound rose to 1800s for
+# uploads (#3586), but `restic check` holds the exclusive lock, and a ship's
+# `backup` does not wait for a lock at all. So the budget the check is sized to
+# stays at the 600s it was measured against, and it never exceeds the unit's bound.
+CHECK_BUDGET_SECONDS = 600
+
+
+def test_the_check_budget_fits_inside_the_unit_bound():
+    assert CHECK_BUDGET_SECONDS <= _ship_timeout()
 
 
 def _on_demand_backup_nodes() -> list[str]:
@@ -50,9 +62,9 @@ def test_catch_up_checks_are_spread_wider_than_their_budgets_end_to_end():
     on_demand = _on_demand_backup_nodes()
     assert on_demand, "no on-demand backup node found: the test would pass vacuously"
     spread = _seconds(DEFAULTS["node_backup_check_randomized_delay"])
-    assert spread >= _ship_timeout() * len(on_demand), (
+    assert spread >= CHECK_BUDGET_SECONDS * len(on_demand), (
         f"{len(on_demand)} on-demand nodes ({', '.join(on_demand)}) catch up at boot within {spread}s, "
-        f"less than their {_ship_timeout()}s budgets laid end to end"
+        f"less than their {CHECK_BUDGET_SECONDS}s check budgets laid end to end"
     )
 
 
@@ -82,7 +94,7 @@ CHECK_BUDGET_UID = "backup081-check-budget"
 
 
 def _packs_per_check() -> int:
-    return int(MARGIN * (_ship_timeout() - SHIP_SECONDS - PLAIN_CHECK_SECONDS) / SECONDS_PER_PACK)
+    return int(MARGIN * (CHECK_BUDGET_SECONDS - SHIP_SECONDS - PLAIN_CHECK_SECONDS) / SECONDS_PER_PACK)
 
 
 def _check_budget_rule() -> dict:

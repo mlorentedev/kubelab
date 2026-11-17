@@ -115,19 +115,11 @@ def test_every_consumer_of_the_node_path_runs_after_the_resolve_and_carries_its_
     tasks = _tasks()
     resolve = tasks[_index("Resolve the node install mise has active")]
     consumers = [t for t in tasks if "block" not in t and "_dev_node_node_where" in str(t) and t is not resolve]
-    assert len(consumers) >= 4, "the assert, the entry-point check, the repair and the npm install"
+    assert len(consumers) >= 4, "the assert, the entry-point check, the repair and the retired npm install"
     for task in consumers:
         assert tasks.index(resolve) < tasks.index(task), task["name"]
         tags = set(task.get("tags", [])) - {"dev_node"}
         assert tags <= set(resolve["tags"]), f"{task['name']!r} can run without the resolve under {tags}"
-
-
-def test_the_npm_install_resolves_to_the_active_node() -> None:
-    """Render the var the install uses with a fake `mise where` answer: the path is mise's."""
-    active = "/home/u/.local/share/mise/installs/node/24.22.1"
-    npm = _tasks()[_index("Install global agent CLI tools via mise node npm")]
-    raw = npm["vars"]["_dev_node_mise_node_bin"]
-    assert jinja2.Template(raw).render(_dev_node_node_where={"stdout": active + "\n"}) == active + "/bin"
 
 
 # --- the /usr/local/bin wrappers resolve node on every call ------------------
@@ -136,7 +128,10 @@ def test_the_npm_install_resolves_to_the_active_node() -> None:
 # gone. A wrapper that exec'd the path the provision saw would point at nothing
 # until the next provision, and a non-interactive SSH agent has no other node.
 
-NODE_WRAPPED = ["node", "npm", "npx", "claude"]
+# mise lays tools out differently: node keeps its entry points under `bin/`, the
+# aqua `claude` is one binary at the install root. The wrapper asks mise for the
+# executable (`mise which <item>`) instead of assuming a layout (#3566).
+WRAPPED = {"node": "node", "npm": "node", "npx": "node", "claude": "claude"}
 WRAPPER_TASK = "Wrap mise node, npm, npx, and claude into /usr/local/bin for non-interactive SSH tools"
 
 
@@ -146,21 +141,52 @@ def _render_wrapper(item: str, home: Path) -> str:
     return env.get_template("mise-bin-wrapper.sh.j2").render(item=item, dev_node_home=str(home), **task["vars"])
 
 
-def test_a_node_wrapper_names_no_install_version() -> None:
-    for item in NODE_WRAPPED:
+def test_a_mise_wrapper_names_no_install_path_or_version() -> None:
+    for item in WRAPPED:
         rendered = _render_wrapper(item, Path("/home/u"))
         code = "\n".join(ln for ln in rendered.splitlines() if ln.strip() and not ln.lstrip().startswith("#"))
         assert "installs/" not in code, f"the {item} wrapper bakes in an install directory"
         assert not re.search(r"\d+\.\d+\.\d+", code), f"the {item} wrapper bakes in a version"
-        assert 'mise" where node' in code, f"the {item} wrapper must ask mise which node is active"
+        assert f'mise" which {item}' in code, f"the {item} wrapper must ask mise where {item} is"
+        assert "/bin/" + item not in code, f"the {item} wrapper assumes a bin/ layout the aqua backend does not have"
+
+
+def _layout(home: Path, item: str, version: str) -> Path:
+    """Where mise puts the tool: node's entry points under bin/, claude at the install root."""
+    if WRAPPED[item] == "node":
+        return home / "installs/node" / version / "bin" / item
+    return home / "installs/claude" / version / item
 
 
 def _install(home: Path, version: str) -> None:
-    for item in NODE_WRAPPED:
-        tool = home / "installs/node" / version / "bin" / item
+    for item in WRAPPED:
+        tool = _layout(home, item, version)
         tool.parent.mkdir(parents=True, exist_ok=True)
         tool.write_text(f'#!/bin/sh\necho {item} {version} "$@"\n', encoding="utf-8", newline="\n")
         tool.chmod(0o755)
+
+
+def _fake_mise(home: Path) -> None:
+    """`mise which <item>` answers the path recorded under <home>/active/<item>; anything else is an error.
+
+    It also talks on stderr, as mise does: only stdout may become the path."""
+    mise = home / ".local/bin/mise"
+    mise.parent.mkdir(parents=True, exist_ok=True)
+    script = (
+        f'#!/bin/sh\n[ "$1" = which ] || exit 2\necho "mise: noise" >&2\ncat "{home}/active/$2" 2>/dev/null || exit 1\n'
+    )
+    mise.write_text(
+        script,
+        encoding="utf-8",
+        newline="\n",
+    )
+    mise.chmod(0o755)
+
+
+def _activate(home: Path, version: str) -> None:
+    (home / "active").mkdir(exist_ok=True)
+    for item in WRAPPED:
+        (home / "active" / item).write_text(str(_layout(home, item, version)) + "\n", encoding="utf-8", newline="\n")
 
 
 def _run(wrapper: Path, home: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -172,46 +198,41 @@ def _run(wrapper: Path, home: Path, *args: str) -> subprocess.CompletedProcess[s
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX sh wrappers")
-def test_the_wrapper_follows_a_node_bump_without_a_reprovision(tmp_path: Path) -> None:
-    """The consumer is a shell that runs the wrapper after the converge pruned the old node."""
+def test_the_wrapper_follows_a_tool_bump_without_a_reprovision(tmp_path: Path) -> None:
+    """The consumer is a shell that runs the wrapper after the converge pruned the old install."""
     home = tmp_path / "home"
-    (home / ".local/bin").mkdir(parents=True)
-    mise = home / ".local/bin/mise"
-    mise.write_text(
-        '#!/bin/sh\n[ "$1 $2" = "where node" ] || exit 2\ncat "' + str(home) + '/active"\n',
-        encoding="utf-8",
-        newline="\n",
-    )
-    mise.chmod(0o755)
+    _fake_mise(home)
     wrappers = {}
-    for item in NODE_WRAPPED:
+    for item in WRAPPED:
         wrappers[item] = tmp_path / f"wrapper-{item}"
         wrappers[item].write_text(_render_wrapper(item, home), encoding="utf-8", newline="\n")
 
     _install(home, "1.0.0")
-    (home / "active").write_text(str(home / "installs/node/1.0.0") + "\n", encoding="utf-8", newline="\n")
+    _activate(home, "1.0.0")
     for item, wrapper in wrappers.items():
         out = _run(wrapper, home, "hi")
         assert (out.returncode, out.stdout.strip()) == (0, f"{item} 1.0.0 hi"), out.stderr
 
-    # The converge bumps node and prunes the old tree.
+    # The converge bumps the tools and prunes the old trees.
     _install(home, "2.0.0")
     shutil.rmtree(home / "installs/node/1.0.0")
-    (home / "active").write_text(str(home / "installs/node/2.0.0") + "\n", encoding="utf-8", newline="\n")
+    shutil.rmtree(home / "installs/claude/1.0.0")
+    _activate(home, "2.0.0")
     for item, wrapper in wrappers.items():
         out = _run(wrapper, home, "hi")
         assert (out.returncode, out.stdout.strip()) == (0, f"{item} 2.0.0 hi"), out.stderr
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX sh wrappers")
-def test_the_wrapper_says_so_when_mise_has_no_node(tmp_path: Path) -> None:
+@pytest.mark.parametrize("item", list(WRAPPED))
+def test_the_wrapper_says_which_tool_mise_does_not_have(tmp_path: Path, item: str) -> None:
     home = tmp_path / "home"
     (home / ".local/bin").mkdir(parents=True)
     mise = home / ".local/bin/mise"
-    mise.write_text("#!/bin/sh\necho 'mise ERROR node not installed' >&2\nexit 1\n", encoding="utf-8", newline="\n")
+    mise.write_text("#!/bin/sh\necho 'mise ERROR not installed' >&2\nexit 1\n", encoding="utf-8", newline="\n")
     mise.chmod(0o755)
-    wrapper = tmp_path / "wrapper-node"
-    wrapper.write_text(_render_wrapper("node", home), encoding="utf-8", newline="\n")
+    wrapper = tmp_path / f"wrapper-{item}"
+    wrapper.write_text(_render_wrapper(item, home), encoding="utf-8", newline="\n")
     out = _run(wrapper, home, "--version")
-    assert out.returncode != 0
-    assert "no node" in out.stderr, "a caller must see why, not 'No such file or directory'"
+    assert out.returncode == 127
+    assert f"mise has no {item}" in out.stderr, "a caller must see which tool is missing, not 'No such file'"

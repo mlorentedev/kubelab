@@ -52,3 +52,28 @@ C. **Both.**
 - A backend that never answers gets the edge's 504 page after 60 s, instead of holding the request until the client gives up.
 - A route that legitimately answers its headers later than 60 s, and was not in these seven days, will be cut. The coverage test and the declaration name it when it is found. Prod traffic is light, so a rare call may be missing from the sample.
 - The rest of OPS-065's tasks follow from these values. The stuck-backend fixture and the staging check come first, then the prod deploy with the VPN check.
+
+## Amendment 2026-11-15: the client side (EDGE-002, #3550)
+
+This ADR bounded how long the edge waits for a backend. The edge also bounds how long it reads a request from a client, and nothing declared that bound. It is `entryPoints.<ep>.transport.respondingTimeouts.readTimeout`. It covers the whole request, body included, and Traefik v3 defaults it to 60 s.
+
+**What it cut.** In prod Traefik's access log for the gitea router (2026-11-14):
+- every failed registry push was a `PUT` ending in `499` at `total` = 60.000 s;
+- its paired 504s had `total` ≈ 60 s and an origin of a few µs.
+
+A 499 reads as a client abort. Here it was the edge's own deadline.
+
+**Decision.**
+
+1. **Declare it at 60 s on `websecure`** (`k3s_traefik_websecure_read_timeout`, rendered into `additionalArguments`, asserted by `tests/test_edge_backend_timeouts.py`).
+   - This is the value Traefik already applied, so the change does not alter behaviour. It makes the bound visible beside the backend bounds.
+   - Owner ruling, 2026-11-14: raise it only on a measured off-LAN failure.
+2. **It has no per-router form.** Any value applies to every route on the entrypoint.
+   - Raising it for one upload raises it for every route, including how long a slow or idle client may hold a connection before sending its request.
+   - The only finer alternative is a second entrypoint with its own bound. That is not adopted: no off-LAN upload is known to need longer.
+3. **The failure that exposed it is fixed at its cause, not here.** Beelink CI pushed to the forge on the same node through the public edge. Jobs now push over the compose network (`KUBELAB_FORGE_REGISTRY`, `docs/runbooks/cicd.md`, lesson-762), so their blobs never reach this bound.
+
+**Consequences.**
+- An upload through the edge that takes more than 60 s is still cut with a 499: a large git push, an LFS object or a release asset from a slow link.
+- A 499 at a round 60 s is this bound, not the client.
+- Upgraded connections (Headscale's control channel, websockets) already ran under the same default, so declaring it changes nothing for them.
