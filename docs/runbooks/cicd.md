@@ -106,7 +106,10 @@ as plain HTTP. The traffic never leaves the node.
         run: |
           # Empty means the runner predates EDGE-002. An empty registry host makes the
           # tags resolve to Docker Hub, so fail here instead.
-          test -n "$KUBELAB_FORGE_REGISTRY" && test -n "$KUBELAB_FORGE_NETWORK"
+          # `|| exit 1` on each: under `bash -e`, a failing test that is not the last
+          # command of an `&&` list does not stop the step.
+          test -n "$KUBELAB_FORGE_REGISTRY" || exit 1
+          test -n "$KUBELAB_FORGE_NETWORK" || exit 1
           echo "registry=$KUBELAB_FORGE_REGISTRY" >> "$GITHUB_OUTPUT"
           echo "network=$KUBELAB_FORGE_NETWORK" >> "$GITHUB_OUTPUT"
       - name: Authenticate to the forge registry, for this job only

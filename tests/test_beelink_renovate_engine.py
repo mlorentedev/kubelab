@@ -24,6 +24,10 @@ from tests.ansible_jinja import ansible_env
 REPO = Path(__file__).resolve().parent.parent
 ROLE = REPO / "infra/ansible/roles/beelink_services"
 PLAYBOOK = REPO / "infra/ansible/playbooks/provision-bee.yml"
+#: Gitea on the compose network (EDGE-002), read from the declaration rather than copied.
+FORGE_ENDPOINT = yaml.safe_load((REPO / "infra/config/values/common.yaml").read_text(encoding="utf-8"))["apps"][
+    "services"
+]["automation"]["gitea_runner"]["forge_endpoint"]
 ENGINE_URL = "https://raw.githubusercontent.com/mlorentedev/ci-workflows/{{ %s }}/renovate/engine.json"
 
 (PLAY,) = [p for p in yaml.safe_load(PLAYBOOK.read_text(encoding="utf-8")) if "roles" in p]
@@ -57,7 +61,7 @@ def _render_env(engine: dict) -> str:
         gitea_renovate_token="not-a-token",  # noqa: S106 - the template needs one; only RENOVATE_IMAGE is read here
         renovate_github_com_token="not-a-token",  # noqa: S106 - likewise
         renovate_config_container_path="/config.yaml",
-        act_runner_forge_endpoint="gitea:3000",  # only RENOVATE_IMAGE is read here
+        act_runner_forge_endpoint=FORGE_ENDPOINT,
     )
 
 

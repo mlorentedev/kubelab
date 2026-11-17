@@ -685,10 +685,7 @@ FORGE_JOB_ENV = ("KUBELAB_FORGE_REGISTRY", "KUBELAB_FORGE_NETWORK")
 def test_jobs_are_handed_the_in_network_forge_endpoint() -> None:
     runner = _ssot()
     envs = _config()["runner"].get("envs") or {}
-    assert envs == {
-        "KUBELAB_FORGE_REGISTRY": runner["forge_endpoint"],
-        "KUBELAB_FORGE_NETWORK": runner["job_network"],
-    }, (
+    assert envs == dict(zip(FORGE_JOB_ENV, (runner["forge_endpoint"], runner["job_network"]), strict=True)), (
         "`runner.envs` must hand every job exactly the declared forge endpoint and "
         "job network under the KUBELAB_FORGE_* names (EDGE-002). A product workflow "
         "reads them to push over the compose network instead of through the edge."
@@ -705,8 +702,7 @@ def test_the_job_network_is_the_one_gitea_is_on() -> None:
     networks = {spec.get("name", key) for key, spec in compose["networks"].items()}
     assert runner["job_network"] in networks
     assert runner["job_network"] in compose["services"]["gitea"]["networks"], (
-        "the job network must be one Gitea is attached to, or the declared endpoint "
-        "does not resolve from a job."
+        "the job network must be one Gitea is attached to, or the declared endpoint does not resolve from a job."
     )
 
 
