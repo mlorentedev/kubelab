@@ -1,0 +1,88 @@
+# Grafana alerting: resume's daily pipeline has not succeeded (RES-HOST-001 G, #2366).
+#
+# `resume daily` prints `daily: ok <start>` on stderr as its last line, only on exit 0
+# (resume #777, #814); a failed run prints `daily: started` too, so only the `ok` line
+# means success. The window is the schedule's period plus 2 hours, 26h for resume's
+# daily `0 6 * * *`: one success per window, which the owner accepted over the
+# two-sample floor the base rules keep (RES-HOST-001 F6).
+#
+# Staging only: the rule sits in this overlay, not in base, because it alerts on no
+# data and prod runs no resume yet. The prod lane adds it there under the same uid.
+# Staging routes to `apprise-log`, so it archives and never pages.
+#
+# The stream: Vector labels lines with namespace, pod, container and node only. The
+# Job's container is `daily`, a generic name, so the pod prefix (the CronJob's name)
+# pins it to resume. tests/test_resume_daily_alert.py reads both from the render.
+---
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: resume
+    folder: kubelab
+    interval: 10m
+    rules:
+      - uid: reshost001-resume-daily-no-success
+        title: resume's daily pipeline has not succeeded in 26 hours
+        condition: C
+        for: 10m
+        # No line in the window is the failure itself: a Job that never starts (an
+        # image pull, a missing Secret) logs nothing at all.
+        noDataState: Alerting
+        execErrState: Alerting
+        annotations:
+          summary: >-
+            No `daily: ok` line from resume's daily CronJob in the last 26 hours. Read the
+            last Jobs' logs (`{container="daily", pod=~"resume-daily-.+"}`): a failed run
+            names its step on stderr (`daily: <step> failed`). No lines at all means no Job
+            ran or none reached its container: check the CronJob, the pull Secret and
+            `resume-secrets`.
+          runbook_url: https://github.com/mlorentedev/kubelab/blob/master/docs/runbooks/resume-daily-pipeline.md#no-success-alert
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 93600
+              to: 0
+            datasourceUid: loki
+            model:
+              refId: A
+              datasource:
+                type: loki
+                uid: loki
+              editorMode: code
+              queryType: range
+              expr: >-
+                sum(
+                  count_over_time(
+                    {container="daily", pod=~"resume-daily-.+"} |= "daily: ok"
+                  [26h])
+                )
+          - refId: B
+            relativeTimeRange:
+              from: 93600
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              reducer: last
+              expression: A
+              datasource:
+                type: __expr__
+                uid: __expr__
+          - refId: C
+            relativeTimeRange:
+              from: 93600
+              to: 0
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    type: lt
+                    params: [1]
+              datasource:
+                type: __expr__
+                uid: __expr__
