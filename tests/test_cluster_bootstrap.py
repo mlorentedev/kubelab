@@ -23,7 +23,11 @@ def test_loads_expected_entries() -> None:
 
 def test_agent_sandbox_is_versioned_operator() -> None:
     entry = next(e for e in _load_cluster_bootstrap() if e.name == "agent-sandbox")
-    assert entry.version == "v0.5.0rc1"
+    assert entry.version  # the pin lives in common.yaml; a bump must not need an edit here
+    # The vendored manifest is what gets applied, so its controller image must be the
+    # pinned release. A Renovate bump that skips `make sync-operators` leaves the old image.
+    manifest = (ROOT / entry.manifest).read_text(encoding="utf-8")
+    assert f"agent-sandbox-controller:{entry.version}" in manifest
     assert entry.namespace == "agent-sandbox-system"
     assert entry.render == {}  # static operator — no deploy-time placeholders
     assert entry.optional is False
