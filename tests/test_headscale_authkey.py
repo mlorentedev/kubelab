@@ -67,9 +67,7 @@ CREATE_OUTPUT_JSON = json.dumps(
 )
 
 
-def _mock_mint(
-    mocker, tmp_path, role="hosts", segment=SEGMENT_JSON, create_stdout=CREATE_OUTPUT_JSON, **mint_kwargs
-):
+def _mock_mint(mocker, tmp_path, role="hosts", segment=SEGMENT_JSON, create_stdout=CREATE_OUTPUT_JSON, **mint_kwargs):
     """Run mint() with SOPS and ssh mocked; return (result, subprocess.run mock)."""
     mocker.patch(
         "toolkit.features.headscale_authkey.SecretsManager",
@@ -621,6 +619,7 @@ class TestCliAndMakeSurface:
             ["make", "-n", "headscale-authkey", "SEGMENT=t", "ROLE=hosts", "OUT=/dev/null", *make_args],
             capture_output=True,
             text=True,
+            encoding="utf-8",
             cwd=Path(__file__).resolve().parents[1],
             check=True,
         ).stdout

@@ -139,8 +139,8 @@ repurposed:
 # Preferred: the toolkit mints from the SOPS segment declaration — the tag and
 # owner come from SOPS, never from argv (VPN-ACL-016). Run from the authorized
 # deploy controller (OPS-051); the key lands in OUT owner-only and is printed
-# nowhere. ROLE is hosts (persistent) or clients (ephemeral). Add EPHEMERAL=1 to
-# make a hosts key ephemeral too — only for disposable hosts (see below).
+# nowhere. ROLE is hosts (persistent) or clients (ephemeral). Add EPHEMERAL=1 for an
+# ephemeral hosts key — only for disposable hosts (see below).
 make headscale-authkey SEGMENT=<segment> ROLE=hosts|clients OUT=<file> [ENV=prod] [EXPIRATION=1h] [EPHEMERAL=1]
 
 # Manual equivalent (controller without the toolkit): <owner-id> from checklist
