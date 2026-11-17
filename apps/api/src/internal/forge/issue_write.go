@@ -17,8 +17,10 @@ import (
 // listing asks for, which are the hooks below.
 type issueWriter struct {
 	http *http.Client
-	// root is the API root: https://api.github.com, or <gitea>/api/v1.
+	// root is the API root: https://api.github.com, or <gitea>/api/v1. site is the forge's own
+	// address, the base a next link is read under: the reader's BaseURL.
 	root string
+	site string
 	// authorize returns the request authenticator, ErrNoWriter when the writer has no credential,
 	// or the error of a token that could not be had (nothing was sent).
 	authorize func(context.Context) (func(*http.Request), error)
@@ -173,7 +175,7 @@ func (e *issueWriter) issueLabels(ctx context.Context, auth func(*http.Request),
 // getAll reads a paged listing into one slice. A page that fails, cannot be decoded, or a listing
 // that does not end within maxPages comes back as a reply that is not ok, never as a short list.
 func getAll[T any](ctx context.Context, e *issueWriter, auth func(*http.Request), first string, maxPages int) ([]T, reply) {
-	base, err := url.Parse(e.root)
+	base, err := url.Parse(e.site)
 	if err != nil {
 		return nil, reply{Err: fmt.Errorf("parse base url: %w", err)}
 	}

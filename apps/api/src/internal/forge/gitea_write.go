@@ -28,6 +28,7 @@ func (g *GiteaWriter) engine() *issueWriter {
 	return &issueWriter{
 		http: g.HTTP,
 		root: strings.TrimSuffix(g.BaseURL, "/") + strings.TrimSuffix(giteaAPIRoot, "/"),
+		site: g.BaseURL,
 		authorize: func(context.Context) (func(*http.Request), error) {
 			if g.Token == "" {
 				return nil, fmt.Errorf("%w: gitea has no write token", ErrNoWriter)

@@ -148,3 +148,21 @@ func TestEachWriterHasItsOwnCeiling(t *testing.T) {
 		}
 	}
 }
+
+// Staging's real shape: the App key reaches it through common SOPS (tasks.md, section 5), the Gitea
+// read token is its own, and there is no Gitea write token (W7). The adapter builds a GitHub
+// writer from that, and no Gitea writer. So the adapter alone does not keep staging from
+// writing to GitHub: the 503 W7 promises for staging is a gate of the route and the worker,
+// which wire these writers, and this test is where that fact is held until they do.
+func TestStagingShapeBuildsAGitHubWriterAndNoGiteaWriter(t *testing.T) {
+	writers := forge.NewWriters(forge.Credentials{
+		GiteaURL: "http://gitea:3000", GiteaToken: "read-token",
+		GitHubAppID: "1", GitHubInstallationID: "2", GitHubPrivateKey: "pem",
+	})
+	if _, err := forge.WriterFor(writers, "github"); err != nil {
+		t.Errorf("the App key builds the github writer: %v", err)
+	}
+	if _, err := forge.WriterFor(writers, "gitea"); !errors.Is(err, forge.ErrNoWriter) {
+		t.Errorf("no write token, no gitea writer: %v", err)
+	}
+}

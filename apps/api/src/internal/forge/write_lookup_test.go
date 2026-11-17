@@ -288,3 +288,35 @@ func TestLookupSendsTheWriterCredential(t *testing.T) {
 		t.Fatalf("github %q, gitea %q", gh, gt)
 	}
 }
+
+// Gitea writes its next links from ROOT_URL, its public address, while the API reads it at the
+// in-cluster one, possibly under another path prefix (the reader's twin: contract_test.go). The
+// listing keeps the configured host and prefix and takes the API path and query from the link,
+// so page 2 is read at the real API path and the write token never leaves the configured host.
+func TestGiteaWriterFollowsANextLinkWrittenForItsPublicAddress(t *testing.T) {
+	const prefix = "/internal"
+	var second int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		api := strings.TrimPrefix(r.URL.Path, prefix)
+		if api != "/api/v1/repos/o/r/issues" {
+			t.Errorf("read %s, not the repository's issues under the configured prefix %s", r.URL.Path, prefix)
+		}
+		if r.URL.Query().Get("page") == "2" {
+			second++
+			_, _ = w.Write([]byte(listing(lookupItem(50, "<!-- kubelab-write:42 -->", ""))))
+			return
+		}
+		q := r.URL.Query()
+		q.Set("page", "2")
+		w.Header().Set("Link", `<https://git.public.invalid/gitea`+api+`?`+q.Encode()+`>; rel="next"`)
+		_, _ = w.Write([]byte(listing()))
+	}))
+	defer srv.Close()
+	sent := time.Date(2026, 11, 17, 12, 0, 0, 0, time.UTC)
+
+	w := &forge.GiteaWriter{BaseURL: srv.URL + prefix, Token: "w", Now: func() time.Time { return sent.Add(time.Hour) }}
+	got, err := w.FindCreated(context.Background(), forge.Lookup{Source: gtSrc, OutboxID: 42, SentAt: sent, Settle: time.Minute})
+	if err != nil || !got.Found || got.Number != 50 || second != 1 {
+		t.Fatalf("got %+v, err=%v, page 2 read %d time(s)", got, err, second)
+	}
+}

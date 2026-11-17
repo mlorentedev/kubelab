@@ -33,6 +33,7 @@ func (g *GitHubWriter) engine() *issueWriter {
 	return &issueWriter{
 		http: g.HTTP,
 		root: strings.TrimSuffix(g.BaseURL, "/"),
+		site: strings.TrimSuffix(g.BaseURL, "/"),
 		authorize: func(ctx context.Context) (func(*http.Request), error) {
 			token := g.Token
 			if g.Tokens != nil {
