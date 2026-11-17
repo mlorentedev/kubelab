@@ -1214,10 +1214,12 @@ apps:
     # domain, port, auth and version are staging.yaml's, rendered from the contract snapshot.
     resume:
       image_name: resume
-      # ADR028-004. Staging holds seeded fixtures (owner, 2026-11-15), so a second
-      # instance is rebuilt from git rather than forked; not a 3 AM service (ADR-028).
-      state_promotion: dual
-      location: on-demand
+      # ADR028-004, as #2366 and resume's ADR-008 classify it: prod holds the only real
+      # data, with no promotion path in git. Staging runs on seeded fixtures; the ADR-061
+      # amendment that lets a singleton render there too is due before the prod lane
+      # (RES-HOST-001 Q4). Rejected there: `dual`, which misclassifies prod's state.
+      state_promotion: singleton
+      location: always-on
 
     # portfolio: removed — renamed to web (WEB-001, 2026-03-15)
     # blog: removed — killed (2026-03-15)
@@ -2407,8 +2409,8 @@ apps:
             none: "Task board, not a 3 AM service (ADR-028): it waits for the IdP to come back."
           resume:
             none: >-
-              Job-search pipeline, not a 3 AM service (ADR-028): the daily CronJob runs
-              without the IdP, and only the board waits for it to come back.
+              The daily CronJob runs without the IdP and its data stays on the volume;
+              only the board waits for the IdP to come back.
           n8n:
             none: >-
               Automations keep running with the IdP down; only the editor needs a login,

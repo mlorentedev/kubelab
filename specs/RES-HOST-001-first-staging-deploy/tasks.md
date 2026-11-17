@@ -178,22 +178,33 @@ excluding regenerated schema and snapshot files.
 
 ## I. Onboarding (owner)
 
-- [ ] Registry entry: forge gitea, `personal/resume`, receiver dormant,
+- [x] Registry entry: forge gitea, `personal/resume`, receiver dormant,
   `events.staging` only, `image_registry: ghcr.io/mlorentedev`, `private: true`,
   `pull_credential: {username: mlorentedev, secret: ghcr.pull_token}`,
   `egress: [dns, public-https, notify]`.
-- [ ] Contract snapshot for staging, with `hostnames.prod` declared and the
+- [x] Contract snapshot for staging, with `hostnames.prod` declared and the
   volume claim named `data` (PVC `resume-data`, as proposal D11 assumes).
-- [ ] Staging values: `resume_web_host: 0.0.0.0`, the public URL, the notify
+- [x] Staging values: `resume_web_host: 0.0.0.0`, the public URL, the notify
   URL `http://n8n:5678/webhook/notify`, and the fixture seed setting that
   https://gitea.kubelab.live/personal/resume/issues/810 defines (Q5). That
   issue must ship in a published image before step J.
-- [ ] ADR-061 classification entry.
-- [ ] Staging Authelia rule with `subject: group:admins`.
-- [ ] Re-run slice D's Authelia test and add a case pinned to
+- [x] ADR-061 classification entry.
+- [x] Staging Authelia rule with `subject: group:admins`.
+- [x] Re-run slice D's Authelia test and add a case pinned to
   `resume.staging.kubelab.live`, so it fails if that host's rule is missing or
   names another group.
-- [ ] Portal tile and the e2e expectation for the new host.
+- [x] Portal tile and the e2e expectation for the new host.
+
+Landed in #3609 (2026-11-17). Deviations, dated 2026-11-17:
+
+- The snapshot names no `hostnames.prod`. `tests/test_dns_contract_hostnames.py`
+  holds every snapshot's prod hostname to a public record, and that record is
+  #3489's to derive, a prod-lane precondition (Q7). resume dropped the hostname
+  (personal/resume#823) under IDP-053 AC5: a contract names only lanes that exist.
+  It comes back with the prod lane.
+- #3609 first classified resume `dual` / `on-demand`, the option Q4 rejected; it
+  was corrected to `singleton` / `always-on` right after.
+- The hand steps the onboarding needed are #3605, #3606, #3607 and #3608.
 
 ## J. First staging deploy (owner runs)
 
