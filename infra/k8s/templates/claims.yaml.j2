@@ -49,6 +49,8 @@ spec:
     spec:
       backoffLimit: 2
       activeDeadlineSeconds: {{ job.active_deadline_seconds }}
+      # Finished Jobs expire within a day; the CronJob's own status keeps the last success.
+      ttlSecondsAfterFinished: 86400
       template:
         metadata:
           labels:

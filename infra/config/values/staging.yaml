@@ -62,6 +62,23 @@ apps:
       enable_auth: false
       auth_level: bypass
       version: sha-bbb4c929d205
+    # The app reads RESUME_*: the ConfigMap strips APPS_PLATFORM_RESUME_, so each leaf
+    # keeps its own resume_ prefix. The notify token arrives through resume-secrets.
+    resume:
+      version: sha-a0e3aae
+      resume_web_host: 0.0.0.0
+      resume_web_public_url: https://resume.staging.kubelab.live
+      resume_web_secure_cookies: true
+      resume_notify_webhook_url: http://n8n:5678/webhook/notify
+      # Staging serves fixture data, never the owner's (resume #810, RES-HOST-001 Q5).
+      resume_seed_fixtures: true
+      default_port: 8765
+      health_path: /healthz
+      domain: resume.staging.kubelab.live
+      site_domain: resume.staging.kubelab.live
+      site_url: https://resume.staging.kubelab.live
+      enable_auth: true
+      auth_level: one_factor
     console:
       version: sha-a07adfd
 

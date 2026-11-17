@@ -47,3 +47,15 @@ products:
       secret: apps.services.core.gitea.registry_pull_token
     events:
       staging: imagesensortool-image-published
+  resume:
+    repository: personal/resume
+    forge: gitea
+    receiver: generic
+    image_registry: ghcr.io/mlorentedev
+    private: true
+    pull_credential:
+      username: mlorentedev
+      secret: ghcr.pull_token
+    egress: [dns, public-https, notify]
+    events:
+      staging: resume-image-published

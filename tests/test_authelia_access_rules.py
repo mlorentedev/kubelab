@@ -318,3 +318,9 @@ def test_admins_hosts_reads_the_auth_level_from_each_lane_snapshot(
     monkeypatch.setattr(product_render, "snapshot_path", lambda app, env: tmp_path / f"{app}.yaml")
 
     assert _admins_hosts("staging") == {"shop.staging.kubelab.live"}
+
+
+def test_resume_staging_is_a_known_admins_only_host() -> None:
+    """Pinned (RES-HOST-001 slice I): the generic check above judges whatever the snapshots declare,
+    so a contract that quietly dropped `forwardauth-admins` would leave it with nothing to check."""
+    assert "resume.staging.kubelab.live" in _admins_hosts("staging")

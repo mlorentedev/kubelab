@@ -175,6 +175,8 @@ EXPECTATIONS: dict[str, ServiceExpectation] = {
         content_type="text/html",
         body_contains="<html",
     ),
+    # Admins-only behind Authelia: an unauthenticated probe is redirected to the portal.
+    "resume": ServiceExpectation(health_status=(200, 302), auth_protected=True),
     # blog: removed 2026-03-15
     # -- Security --
     "authelia": ServiceExpectation(

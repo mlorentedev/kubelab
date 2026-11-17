@@ -40,10 +40,10 @@ TRAEFIK = {
     "namespaceSelector": {"matchLabels": {"kubernetes.io/metadata.name": "kube-system"}},
     "podSelector": {"matchLabels": {NAME: "traefik"}},
 }
-# Products a base policy admits before their registry entry exists (RES-HOST-001 E3): resume calls n8n's
-# webhook, and its entry lands with the onboarding. The name is allowed as a source until then; the test
-# below fails once the entry exists, so this set empties itself instead of outliving its reason.
-AHEAD_OF_THEIR_ENTRY = {"resume"}
+# Products a base policy admits before their registry entry exists (RES-HOST-001 E3 used it for resume,
+# whose entry has since landed). A name is allowed as a source until then; the test below fails once the
+# entry exists, so this set empties itself instead of outliving its reason.
+AHEAD_OF_THEIR_ENTRY: set[str] = set()
 IMAGE = re.compile(r'"image": "[^"]*"')
 ADDRESS = re.compile(r"(?<![\w.-])([a-z][a-z0-9-]*)(?:\.kubelab(?:\.svc(?:\.cluster\.local)?)?)?:(\d{2,5})\b")
 

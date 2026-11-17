@@ -364,8 +364,8 @@ class TestLabels:
 
 
 @pytest.mark.parametrize("overlay", ["staging", "prod"])
-def test_the_committed_overlays_render_no_claim(overlay: str) -> None:
-    """No product in the repo declares `resources:` yet, so the overlays must hold none of its objects."""
+def test_the_committed_overlays_render_only_resumes_claim(overlay: str) -> None:
+    """resume is the one product declaring `resources:`, on a staging lane only (RES-HOST-001)."""
     if shutil.which("kubectl") is None:
         if os.environ.get("CI"):
             pytest.fail("kubectl not on PATH in CI: the overlays went unchecked")
@@ -381,6 +381,14 @@ def test_the_committed_overlays_render_no_claim(overlay: str) -> None:
     # The base holds hand-written PVCs and CronJobs; what the toolkit generates carries managed-by: toolkit.
     generated = [o for o in objects if o["metadata"].get("labels", {}).get("app.kubernetes.io/managed-by") == "toolkit"]
 
-    assert not [o for o in generated if o["kind"] in ("PersistentVolumeClaim", "CronJob")]
-    strategies = {o["spec"]["strategy"]["type"] for o in generated if o["kind"] == "Deployment"}
-    assert strategies == {"RollingUpdate"}
+    staging = overlay == "staging"
+    claimed = {
+        (o["kind"], o["metadata"]["name"]) for o in generated if o["kind"] in ("PersistentVolumeClaim", "CronJob")
+    }
+    assert claimed == ({("PersistentVolumeClaim", "resume-data"), ("CronJob", "resume-daily")} if staging else set())
+    recreated = {
+        o["metadata"]["name"]
+        for o in generated
+        if o["kind"] == "Deployment" and o["spec"]["strategy"]["type"] == "Recreate"
+    }
+    assert recreated == ({"resume"} if staging else set())

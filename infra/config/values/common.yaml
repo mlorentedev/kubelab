@@ -1209,6 +1209,16 @@ apps:
     imagesensortool:
       image_name: imagesensortool
 
+    # resume's control surface and daily pipeline (RES-HOST-001, resume ADR-008). Its image is
+    # on the registry its entry names (ghcr.io), so only the repository name is declared here;
+    # domain, port, auth and version are staging.yaml's, rendered from the contract snapshot.
+    resume:
+      image_name: resume
+      # ADR028-004. Staging holds seeded fixtures (owner, 2026-11-15), so a second
+      # instance is rebuilt from git rather than forked; not a 3 AM service (ADR-028).
+      state_promotion: dual
+      location: on-demand
+
     # portfolio: removed — renamed to web (WEB-001, 2026-03-15)
     # blog: removed — killed (2026-03-15)
     # wiki: removed — integrated in toolkit as `kubelab docs` (see B1/TOOLKIT-008)
@@ -2384,6 +2394,10 @@ apps:
             path: /dashboard
           vikunja:
             none: "Task board, not a 3 AM service (ADR-028): it waits for the IdP to come back."
+          resume:
+            none: >-
+              Job-search pipeline, not a 3 AM service (ADR-028): the daily CronJob runs
+              without the IdP, and only the board waits for it to come back.
           n8n:
             none: >-
               Automations keep running with the IdP down; only the editor needs a login,

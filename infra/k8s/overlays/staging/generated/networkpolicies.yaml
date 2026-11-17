@@ -1,0 +1,75 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: resume-ingress
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: resume
+    app.kubernetes.io/part-of: kubelab
+    app.kubernetes.io/managed-by: toolkit
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: resume
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+      ports:
+        - protocol: TCP
+          port: 8765
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: resume-egress
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: resume
+    app.kubernetes.io/part-of: kubelab
+    app.kubernetes.io/managed-by: toolkit
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: resume
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 100.64.0.0/10
+              - 169.254.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: n8n
+      ports:
+        - protocol: TCP
+          port: 5678

@@ -1014,6 +1014,19 @@ def build_service_tables(
                 "Sensor comparator",
             )
         )
+    # resume declares a staging lane only for now (RES-HOST-001): admins-only behind Authelia.
+    if "resume" in platform:
+        staging.append(
+            _svc(
+                "Resume",
+                f"https://resume.staging.{base}",
+                f"https://resume.staging.{base}/healthz",
+                "Authelia",
+                "Platform",
+                "ace1",
+                "Job-search pipeline",
+            )
+        )
     prod = _env_services("prod")
     prod.append(_svc("kubelab.live", f"https://{base}", f"https://{base}", "-", "Core", "VPS", "301 → mlorente.dev"))
 

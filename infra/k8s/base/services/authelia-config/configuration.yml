@@ -81,6 +81,13 @@ access_control:
     - domain: 'console.staging.kubelab.live'
       policy: one_factor
 
+    # resume (RES-HOST-001): its tracker holds PII, so only the admins group gets
+    # in (`auth: forwardauth-admins` in its contract; resume ADR-008 decision 5).
+    - domain: 'resume.staging.kubelab.live'
+      policy: one_factor
+      subject:
+        - 'group:admins'
+
     # n8n: own auth (2.x built-in user management, OIDC is enterprise-only)
     - domain: 'n8n.staging.kubelab.live'
       policy: bypass
