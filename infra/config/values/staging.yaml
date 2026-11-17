@@ -61,7 +61,7 @@ apps:
       health_path: /healthz
       enable_auth: false
       auth_level: bypass
-      version: sha-bbb4c929d205
+      version: sha-9c6d2af18237
     # The app reads RESUME_*: the ConfigMap strips APPS_PLATFORM_RESUME_, so each leaf
     # keeps its own resume_ prefix. The notify token arrives through resume-secrets.
     resume:
