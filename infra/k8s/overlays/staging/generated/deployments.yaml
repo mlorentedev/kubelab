@@ -258,3 +258,81 @@ spec:
             requests:
               memory: 256Mi
               cpu: "0.25"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: resume
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: resume
+    app.kubernetes.io/part-of: kubelab
+    app.kubernetes.io/managed-by: toolkit
+spec:
+  replicas: 1
+  strategy:
+    # A surge pod cannot open a database the old pod still holds, nor mount an RWO claim from another node.
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: resume
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: resume
+        app.kubernetes.io/part-of: kubelab
+        # Keeps the Service off the CronJob pods, which carry the same name label.
+        app.kubernetes.io/component: app
+    spec:
+      securityContext:
+        fsGroup: 10001
+        fsGroupChangePolicy: OnRootMismatch
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: resume-data
+      imagePullSecrets:
+        - name: pull-ghcr-io
+      containers:
+        - name: resume
+          image: ghcr.io/mlorentedev/resume:sha-a0e3aae
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8765
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: resume-config
+            - secretRef:
+                name: resume-secrets
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          lifecycle:
+            preStop:
+              sleep:
+                seconds: 5
+          resources:
+            limits:
+              memory: 512Mi
+              cpu: "0.5"
+            requests:
+              memory: 256Mi
+              cpu: "0.25"

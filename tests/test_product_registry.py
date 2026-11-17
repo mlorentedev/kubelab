@@ -272,10 +272,15 @@ class TestRegistryFields:
         entry = product_registry.load_registry().products["web"]
         assert (entry.image_registry, entry.private, entry.pull_credential) == (None, False, None)
 
-    def test_the_committed_registry_names_a_registry_only_for_imagesensortool(self) -> None:
-        """IDP-053 S3b: the one entry on another registry, private, pulling with the catalogued token."""
+    def test_the_committed_registry_names_another_registry_only_for_the_private_products(self) -> None:
+        """IDP-053 S3b and RES-HOST-001: the entries on another registry, private, pulling with a catalogued token."""
         products = product_registry.load_registry().products
-        assert [n for n, p in products.items() if p.image_registry] == ["imagesensortool"]
+        assert [n for n, p in products.items() if p.image_registry] == ["imagesensortool", "resume"]
+        resume = products["resume"]
+        assert (resume.forge, resume.repository, resume.receiver) == ("gitea", "personal/resume", "generic")
+        assert (resume.image_registry, resume.private) == ("ghcr.io/mlorentedev", True)
+        assert resume.pull_credential is not None
+        assert resume.pull_credential.secret == "ghcr.pull_token"
         entry = products["imagesensortool"]
         assert (entry.forge, entry.repository, entry.receiver) == ("gitea", "personal/imagesensortool", "generic")
         assert (entry.image_registry, entry.private) == ("gitea.kubelab.live/personal", True)

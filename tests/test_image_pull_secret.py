@@ -77,14 +77,18 @@ class TestMappingFromTheRegistry:
     def test_a_registry_with_no_private_entry_adds_no_secret(self, tmp_path: Path) -> None:
         assert pull_secret_mappings(_registry(tmp_path)) == []
 
-    def test_the_committed_registry_adds_one_gitea_secret_in_the_envs_its_token_is_catalogued_for(self) -> None:
-        """IDP-053 S3b: imagesensortool is the one private entry. Its Secret follows the token's catalog envs
-        (staging and prod, S2c), so prod applies it too although only staging has a consumer; that consumer is
-        pinned by `test_every_committed_deployment_is_byte_identical`."""
-        (mapping,) = pull_secret_mappings(product_registry.load_registry())
+    def test_the_committed_registry_adds_one_secret_per_private_host_in_the_envs_its_token_is_catalogued_for(
+        self,
+    ) -> None:
+        """IDP-053 S3b and RES-HOST-001: one product pulls from the forge, resume from ghcr.io. Each Secret
+        follows its token's catalog envs (staging and prod), so prod applies them too although only staging has
+        consumers; those are pinned by `test_every_committed_deployment_is_byte_identical`."""
+        mappings = pull_secret_mappings(product_registry.load_registry())
 
-        assert mapping.name == pull_secret_name(HOST)
-        assert mapping.envs == ("staging", "prod")
+        assert {m.name: m.envs for m in mappings} == {
+            pull_secret_name(HOST): ("staging", "prod"),
+            pull_secret_name("ghcr.io"): ("staging", "prod"),
+        }
 
     def test_the_committed_pull_login_is_the_reviewer_account_the_token_is_minted_for(self) -> None:
         """`username` is a copy of `apps.auth.identities.reviewer`; a rename there would ship a dead login."""
@@ -330,7 +334,7 @@ products:
 
     @pytest.mark.parametrize("env", ["staging", "prod"])
     def test_every_committed_deployment_is_byte_identical(self, env: str, tmp_path: Path) -> None:
-        """The committed files are what the template renders, and only imagesensortool pulls with a Secret.
+        """The committed files are what the template renders, and only the private products pull with a Secret.
 
         Compared with the file committed before this change, not with a second render of the new
         template: `make validate-sync` would pass on a template that changed both.
@@ -351,4 +355,4 @@ products:
             for d in yaml.safe_load_all(committed.read_text(encoding="utf-8"))
             if d and d["spec"]["template"]["spec"].get("imagePullSecrets")
         ]
-        assert pulls == (["imagesensortool"] if env == "staging" else [])
+        assert pulls == (["imagesensortool", "resume"] if env == "staging" else [])

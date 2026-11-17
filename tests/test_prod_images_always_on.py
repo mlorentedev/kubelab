@@ -24,10 +24,19 @@ PROD_OVERLAY = REPO / "infra" / "k8s" / "overlays" / "prod"
 COMMON = REPO / "infra" / "config" / "values" / "common.yaml"
 
 
+#: Registries the platform does not run: a forge-hosted product may still publish to one (resume builds on
+#: Gitea and pushes to ghcr.io), and an image there does not sleep with the forge.
+PUBLIC_REGISTRIES = frozenset({"ghcr.io", "docker.io", "quay.io"})
+
+
 def forge_hosts(common: dict[str, Any], products: dict[str, product_registry.Product]) -> set[str]:
-    """The hosts of the forge: its own domain, and the registry host of every forge-hosted product."""
+    """The hosts of the forge: its own domain, and the registry of each forge-hosted product, unless public."""
     hosts = {common["apps"]["services"]["core"]["gitea"]["domain"]}
-    hosts |= {p.image_host for p in products.values() if p.forge == "gitea" and p.image_host}
+    hosts |= {
+        p.image_host
+        for p in products.values()
+        if p.forge == "gitea" and p.image_host and p.image_host not in PUBLIC_REGISTRIES
+    }
     return hosts
 
 

@@ -1,0 +1,35 @@
+# resume's platform contract (kubelab ADR-067): what the control surface and its daily pipeline
+# need from kubelab to run (ADR-008). kubelab reads it at the commit of each published image,
+# validates it against its product registry, and keeps a byte-for-byte copy under
+# infra/config/products/contracts/. A new hostname, auth level, secret or resource: allow it in
+# kubelab first, then edit it here. tests/test_kubelab_contract.py ties `port`, `health_path`, the
+# volume and the job to the Dockerfile's runtime stage and the CLI.
+#
+# The tracker holds PII, so only the `admins` group gets past Authelia (ADR-008 decision 5).
+# The web Deployment and the CronJob share one RWO volume on one node; SQLite's locking is unsafe
+# on a network filesystem (decision 2). The job's schedule is UTC and every environment runs it,
+# staging included (owner, 2026-11-15). There is no prod hostname until kubelab opens a prod lane
+# with its public DNS record: a contract names only the lanes that exist (kubelab IDP-053 AC5).
+schema_version: 1
+image: ghcr.io/mlorentedev/resume
+port: 8765
+health_path: /healthz
+hostnames:
+  staging: resume.staging.kubelab.live
+auth: forwardauth-admins
+secrets:
+  - apps.platform.resume.llm_api_key
+  - apps.services.automation.notify.webhook_secret
+resources:
+  data:
+    type: volume
+    params:
+      size: 1Gi
+      mount_path: /data
+      fs_group: 10001
+  daily:
+    type: job
+    params:
+      schedule: "0 6 * * *"
+      command: [resume, daily]
+      volume: data

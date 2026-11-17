@@ -124,3 +124,29 @@ spec:
         - name: error-pages
   tls:
     certResolver: letsencrypt
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: resume
+  namespace: kubelab
+  labels:
+    app.kubernetes.io/name: resume
+    app.kubernetes.io/part-of: kubelab
+    app.kubernetes.io/managed-by: toolkit
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`resume.staging.kubelab.live`)
+      kind: Rule
+      services:
+        - name: resume
+          port: 8765
+      middlewares:
+        - name: secure-headers
+        - name: rate-limit
+        - name: error-pages
+        - name: authelia
+  tls:
+    certResolver: letsencrypt

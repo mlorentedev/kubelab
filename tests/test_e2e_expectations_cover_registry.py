@@ -81,7 +81,8 @@ def test_the_expectation_agrees_with_the_contract_on_authentication(snapshot: pa
 
     expectation = EXPECTATIONS.get(snapshot.stem)
     assert expectation is not None, f"{snapshot.stem} has a contract snapshot but no entry in tests/e2e/expectations.py"
-    assert expectation.auth_protected == (auth == "forwardauth"), (
+    # `forwardauth-admins` renders the same middleware; the admins-only rule is Authelia's, not the route's.
+    assert expectation.auth_protected == (auth in ("forwardauth", "forwardauth-admins")), (
         f"{snapshot.stem}: the contract says auth: {auth}, "
         f"tests/e2e/expectations.py says auth_protected={expectation.auth_protected}"
     )

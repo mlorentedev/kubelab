@@ -30,7 +30,7 @@ _ENVS = ("staging", "prod")
 # that deletion into a failing test: a pin removed by mistake is not on this list, and an app
 # registered ahead of its first build is added here and may stay once it is pinned (the deploy
 # pull request that pins it edits only values and generated/, never this file).
-DECLARED_UNPINNED: dict[str, set[str]] = {"staging": set(), "prod": {"imagesensortool"}}
+DECLARED_UNPINNED: dict[str, set[str]] = {"staging": set(), "prod": {"imagesensortool", "resume"}}
 
 _REGISTRY = """\
 products:
