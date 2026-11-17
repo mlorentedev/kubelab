@@ -356,14 +356,14 @@ def _pinned(version: str, root: Path = REPO) -> doctor.Check:
     return doctor._check_core_pin(root, _core(), probe)
 
 
-@pytest.mark.parametrize("version", ["2.19.0", "2.21.4", "2.21.6", "2.21.99"])
+@pytest.mark.parametrize("version", ["2.19.0", "2.21.4", "2.21.6", "2.21.99", "2.21.7rc1", "2.21.7.dev0"])
 def test_a_core_inside_the_pin_passes(version):
     check = _pinned(version)
     assert check.ok, check
     assert version in check.detail
 
 
-@pytest.mark.parametrize("version", ["2.22.0", "2.22.1", "2.23.0", "3.0.0", "2.18.9"])
+@pytest.mark.parametrize("version", ["2.22.0", "2.22.1", "2.23.0", "3.0.0", "2.18.9", "2.22.0rc1", "2.22.0b2"])
 def test_a_core_outside_the_pin_is_refused_with_the_cause_and_the_repair(version):
     """2.22.0 crashes `ansible.builtin.git` on an existing shallow clone at a tag, so
     every provision of an existing dev node fails at its first git task."""
