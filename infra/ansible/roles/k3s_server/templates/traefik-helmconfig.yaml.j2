@@ -105,6 +105,9 @@ spec:
       # declared in `edge.backend_timeouts.exceptions` (common.yaml).
       - "--serversTransport.forwardingTimeouts.responseHeaderTimeout={{ k3s_traefik_response_header_timeout }}"
       - "--serversTransport.forwardingTimeouts.dialTimeout={{ k3s_traefik_dial_timeout }}"
+      # How long the edge reads a request from a client, body included (EDGE-002).
+      # Entrypoint-wide: Traefik has no per-router read bound (ADR-076 amendment).
+      - "--entrypoints.websecure.transport.respondingTimeouts.readTimeout={{ k3s_traefik_websecure_read_timeout }}"
 {% if k3s_traefik_acme_enabled %}
       # `api.dashboard` serves the dashboard through `api@internal`, which is
       # reachable only via an IngressRoute -- so it inherits that route's

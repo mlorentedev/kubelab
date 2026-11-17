@@ -45,6 +45,13 @@ k3s_traefik_access_log_min_duration: 1s
 # declares an exception in `edge.backend_timeouts.exceptions` (common.yaml).
 k3s_traefik_response_header_timeout: 60s
 k3s_traefik_dial_timeout: 5s
+# How long the edge reads a request, body included (EDGE-002, ADR-076 amendment).
+# Traefik v3 already defaults to 60 s; declaring it makes the bound visible. It has
+# no per-router form, so it applies to every route on `websecure`, and an upload
+# that takes longer is cut with a 499 (#3550). Traffic between services on one node
+# must not cross the edge, so CI pushes over the compose network instead
+# (`docs/runbooks/cicd.md`). Raise it only on a measured off-LAN failure.
+k3s_traefik_websecure_read_timeout: 60s
 k3s_traefik_http_port: 80
 k3s_traefik_https_port: 443
 
