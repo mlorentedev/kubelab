@@ -115,7 +115,7 @@ def test_every_consumer_of_the_node_path_runs_after_the_resolve_and_carries_its_
     tasks = _tasks()
     resolve = tasks[_index("Resolve the node install mise has active")]
     consumers = [t for t in tasks if "block" not in t and "_dev_node_node_where" in str(t) and t is not resolve]
-    assert len(consumers) >= 3, "the assert, the entry-point check and the repair"
+    assert len(consumers) >= 4, "the assert, the entry-point check, the repair and the retired npm install"
     for task in consumers:
         assert tasks.index(resolve) < tasks.index(task), task["name"]
         tags = set(task.get("tags", [])) - {"dev_node"}
@@ -132,7 +132,6 @@ def test_every_consumer_of_the_node_path_runs_after_the_resolve_and_carries_its_
 # aqua `claude` is one binary at the install root. The wrapper asks mise for the
 # executable (`mise which <item>`) instead of assuming a layout (#3566).
 WRAPPED = {"node": "node", "npm": "node", "npx": "node", "claude": "claude"}
-NODE_WRAPPED = [item for item, tool in WRAPPED.items() if tool == "node"]
 WRAPPER_TASK = "Wrap mise node, npm, npx, and claude into /usr/local/bin for non-interactive SSH tools"
 
 
@@ -168,11 +167,16 @@ def _install(home: Path, version: str) -> None:
 
 
 def _fake_mise(home: Path) -> None:
-    """`mise which <item>` answers the path recorded under <home>/active/<item>; anything else is an error."""
+    """`mise which <item>` answers the path recorded under <home>/active/<item>; anything else is an error.
+
+    It also talks on stderr, as mise does: only stdout may become the path."""
     mise = home / ".local/bin/mise"
     mise.parent.mkdir(parents=True, exist_ok=True)
+    script = (
+        f'#!/bin/sh\n[ "$1" = which ] || exit 2\necho "mise: noise" >&2\ncat "{home}/active/$2" 2>/dev/null || exit 1\n'
+    )
     mise.write_text(
-        '#!/bin/sh\n[ "$1" = which ] || exit 2\ncat "' + str(home) + '/active/$2" 2>/dev/null || exit 1\n',
+        script,
         encoding="utf-8",
         newline="\n",
     )

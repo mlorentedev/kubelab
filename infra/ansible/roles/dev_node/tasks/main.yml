@@ -308,8 +308,8 @@
     # (#3566). This role used to install it with npm into the node's global tree.
     # Dropping that task does not remove what it installed, and the package's
     # `bin/claude` would stay a second `claude` inside mise until a node bump
-    # reinstalls that node. `absent` reports ok once it is gone, so this converges
-    # and can be deleted when no node the role provisioned before this change is left.
+    # reinstalls that node. `absent` reports ok once it is gone, so this converges.
+    # Drop this task once every dev node has provisioned past #3566.
     # tests/test_dev_node_npm_converges.py.
     - name: Retire the npm-installed Claude Code the role used to provision
       community.general.npm:
