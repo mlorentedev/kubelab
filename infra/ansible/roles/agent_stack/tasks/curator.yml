@@ -45,12 +45,52 @@
       register: _agent_stack_curator_before
       when: not ansible_check_mode
 
-    - name: Run the analyzer once
+    - name: Reload systemd for the analyzer units
       ansible.builtin.systemd:
-        name: "{{ agent_stack_curator_unit }}.service"
-        state: started
         daemon_reload: true
       changed_when: false
+      when: not ansible_check_mode
+
+    # `state: started` is not a run: it guarantees the unit is active or activating, and
+    # does nothing at all when its timer already started it (#3575). `--wait` has the same
+    # hole, since an unit already activating queues no job to wait for. So start it, then
+    # poll until whatever is running has finished, then ask systemd how it ended.
+    - name: Run the analyzer once
+      ansible.builtin.command:
+        argv: [systemctl, start, --wait, "{{ agent_stack_curator_unit }}.service"]
+      changed_when: false
+      when: not ansible_check_mode
+
+    - name: Wait for the analyzer run to settle
+      ansible.builtin.command:
+        argv: [systemctl, show, -p, ActiveState, --value, "{{ agent_stack_curator_unit }}.service"]
+      register: _agent_stack_curator_state
+      until: >-
+        ansible_check_mode
+        or _agent_stack_curator_state.stdout | trim not in ['activating', 'active', 'deactivating', 'reloading']
+      retries: "{{ agent_stack_curator_wait_retries }}"
+      delay: "{{ agent_stack_curator_wait_delay }}"
+      changed_when: false
+      # A read: it runs in a dry run too, which starts nothing and so waits for nothing.
+      check_mode: false
+      ignore_errors: "{{ ansible_check_mode }}"
+
+    - name: Read how the analyzer run ended
+      ansible.builtin.command:
+        argv: [systemctl, show, -p, Result, --value, "{{ agent_stack_curator_unit }}.service"]
+      register: _agent_stack_curator_result
+      changed_when: false
+      check_mode: false
+      ignore_errors: "{{ ansible_check_mode }}"
+
+    - name: Verify the analyzer run succeeded
+      ansible.builtin.assert:
+        that:
+          - _agent_stack_curator_result.stdout | trim == 'success'
+        fail_msg: >-
+          {{ agent_stack_curator_unit }}.service ended with Result={{ _agent_stack_curator_result.stdout | trim }};
+          see journalctl -u {{ agent_stack_curator_unit }}.service
+        quiet: true
       when: not ansible_check_mode
 
     - name: Look at the candidates again
