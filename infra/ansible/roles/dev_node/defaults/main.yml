@@ -130,8 +130,6 @@ dev_node_gitea_key_title: "kubelab-{{ inventory_hostname }}-dev-node"
 # restic comes from backup.r2.restic_version, passed in by the playbook; empty
 # here so a play that forgets it fails in the shared install's assert.
 dev_node_restic_version: ""
-# Matches the poetry the workstation runs. CI installs it unpinned with pipx.
-dev_node_poetry_version: "2.2.1"
 # Public repository: cloning needs no credential.
 dev_node_drill_repo: "https://github.com/mlorentedev/kubelab.git"
 dev_node_drill_checkout: "{{ dev_node_home }}/.local/share/kubelab-drill"

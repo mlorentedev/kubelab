@@ -3,9 +3,9 @@
 #
 # The workstation resolves every input, secrets included, and sends them to
 # `toolkit backup drill-<x> --inputs-stdin` over ssh. ace2 executes, so it needs
-# the runtime and nothing else: restic at the fleet's pinned version, poetry,
-# docker for the dev user, and a checkout of its own. It never gets a SOPS age
-# key; the last task fails provisioning if one appears.
+# the runtime and nothing else: restic at the fleet's pinned version, poetry
+# (the dotfiles' install), docker for the dev user, and a checkout of its own.
+# It never gets a SOPS age key; the last task fails provisioning if one appears.
 
 - name: Install restic at the pinned version (node_backup's install, shared)
   # import, not include: resolved when the play is parsed, so `--syntax-check`
@@ -17,33 +17,31 @@
     node_backup_restic_version: "{{ dev_node_restic_version }}"
   tags: [dev_node, drill]
 
-- name: Install pipx (poetry's installer, as in CI)
-  ansible.builtin.apt:
-    name: pipx
-    state: present
-    update_cache: true
-    cache_valid_time: 3600
-  tags: [dev_node, drill]
-
 - name: Read the poetry version the dev user has
   ansible.builtin.command: "{{ dev_node_home }}/.local/bin/poetry --version"
   register: _dev_node_poetry
   failed_when: false
   changed_when: false
-  # A read: skipped under --check, the install below would report a change.
+  # A read: a dry run must still hand the assert below the answer.
   check_mode: false
   become: true
   become_user: "{{ dev_node_user }}"
   tags: [dev_node, drill]
 
-- name: Install poetry at the pinned version for the dev user
-  ansible.builtin.command: pipx install --force "poetry=={{ dev_node_poetry_version }}"
-  environment:
-    HOME: "{{ dev_node_home }}"
-  when: ("(version " ~ dev_node_poetry_version ~ ")") not in _dev_node_poetry.stdout
-  changed_when: true
-  become: true
-  become_user: "{{ dev_node_user }}"
+# poetry belongs to the dotfiles (#3577): their bootstrap installs it as a uv tool
+# into ~/.local/bin, and this role installing a second one over it never converged.
+# The drills run `poetry run toolkit`, so say who installs it rather than fail mid-drill.
+- name: The dev user has the poetry the dotfiles install
+  ansible.builtin.assert:
+    that:
+      - _dev_node_poetry.rc == 0
+      - "'Poetry (version' in _dev_node_poetry.stdout"
+    fail_msg: >-
+      {{ dev_node_home }}/.local/bin/poetry is missing or does not run
+      ({{ (_dev_node_poetry.stderr | default('')) | trim }}). The dotfiles own poetry:
+      their bootstrap installs it (`dotf converge`, run by setup-linux.sh). Check that
+      dev_node_dotfiles_run_setup is true and that the bootstrap succeeded.
+    quiet: true
   tags: [dev_node, drill]
 
 - name: Read the dev user's groups
