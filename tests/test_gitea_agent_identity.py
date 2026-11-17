@@ -9,9 +9,7 @@ it under `writers:`, where the reconciler makes it a collaborator at `write`.
 
 from __future__ import annotations
 
-import os
 import pathlib
-import subprocess
 from typing import Any
 
 import pytest
@@ -99,7 +97,14 @@ def test_the_token_is_catalogued() -> None:
     assert spec.kind is SecretKind.EXTERNAL
     assert spec.expiry is Expiry.NEVER
     assert spec.envs == ("prod",)
-    assert "secrets-copy-gitea-agent-token" in spec.rotate_note, "a re-mint must say how the Bitwarden copy follows"
+    assert "Bitwarden" not in spec.rotate_note, "the token has no workstation copy (ADR-062, 2026-11-16)"
+
+
+def test_no_target_copies_the_agent_token_to_the_workstation() -> None:
+    """Supervised sessions write as the operator, so the agents' token stays in SOPS (ADR-062, 2026-11-16)."""
+    makefile = MAKEFILE.read_text(encoding="utf-8")
+    assert "GITEA_KUBELAB_AGENT_TOKEN" not in makefile
+    assert "apps.services.core.gitea.agent_token" not in makefile
 
 
 def test_the_playbook_reads_the_grant_and_the_secret_from_the_ssot() -> None:
@@ -138,51 +143,6 @@ def test_the_orphan_guards_cover_the_agent_token() -> None:
     revoke = _task("Revoke a named token that Gitea holds and SOPS does not")
     assert any(item["name"] == ROTATABLE_TOKENS["agent"].token_name for item in revoke["loop"])
     assert "gitea_agent_token" in str(_task("Assert the controller can record a minted token")["when"])
-
-
-def test_the_bitwarden_copy_never_puts_the_value_in_argv() -> None:
-    makefile = MAKEFILE.read_text(encoding="utf-8")
-    start = makefile.index("secrets-copy-gitea-agent-token:")
-    recipe = makefile[start : makefile.index("\n\n", start)]
-    assert 'printf %s "$$V" | dotf secrets set --yes GITEA_KUBELAB_AGENT_TOKEN' in recipe
-    assert "test -n" in recipe, "an empty read must not overwrite the Bitwarden copy"
-
-
-def _run_copy(tmp_path: pathlib.Path, printed: str) -> tuple[int, str | None]:
-    """Run the real recipe with the toolkit and dotf stubbed: what reaches Bitwarden?"""
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    received = tmp_path / "received"
-    (bin_dir / "toolkit-stub").write_text(f"#!/bin/sh\nprintf '%s\\n' {printed!r}\n", encoding="utf-8", newline="\n")
-    (bin_dir / "dotf").write_text(f"#!/bin/sh\ncat > {received.as_posix()}\n", encoding="utf-8", newline="\n")
-    for stub in bin_dir.iterdir():
-        stub.chmod(0o755)
-    result = subprocess.run(
-        ["make", "-s", "secrets-copy-gitea-agent-token", f"TOOLKIT={(bin_dir / 'toolkit-stub').as_posix()}"],
-        cwd=REPO,
-        env={**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"},
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-    )
-    return result.returncode, received.read_text(encoding="utf-8") if received.exists() else None
-
-
-def test_the_bitwarden_copy_takes_a_gitea_token(tmp_path: pathlib.Path) -> None:
-    token = "ab" * 20  # 40 hex characters, built so no scanner reads it as a credential
-    assert _run_copy(tmp_path, token) == (0, token)
-
-
-@pytest.mark.parametrize(
-    "printed",
-    ["ab" * 20 + "c", "apps.services.core.gitea.agent_token: not-a-token-value", ""],
-    ids=["41-chars", "not-hex", "empty"],
-)
-def test_the_bitwarden_copy_refuses_anything_but_a_gitea_token(tmp_path: pathlib.Path, printed: str) -> None:
-    """A Gitea token is exactly 40 hex characters; a longer or other line must never reach Bitwarden."""
-    code, received = _run_copy(tmp_path, printed)
-    assert code != 0
-    assert received is None
 
 
 class _Refuses(GiteaClient):
