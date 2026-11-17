@@ -103,6 +103,16 @@ def test_the_edge_declares_how_long_it_reads_a_request(acme: bool) -> None:
     assert [a for a in _arguments(acme) if a.startswith(f"{flag}=")] == [f"{flag}={read}"]
 
 
+def test_the_read_bound_is_the_ruled_value() -> None:
+    """60 s is an owner ruling (2026-11-14, ADR-076 amendment), not a free default.
+
+    The render test above only proves the template reads the variable. Raising the bound
+    applies to every route on the entrypoint, so it takes a measured off-LAN failure and
+    an ADR change, and this test is where that change has to be made on purpose.
+    """
+    assert str(_defaults()["k3s_traefik_websecure_read_timeout"]) == "60s"
+
+
 def test_the_default_bounds_are_bounds() -> None:
     defaults = _defaults()
     for key in (
