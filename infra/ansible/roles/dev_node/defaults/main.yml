@@ -46,6 +46,12 @@ dev_node_dotfiles_repo: "https://github.com/mlorentedev/dotfiles.git"
 dev_node_dotfiles_dir: "{{ dev_node_home }}/Projects/Workspace/dotfiles"
 # The dotfiles repo's default branch is `main` (kubelab's own `master` convention
 # does not apply here) — verified via `git ls-remote --symref … HEAD`.
+# Follows `main` on purpose (owner decision on #3577, 2026-11-17): the dev node
+# is where agents run, so it takes dotfiles fixes as soon as they merge rather
+# than at the next release. The cost is that this task and the bootstrap after
+# it report `changed` whenever dotfiles' `main` moved since the last pass, so an
+# idempotence proof for this role reads `changed=0` on every OTHER task. Pinning
+# a release tag here would trade that for a node that lags `main`.
 dev_node_dotfiles_version: "main"
 # Run the (long) dotfiles bootstrap. Toggle off to only clone/update the repo.
 dev_node_dotfiles_run_setup: true
