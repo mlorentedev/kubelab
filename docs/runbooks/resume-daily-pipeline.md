@@ -20,9 +20,11 @@ cluster only through `apply-secrets` (#3645), so until that runs the pod sits in
 
 1. Check the vault: `toolkit secrets audit --env <env>` lists no missing key for
    resume (`apps.platform.resume.llm_api_key`, `ghcr.pull_token`, the notify
-   bearer). Set any missing value with
-   `toolkit secrets set <key> --env <env> --stdin` and land the encrypted file
-   through a PR.
+   bearer). Set a missing value in the vault its catalog entry names, and land
+   the encrypted file through a PR. `ghcr.pull_token` is shared, so set it with
+   `--env common`. A per-environment copy would shadow every later rotation.
+   resume's own keys take `--env <env>`:
+   `toolkit secrets set <key> --env <env> --stdin`.
 2. From a tree at `master`, preview the apply with
    `make apply-secrets ENV=<env> DRY_RUN=1`. Only resume's Secrets
    (`resume-secrets`, `pull-ghcr-io`) should show as created, plus
@@ -30,8 +32,9 @@ cluster only through `apply-secrets` (#3645), so until that runs the pod sits in
    `deployment/resume`. Stop if anything else changes.
 3. Apply with `make apply-secrets ENV=<env>`. The first image pull can outlast
    the 180s readiness wait, in which case the run exits 1 although every Secret
-   was applied (#3652). Confirm with
-   `kubectl -n kubelab rollout status deploy/resume`.
+   was applied (#3652). Confirm against that same environment's cluster:
+   `kubectl --kubeconfig ~/.kube/kubelab-<env>-config -n kubelab rollout status deploy/resume`.
+   Every `kubectl` command below takes the same `--kubeconfig`.
 4. Acceptance:
    - The pod is `Ready` on `/healthz`.
    - An `operator` user gets 403 and a `superadmin` user gets the board. This is
@@ -44,9 +47,12 @@ cluster only through `apply-secrets` (#3645), so until that runs the pod sits in
    - The first scheduled run prints `daily: ok`, and the no-success alert
      returns to Normal.
 
-Rollback: the Secrets are additive. To take resume out of an environment, revert
-the product entry's PR. Argo then prunes the Deployment and the CronJob and keeps
-the PVC (`Prune=false`).
+Rollback: to take resume out of an environment, revert the product entry's PR.
+Argo then prunes the Deployment and the CronJob and keeps the PVC (`Prune=false`).
+Argo does not manage the Secrets, so they stay behind: delete `resume-secrets` by
+hand, and keep `pull-ghcr-io` only while another product still pulls from ghcr.
+Do not run `apply-secrets` for that environment until the entry is gone from the
+vault's mappings, or it recreates them.
 
 ## No-success alert
 
