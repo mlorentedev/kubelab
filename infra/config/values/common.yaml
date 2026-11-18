@@ -924,7 +924,7 @@ edge:
 
   traefik:
     name: traefik
-    image: traefik:v3.7
+    image: traefik:v3.6
     dashboard_port: 8080
     health_path: /ping
     # Core
@@ -1873,7 +1873,7 @@ apps:
         # live alerting path, so always-on by ADR-028's own test.
         state_promotion: dual
         location: always-on
-        image: n8nio/n8n:2.48.4
+        image: n8nio/n8n:2.12.3
         domain: n8n.kubelab.live
         enable_auth: false
         auth_level: bypass
@@ -2115,7 +2115,7 @@ apps:
         location: always-on
         # Internal-only, no public DNS record — each env overrides its own domain.
         image: grafana/loki:3.7.10
-        vector_image: timberio/vector:0.61.0-alpine
+        vector_image: timberio/vector:0.43.1-alpine
         enable_auth: true
         auth_level: one_factor
         default_port: 3100
@@ -2435,7 +2435,7 @@ apps:
         state_promotion: dual
         location: always-on
         # Internal-only, no public DNS record — each env overrides its own domain.
-        image: crowdsecurity/crowdsec:v1.8.2
+        image: crowdsecurity/crowdsec:v1.7.6
         bouncer_image: fbonalair/traefik-crowdsec-bouncer:0.5.0
         bouncer_name: crowdsec-bouncer-traefik
         enable_bouncer_middleware: true  # Set false in dev — bouncer blocks localhost traffic
@@ -2615,7 +2615,7 @@ apps:
         # Run through the agent's daemon at every provision, with a memory and a
         # CPU limit, to prove the sandbox Hermes executes commands in can start.
         probe:
-          image: busybox:1.38.0
+          image: busybox:1.37.0
         # The gateway, run by the agent's own daemon. Pinned: the tag names the
         # source the config keys and the approval semantics were read from.
         image: nousresearch/hermes-agent:v0.23.1
