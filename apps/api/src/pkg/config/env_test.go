@@ -59,6 +59,7 @@ func TestPopulateConfigForge(t *testing.T) {
 		for _, key := range []string{
 			"FORGE_GITEA_TOKEN", "FORGE_GITEA_WRITE_TOKEN", "INFRA_FORGE_GITEA_URL", "INFRA_FORGE_GITHUB_APP_ID",
 			"INFRA_FORGE_GITHUB_INSTALLATION_ID", "FORGE_GITHUB_PRIVATE_KEY", "FORGE_CREATE_TOKEN",
+			"INFRA_FORGE_WRITES_ENABLED",
 		} {
 			t.Setenv(key, "")
 		}
@@ -67,7 +68,7 @@ func TestPopulateConfigForge(t *testing.T) {
 			t.Fatalf("populateConfig() without forge credentials failed: %v", err)
 		}
 		if cfg.Forge.GiteaToken != "" || cfg.Forge.GiteaWriteToken != "" || cfg.Forge.GiteaURL != "" || cfg.Forge.GitHubPrivateKey != "" ||
-			cfg.Forge.GitHubAppID != "" || cfg.Forge.GitHubInstallationID != "" || cfg.Forge.CreateToken != "" {
+			cfg.Forge.GitHubAppID != "" || cfg.Forge.GitHubInstallationID != "" || cfg.Forge.CreateToken != "" || cfg.Forge.WritesEnabled {
 			t.Fatalf("absent credentials must stay empty, got %+v", cfg.Forge)
 		}
 	})
@@ -91,4 +92,28 @@ func TestPopulateConfigForge(t *testing.T) {
 			t.Fatalf("forge credentials read from the wrong variables: got %q, want %q", got, want)
 		}
 	})
+}
+
+// The write gate is a declaration, never inferred from a credential (ADR-066 W14): absent or
+// unreadable is off, so a mistyped value fails closed and staging never writes by accident.
+func TestForgeWritesEnabledFailsClosed(t *testing.T) {
+	t.Setenv("ENVIRONMENT", EnvDev)
+	t.Setenv("SITE_TITLE", "KubeLab")
+	t.Setenv("SITE_DOMAIN", "kubelab.live")
+	// Credentials that would build a writer must change nothing while the gate is off.
+	t.Setenv("FORGE_GITEA_WRITE_TOKEN", "gitea-write-token")
+	t.Setenv("FORGE_GITHUB_PRIVATE_KEY", "pem-body")
+	for value, want := range map[string]bool{
+		"": false, "false": false, "no": false, "enabled": false, "tru": false, " true": false,
+		"true": true, "True": true, "1": true,
+	} {
+		t.Setenv("INFRA_FORGE_WRITES_ENABLED", value)
+		cfg, err := populateConfig()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.Forge.WritesEnabled != want {
+			t.Errorf("INFRA_FORGE_WRITES_ENABLED=%q: WritesEnabled = %v, want %v", value, cfg.Forge.WritesEnabled, want)
+		}
+	}
 }

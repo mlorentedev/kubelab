@@ -591,6 +591,12 @@ infra:
     # the Authelia rule is in both authelia-config/configuration.yml files, and the
     # public record is `console` in infra/terraform/dns/services.json.
     console_domain: console.kubelab.live
+    # The gate on every write to a forge (ADR-066 W14), read by the API as
+    # INFRA_FORGE_WRITES_ENABLED. False builds no forge writer, so the write routes
+    # answer 503 and enqueue nothing. Prod alone sets it true: staging has no forge
+    # writer (W7). The API reads it with strconv.ParseBool and an unparsable value
+    # means false, so a typo fails closed. `tests/test_forge_writes_gate.py`.
+    writes_enabled: false
 resources:
   default_memory_limit: 512m
   default_memory_reservation: 256m
