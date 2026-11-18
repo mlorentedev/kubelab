@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.14.0](https://github.com/mlorentedev/kubelab/compare/api-v1.13.0...api-v1.14.0) (2026-11-18)
+
+
+### Features
+
+* **api:** add the forge writer adapter for GitHub and Gitea ([#3634](https://github.com/mlorentedev/kubelab/issues/3634)) ([b134827](https://github.com/mlorentedev/kubelab/commit/b1348273c873c7a23457080bdfaad9c780570c37))
+
 ## [1.13.0](https://github.com/mlorentedev/kubelab/compare/api-v1.12.1...api-v1.13.0) (2026-11-17)
 
 
