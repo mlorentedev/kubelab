@@ -172,8 +172,10 @@ def test_a_required_crd_is_defined_by_an_earlier_entry() -> None:
     from toolkit.cli.infra import _load_cluster_bootstrap
 
     root = Path(__file__).resolve().parents[1]
+    entries = _load_cluster_bootstrap()
+    assert any(e.requires_crd for e in entries), "no entry declares requires_crd: this guard checks nothing"
     seen: set[str] = set()
-    for entry in _load_cluster_bootstrap():
+    for entry in entries:
         if entry.requires_crd:
             assert entry.requires_crd in seen, f"{entry.name}: no earlier entry defines CRD {entry.requires_crd}"
         docs = yaml.safe_load_all((root / entry.manifest).read_text(encoding="utf-8"))

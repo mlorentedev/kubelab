@@ -350,8 +350,9 @@ class TestRequiresCrd:
             runner=runner,
         )
         assert runner.call_count == 1, "only the CRD lookup: no validation can map the kind"
-        lookup = runner.call_args_list[0].args[0]
-        assert lookup[-3:] == ["crd", self.CRD, "--ignore-not-found"]
+        lookup = runner.call_args_list[0]
+        assert lookup.args[0][-3:] == ["crd", self.CRD, "--ignore-not-found"]
+        assert "input" not in lookup.kwargs, "a CRD lookup sends no manifest"
         out = capsys.readouterr()
         assert "NOT validated" in out.out + out.err + caplog.text
 
