@@ -1,5 +1,5 @@
 ---
-id: lesson-767-a-cleanup-that-bounds-the-journal-by-size-overrides-the-journal-cap
+id: lesson-768-a-cleanup-that-bounds-the-journal-by-size-overrides-the-journal-cap
 type: lesson
 status: active
 created: "2026-11-18"
