@@ -14,7 +14,7 @@ tags: [kubelab, edge-tls, traefik, gitea, ci]
 
 **Problem**: Prod Traefik logged the failed uploads as 499, which reads as "the client gave up". The per-line access log for the gitea router showed something else:
 
-- every 499 was a `PUT` whose `total` was 60.000 s from the request start;
+- every 499 was a `PUT` whose `total` was about 60 s from the request start (60.0 to 61.2 s);
 - the paired 504s had `total` ≈ 60 s and an origin time of a few µs.
 
 That is the `websecure` entrypoint's `respondingTimeouts.readTimeout`. Traefik v3 defaults it to 60 s, it covers the whole request body, and nothing in the repo declared it. The largest arm64 blob was 17 MB, and at the uplink's rate of under about 2.3 Mbit/s it needs longer than that. Traefik has no per-router read bound, so raising it would apply to every route on the entrypoint.
