@@ -92,7 +92,7 @@ spec:
     spec:
       containers:
         - name: web
-          image: docker.io/mlorentedev/kubelab-web:sha-6b63f5d
+          image: docker.io/mlorentedev/kubelab-web:sha-29c6b7b
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
@@ -222,7 +222,7 @@ spec:
         - name: pull-gitea-kubelab-live
       containers:
         - name: imagesensortool
-          image: gitea.kubelab.live/personal/imagesensortool:sha-9c6d2af18237
+          image: gitea.kubelab.live/personal/imagesensortool:sha-cbc5c8f533c6
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

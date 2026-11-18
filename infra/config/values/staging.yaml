@@ -52,7 +52,7 @@ apps:
       enable_blog: false
       enable_homelabs: false
       enable_contact: false
-      version: sha-6b63f5d
+      version: sha-29c6b7b
     imagesensortool:
       domain: staging.imagesensortool.com
       site_domain: staging.imagesensortool.com
@@ -61,7 +61,7 @@ apps:
       health_path: /healthz
       enable_auth: false
       auth_level: bypass
-      version: sha-9c6d2af18237
+      version: sha-cbc5c8f533c6
     # The app reads RESUME_*: the ConfigMap strips APPS_PLATFORM_RESUME_, so each leaf
     # keeps its own resume_ prefix. The notify token arrives through resume-secrets.
     resume:
