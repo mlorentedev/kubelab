@@ -717,3 +717,15 @@ def test_the_forge_endpoint_names_gitea_s_container_port() -> None:
     assert _runner()["environment"]["GITEA_INSTANCE_URL"] == f"http://{host}:{port}", (
         "the runner polls Gitea at the same declared endpoint the jobs push to."
     )
+
+
+def test_the_playbook_hands_the_role_the_declared_forge_endpoint() -> None:
+    playbook = REPO / "infra/ansible/playbooks/provision-bee.yml"
+    (play,) = [p for p in yaml.safe_load(playbook.read_text(encoding="utf-8")) if "roles" in p]
+    (role,) = [r for r in play["roles"] if isinstance(r, dict) and "beelink_services" in str(r.get("role"))]
+    source = "config.apps.services.automation.gitea_runner"
+    for var, key in (("act_runner_forge_endpoint", "forge_endpoint"), ("act_runner_job_network", "job_network")):
+        assert role["vars"].get(var) == f"{{{{ {source}.{key} }}}}", (
+            f"provision-bee.yml must hand `{var}` from `{source}.{key}`: the template tests "
+            "inject it directly, so only this assertion covers the hand-off the node renders (EDGE-002)."
+        )
