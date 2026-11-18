@@ -1,7 +1,7 @@
 ---
 id: EDGE-002-forge-upload-bound
 type: spec
-status: draft
+status: archived
 created: "2026-11-14"
 owner: manu
 issue: "kubelab#3550"
