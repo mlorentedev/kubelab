@@ -1,5 +1,4 @@
 ---
-maintenance_journal_max_size: "20M"
 maintenance_snap_retain: 2
 maintenance_tmp_max_days: 7
 # ANSIBLE-035: the timer is now a property of provisioning, not an

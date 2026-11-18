@@ -96,7 +96,7 @@ def test_a_node_that_cannot_patch_still_gets_cleaned() -> None:
     """The RPi4 is the standing proof, not a hypothetical.
 
     Its apt has been unable to resolve `bzip2` since #1198. A maintenance run
-    that aborted on a failed patch would have stopped vacuuming journals on a
+    that aborted on a failed patch would have stopped cleaning the disk on a
     node with 8GB of storage — trading a CVE for a full disk.
     """
     script = _render()
@@ -200,7 +200,7 @@ def test_the_patch_tasks_report_change_only_when_they_change_something() -> None
     upgrade = by_name["Apply security updates"]
     assert upgrade.get("failed_when") is False, (
         "a node that cannot patch must still get its disk cleaned — the RPi4's apt "
-        "has been broken since #1198 and it needs journal vacuuming more, not less"
+        "has been broken since #1198 and it needs disk cleaning more, not less"
     )
 
 
@@ -386,3 +386,20 @@ def test_the_timer_path_judges_a_failed_hold_by_dpkg_state(tmp_path: pathlib.Pat
 
     assert unprotected == {"docker-ce", "tailscale"}
     assert "containerd.io" in held and "docker-ce" not in held
+
+
+def test_the_role_never_vacuums_the_journal() -> None:
+    """journald's SystemMaxUse is the journal's one bound (#3637).
+
+    The role used to run `journalctl --vacuum-size=20M`, from both the timer
+    script and the one-shot tasks. That undid base_system's 1G cap on the
+    large-disk nodes: beelink held a single boot on 2026-11-18, and the
+    seven-day readings in `make backup-schedule` missed a ship systemd killed
+    three days earlier. A vacuum of any kind here brings that back.
+    """
+    offenders = [
+        str(path.relative_to(REPO))
+        for path in ROLE.rglob("*")
+        if path.is_file() and "--vacuum-" in path.read_text(encoding="utf-8")
+    ]
+    assert not offenders, f"node_maintenance vacuums the journal again: {offenders}"

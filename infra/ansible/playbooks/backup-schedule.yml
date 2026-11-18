@@ -243,9 +243,30 @@
       changed_when: false
       failed_when: check_unindexed.rc not in [0, 1]
 
+    - name: Read how far back the journal reaches
+      # #3637: every count in the report below is "of the last 7 days" only if
+      # the journal still holds 7 days. One that keeps less (the 20M cap on the
+      # small nodes, or node_maintenance's vacuum until #3637) reported a clean
+      # 4 / 4 on beelink while missing a ship killed three days earlier. The
+      # bound is the oldest entry of the whole journal, not the first line of
+      # one unit, which also starts late on a node whose timer was off.
+      check_mode: false
+      ansible.builtin.shell:
+        cmd: >-
+          printf '%s %s\n' "$(date +%s)"
+          "$(journalctl --quiet --no-pager --output short-unix | head -n 1 | cut -d. -f1)"
+        executable: /bin/bash
+      register: journal_reach
+      changed_when: false
+
     - name: Report the lock's effect on prune and ship
       check_mode: false
       vars:
+        journal_fields: "{{ journal_reach.stdout.split() }}"
+        # Unrounded: 6.96 rounded to 7.0 would pass as a full week (Codex on #3640).
+        journal_days: >-
+          {{ ((journal_fields[0] | int) - (journal_fields[1] | int)) / 86400
+             if journal_fields | length == 2 else -1 }}
         ship_started: "{{ ship_backups.stdout_lines | select('search', '^Starting node-backup-ship') | list | length }}"
         ship_saved: "{{ ship_backups.stdout_lines | select('search', ' saved$') | list | length }}"
         ship_began: >-
@@ -253,6 +274,13 @@
              | list | length }}
       ansible.builtin.debug:
         msg: >-
+          {{ ('journal reach: not measured, so no count below is known to cover 7 days')
+             if journal_days | float < 0
+             else ('journal reaches back ' ~ (journal_days | float | round(1)) ~ ' days, from '
+                   ~ ('%Y-%m-%d %H:%M' | strftime(journal_fields[1] | int))
+                   ~ ': every count below covers that, NOT 7 days')
+             if journal_days | float < 7
+             else 'journal reaches back 7 days or more' }};
           {{ (prune_refused.stdout | trim) if (prune_refused.stdout | trim)
              else 'node-backup-prune: no refused-delete count in the last 7 days (no run that reached forget since the count shipped)' }};
           node-backup-prune runs in the journal for the last 7 days: {{ prune_runs.stdout_lines | length }};

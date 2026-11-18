@@ -65,6 +65,10 @@ journald_storage: "persistent"
 # A play for a node with room sets journald_system_max_use to the larger value:
 # 1G holds 14 days up to about 3 MB an hour, three times what ace2 writes (#2702).
 # A busier node still reaches the two boots; list-boots after a provision says which.
+# This cap is the journal's ONLY bound. Until #3637 node_maintenance also ran
+# `journalctl --vacuum-size=20M`, so the 1G above never held more than ~20M:
+# beelink kept one boot on 2026-11-18. tests/test_node_maintenance_patching.py
+# fails if the role vacuums again.
 journald_system_max_use: "20M"
 journald_large_disk_max_use: "1G"
 journald_system_keep_free: "50M"

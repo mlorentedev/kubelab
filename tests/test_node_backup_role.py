@@ -1512,3 +1512,39 @@ def test_the_schedule_arms_the_prune_and_reports_its_failures() -> None:
     )
     report = next(t for t in play["tasks"] if t.get("name") == "Report the prune unit's failures")
     assert "not installed" in report["ansible.builtin.debug"]["msg"]
+
+
+def _render_reach_line(stdout: str) -> str:
+    """Render the report's first clause the way Ansible would, for one journal reading."""
+    import time
+
+    import jinja2
+
+    task = next(t for t in _schedule_playbook()["tasks"] if t.get("name") == "Report the lock's effect on prune and ship")
+    env = jinja2.Environment()
+    env.filters["strftime"] = lambda fmt, epoch: time.strftime(fmt, time.gmtime(epoch))
+    ctx: dict = {"journal_reach": {"stdout": stdout}}
+    for key in ("journal_fields", "journal_days"):
+        raw = env.from_string(task["vars"][key]).render(**ctx).strip()
+        ctx[key] = raw.strip("[]").replace("'", "").split(", ") if key == "journal_fields" else raw
+    first_clause = task["ansible.builtin.debug"]["msg"].split("}};", 1)[0] + "}}"
+    return env.from_string(first_clause).render(**ctx).strip()
+
+
+def test_the_schedule_report_says_when_the_journal_holds_less_than_its_window() -> None:
+    """#3637: beelink's journal held one boot, and the report read a clean 4 / 4
+    "in the last 7 days" while missing a ship systemd killed three days before.
+    A count over a shorter window has to say so."""
+    task = next(t for t in _schedule_playbook()["tasks"] if t.get("name") == "Read how far back the journal reaches")
+    cmd = str(task["ansible.builtin.shell"]["cmd"])
+    assert "journalctl" in cmd and " -u " not in cmd and "--since" not in cmd, (
+        "the reach must be the whole journal's oldest entry, not one unit's or a window's"
+    )
+
+    now = 1_763_500_000
+    short = _render_reach_line(f"{now} {now - int(0.8 * 86400)}")
+    assert "NOT 7 days" in short and "0.8 days" in short, short
+    assert "NOT 7 days" not in _render_reach_line(f"{now} {now - 9 * 86400}")
+    # Just under the window must not round up into it (Codex on #3640).
+    assert "NOT 7 days" in _render_reach_line(f"{now} {now - int(6.96 * 86400)}")
+    assert "not measured" in _render_reach_line(f"{now} ")
