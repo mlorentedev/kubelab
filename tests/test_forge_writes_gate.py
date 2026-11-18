@@ -11,9 +11,12 @@ staging would give it a writer the decision says it must not have (W7).
 from __future__ import annotations
 
 import re
+import shutil
+import subprocess
 from pathlib import Path
 from typing import Any
 
+import pytest
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -39,6 +42,35 @@ def _configmaps(env: str) -> dict[str, dict[str, str]]:
 def _carriers(env: str) -> dict[str, str | None]:
     """Every ConfigMap that carries the other forge variables, with the gate's value in it (None if absent)."""
     return {name: data.get(ENV_VAR) for name, data in _configmaps(env).items() if "INFRA_FORGE_GITEA_URL" in data}
+
+
+def _api_environment(env: str) -> dict[str, str]:
+    """What the API pod's `envFrom` ConfigMaps hold in the overlay Argo CD applies, read from the render.
+
+    The generated file is not the pod's environment: a ConfigMap that was generated and that the
+    Deployment does not reference would leave the API on its default. So this follows the
+    Deployment's own references to the ConfigMaps the overlay emits.
+    """
+    if shutil.which("kubectl") is None:
+        pytest.skip("kubectl not on PATH: cannot render the overlay (a skip is CANNOT CHECK, not OK)")
+    out = subprocess.run(
+        ["kubectl", "kustomize", str(REPO_ROOT / "infra" / "k8s" / "overlays" / env)],
+        capture_output=True, text=True, check=True,
+    ).stdout
+    docs = [d for d in yaml.safe_load_all(out) if d]
+    api = next(d for d in docs if d["kind"] == "Deployment" and d["metadata"]["name"] == "api")
+    refs = {
+        source["configMapRef"]["name"]
+        for container in api["spec"]["template"]["spec"]["containers"]
+        for source in container.get("envFrom") or []
+        if "configMapRef" in source
+    }
+    assert refs, "the api Deployment loads no ConfigMap, so this test would prove nothing"
+    environment: dict[str, str] = {}
+    for doc in docs:
+        if doc["kind"] == "ConfigMap" and doc["metadata"]["name"] in refs:
+            environment.update(doc.get("data") or {})
+    return environment
 
 
 class TestTheDeclaration:
@@ -68,6 +100,11 @@ class TestTheApiReceivesIt:
         carriers = _carriers("staging")
         assert carriers, "no staging ConfigMap carries the forge variables, so this test would prove nothing"
         assert set(carriers.values()) == {"false"}, f"staging ConfigMaps carry {carriers}"
+
+    @pytest.mark.parametrize(("env", "expected"), [("prod", "true"), ("staging", "false")])
+    def test_the_api_deployment_loads_the_value(self, env: str, expected: str) -> None:
+        """The effect: the variable is in the environment the API pod is started with."""
+        assert _api_environment(env).get(ENV_VAR) == expected
 
     def test_the_go_reader_asks_for_the_name_the_generator_emits(self) -> None:
         """The key flattens to INFRA_FORGE_WRITES_ENABLED (ADR-036); env.go must read exactly that."""
