@@ -13,8 +13,15 @@ const githubAPI = "https://api.github.com"
 // GitHub writes through the App installation, so it needs the App key. Gitea needs its address and
 // its own write token: the reader's token is read:issue, and is never lent to a write. Staging has
 // no write token (ADR-066 W7), so it has no Gitea writer.
+//
+// With Credentials.WritesEnabled false there is no writer at all, whatever is configured (W14):
+// the gate is a declaration and never inferred from a credential, because staging holds the App
+// key for its reads and the App can write.
 func NewWriters(c Credentials) map[string]Writer {
 	writers := map[string]Writer{}
+	if !c.WritesEnabled {
+		return writers
+	}
 	if c.GitHubPrivateKey != "" {
 		client := &http.Client{Transport: &Ceiling{Limit: HourlyCallCeiling}}
 		writers["github"] = &GitHubWriter{BaseURL: githubAPI, Tokens: newAppTokens(c, client).Token, HTTP: client}

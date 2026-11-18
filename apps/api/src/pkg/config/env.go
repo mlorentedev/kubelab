@@ -38,6 +38,7 @@ type Config struct {
 		GiteaURL             string // the Gitea root the reader calls; empty wires no Gitea reader
 		GiteaToken           string // read:issue token on the reviewer's account
 		GiteaWriteToken      string // write:issue token on the machine account, prod only; empty means no Gitea writer (ADR-066 W7)
+		WritesEnabled        bool   // infra.forge.writes_enabled: false builds no writer for any forge (ADR-066 W14)
 		GitHubAppID          string
 		GitHubInstallationID string
 		GitHubPrivateKey     string // PEM of the GitHub App, never logged
@@ -120,6 +121,7 @@ func populateConfig() (*Config, error) {
 	cfg.Forge.GiteaURL = os.Getenv("INFRA_FORGE_GITEA_URL")
 	cfg.Forge.GiteaToken = os.Getenv("FORGE_GITEA_TOKEN")
 	cfg.Forge.GiteaWriteToken = os.Getenv("FORGE_GITEA_WRITE_TOKEN")
+	cfg.Forge.WritesEnabled = getBoolEnv("INFRA_FORGE_WRITES_ENABLED", false)
 	cfg.Forge.GitHubAppID = os.Getenv("INFRA_FORGE_GITHUB_APP_ID")
 	cfg.Forge.GitHubInstallationID = os.Getenv("INFRA_FORGE_GITHUB_INSTALLATION_ID")
 	cfg.Forge.GitHubPrivateKey = os.Getenv("FORGE_GITHUB_PRIVATE_KEY")

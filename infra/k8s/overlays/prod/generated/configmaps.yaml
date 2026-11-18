@@ -18,6 +18,7 @@ data:
   INFRA_FORGE_SOURCES: >-
     gitea:personal/imagesensortool, gitea:personal/resume, gitea:teledyne/fae-brain,
     gitea:teledyne/openkm-brain, gitea:teledyne/projects-toolkit, github:mlorentedev/*
+  INFRA_FORGE_WRITES_ENABLED: "true"
   INFRA_POSTGRES_DATABASE: "kubelab"
   INFRA_POSTGRES_HOST: "postgres"
   INFRA_POSTGRES_PORT: "5432"
@@ -60,6 +61,7 @@ data:
   INFRA_FORGE_SOURCES: >-
     gitea:personal/imagesensortool, gitea:personal/resume, gitea:teledyne/fae-brain,
     gitea:teledyne/openkm-brain, gitea:teledyne/projects-toolkit, github:mlorentedev/*
+  INFRA_FORGE_WRITES_ENABLED: "true"
   INFRA_POSTGRES_DATABASE: "kubelab"
   INFRA_POSTGRES_HOST: "postgres"
   INFRA_POSTGRES_PORT: "5432"
@@ -97,6 +99,7 @@ data:
   INFRA_FORGE_SOURCES: >-
     gitea:personal/imagesensortool, gitea:personal/resume, gitea:teledyne/fae-brain,
     gitea:teledyne/openkm-brain, gitea:teledyne/projects-toolkit, github:mlorentedev/*
+  INFRA_FORGE_WRITES_ENABLED: "true"
   INFRA_POSTGRES_DATABASE: "kubelab"
   INFRA_POSTGRES_HOST: "postgres"
   INFRA_POSTGRES_PORT: "5432"

@@ -50,7 +50,7 @@ func TestMarker(t *testing.T) {
 // Staging's shape (W7): the reader has an address and a read token, and there is no write token.
 // It has no Gitea writer, and the read token is never lent to a write.
 func TestNoGiteaWriterWithoutAWriteToken(t *testing.T) {
-	writers := forge.NewWriters(forge.Credentials{GiteaURL: "http://gitea:3000", GiteaToken: "read-token"})
+	writers := forge.NewWriters(forge.Credentials{WritesEnabled: true, GiteaURL: "http://gitea:3000", GiteaToken: "read-token"})
 	if _, ok := writers["gitea"]; ok {
 		t.Fatal("a gitea writer was built from the read token")
 	}
@@ -61,13 +61,13 @@ func TestNoGiteaWriterWithoutAWriteToken(t *testing.T) {
 }
 
 func TestNoGiteaWriterWithoutAnAddress(t *testing.T) {
-	if _, ok := forge.NewWriters(forge.Credentials{GiteaWriteToken: "w"})["gitea"]; ok {
+	if _, ok := forge.NewWriters(forge.Credentials{WritesEnabled: true, GiteaWriteToken: "w"})["gitea"]; ok {
 		t.Fatal("a gitea writer with no address")
 	}
 }
 
 func TestTheGiteaWriterIsWiredFromItsOwnToken(t *testing.T) {
-	c := forge.Credentials{GiteaURL: "http://gitea:3000", GiteaToken: "read-token", GiteaWriteToken: "write-token"}
+	c := forge.Credentials{WritesEnabled: true, GiteaURL: "http://gitea:3000", GiteaToken: "read-token", GiteaWriteToken: "write-token"}
 	w, err := forge.WriterFor(forge.NewWriters(c), "gitea")
 	if err != nil {
 		t.Fatal(err)
@@ -86,7 +86,7 @@ func TestTheGiteaWriterNeverSendsTheReadToken(t *testing.T) {
 		_, _ = w.Write([]byte(`{"state":"closed"}`))
 	}))
 	defer srv.Close()
-	w, err := forge.WriterFor(forge.NewWriters(forge.Credentials{GiteaURL: srv.URL, GiteaToken: "read-token", GiteaWriteToken: "write-token"}), "gitea")
+	w, err := forge.WriterFor(forge.NewWriters(forge.Credentials{WritesEnabled: true, GiteaURL: srv.URL, GiteaToken: "read-token", GiteaWriteToken: "write-token"}), "gitea")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +99,7 @@ func TestTheGiteaWriterNeverSendsTheReadToken(t *testing.T) {
 // GitHub writes through the App installation: without the App key it has no writer, and a
 // write is never sent anonymously.
 func TestNoGitHubWriterWithoutTheAppKey(t *testing.T) {
-	writers := forge.NewWriters(forge.Credentials{GitHubAppID: "1", GitHubInstallationID: "2"})
+	writers := forge.NewWriters(forge.Credentials{WritesEnabled: true, GitHubAppID: "1", GitHubInstallationID: "2"})
 	if _, ok := writers["github"]; ok {
 		t.Fatal("a github writer with no App key")
 	}
@@ -110,7 +110,7 @@ func TestNoGitHubWriterWithoutTheAppKey(t *testing.T) {
 
 func TestTheGitHubWriterUsesTheAppInstallationToken(t *testing.T) {
 	w, err := forge.WriterFor(forge.NewWriters(forge.Credentials{
-		GitHubAppID: "1", GitHubInstallationID: "2", GitHubPrivateKey: "pem",
+		WritesEnabled: true, GitHubAppID: "1", GitHubInstallationID: "2", GitHubPrivateKey: "pem",
 	}), "github")
 	if err != nil {
 		t.Fatal(err)
@@ -122,7 +122,7 @@ func TestTheGitHubWriterUsesTheAppInstallationToken(t *testing.T) {
 }
 
 func TestWriterForAnUnknownForge(t *testing.T) {
-	if _, err := forge.WriterFor(forge.NewWriters(forge.Credentials{}), "bitbucket"); !errors.Is(err, forge.ErrNoWriter) {
+	if _, err := forge.WriterFor(forge.NewWriters(forge.Credentials{WritesEnabled: true}), "bitbucket"); !errors.Is(err, forge.ErrNoWriter) {
 		t.Fatalf("got %v", err)
 	}
 }
@@ -132,7 +132,7 @@ func TestWriterForAnUnknownForge(t *testing.T) {
 func TestEachWriterHasItsOwnCeiling(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
 	defer srv.Close()
-	c := forge.Credentials{GiteaURL: srv.URL, GiteaToken: "r", GiteaWriteToken: "w", GitHubPrivateKey: "pem"}
+	c := forge.Credentials{WritesEnabled: true, GiteaURL: srv.URL, GiteaToken: "r", GiteaWriteToken: "w", GitHubPrivateKey: "pem"}
 	writers := forge.NewWriters(c)
 	readers := forge.NewReaders(c)
 
@@ -150,15 +150,41 @@ func TestEachWriterHasItsOwnCeiling(t *testing.T) {
 }
 
 // Staging's real shape: the App key reaches it through common SOPS (tasks.md, section 5), the Gitea
-// read token is its own, and there is no Gitea write token (W7). The adapter builds a GitHub
-// writer from that, and no Gitea writer. So the adapter alone does not keep staging from
-// writing to GitHub: the 503 W7 promises for staging is a gate of the route and the worker,
-// which wire these writers, and this test is where that fact is held until they do.
-func TestStagingShapeBuildsAGitHubWriterAndNoGiteaWriter(t *testing.T) {
-	writers := forge.NewWriters(forge.Credentials{
+// read token is its own, and there is no Gitea write token (W7). The credentials alone would build
+// a GitHub writer, and the App holds Issues: write, so the gate (W14, infra.forge.writes_enabled)
+// is what keeps staging from writing: with it off no forge has a writer, whatever is configured.
+func TestStagingShapeBuildsNoWriterWhileTheGateIsOff(t *testing.T) {
+	staging := forge.Credentials{
 		GiteaURL: "http://gitea:3000", GiteaToken: "read-token",
 		GitHubAppID: "1", GitHubInstallationID: "2", GitHubPrivateKey: "pem",
-	})
+	}
+	for _, withTokens := range []bool{false, true} {
+		c := staging
+		if withTokens {
+			// Even a Gitea write token must change nothing while the gate is off.
+			c.GiteaWriteToken = "write-token"
+		}
+		writers := forge.NewWriters(c)
+		if len(writers) != 0 {
+			t.Errorf("gate off, write token %v: %d writers were built", withTokens, len(writers))
+		}
+		for _, name := range []string{"github", "gitea"} {
+			if _, err := forge.WriterFor(writers, name); !errors.Is(err, forge.ErrNoWriter) {
+				t.Errorf("gate off, write token %v: %s: %v, want ErrNoWriter", withTokens, name, err)
+			}
+		}
+	}
+}
+
+// The same credentials with the gate on build what each forge's credential allows: the App key
+// builds the GitHub writer, and the Gitea writer needs its own write token.
+func TestTheGateOnBuildsWhatTheCredentialsAllow(t *testing.T) {
+	c := forge.Credentials{
+		WritesEnabled: true,
+		GiteaURL:      "http://gitea:3000", GiteaToken: "read-token",
+		GitHubAppID: "1", GitHubInstallationID: "2", GitHubPrivateKey: "pem",
+	}
+	writers := forge.NewWriters(c)
 	if _, err := forge.WriterFor(writers, "github"); err != nil {
 		t.Errorf("the App key builds the github writer: %v", err)
 	}

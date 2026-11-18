@@ -280,6 +280,24 @@ The forge writer adapter (`apps/api/src/internal/forge`, `Writer` with `GitHubWr
 
 **Not decided here.** The worker's backoff schedule and the route shapes. The 2026-11-17 amendment's own "Not decided here" paragraph, above, is closed for the failures of a create by W10; what remains open is the key name of the gate that keeps staging from writing to GitHub (W14), which the owner is asked to approve before the worker change writes it.
 
+### 2026-11-17 — The worker: gate, claim, settle schedule and audit (CONSOLE-004, #2570)
+
+The outbox worker (`internal/forge/worker.go`, the store in `internal/store/outbox.go`) is the part that sends what the routes enqueue. It makes the points W3, W8, W9 and W14 left to it concrete. The routes are a separate change; this one has no route and enqueues nothing itself. The numbering continues.
+
+**W15 · The gate's key is `infra.forge.writes_enabled`.** False in `common.yaml`, true in `prod.yaml` only, emitted as `INFRA_FORGE_WRITES_ENABLED` through the generated ConfigMaps (ADR-036) and read by `env.go` with `getBoolEnv`, so an unparsable value is false and a typo fails closed. `NewWriters` returns no writer for any forge while it is false, whatever credentials are present; that replaces the shape test W14 named, which now reads `TestStagingShapeBuildsNoWriterWhileTheGateIsOff`. `tests/test_forge_writes_gate.py` holds the declaration (a YAML bool, prod alone) and the value in each environment's generated ConfigMaps. With no writer the worker does not start.
+
+**W16 · The claim.** One row at a time: `FOR UPDATE OF o SKIP LOCKED` over the due rows, in id order. Rows of one item (forge, owner, repository, number) are applied in order: a row is not claimable while an earlier id of the same item is `pending` or `in_flight`. A create has no number and waits for nothing. The claim commits `status = 'in_flight'` before the forge is called, with `next_attempt_at` set to the worker's clock plus the settle interval (the worker's clock, never SQL `now()`, so one clock judges every stamp), and `attempts` rises by one unless the row was already `in_flight` and is a create, which is a lookup and not a send. `Restamp` and `Defer` move the stamp with `GREATEST`, so nothing moves it earlier.
+
+**W17 · The settle schedule, and a departure from W12's wording.** The settle interval is 2 minutes and a call's timeout 20 seconds; the worker refuses to run if the interval is not longer than the timeout. A row found `in_flight` that is a create is looked up by marker, never re-posted first. Found: adopted as `applied` (the audit row says so, with no HTTP status). Not found: the stamp is restamped one interval out and then the create is posted again. A lookup error or a `NotSettledError`: the row is deferred and nothing is posted. A resumed non-create is sent again, since every action the adapter makes is idempotent (W13). W12 puts the interval in the lookup (`SentAt + Settle`); the outbox has no `sent_at` column, so the worker passes `SentAt = created_at`, a superset listing window, and holds the interval with the schedule instead: a claim is not due again before the interval, which is what guarantees the first request has ended. The cost is that a create stuck for long lists more issues, and the adapter's limit of 2,000 turns that into an error, never into a false "not found".
+
+**W18 · Backoff.** 10 seconds, doubling, capped at 15 minutes; a `Retry-After` is honoured up to one hour. A row is never given up on: only a terminal 4xx ends one. These are the worker's values (`Backoff`, `retryAfterCap`), not a contract.
+
+**W19 · The audit.** One row per forge call (W9), outcome `applied`, `failed`, `retry` or `unknown`, the CHECK widened by `20261117000000_forge_write_audit_outcomes.sql` and held equal to `forge.Outcomes` by a test. `detail` holds the title, the label or the login and never the body. `forge_status` is NULL when there was no answer or the row was adopted. A crash between the forge's 2xx and the commit loses that call's own audit row; the adoption row that follows stands for it, and the forge holds the issue exactly once.
+
+**W20 · The read model follows the forge (W2).** An applied create inserts the source and the item (`ON CONFLICT DO NOTHING`, author empty), a label or an assignee change and a close or a reopen update the item. `updated_at` is not bumped: it is the forge's own clock, and the next reconcile replaces it.
+
+**Not decided here.** The route shapes, the `pending` field of the queue and the machine identity's name on the token route.
+
 ## References
 
 - [ADR-016](adr-016-oidc-centralized-auth.md) (OIDC Centralized Auth)

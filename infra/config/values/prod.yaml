@@ -139,6 +139,9 @@ infra:
     # The `gitea` Service of overlays/prod/gitea.yaml: an EndpointSlice to the Beelink
     # over the tailnet, so the token never crosses the public router.
     gitea_url: http://gitea:3000
+    # The only environment with a forge writer (ADR-066 W7, W14). It also needs
+    # `apps.services.core.gitea.issue_writer_token` delivered by `make apply-secrets`.
+    writes_enabled: true
 
 secret_expiry:
   declared:

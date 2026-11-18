@@ -15,6 +15,9 @@ import (
 // sources being read. Catalog is nil when the declaration does not parse.
 type ForgeView struct {
 	Readers map[string]forge.Reader
+	// Writers is empty unless the environment declares infra.forge.writes_enabled (ADR-066 W14):
+	// with none, no route accepts a write and no worker sends one.
+	Writers map[string]forge.Writer
 	Catalog *forge.Catalog
 	Model   store.ForgeModel
 	// CreateToken is the machine token the create accepts (AC3); empty accepts nobody.
@@ -38,7 +41,15 @@ func NewForgeView(ctx context.Context, conf *config.Config) *ForgeView {
 		GiteaURL:             conf.Forge.GiteaURL,
 		GiteaToken:           conf.Forge.GiteaToken,
 	})
-	view := &ForgeView{Readers: readers, Model: store.ForgeModel{Conf: conf.Postgres}, CreateToken: conf.Forge.CreateToken, ConsoleDomain: conf.Forge.ConsoleDomain}
+	writers := forge.NewWriters(forge.Credentials{
+		WritesEnabled:        conf.Forge.WritesEnabled,
+		GitHubAppID:          conf.Forge.GitHubAppID,
+		GitHubInstallationID: conf.Forge.GitHubInstallationID,
+		GitHubPrivateKey:     conf.Forge.GitHubPrivateKey,
+		GiteaURL:             conf.Forge.GiteaURL,
+		GiteaWriteToken:      conf.Forge.GiteaWriteToken,
+	})
+	view := &ForgeView{Readers: readers, Writers: writers, Model: store.ForgeModel{Conf: conf.Postgres}, CreateToken: conf.Forge.CreateToken, ConsoleDomain: conf.Forge.ConsoleDomain}
 	declared, err := forge.ParseSources(conf.Forge.Sources)
 	if err != nil {
 		log.Printf("forge view: sources: %v", err)
@@ -67,4 +78,14 @@ func StartForgeReconcile(ctx context.Context, conf *config.Config, view *ForgeVi
 	go r.Run(ctx, forge.ReconcilePeriod, forge.RetryPeriod)
 	projector := &forge.Projector{Log: view.Model}
 	go projector.Run(ctx, forge.ProjectPeriod)
+}
+
+// StartForgeWrites starts the outbox worker when the environment may write and has a database.
+// Without a writer the rows a route accepted would never be sent, and none is accepted then.
+func StartForgeWrites(ctx context.Context, conf *config.Config, view *ForgeView) {
+	if len(view.Writers) == 0 || !conf.Postgres.Configured() {
+		return
+	}
+	worker := &forge.Worker{Store: view.Model, Writers: view.Writers}
+	go worker.Run(ctx, forge.WritePeriod)
 }

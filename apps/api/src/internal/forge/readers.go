@@ -12,6 +12,10 @@ type Credentials struct {
 	GiteaURL             string // the Gitea root; empty wires no Gitea reader
 	GiteaToken           string // read:issue, the reader's
 	GiteaWriteToken      string // write:issue, the writer's; empty wires no Gitea writer
+	// WritesEnabled is the environment's explicit declaration that it may write to a forge
+	// (infra.forge.writes_enabled). False builds no writer for any forge, whatever credentials
+	// are present: staging holds the App key for its reads and must never write (ADR-066 W14).
+	WritesEnabled bool
 }
 
 // NewReaders builds one reader per forge the environment can reach, each behind

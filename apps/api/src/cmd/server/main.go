@@ -37,6 +37,7 @@ func main() {
 	api.SetupRoutes(r, forgeView)
 
 	api.StartForgeReconcile(ctx, conf, forgeView)
+	api.StartForgeWrites(ctx, conf, forgeView)
 
 	port := os.Getenv("PORT")
 	if port == "" {
