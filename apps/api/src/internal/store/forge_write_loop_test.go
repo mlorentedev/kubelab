@@ -74,7 +74,10 @@ func newLoop(t *testing.T) *loop {
 	}
 	f := newFakeForge(t)
 	// The clock starts ahead of the database's, so a row enqueued now is already due.
-	clock := &testClock{t: time.Now().Add(time.Hour)}
+	// Postgres keeps microseconds and rounds a finer instant, so a clock with nanoseconds (Linux
+	// has them, macOS does not) would never compare equal to a stamp read back. Round() with no
+	// monotonic reading is also what a stored value looks like.
+	clock := &testClock{t: time.Now().Add(time.Hour).Round(time.Microsecond).UTC()}
 	model := store.ForgeModel{Conf: testPostgres(t)}
 	writers := map[string]forge.Writer{"gitea": &forge.GiteaWriter{
 		BaseURL: f.srv.URL, Token: "write-token", HTTP: &http.Client{}, Now: clock.Now,
