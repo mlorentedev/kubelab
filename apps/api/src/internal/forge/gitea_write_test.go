@@ -143,6 +143,8 @@ func TestGiteaWriter(t *testing.T) {
 
 func TestGiteaWriterStatusClasses(t *testing.T) { runStatusClasses(t, newGiteaWriter) }
 
+func TestGiteaWriterTruncatedAnswers(t *testing.T) { runTruncatedAnswers(t, newGiteaWriter) }
+
 func TestGiteaWriterWithNoAnswer(t *testing.T) { runNoAnswer(t, newGiteaWriter, setGiteaWriterHTTP) }
 
 func TestGiteaWriterRefusesWhatItCannotMake(t *testing.T) { runInvalidWrites(t, newGiteaWriter) }

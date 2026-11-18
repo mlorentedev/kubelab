@@ -186,6 +186,11 @@ func (l Lookup) validate() error {
 	if l.SentAt.IsZero() {
 		return errors.New("lookup needs the time the create was sent")
 	}
+	// An interval that is not positive would let a search that ran at once call a create that is
+	// still being processed "not found", and the retry would open a second issue (W8).
+	if l.Settle <= 0 {
+		return errors.New("lookup needs a positive settle interval")
+	}
 	return nil
 }
 
@@ -234,8 +239,12 @@ func call(ctx context.Context, client *http.Client, auth func(*http.Request), me
 	defer resp.Body.Close()
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxReplyBytes))
 	if err != nil {
-		// The status line arrived, so the forge did answer; the body did not.
-		return reply{Status: resp.StatusCode, Header: resp.Header, Err: fmt.Errorf("read answer: %w", err)}
+		// The status line arrived, so the forge did answer; the body did not. A 2xx whose body is
+		// lost is not trusted, but a refusal is a refusal without its message.
+		if resp.StatusCode/100 == 2 {
+			return reply{Status: resp.StatusCode, Header: resp.Header, Err: fmt.Errorf("read answer: %w", err)}
+		}
+		raw = nil
 	}
 	return reply{Status: resp.StatusCode, Header: resp.Header, Body: raw}
 }

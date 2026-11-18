@@ -178,6 +178,8 @@ func TestGitHubWriter(t *testing.T) {
 
 func TestGitHubWriterStatusClasses(t *testing.T) { runStatusClasses(t, newGitHubWriter) }
 
+func TestGitHubWriterTruncatedAnswers(t *testing.T) { runTruncatedAnswers(t, newGitHubWriter) }
+
 func TestGitHubWriterWithNoAnswer(t *testing.T) {
 	runNoAnswer(t, newGitHubWriter, setGitHubWriterHTTP)
 }

@@ -227,6 +227,9 @@ func runLookupContract(t *testing.T, c lookupContract) {
 		for _, bad := range []forge.Lookup{
 			{Source: c.Src, SentAt: sent, Settle: settle},
 			{Source: c.Src, OutboxID: 42, Settle: settle},
+			// Without a positive interval the search would call a still-running create "not found".
+			{Source: c.Src, OutboxID: 42, SentAt: sent},
+			{Source: c.Src, OutboxID: 42, SentAt: sent, Settle: -time.Second},
 			{Source: forge.Source{Forge: c.Src.Forge, Owner: "o", Repo: forge.EveryRepo}, OutboxID: 42, SentAt: sent, Settle: settle},
 		} {
 			if _, err := w.FindCreated(context.Background(), bad); err == nil {

@@ -318,3 +318,37 @@ func runInvalidWrites(t *testing.T, newWriter func(baseURL string) forge.Writer)
 		})
 	}
 }
+
+// A body that cannot be read changes nothing about a status that arrived: a refusal is still a
+// refusal, and a 2xx whose body is lost is not trusted (a create is UNKNOWN, the issue may exist).
+func runTruncatedAnswers(t *testing.T, newWriter func(baseURL string) forge.Writer) {
+	t.Helper()
+	src := forge.Source{Owner: "o", Repo: "r"}
+	truncated := func(status string) *httptest.Server {
+		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			conn, buf, err := w.(http.Hijacker).Hijack()
+			if err != nil {
+				return
+			}
+			defer conn.Close()
+			_, _ = buf.WriteString("HTTP/1.1 " + status + "\r\nContent-Length: 100\r\nContent-Type: application/json\r\n\r\n{\"mess")
+			_ = buf.Flush()
+		}))
+	}
+	t.Run("a 4xx whose body is cut short is still terminal", func(t *testing.T) {
+		srv := truncated("400 Bad Request")
+		defer srv.Close()
+		got := newWriter(srv.URL).Write(context.Background(), forge.Write{Action: forge.ActionAddLabel, Source: src, Number: 5, Label: "x"})
+		if got.Outcome != forge.OutcomeFailed || got.Status != 400 {
+			t.Errorf("got %+v", got)
+		}
+	})
+	t.Run("a 2xx create whose body is cut short is unknown", func(t *testing.T) {
+		srv := truncated("201 Created")
+		defer srv.Close()
+		got := newWriter(srv.URL).Write(context.Background(), forge.Write{Action: forge.ActionCreate, Source: src, OutboxID: 1, Title: "t"})
+		if got.Outcome != forge.OutcomeUnknown || got.Status != 201 || got.Err == nil {
+			t.Errorf("got %+v", got)
+		}
+	})
+}
