@@ -222,7 +222,7 @@ spec:
         - name: pull-gitea-kubelab-live
       containers:
         - name: imagesensortool
-          image: gitea.kubelab.live/personal/imagesensortool:sha-9c6d2af18237
+          image: gitea.kubelab.live/personal/imagesensortool:sha-cbc5c8f533c6
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
