@@ -85,4 +85,4 @@ patches:
 # Run `make sync-k8s-images` to refresh after bumping versions.
 images:
   - name: pragent/pr-agent
-    newTag: 0.45.0-gitea_app
+    newTag: 0.50.0-gitea_app
