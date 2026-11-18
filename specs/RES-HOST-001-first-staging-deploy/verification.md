@@ -26,9 +26,9 @@ credential; its digest check reports only match or mismatch.
 | AC6 | `uv run pytest tests/test_product_staging_hostname.py` | | | |
 | AC7 | `uv run pytest tests/test_networkpolicy_coverage.py tests/test_authelia_access_rules.py` | | | |
 | AC8 | staging: apply, bootstrap, key label count, cert fingerprint, probe digest, rerun unchanged (deployed) | | | |
-| AC9 | resume pod `Ready` on `/healthz` (deployed) | | | |
-| AC10 | `operator` 403, `superadmin` 200 on `resume.staging.kubelab.live` (deployed) | | | |
-| AC11 | egress: public 443 ok; private 443 refused; public 80 refused; notify-router ok (deployed) | | | |
+| AC9 | resume pod `Ready` on `/healthz` (deployed) | Pass. After the owner ran `make apply-secrets ENV=staging`, `kubectl -n kubelab rollout status deploy/resume` reported rolled out; the pod was `1/1 Running` with 0 restarts and its readiness probe on `/healthz`. The unauthenticated URL answers 302 to Authelia, and `pytest tests/e2e -m e2e --env staging -k resume` passed 5/5. Checked read-only by the agent. | #3609, #3644 | 2026-11-18 |
+| AC10 | `operator` 403, `superadmin` 200 on `resume.staging.kubelab.live` (deployed) | Pass. The owner signed in from a private window: an `operator` user got 403, and the owner's `superadmin` user got the board. | #3609 | 2026-11-18 |
+| AC11 | egress: public 443 ok; private 443 refused; public 80 refused; notify-router ok (deployed) | Pass. The agent ran TCP connects from the resume pod (`kubectl exec`), with the owner's leave: `boards.greenhouse.io:443` connected; `172.16.1.2:443` refused; `example.com:80` blocked; `n8n:5678` connected. Control: the same `172.16.1.2:443` (traefik's LoadBalancer VIP) connects from the n8n pod, which has no egress policy. So the refusal is kube-router enforcing the `except` block, not a closed port. | #3609 | 2026-11-18 |
 | AC12 | one Job from the CronJob completes; success marker in Loki; rule normal (deployed) | | | |
 
 ## Mutation checks
