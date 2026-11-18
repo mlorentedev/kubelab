@@ -4,6 +4,7 @@ Newest first. Back to [all categories](../_index.md).
 
 | # | Lesson | Date |
 |---|---|---|
+| 767 | [A forge's 2xx to a write does not say the write took](lesson-767-a-forge-2xx-to-a-write-does-not-say-it-took.md) | 2026-11-17 |
 | 732 | [Gitea's next-page links name its public ROOT_URL, not the address the client read](lesson-732-gitea-next-links-name-root-url.md) | 2026-11-11 |
 | 205 | [Homepage bookmarks don't support tabs](lesson-205-homepage-bookmarks-don-t-support-tabs.md) | 2026-03-23 |
 | 201 | [Homepage has no native GitHub/Cloudflare/DockerHub widgets](lesson-201-homepage-has-no-native-github-cloudflare-dock.md) | 2026-03-23 |
