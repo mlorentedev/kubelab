@@ -7,8 +7,8 @@ created: "2026-08-14"
 
 # Fleet maintenance timer — operational runbook
 
-> `kubelab-maintenance.timer` runs disk hygiene (APT cache, journal
-> vacuum, rotated-log retention, snap/Docker/crictl pruning, temp files) on
+> `kubelab-maintenance.timer` runs disk hygiene (APT cache,
+> rotated-log retention, snap/Docker/crictl pruning, temp files) on
 > every Ubuntu/Debian node in the fleet: weekly, and daily on the CI node,
 > where it also reclaims Docker residue (see below). Property of provisioning since
 > ANSIBLE-035 — a freshly provisioned or freshly replaced node comes up with
@@ -186,8 +186,7 @@ lines name `docker-reclaim` or `disk-NN%`, the two failures the script records o
 
 Otherwise, a failed `kubelab-maintenance.service` run (a hard script abort — most
 individual sub-tasks tolerate failure deliberately via `ignore_errors`, so
-this means something like `apt-get clean` or `journalctl --vacuum-size`
-failing outright, not a single skipped prune) triggers
+this means something like `apt-get clean` failing outright, not a single skipped prune) triggers
 `kubelab-notify@kubelab-maintenance.service.service`, which POSTs a
 `log`-severity envelope to n8n's public `/webhook/notify` ingress
 (NOTIFY-001). That name is not a typo: `kubelab-notify@.service` is one

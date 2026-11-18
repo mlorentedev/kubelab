@@ -8,8 +8,8 @@ echo "[$(date)] Starting maintenance on $(hostname)"
 df -h /
 
 # Failures that must reach a human (OPS-024). Each step below still runs when an
-# earlier one fails -- a node that cannot reclaim still needs its journal
-# vacuumed -- and the run exits non-zero at the END if any was recorded, which
+# earlier one fails -- a node that cannot reclaim still needs its APT cache
+# cleaned -- and the run exits non-zero at the END if any was recorded, which
 # fires this unit's OnFailure=kubelab-notify@ with the journal tail as the body.
 FAILURES=""
 
@@ -22,7 +22,7 @@ FAILURES=""
 # `set -e` is active and this section deliberately does NOT abort the run: a
 # node that cannot patch still needs its disk cleaned, and the RPi4 is the
 # standing proof — its apt has been unable to resolve `bzip2` since #1198, and
-# a maintenance timer that gave up there would have stopped vacuuming journals
+# a maintenance timer that gave up there would have stopped cleaning the disk
 # on a node with 8GB of storage.
 #
 # Failures are REPORTED instead. The unit's OnFailure= is reserved for the
@@ -116,8 +116,11 @@ apt-get clean
 rm -rf /var/lib/apt/lists/*
 mkdir -p /var/lib/apt/lists/partial
 
-# Journal vacuum
-journalctl --vacuum-size={{ maintenance_journal_max_size }}
+# No journal vacuum here (#3637). journald's own SystemMaxUse, set by
+# base_system on every node that runs this role, is the journal's one bound.
+# A vacuum at 20M used to run here too and undid the 1G cap on the large-disk
+# nodes, so a node kept about one boot and the seven-day readings in
+# `make backup-schedule` read a shorter window than they said.
 
 # Rotated rsyslog files older than N days (RELIAB-009 follow-up)
 find /var/log -maxdepth 1 -type f \( \

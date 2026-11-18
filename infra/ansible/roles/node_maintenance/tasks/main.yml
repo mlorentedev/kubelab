@@ -147,7 +147,7 @@
   register: _security_patch
   # A node that cannot patch still needs its disk cleaned. The RPi4 is the
   # standing proof — its apt has been unable to resolve `bzip2` since #1198 —
-  # and a run that aborted there would have stopped vacuuming journals on a
+  # and a run that aborted there would have stopped cleaning the disk on a
   # node with 8GB of storage, trading a CVE for a full disk.
   failed_when: false
   # ...but NOT while a runtime package it should have held is unprotected.
@@ -223,12 +223,10 @@
     mode: "0700"
   when: maintenance_run_cleanup | bool and ansible_facts.pkg_mgr == 'apt'
 
-# --- Journal cleanup ---
-- name: Vacuum journal logs to {{ maintenance_journal_max_size }}
-  command: journalctl --vacuum-size={{ maintenance_journal_max_size }}
-  register: _journal
-  changed_when: "'Deleted' in _journal.stdout"
-  when: maintenance_run_cleanup | bool
+# --- Journal: no vacuum (#3637) ---
+# journald's SystemMaxUse (base_system) is the one bound. A size vacuum here
+# was a second bound with its own number, 20M, and it cut the 1G large-disk
+# nodes down to about one boot.
 
 # --- Rotated rsyslog cleanup (RELIAB-009 follow-up) ---
 - name: Find rotated rsyslog files older than {{ maintenance_rotated_log_retention_days }} days
