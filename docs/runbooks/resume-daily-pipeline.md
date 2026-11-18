@@ -52,7 +52,7 @@ Argo then prunes the Deployment and the CronJob and keeps the PVC (`Prune=false`
 Argo does not manage the Secrets, so they stay behind: delete `resume-secrets` by
 hand, and keep `pull-ghcr-io` only while another product still pulls from ghcr.
 Do not run `apply-secrets` for that environment until the entry is gone from the
-vault's mappings, or it recreates them.
+Secret mappings in `toolkit/features/k8s_secrets.py`, or it recreates them.
 
 ## No-success alert
 
