@@ -25,7 +25,7 @@ credential; its digest check reports only match or mismatch.
 | AC5 | `uv run pytest tests/test_stateful_service_classification.py` | | | |
 | AC6 | `uv run pytest tests/test_product_staging_hostname.py` | | | |
 | AC7 | `uv run pytest tests/test_networkpolicy_coverage.py tests/test_authelia_access_rules.py` | | | |
-| AC8 | staging: apply, bootstrap, key label count, cert fingerprint, probe digest, rerun unchanged (deployed) | | | |
+| AC8 | staging: apply, bootstrap, key label count, cert fingerprint, probe digest, rerun unchanged (deployed) | Partial. After `make apply-secrets ENV=staging`, `sealed-secrets-key` in `kube-system` carries `sealedsecrets.bitnami.com/sealed-secrets-key=active`, and its certificate's SHA-256 fingerprint equals the SOPS copy's (`4D:81:CF:CD…0B:22:8C:B7`). Bootstrap, the probe digest and the rerun are pending. | #3644 | 2026-11-18 |
 | AC9 | resume pod `Ready` on `/healthz` (deployed) | | | |
 | AC10 | `operator` 403, `superadmin` 200 on `resume.staging.kubelab.live` (deployed) | | | |
 | AC11 | egress: public 443 ok; private 443 refused; public 80 refused; notify-router ok (deployed) | | | |
