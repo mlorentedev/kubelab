@@ -58,7 +58,7 @@ C. **Both.**
 This ADR bounded how long the edge waits for a backend. The edge also bounds how long it reads a request from a client, and nothing declared that bound. It is `entryPoints.<ep>.transport.respondingTimeouts.readTimeout`. It covers the whole request, body included, and Traefik v3 defaults it to 60 s.
 
 **What it cut.** In prod Traefik's access log for the gitea router (2026-11-14):
-- every failed registry push was a `PUT` ending in `499` at `total` = 60.000 s;
+- every failed registry push was a `PUT` ending in `499` at `total` ≈ 60 s from the request start (60.0 to 61.2 s);
 - its paired 504s had `total` ≈ 60 s and an origin of a few µs.
 
 A 499 reads as a client abort. Here it was the edge's own deadline.
@@ -68,6 +68,7 @@ A 499 reads as a client abort. Here it was the edge's own deadline.
 1. **Declare it at 60 s on `websecure`** (`k3s_traefik_websecure_read_timeout`, rendered into `additionalArguments`, asserted by `tests/test_edge_backend_timeouts.py`).
    - This is the value Traefik already applied, so the change does not alter behaviour. It makes the bound visible beside the backend bounds.
    - Owner ruling, 2026-11-14: raise it only on a measured off-LAN failure.
+   - What it admits: a request body crosses it if the client sends at least about 7.5 MB per Mbit/s of uplink in 60 s (60 s × 1 Mbit/s ÷ 8). The 17 MB layer that exposed it needs about 2.3 Mbit/s sustained, which the home uplink did not give.
 2. **It has no per-router form.** Any value applies to every route on the entrypoint.
    - Raising it for one upload raises it for every route, including how long a slow or idle client may hold a connection before sending its request.
    - The only finer alternative is a second entrypoint with its own bound. That is not adopted: no off-LAN upload is known to need longer.

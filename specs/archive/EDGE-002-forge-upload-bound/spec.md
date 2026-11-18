@@ -1,7 +1,7 @@
 ---
 id: EDGE-002-forge-upload-bound
 type: spec
-status: draft
+status: archived
 created: "2026-11-14"
 owner: manu
 issue: "kubelab#3550"
@@ -14,7 +14,7 @@ A request body that takes more than 60 s to reach prod Traefik is cut. The cause
 
 Measured on 2026-11-14 in prod Traefik's per-line access log for the gitea router (#3550):
 
-- Every 499 is a `PUT` ending at `total` = 60.000 s from the request start.
+- Every 499 is a `PUT` ending at `total` ≈ 60 s from the request start (60.0 to 61.2 s).
 - The paired 504s are the same cut seen from the forward side: `total` ≈ 60 s, origin a few µs.
 - They came in three bursts, 18:29, 20:02 and 20:34Z.
 
@@ -47,12 +47,12 @@ Owner ruling 2026-11-14: option (c), both changes, in two PRs. Order ruled the s
 
 **PR 2: declare the entrypoint read bound (`readTimeout`).**
 
-- `common.yaml` declares the bound for the `websecure` entrypoint, rendered through `k3s_server` into `additionalArguments`, the same way as `k3s_traefik_response_header_timeout` (ADR-076). A test fails if the rendered flag and the declaration diverge.
+- The `k3s_server` role defaults declare the bound for the `websecure` entrypoint, rendered into `additionalArguments`, the same way as `k3s_traefik_response_header_timeout` (ADR-076). A test fails if the rendered flag and the declaration diverge.
 - ADR-076 gets an amendment for the client side. It records:
   - Traefik has no per-router read bound, so any value applies to every route on the entrypoint;
   - the only finer alternative is a second entrypoint;
   - what the value is sized for.
-- The value is an owner ruling (see Next).
+- The value is an owner ruling: 60 s, ruled 2026-11-14.
 
 **Out of scope:**
 - A local TLS terminator for `gitea.kubelab.live` on the Beelink.
@@ -63,28 +63,26 @@ Owner ruling 2026-11-14: option (c), both changes, in two PRs. Order ruled the s
 
 - [x] PR 1: throwaway imagesensortool run pushes a scratch tag to `gitea:3000` (BuildKit on `kubelab`, `http = true`): the 17 MB blob completes and no gitea `PUT` shows on prod Traefik for that run.
 - [x] PR 1: declare the endpoint in common.yaml and hand it to jobs through `runner.envs` (supported by the pinned `gitea/runner:4.1.0`).
-- [ ] PR 1: owner runs the Beelink provision, which restarts act_runner: no job running; a job prints the variables.
-- [ ] PR 1: runbook and product-onboarding docs name the variable; imagesensortool's workflow switches (its repo); its master push goes green.
-- [ ] PR 2: declare `readTimeout` on `websecure` and render it with a test (red before, green after).
-- [ ] PR 2: reproduce the cut in staging (an upload of about 90 s through the staging edge: 499 at 60 s before, completes after, if the value is raised).
-- [ ] PR 2: ADR-076 amendment; owner runs the `k3s_server` role on the VPS (check mode first; it restarts the only Traefik replica, which fronts Headscale).
+- [x] PR 1: owner runs the Beelink provision, which restarts act_runner: no job running; a job prints the variables.
+- [x] PR 1: runbook and product-onboarding docs name the variable; imagesensortool's workflow switches (its repo); its master push goes green.
+- [x] PR 2: declare `readTimeout` on `websecure` and render it with a test (red before, green after).
+- [x] PR 2: reproduce the cut in staging (an upload of about 90 s through the staging edge: 499 at 60 s before, completes after, if the value is raised). Not applicable: the ruled value is 60 s, Traefik's default, so there is no before/after to reproduce.
+- [x] PR 2: ADR-076 amendment; owner runs the `k3s_server` role on the VPS (check mode first; it restarts the only Traefik replica, which fronts Headscale).
 
 ## Evidence
 
 - Per-line prod Traefik read, 2026-11-14: recorded on #3550.
 - Local-push proof, 2026-11-14: imagesensortool runs 3526 and 3532 pushed over `gitea:3000`, the 50 MB layer in 3.3 s, which the home uplink (under about 2.3 Mbit/s) cannot carry. Corroborated, within the access log's floor (1 s or 5xx), by prod Traefik's gitea `PUT` log read on 2026-11-15: none between 22:55 and 23:01Z, with the cut bursts before it as the control.
+- Beelink provision (PR 1, #3592): applied `changed=2` (runner config and its recreate handler), re-run `changed=0`.
+- imagesensortool switched to the recipe (personal/imagesensortool#205, `c3a40c3`, merged 2026-11-17T07:07Z). Runs 3620 (`c3a40c3`) and 3622 (`6db71aa`) green: BuildKit on `kubelab` with `[registry."gitea:3000"] http = true`, push step 1.8 s; the guard step's `test -n` on both variables passed, so the jobs received them; both platforms listed by `imagetools inspect` on the public name. Base blobs were already in the registry, so this is not a cold-push timing. Prod Traefik's gitea router logged no `PUT` from 07:00 to 07:19Z; its last `PUT`s were at 05:53Z, from the pre-switch run.
+- VPS (PR 2, #3596), 2026-11-17: `make deploy TARGET=k3s ENV=prod TAGS=k3s-server` changed only the HelmChartConfig (`changed=1`), re-run `changed=0`; `make test-e2e ENV=prod` 78 passed, 31 skipped, 0 failed.
 
 ## Next
 
-PR 1 needs an owner ruling on the variable names and the `common.yaml` key, a cross-repo contract product workflows will read. Then the order is:
-
-1. merge;
-2. owner provisions the Beelink with no job running;
-3. a job prints the variable;
-4. imagesensortool switches its workflow.
+None. Both PRs merged and applied; the consumer is switched.
 
 ## Promotion candidates
 
-- [x] Lesson? `yes` (lesson-762): Traefik v3's default `readTimeout` of 60 s cuts any request body longer than that, and the 499 it logs reads as a client abort.
-- [ ] ADR? `yes`: ADR-076 amendment (PR 2).
-- [ ] Pattern? `no`
+- [x] Lesson? yes: docs/lessons/edge-tls/lesson-762-a-499-at-exactly-60-s-is-traefik-s-read-deadline-not-the-client.md
+- [x] ADR? yes: docs/adr/adr-076-edge-backend-timeouts.md
+- [x] Pattern? no: a single-repo edge setting; the lesson and the ADR amendment carry it.
