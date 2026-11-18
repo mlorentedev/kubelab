@@ -20,3 +20,13 @@ resources:
   - stuck-backend.yaml
   - imagesensortool-networkpolicy.yaml
   # secrets managed via: toolkit infra k8s apply-secrets --env staging (ADR-014)
+
+# resume's no-success rule (RES-HOST-001 G): staging only, because it alerts on no
+# data and prod runs no resume yet. `merge` adds one key and keeps every base file;
+# `replace` would drop them all.
+configMapGenerator:
+  - name: grafana-alerting
+    namespace: kubelab
+    behavior: merge
+    files:
+      - grafana-alerting/resume-rules.yaml

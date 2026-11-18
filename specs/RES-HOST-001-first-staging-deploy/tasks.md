@@ -144,17 +144,26 @@ excluding regenerated schema and snapshot files.
 
 ## G. No-success alert (owner)
 
-- [ ] G1 Read how `grafana-alerting` rule files reach Grafana (base
+- [x] G1 Read how `grafana-alerting` rule files reach Grafana (base
   `configMapGenerator` in `infra/k8s/base/kustomization.yaml`) and whether an
   overlay can add a file; place the rule so it does not fire in an env where
   resume does not run (staging overlay, or `noDataState: OK`).
-- [ ] G2 [AC12] Test: the rule's window equals the job schedule's period plus
+- [x] G2 [AC12] Test: the rule's window equals the job schedule's period plus
   2 hours, read from resume's snapshot (26h for any daily schedule, for
   example `0 6 * * *`; the schedule itself is resume's to set).
-- [ ] G3 [AC12] The Loki rule on resume's success marker; an `EXEMPT` entry in
+- [x] G3 [AC12] The Loki rule on resume's success marker; an `EXEMPT` entry in
   `tests/test_alerting_emitter_window.py` with the owner's decision as reason;
   the job's container added to `CRONJOB_CONTAINERS` in
   `tests/test_alerting_unwrap_grouping.py`.
+
+Deviations, dated 2026-11-17: the rule sits in the staging overlay
+(`overlays/staging/grafana-alerting/resume-rules.yaml`, a `behavior: merge` key),
+because it alerts on no data and prod runs no resume yet. G3's `EXEMPT` entry and
+`CRONJOB_CONTAINERS` addition cannot apply to it: both guards read base only, and
+`CRONJOB_CONTAINERS` needs a hand-written `base/services/<name>.yaml`. Its
+properties are held by `tests/test_resume_daily_alert.py` instead, including F6's
+one-sample ruling; #3621 tracks the guards, #3622 a rule derived from the job
+claim. The rule opens `docs/runbooks/resume-daily-pipeline.md#no-success-alert`, which slice J extends with the first deploy.
 
 ## H. resume secrets (owner sets values)
 
@@ -182,8 +191,8 @@ excluding regenerated schema and snapshot files.
   `events.staging` only, `image_registry: ghcr.io/mlorentedev`, `private: true`,
   `pull_credential: {username: mlorentedev, secret: ghcr.pull_token}`,
   `egress: [dns, public-https, notify]`.
-- [x] Contract snapshot for staging, with `hostnames.prod` declared and the
-  volume claim named `data` (PVC `resume-data`, as proposal D11 assumes).
+- [x] Contract snapshot for staging, ~~with `hostnames.prod` declared~~ (see the
+  deviation below) and the volume claim named `data` (PVC `resume-data`, as proposal D11 assumes).
 - [x] Staging values: `resume_web_host: 0.0.0.0`, the public URL, the notify
   URL `http://n8n:5678/webhook/notify`, and the fixture seed setting that
   https://gitea.kubelab.live/personal/resume/issues/810 defines (Q5). That
