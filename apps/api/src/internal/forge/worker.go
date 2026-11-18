@@ -66,6 +66,15 @@ func (w *Worker) now() time.Time {
 	return time.Now()
 }
 
+// hold is how long a claimed row stays out of reach of every worker: the call's own timeout,
+// which bounds how long this worker waits for the forge, plus the settle interval that follows
+// it (W8). The forge may keep working on a request after its client gave up, so a row is taken
+// again, by this worker or by another replica, only once the interval has passed since the
+// client stopped waiting, not since the claim.
+func (w *Worker) hold() time.Duration {
+	return w.callTimeout() + w.settle()
+}
+
 func (w *Worker) settle() time.Duration {
 	if w.Settle > 0 {
 		return w.Settle
@@ -114,7 +123,7 @@ func (w *Worker) Once(ctx context.Context) (int, error) {
 	}
 	taken := 0
 	for taken < maxPerRun && ctx.Err() == nil {
-		q, err := w.Store.Claim(ctx, w.now(), w.settle())
+		q, err := w.Store.Claim(ctx, w.now(), w.hold())
 		if err != nil {
 			return taken, fmt.Errorf("claim: %w", err)
 		}
@@ -167,7 +176,7 @@ func (w *Worker) resolve(ctx context.Context, writer Writer, q *Queued) (bool, e
 	}
 	// Not found, and the original request has ended: the create is posted again. The stamp is
 	// written before the post, as it is for any send.
-	if err := w.Store.Restamp(ctx, q.ID, w.now().Add(w.settle())); err != nil {
+	if err := w.Store.Restamp(ctx, q.ID, w.now().Add(w.hold())); err != nil {
 		return true, fmt.Errorf("restamp: %w", err)
 	}
 	q.Attempts++

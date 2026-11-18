@@ -18,6 +18,8 @@ type memStore struct {
 	calls []string
 	until time.Time
 	retry time.Time
+	// hold is what the last claim kept the row out of reach for.
+	hold  time.Duration
 	adopt bool
 	// order is the sequence of store and writer calls, to hold "stamp before send".
 	order *[]string
@@ -30,7 +32,8 @@ func (m *memStore) note(s string) {
 	}
 }
 
-func (m *memStore) Claim(context.Context, time.Time, time.Duration) (*forge.Queued, error) {
+func (m *memStore) Claim(_ context.Context, _ time.Time, hold time.Duration) (*forge.Queued, error) {
+	m.hold = hold
 	if len(m.rows) == 0 {
 		return nil, nil
 	}
@@ -153,8 +156,8 @@ func TestARowIsRestampedBeforeAnyPostThatFollowsANotFound(t *testing.T) {
 	if got := strings.Join(order, " "); got != "writer:find store:restamp writer:write store:applied" {
 		t.Fatalf("order = %s, want the search, the stamp, then the post", got)
 	}
-	if want := epoch.Add(2 * time.Minute); !st.until.Equal(want) {
-		t.Fatalf("stamped until %s, want now+settle %s", st.until, want)
+	if want := epoch.Add(2*time.Minute + 10*time.Second); !st.until.Equal(want) {
+		t.Fatalf("stamped until %s, want now+timeout+settle %s", st.until, want)
 	}
 	// The search lists from the row's creation: an earlier time than any send can only list more.
 	if !sw.lk.SentAt.Equal(epoch.Add(-time.Hour)) || sw.lk.Settle != 2*time.Minute || sw.lk.OutboxID != 5 {
@@ -261,5 +264,18 @@ func TestARowForAForgeWithNoWriterIsKeptAndNothingIsSent(t *testing.T) {
 	}
 	if sw.writes != 0 || sw.finds != 0 || strings.Join(st.calls, " ") != "defer" {
 		t.Fatalf("writes %d, finds %d, calls %v", sw.writes, sw.finds, st.calls)
+	}
+}
+
+// A forge may keep working on a request after its client gave up, so a claimed row is out of
+// every worker's reach for the call's timeout AND the settle interval after it, never the
+// interval alone: a second replica would otherwise look for a create while it can still land.
+func TestAClaimHoldsTheRowForTheCallTimeoutAndTheSettleInterval(t *testing.T) {
+	w, st := newWorker([]*forge.Queued{create(false)}, &scriptedWriter{write: forge.Result{Outcome: forge.OutcomeApplied, Status: 201, Number: 9}})
+	if _, err := w.Once(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if want := 2*time.Minute + 10*time.Second; st.hold != want {
+		t.Fatalf("a claim holds the row for %s, want the timeout and the settle interval, %s", st.hold, want)
 	}
 }

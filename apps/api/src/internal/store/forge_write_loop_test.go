@@ -40,7 +40,9 @@ func (c *testClock) Advance(d time.Duration) {
 }
 
 const (
-	testSettle  = 2 * time.Minute
+	testSettle = 2 * time.Minute
+	// What a worker holds a claimed row for: its call timeout, then the settle interval.
+	testHold    = testSettle + testTimeout
 	testTimeout = 300 * time.Millisecond
 )
 
@@ -137,9 +139,9 @@ func (l *loop) committedBeforeTheSend(id int64, sends int, attempts ...int) {
 		l.t.Fatalf("outbox %d: %d writes reached the forge, want %d", id, len(got), sends)
 	}
 	for i, s := range got {
-		if s.Status != "in_flight" || s.Next.Before(l.clock.Now().Add(testSettle)) || s.Attempts != attempts[i] {
+		if s.Status != "in_flight" || s.Next.Before(l.clock.Now().Add(testHold)) || s.Attempts != attempts[i] {
 			l.t.Fatalf("outbox %d, write %d: the database showed %+v, want in_flight, stamped >= %s, attempt %d",
-				id, i+1, s, l.clock.Now().Add(testSettle), attempts[i])
+				id, i+1, s, l.clock.Now().Add(testHold), attempts[i])
 		}
 	}
 }
@@ -625,7 +627,7 @@ func TestACreateWhoseAnswerWasLostIsFoundByItsMarkerAndNotPostedAgain(t *testing
 	if l.run() != 0 {
 		t.Fatal("the row was looked at before the settle interval passed")
 	}
-	l.clock.Advance(testSettle)
+	l.clock.Advance(testHold)
 	if l.run() != 1 {
 		t.Fatal("the row was not resumed once its interval passed")
 	}
@@ -653,7 +655,7 @@ func TestACreateTheForgeNeverMadeIsPostedAgainAfterTheInterval(t *testing.T) {
 		t.Fatalf("row is %q, want in_flight after a connection that ended with no answer", got)
 	}
 	l.forge.set(func(f *fakeForge) { f.dropCreate = false })
-	l.clock.Advance(testSettle)
+	l.clock.Advance(testHold)
 	l.run()
 	got := l.row(r.ID)
 	if got.Status != "applied" || got.Attempts != 2 {
@@ -664,7 +666,7 @@ func TestACreateTheForgeNeverMadeIsPostedAgainAfterTheInterval(t *testing.T) {
 	}
 	// The second post was stamped, and counted, before it was sent (the clock moved by one interval).
 	second := l.sentFrom(r.ID)[1:]
-	if len(second) != 1 || second[0].Status != "in_flight" || second[0].Attempts != 2 || second[0].Next.Before(l.clock.Now().Add(testSettle)) {
+	if len(second) != 1 || second[0].Status != "in_flight" || second[0].Attempts != 2 || second[0].Next.Before(l.clock.Now().Add(testHold)) {
 		t.Fatalf("at the second post the database showed %+v, want in_flight, attempt 2, stamped a full interval ahead", second)
 	}
 }
@@ -693,7 +695,7 @@ func TestACrashBetweenTheForgeAndTheCommitOpensNoSecondIssue(t *testing.T) {
 	if n, _ := restarted.Once(l.ctx); n != 0 {
 		t.Fatal("the restarted worker took the row before its interval passed")
 	}
-	l.clock.Advance(testSettle)
+	l.clock.Advance(testHold)
 	if n, err := restarted.Once(l.ctx); err != nil || n != 1 {
 		t.Fatalf("restarted worker: %d, %v", n, err)
 	}
@@ -712,7 +714,7 @@ func TestAnInterruptedLabelIsSentAgain(t *testing.T) {
 	dying := *l.worker
 	dying.Store = diesBeforeTheCommit{l.model}
 	_, _ = dying.Once(l.ctx)
-	l.clock.Advance(testSettle)
+	l.clock.Advance(testHold)
 	l.run()
 	if got := l.row(r.ID); got.Status != "applied" || got.Attempts != 2 {
 		t.Fatalf("row = %+v, want applied by the second send", got)
