@@ -364,6 +364,26 @@ toolkit secrets set infra.sealed_secrets.tls_key --env staging --stdin < "$d/tls
 rm -rf "$d"
 ```
 
+**The probe** (`infra/k8s/cluster/sealed-secrets/probe.yaml`) is applied by the bootstrap layer
+after the controller: its entry declares `requires_crd: sealedsecrets.bitnami.com`. A real run waits
+for that CRD to be Established, and a dry-run on a cluster without it reports the probe
+`NOT validated` instead of failing. **Reseal it after any rotation of the pair.** Its plaintext is
+not a credential, but it has to be sealed against the current certificate:
+
+```bash
+umask 077 && d=$(mktemp -d ~/.cache/seal.XXXX)   # under $HOME: Docker cannot mount /private/tmp
+toolkit secrets show infra.sealed_secrets.tls_crt --env staging \
+  | sed -n '/-----BEGIN CERTIFICATE-----/,/-----END CERTIFICATE-----/p' | sed 's/^[[:space:]]*//' > "$d/cert.pem"
+plain="kubelab sealed-secrets probe $(openssl rand -hex 16)"
+kubectl create secret generic sealed-secrets-probe -n kube-system --from-literal=probe="$plain" \
+    --dry-run=client -o yaml \
+  | docker run --rm -i -v "$d:/c:ro" docker.io/bitnami/sealed-secrets-kubeseal:<controller version> \
+      --cert /c/cert.pem --format yaml > "$d/sealed.yaml"
+printf %s "$plain" | shasum -a 256   # goes in the kubelab.live/plaintext-sha256 annotation
+```
+
+Copy `encryptedData` from `$d/sealed.yaml` into `probe.yaml`, set the annotation, then `rm -rf "$d"`.
+
 **Verify after the first apply** (prints `match` or `mismatch`, never a value): the probe `SealedSecret` is
 sealed offline against the SOPS certificate, and the controller must have decrypted it to the digest
 committed beside it. Exit 2 means no verdict yet (the controller has not created the Secret, or the cluster could not be read): wait and run it again. Only exit 1, `mismatch`, says the key is not the operator's.

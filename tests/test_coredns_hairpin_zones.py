@@ -133,8 +133,9 @@ class _Kubectl:
     def __init__(self) -> None:
         self.manifests: list[str] = []
 
-    def __call__(self, cmd: list[str], *, input: str, **_: object) -> object:  # noqa: A002
-        self.manifests.append(input)
+    def __call__(self, cmd: list[str], *, input: str | None = None, **_: object) -> object:  # noqa: A002
+        if input is not None:  # a CRD lookup (`requires_crd`) sends no manifest
+            self.manifests.append(input)
         return type("Done", (), {"returncode": 0, "stdout": "ok", "stderr": ""})()
 
 

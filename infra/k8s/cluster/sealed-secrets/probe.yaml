@@ -1,0 +1,18 @@
+# RES-HOST-001 A6 (AC8): sealed offline with `kubeseal --cert` against the certificate held in SOPS
+# (infra.sealed_secrets.tls_crt, staging). Its plaintext is not a credential: a controller running the
+# operator's key unseals it to the digest annotated here; one that minted its own key cannot unseal it.
+# Check with `toolkit infra k8s verify-sealed-secrets --env staging`; reseal after any key rotation.
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: sealed-secrets-probe
+  namespace: kube-system
+  annotations:
+    kubelab.live/plaintext-sha256: 832b8f21d8c10d7ab26569ba7fd0b3dd3ac893d486159530e75873cf3309cbb3
+spec:
+  encryptedData:
+    probe: AgCOl0gFH2xQZqOn0K/Ekww0VJw88cHrePzpTQEar8YvDYbKpINlslUKW0YnQvyhASehuKj3p8fzs/s9FPtoIJ+2h0kIqILHYlHninY2iqrL4bUFZ0y0fwHfY3iZthXYTU2Dx25/bwVQ/zDABYmfnAxQHgJotqYADpTzBuF16xOLL+r5g6SaPBun13ZhHk2aj18ZPEhtkTiuUKglKeU0qUwfzQ0/zZCm/iovURoXITG++bsvDcylcAewB1lIs7lieqUPePIoXTvYSiOKl3Ee5xuSN4YNdqbWtWrF4iTTofxRpwLCbk6SLOWl5Tt1XrppLz3gfVTIJK/ZwGmowX6LscOgmsiZrekDoVa91Y90LCe4W8ssI7HUwz8nYxBkjPtKRa29RfV6GppmC6wATPAUt/f8jepC1f7CdjW5g1R7qqMYFMbvIPvv3uf349foOEkhp7EJmPE8rz9UJ97tF7UghviLLj67kQWF27GwLJZzNLxzdWSlcvCPgk4Cqr2DVPA66RA7EE7LI8iPSC5m/Aikiki439Y6G7dOyXgzYBYTSyL+2tq67zQDykZhYK1iPQOOkL50Pd3Uv37ClQLSdI54b+8UnJwLWf5AuLvLy2o65Gvk0tliQEtO5rpVj/qbS4xIVVfKK808Pv3CTSWM5A6p8ak4X3Ds12fg1SZLMgGtA4HC5pQXDFd6ZhjTweGvud0wkrIGEOOh5ZNGv+cR8QStzpVQWM4zw54dUfi5pvz/ffs62MrxfOPktKgRJ5ThCAEHwirzBrRtq93ZxNCWsibL
+  template:
+    metadata:
+      name: sealed-secrets-probe
+      namespace: kube-system

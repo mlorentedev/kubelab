@@ -165,3 +165,18 @@ def test_every_caller_of_the_loop_passes_its_own_environment(mocker: pytest.Mock
         call()
 
     assert loop.call_args.kwargs["env"] == "prod"
+
+
+def test_a_required_crd_is_defined_by_an_earlier_entry() -> None:
+    """`requires_crd` waits for a CRD; nothing waits well for one that no entry installs first."""
+    from toolkit.cli.infra import _load_cluster_bootstrap
+
+    root = Path(__file__).resolve().parents[1]
+    entries = _load_cluster_bootstrap()
+    assert any(e.requires_crd for e in entries), "no entry declares requires_crd: this guard checks nothing"
+    seen: set[str] = set()
+    for entry in entries:
+        if entry.requires_crd:
+            assert entry.requires_crd in seen, f"{entry.name}: no earlier entry defines CRD {entry.requires_crd}"
+        docs = yaml.safe_load_all((root / entry.manifest).read_text(encoding="utf-8"))
+        seen |= {d["metadata"]["name"] for d in docs if d and d.get("kind") == "CustomResourceDefinition"}

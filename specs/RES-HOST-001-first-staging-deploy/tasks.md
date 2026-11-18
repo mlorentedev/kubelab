@@ -39,25 +39,34 @@ excluding regenerated schema and snapshot files.
 
 ## A. Sealed Secrets key acceptance on staging (owner)
 
-- [ ] A1 [AC8] Test: `cluster_bootstrap` has a `sealed-secrets` entry whose
+- [x] A1 [AC8] Test: `cluster_bootstrap` has a `sealed-secrets` entry whose
   vendored manifest pins the image by digest and passes
   `--key-renew-period=0`.
-- [ ] A2 [AC8] Vendor the controller to `infra/k8s/cluster/sealed-secrets/` and
+- [x] A2 [AC8] Vendor the controller to `infra/k8s/cluster/sealed-secrets/` and
   add the `cluster_bootstrap` entry in `common.yaml`.
-- [ ] A3 [AC8] Test: `SecretMapping` accepts `labels` and `apply_secrets`
+- [x] A3 [AC8] Test: `SecretMapping` accepts `labels` and `apply_secrets`
   renders them; existing mappings render unchanged. Add the field.
-- [ ] A4 [AC8] Catalog entries for the key pair (`tls.crt`, `tls.key`) in SOPS,
+- [x] A4 [AC8] Catalog entries for the key pair (`tls.crt`, `tls.key`) in SOPS,
   and a `SecretMapping` of type `kubernetes.io/tls` in the controller's
   namespace with label `sealedsecrets.bitnami.com/sealed-secrets-key=active`.
   The owner generates and sets the values; no value appears in the PR.
-- [ ] A5 [AC8] Order: the runbook and the bootstrap target apply secrets before
+- [x] A5 [AC8] Order: the runbook and the bootstrap target apply secrets before
   the controller, or the controller mints its own key. Test the order where a
   target encodes it.
-- [ ] A6 [AC8] A probe `SealedSecret` sealed offline with `kubeseal --cert`
+- [x] A6 [AC8] A probe `SealedSecret` sealed offline with `kubeseal --cert`
   against the SOPS cert, committed, with the expected sha256 of its plaintext.
   A verify command compares digests and prints only match or mismatch.
 - [ ] A7 [AC8] Deployed (owner): apply, bootstrap, verify; run both again and
   record "unchanged". Record the evidence on #2449.
+
+Deviations (2026-11-18):
+- A1 to A5 landed in #3574. The owner generated and set the pair in #3644, and the
+  key Secret was applied on 2026-11-18. Its label is `active`, and its certificate's
+  SHA-256 fingerprint matches the SOPS copy.
+- A6 lands with the bootstrap entry that applies the probe. kubectl cannot map
+  `SealedSecret` before the controller's CRD exists, so the entry declares
+  `requires_crd`. The real apply waits for that CRD to be Established, and a
+  dry-run reports the entry unvalidated.
 
 ## K. ADR-073 acceptance record (owner, docs)
 
@@ -221,8 +230,9 @@ Landed in #3609 (2026-11-17). Deviations, dated 2026-11-17:
   `docs/runbooks/resume-daily-pipeline.md`, covering the order, the checks and
   rollback.
 - [ ] [AC9] [AC10] [AC11] [AC12] Run, and record the evidence in
-  `verification.md`. AC9, AC10 and AC11 passed on 2026-11-18. AC12 waits for
-  the first scheduled run.
+  `verification.md`. AC9, AC10 and AC11 passed on 2026-11-18. AC12's Job and
+  marker passed on the first scheduled run (2026-11-18 06:00Z); the rule's
+  Normal state waits for the owner to read it in Grafana.
 
 Deviations (2026-11-18):
 - The runbook is a section of the existing resume runbook, not a file of its
