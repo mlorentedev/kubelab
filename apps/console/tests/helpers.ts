@@ -25,5 +25,6 @@ export const page = (over: Partial<QueuePage> = {}): QueuePage => ({
   items: [item()],
   total: 1,
   next: null,
+  writes: [],
   ...over,
 });

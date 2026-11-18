@@ -2,9 +2,11 @@ package api
 
 import (
 	"context"
+	"errors"
 	"log"
 	"time"
 
+	"github.com/mlorentedev/kubelab/apps/api/internal/console"
 	"github.com/mlorentedev/kubelab/apps/api/internal/forge"
 	"github.com/mlorentedev/kubelab/apps/api/internal/store"
 	"github.com/mlorentedev/kubelab/apps/api/pkg/config"
@@ -20,10 +22,21 @@ type ForgeView struct {
 	Writers map[string]forge.Writer
 	Catalog *forge.Catalog
 	Model   store.ForgeModel
+	// Writes is the intake and the outbox reader behind the write routes and the queue's `writes`.
+	Writes *console.Writes
 	// CreateToken is the machine token the create accepts (AC3); empty accepts nobody.
 	CreateToken string
 	// ConsoleDomain is the console.s own host; empty serves the console nowhere.
 	ConsoleDomain string
+}
+
+// writeTargets is the set a write may name: infra.forge.sources with its wildcards resolved, the
+// same set the queue shows. A declaration that did not parse is an error, never an empty set.
+func (v *ForgeView) writeTargets() ([]forge.Source, error) {
+	if v.Catalog == nil {
+		return nil, errors.New("no catalog: the forge sources did not parse")
+	}
+	return v.Catalog.Current(), nil
 }
 
 // seedTimeout bounds the start-up read of the sources already stored.
@@ -50,6 +63,10 @@ func NewForgeView(ctx context.Context, conf *config.Config) *ForgeView {
 		GiteaWriteToken:      conf.Forge.GiteaWriteToken,
 	})
 	view := &ForgeView{Readers: readers, Writers: writers, Model: store.ForgeModel{Conf: conf.Postgres}, CreateToken: conf.Forge.CreateToken, ConsoleDomain: conf.Forge.ConsoleDomain}
+	view.Writes = &console.Writes{
+		Intake: &forge.Intake{Store: view.Model, Kinds: view.Model, Writers: writers, Sources: view.writeTargets},
+		Reader: view.Model,
+	}
 	declared, err := forge.ParseSources(conf.Forge.Sources)
 	if err != nil {
 		log.Printf("forge view: sources: %v", err)

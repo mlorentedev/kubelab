@@ -6,6 +6,23 @@ import { parseQueuePage } from '../src/lib/contract';
 const get = (scenario: string, query = '') => answerQueue(scenario, new URLSearchParams(query));
 
 describe('the fixture API', () => {
+  it('the default scenario shows a pending write and a failed one, on every page', () => {
+    for (const q of ['', `after=${encodeURIComponent(parseQueuePage(get('default').body).next!)}`]) {
+      const writes = parseQueuePage(get('default', q).body).writes;
+      expect(writes.map((w) => w.status).sort()).toEqual(['failed', 'pending']);
+      expect(writes.find((w) => w.status === 'failed')?.error).toBeTruthy();
+      expect(writes.find((w) => w.action === 'create')?.number).toBeNull();
+    }
+  });
+
+  it('a write the contract does not know fails loudly, as a changed shape does', () => {
+    const body = structuredClone(get('default').body as Record<string, unknown>) as { writes: Record<string, unknown>[] };
+    body.writes[0].status = 'in_flight';
+    expect(() => parseQueuePage(body)).toThrow(/write.status/);
+    delete (body as { writes?: unknown }).writes;
+    expect(() => parseQueuePage(body)).toThrow(/writes/);
+  });
+
   it('answers the first page with a cursor, and the cursor leads to the next page', () => {
     const first = get('default');
     expect(first.status).toBe(200);

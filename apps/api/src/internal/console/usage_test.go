@@ -22,7 +22,7 @@ func serveUsage(t *testing.T, usage Usage, path string, header http.Header) *htt
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	Register(r, func() (QueueReader, []forge.Source, error) { return &fakeQueue{}, nil, nil }, func() string { return consoleHost }, usage)
+	Register(r, func() (QueueReader, []forge.Source, error) { return &fakeQueue{}, nil, nil }, func() string { return consoleHost }, usage, nil)
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, path, nil)
 	req.Host = consoleHost
@@ -62,7 +62,7 @@ func TestEveryConsoleDataRouteCountsAnOpen(t *testing.T) {
 	r := gin.New()
 	var calls []usageCall
 	Register(r, func() (QueueReader, []forge.Source, error) { return &fakeQueue{}, nil, nil },
-		func() string { return consoleHost }, recording(&calls, nil))
+		func() string { return consoleHost }, recording(&calls, nil), nil)
 
 	seen := 0
 	for _, ri := range r.Routes() {
