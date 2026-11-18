@@ -296,7 +296,17 @@ The outbox worker (`internal/forge/worker.go`, the store in `internal/store/outb
 
 **W20 · The read model follows the forge (W2).** An applied create inserts the source and the item (`ON CONFLICT DO NOTHING`, author empty), a label or an assignee change and a close or a reopen update the item. `updated_at` is not bumped: it is the forge's own clock, and the next reconcile replaces it.
 
-**Not decided here.** The route shapes, the `pending` field of the queue and the machine identity's name on the token route.
+**W21 · The routes and the intake (CONSOLE-004 AC2).** Every write, the operator's on `/console/issues/...` and the machine create on `POST /api/forge/issues`, goes through one `forge.Intake`, so the two doors cannot judge a request differently. The routes only translate its answer.
+
+- *Bodies and answer.* Create `{source, title, body}` where `source` is `<forge>:<owner>/<repo>`, spelled as `/console/queue` and the TypeScript contract spell it; label `{label}`; assignee `{login}`; close and reopen carry none. The answer is `{id, status, response, error}`. `202` is a write still pending; `200` is the replay of one already settled (applied or failed), with its stored answer.
+- *Order of judgment.* The gate (no writer for the forge: 503), the key (400), the actor, the shape (400), the target against the declared sources (422), what the platform allows (422), the read model for a close or reopen (422 on a pull request, 503 if it cannot be read), and only then the outbox. A closed environment therefore answers 503 whatever the request says.
+- *Idempotency (W1).* The key is required, printable ASCII with no spaces, at most 255 bytes. `request_hash` covers the action, the target (forge, owner, repository, issue number) and every field, with the target lowercased because the forges compare it so. The same key with another issue, action or body is 422, never a replay.
+- *Undeclared target.* A source outside `infra.forge.sources` (wildcards resolved from the catalog) is refused with 422 and nothing is enqueued: the console can write only where it reads.
+- *Labels.* A write adds or removes only `status:*` and `priority:*` labels (the spec's two families). Any other, `area:` among them, is set on the forge; 422. Text that carries the write marker is refused for the same reason W4 gives for the marker.
+- *Actors.* The console's actor is the `Remote-User`; the machine's is the literal `machine`. A `Remote-User` equal to `machine`, in any case, is 403, because an actor is half of the idempotency scope and the machine's must not be claimable from a header.
+- *The queue.* `GET /console/queue` gains `writes`: every row still owed (pending and in flight, both shown as `pending`) and every failed row whose latest forge call is within 24 hours, read from its latest `forge_write_audit.at` and, with no audit row, from `created_at`. A row that retried for a day before the forge refused it is a fresh failure. At most 500 rows. If the outbox cannot be read the queue answers 503 rather than a page that hides what is owed.
+
+**Not decided here.** A reader for the failed writes older than 24 hours, and what the console draws of `writes` (CONSOLE-004 AC4).
 
 ## References
 
