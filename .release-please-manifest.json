@@ -1,5 +1,5 @@
 {
-  "apps/api": "1.13.0",
+  "apps/api": "1.14.0",
   "apps/console": "1.0.0",
   "edge/errors": "1.3.0"
 }
