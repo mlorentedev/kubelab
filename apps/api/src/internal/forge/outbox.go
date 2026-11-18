@@ -60,9 +60,10 @@ type OutboxStore interface {
 	// when its status is pending or in_flight and next_attempt_at has passed; it may be sent when no
 	// earlier row of the same forge, repository and issue is still owed (writes to one issue keep
 	// their order, and never overlap). The claim commits the row in_flight with next_attempt_at at
-	// now+settle before it returns, so the forge is never called for a row the database does not
-	// show as in flight, and a row left in flight is not due again until the interval has passed.
-	Claim(ctx context.Context, now time.Time, settle time.Duration) (*Queued, error)
+	// now+hold before it returns, so the forge is never called for a row the database does not
+	// show as in flight, and a row left in flight is not due again until the hold has passed. The
+	// worker's hold is the call's timeout plus the settle interval (W8, W16).
+	Claim(ctx context.Context, now time.Time, hold time.Duration) (*Queued, error)
 	// Restamp moves an in_flight row's next_attempt_at out to until, and counts a call, immediately
 	// before the call it stamps. It never moves the time earlier.
 	Restamp(ctx context.Context, id int64, until time.Time) error

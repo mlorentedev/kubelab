@@ -66,7 +66,7 @@ func (m ForgeModel) Enqueue(ctx context.Context, e forge.Enqueue) (forge.Receipt
 // is passed over, never waited for. The NOT EXISTS keeps one issue's writes in order and apart:
 // a row waits while any earlier row for the same issue is still pending or in flight, which
 // includes one backing off. A create has no issue number yet and waits for nothing.
-func (m ForgeModel) Claim(ctx context.Context, now time.Time, settle time.Duration) (*forge.Queued, error) {
+func (m ForgeModel) Claim(ctx context.Context, now time.Time, hold time.Duration) (*forge.Queued, error) {
 	db, err := Pool(m.Conf)
 	if err != nil {
 		return nil, err
@@ -92,7 +92,7 @@ func (m ForgeModel) Claim(ctx context.Context, now time.Time, settle time.Durati
 		    attempts = o.attempts + CASE WHEN due.was = 'in_flight' AND o.action = 'create' THEN 0 ELSE 1 END
 		FROM due WHERE o.id = due.id
 		RETURNING o.id, o.actor, o.action, o.forge, o.owner, o.repo, o.number, o.payload, o.attempts, o.created_at, due.was`,
-		now, now.Add(settle)).
+		now, now.Add(hold)).
 		Scan(&q.ID, &q.Actor, &action, &q.Source.Forge, &q.Source.Owner, &q.Source.Repo, &number, &payload,
 			&q.Attempts, &q.CreatedAt, &was)
 	if errors.Is(err, pgx.ErrNoRows) {
