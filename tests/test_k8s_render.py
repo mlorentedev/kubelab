@@ -298,3 +298,77 @@ class TestResolveMagicDNS:
 
         monkeypatch.setattr(k8s_render.subprocess, "run", _raise)
         assert resolve_magicdns("x") is None
+
+
+# ── requires_crd: an entry whose kind is defined by an earlier entry's CRD ─────
+
+
+class TestRequiresCrd:
+    """The probe's `SealedSecret` kind exists only once the controller's CRD is Established.
+
+    kubectl cannot map a kind whose CRD is absent, so the client validation of such an
+    entry fails on every cluster where the earlier entry has not run yet (RES-HOST-001 A6).
+    """
+
+    CRD = "sealedsecrets.bitnami.com"
+
+    def _entry(self) -> BootstrapEntry:
+        return BootstrapEntry.from_dict(
+            {"name": "probe", "namespace": "ns", "manifest": "m.yaml", "requires_crd": self.CRD}
+        )
+
+    def test_from_dict_reads_the_crd(self) -> None:
+        assert self._entry().requires_crd == self.CRD
+        assert BootstrapEntry.from_dict({"name": "x", "namespace": "ns", "manifest": "m"}).requires_crd is None
+
+    def test_apply_waits_for_the_crd_before_validating(self, tmp_path: Path) -> None:
+        runner = _ok("established", "", "applied")
+        assert render_and_apply(
+            self._entry(), kubeconfig="k", project_root=_write(tmp_path, "kind: X\n"), runner=runner
+        )
+        wait = runner.call_args_list[0].args[0]
+        assert wait[-3:] == ["--for=condition=Established", f"crd/{self.CRD}", "--timeout=120s"]
+        assert "--dry-run=client" in runner.call_args_list[1].args[0]
+        assert "--server-side" in runner.call_args_list[2].args[0]
+
+    def test_apply_fails_when_the_crd_never_becomes_established(self, tmp_path: Path) -> None:
+        runner = _fail("timed out waiting for the condition")
+        assert not render_and_apply(
+            self._entry(), kubeconfig="k", project_root=_write(tmp_path, "kind: X\n"), runner=runner
+        )
+        assert runner.call_count == 1
+
+    def test_dry_run_without_the_crd_passes_unvalidated_and_says_so(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        runner = MagicMock(return_value=MagicMock(returncode=0, stdout="", stderr=""))
+        assert render_and_apply(
+            self._entry(),
+            kubeconfig="k",
+            project_root=_write(tmp_path, "kind: X\n"),
+            dry_run=True,
+            runner=runner,
+        )
+        assert runner.call_count == 1, "only the CRD lookup: no validation can map the kind"
+        lookup = runner.call_args_list[0]
+        assert lookup.args[0][-3:] == ["crd", self.CRD, "--ignore-not-found"]
+        assert "input" not in lookup.kwargs, "a CRD lookup sends no manifest"
+        out = capsys.readouterr()
+        assert "NOT validated" in out.out + out.err + caplog.text
+
+    def test_dry_run_with_the_crd_validates_as_usual(self, tmp_path: Path) -> None:
+        runner = _ok(f"customresourcedefinition.apiextensions.k8s.io/{self.CRD}", "")
+        assert render_and_apply(
+            self._entry(),
+            kubeconfig="k",
+            project_root=_write(tmp_path, "kind: X\n"),
+            dry_run=True,
+            runner=runner,
+        )
+        assert "--dry-run=client" in runner.call_args_list[1].args[0]
+
+    def test_an_entry_without_it_makes_no_crd_call(self, tmp_path: Path) -> None:
+        runner = _ok("", "applied")
+        entry = BootstrapEntry.from_dict({"name": "x", "namespace": "ns", "manifest": "m.yaml"})
+        assert render_and_apply(entry, kubeconfig="k", project_root=_write(tmp_path, "kind: X\n"), runner=runner)
+        assert all("crd" not in " ".join(c.args[0]) for c in runner.call_args_list)

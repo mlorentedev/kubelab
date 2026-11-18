@@ -134,3 +134,20 @@ def test_the_catalog_patterns_accept_each_half_and_refuse_a_swap() -> None:
     assert all(key.fullmatch(k) for k in keys)
     assert not crt.fullmatch(keys[0])
     assert not key.fullmatch(cert)
+
+
+def test_the_bootstrap_layer_applies_the_probe_after_the_controller_where_it_runs() -> None:
+    """A6: the committed probe reaches the cluster through bootstrap, never by hand.
+
+    After the controller, because the SealedSecret kind is the controller's CRD; in the same
+    environments, because elsewhere no key exists to unseal it.
+    """
+    from toolkit.features.sealed_secrets_probe import PROBE_MANIFEST
+
+    entries = _load_cluster_bootstrap()
+    names = [e.name for e in entries]
+    probe = next(e for e in entries if e.manifest == PROBE_MANIFEST)
+
+    assert names.index(probe.name) > names.index("sealed-secrets")
+    assert probe.envs == _entry().envs
+    assert probe.namespace == "kube-system"

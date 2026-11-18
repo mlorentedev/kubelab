@@ -740,6 +740,13 @@ cluster_bootstrap:
   # that `make sync-operators` would undo. The manifest header says how to upgrade it.
   version: v0.41.2              # ADR-073 D2: decrypts product SealedSecrets with the SOPS-held key
   envs: [staging]               # the key Secret exists only there (`sealed-secrets-key`, envs=staging)
+- name: sealed-secrets-probe
+  namespace: kube-system
+  manifest: infra/k8s/cluster/sealed-secrets/probe.yaml
+  requires_crd: sealedsecrets.bitnami.com
+  # RES-HOST-001 A6: sealed offline against the SOPS certificate. After the controller (its CRD)
+  # and only where it runs. `toolkit infra k8s verify-sealed-secrets` reads the unsealed digest.
+  envs: [staging]
 - name: coredns-custom
   namespace: kube-system
   manifest: infra/k8s/base/edge/coredns-custom.yaml

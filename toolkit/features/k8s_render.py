@@ -53,6 +53,9 @@ class BootstrapEntry:
     target is unreachable — e.g. RPi4 is an on-demand node and may be powered off.
     ``envs`` names the environments the entry is applied to; ``None`` is every one (the
     mirror of ``SecretMapping.envs``). Read by ``_apply_cluster_bootstrap``.
+    ``requires_crd`` names a CRD an earlier entry installs and this one's kinds need: the
+    apply waits for it to be Established, and a dry-run without it reports the entry
+    unvalidated instead of failing (kubectl cannot map a kind whose CRD is absent).
     """
 
     name: str
@@ -62,6 +65,7 @@ class BootstrapEntry:
     optional: bool = False
     render: dict[str, str] = field(default_factory=dict)
     envs: tuple[str, ...] | None = None
+    requires_crd: str | None = None
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> BootstrapEntry:
@@ -77,6 +81,7 @@ class BootstrapEntry:
             optional=bool(raw.get("optional", False)),
             render={str(k): str(v) for k, v in dict(raw.get("render") or {}).items()},
             envs=tuple(str(e) for e in envs) if envs is not None else None,
+            requires_crd=(str(raw["requires_crd"]) if raw.get("requires_crd") else None),
         )
 
 
@@ -207,6 +212,17 @@ def render_and_apply(
         logger.error(f"[{entry.name}] render failed: {exc}")
         return False
 
+    if entry.requires_crd:
+        ready = _crd_ready(entry, kubeconfig, dry_run=dry_run, runner=runner)
+        if ready is None:
+            return False
+        if not ready:
+            logger.warning(
+                f"[{entry.name}] NOT validated: CRD {entry.requires_crd} is not installed yet "
+                "(an earlier entry installs it on a real run)"
+            )
+            return True
+
     # Always client-validate first; only apply if validation passes.
     if not _kubectl_apply(text, kubeconfig, entry.name, dry_run=True, runner=runner):
         return False
@@ -214,6 +230,34 @@ def render_and_apply(
         logger.success(f"[{entry.name}] dry-run OK")
         return True
     return _kubectl_apply(text, kubeconfig, entry.name, dry_run=False, runner=runner)
+
+
+CRD_WAIT_TIMEOUT = "120s"
+
+
+def _crd_ready(entry: BootstrapEntry, kubeconfig: str, *, dry_run: bool, runner: Runner) -> bool | None:
+    """Whether ``entry.requires_crd`` can be relied on: True, False (dry-run, absent) or None (failure).
+
+    A real apply runs after the entry that installs the CRD, so it waits for Established and
+    a timeout is a failure. A dry-run applies nothing, so an absent CRD is expected there.
+    """
+    base = ["kubectl", "--kubeconfig", kubeconfig]
+    if dry_run:
+        cmd = [*base, "get", "crd", str(entry.requires_crd), "--ignore-not-found"]
+    else:
+        cmd = [
+            *base,
+            "wait",
+            "--for=condition=Established",
+            f"crd/{entry.requires_crd}",
+            f"--timeout={CRD_WAIT_TIMEOUT}",
+        ]
+    result = runner(cmd, capture_output=True, text=True, check=False)
+    if result.returncode != 0:
+        logger.error(f"[{entry.name}] CRD {entry.requires_crd} not ready: {(result.stderr or '').strip()}")
+        return None
+    # `kubectl wait` exiting 0 is the Established verdict; only the lookup reads stdout.
+    return True if not dry_run else bool((result.stdout or "").strip())
 
 
 def _kubectl_apply(
