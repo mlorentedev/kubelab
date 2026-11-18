@@ -1545,4 +1545,6 @@ def test_the_schedule_report_says_when_the_journal_holds_less_than_its_window() 
     short = _render_reach_line(f"{now} {now - int(0.8 * 86400)}")
     assert "NOT 7 days" in short and "0.8 days" in short, short
     assert "NOT 7 days" not in _render_reach_line(f"{now} {now - 9 * 86400}")
+    # Just under the window must not round up into it (Codex on #3640).
+    assert "NOT 7 days" in _render_reach_line(f"{now} {now - int(6.96 * 86400)}")
     assert "not measured" in _render_reach_line(f"{now} ")
