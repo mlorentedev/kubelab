@@ -55,7 +55,7 @@ def _api_environment(env: str) -> dict[str, str]:
         pytest.skip("kubectl not on PATH: cannot render the overlay (a skip is CANNOT CHECK, not OK)")
     out = subprocess.run(
         ["kubectl", "kustomize", str(REPO_ROOT / "infra" / "k8s" / "overlays" / env)],
-        capture_output=True, text=True, check=True,
+        capture_output=True, text=True, encoding="utf-8", check=True,
     ).stdout
     docs = [d for d in yaml.safe_load_all(out) if d]
     api = next(d for d in docs if d["kind"] == "Deployment" and d["metadata"]["name"] == "api")
