@@ -230,8 +230,9 @@ Landed in #3609 (2026-11-17). Deviations, dated 2026-11-17:
   `docs/runbooks/resume-daily-pipeline.md`, covering the order, the checks and
   rollback.
 - [ ] [AC9] [AC10] [AC11] [AC12] Run, and record the evidence in
-  `verification.md`. AC9, AC10 and AC11 passed on 2026-11-18. AC12 waits for
-  the first scheduled run.
+  `verification.md`. AC9, AC10 and AC11 passed on 2026-11-18. AC12's Job and
+  marker passed on the first scheduled run (2026-11-18 06:00Z); the rule's
+  Normal state waits for the owner to read it in Grafana.
 
 Deviations (2026-11-18):
 - The runbook is a section of the existing resume runbook, not a file of its
