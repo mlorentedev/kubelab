@@ -217,8 +217,24 @@ Landed in #3609 (2026-11-17). Deviations, dated 2026-11-17:
 
 ## J. First staging deploy (owner runs)
 
-- [ ] Runbook `docs/runbooks/runbook-resume-first-staging-deploy.md`: order
-  (apply secrets, render, hand-run `toolkit deployment promote`), checks and
+- [x] Runbook: the "First deploy to an environment" section of
+  `docs/runbooks/resume-daily-pipeline.md`, covering the order, the checks and
   rollback.
 - [ ] [AC9] [AC10] [AC11] [AC12] Run, and record the evidence in
-  `verification.md`.
+  `verification.md`. AC9, AC10 and AC11 passed on 2026-11-18. AC12 waits for
+  the first scheduled run.
+
+Deviations (2026-11-18):
+- The runbook is a section of the existing resume runbook, not a file of its
+  own. That runbook already promised it.
+- No `toolkit deployment promote` was run. Argo CD deployed resume when #3609
+  merged, at the pinned `sha-a0e3aae`, which already carries the fixture seed
+  (resume #813). The pod then waited 19 hours in `ImagePullBackOff` for its
+  Secrets, which only `apply-secrets` delivers (#3645). `deploy-verify` stayed
+  green throughout (#3646).
+- `apply-secrets` exited 1 after applying every Secret. The first image pull
+  took 3m35s, longer than its 180s readiness wait (#3652).
+- AC11 adds a control: the same private connect from a pod without an egress
+  policy. That shows the refusal comes from the policy, not from a closed port.
+- AC12 uses the first scheduled run (06:00 UTC) instead of a manual Job. That
+  needs no hand step, and it also exercises the schedule.
