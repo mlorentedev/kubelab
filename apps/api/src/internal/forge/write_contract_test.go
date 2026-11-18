@@ -149,6 +149,7 @@ type statusRow struct {
 	Name       string
 	Status     int
 	Header     map[string]string
+	Body       string
 	Create     forge.Outcome
 	Other      forge.Outcome
 	RetryAfter time.Duration
@@ -181,6 +182,10 @@ func statusRows() []statusRow {
 		// GitHub signals its rate limits as a 403 too (primary: X-RateLimit-Remaining 0;
 		// secondary: Retry-After). Terminal would drop an operator's write for a limit that lifts.
 		{Name: "403 secondary rate limit", Status: 403, Header: map[string]string{"Retry-After": "60"}, Create: u, Other: r, RetryAfter: time.Minute},
+		// GitHub's documented secondary-limit answer can carry neither header: only its message says so.
+		// A permission refusal is a 403 too, and stays terminal.
+		{Name: "403 secondary rate limit named only in the message", Status: 403, Body: `{"message":"You have exceeded a secondary rate limit. Please wait a few minutes before you try again."}`, Create: u, Other: r},
+		{Name: "403 permission refusal with a message", Status: 403, Body: `{"message":"Resource not accessible by integration"}`, Create: f, Other: f},
 		{Name: "403 primary rate limit", Status: 403, Header: map[string]string{"X-RateLimit-Remaining": "0"}, Create: u, Other: r},
 	}
 }
@@ -203,6 +208,7 @@ func runStatusClasses(t *testing.T, newWriter func(baseURL string) forge.Writer)
 					w.Header().Set("Location", other.URL+"/moved")
 				}
 				w.WriteHeader(row.Status)
+				_, _ = w.Write([]byte(row.Body))
 			}))
 			defer srv.Close()
 

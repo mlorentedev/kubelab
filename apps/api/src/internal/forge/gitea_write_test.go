@@ -123,6 +123,13 @@ func TestGiteaWriter(t *testing.T) {
 				Want: wantResult{Outcome: forge.OutcomeApplied, Status: 200},
 			},
 			{
+				Name:  "remove_assignee whose answer still lists the login is a terminal failure",
+				Write: forge.Write{Action: forge.ActionRemoveAssignee, Source: gtSrc, Number: 5, Login: "bob"},
+				Calls: []exchange{{Method: "DELETE", Path: "/api/v1/repos/o/r/issues/5/assignees", Status: 200,
+					Body: map[string]any{"assignees": []any{"bob"}}, Answer: `{"assignees":[{"login":"bob"}]}`}},
+				Want: wantResult{Outcome: forge.OutcomeFailed, Status: 200},
+			},
+			{
 				// closeOrReopenIssue does nothing for a state the issue already has, and EditIssue answers 201.
 				Name:  "close",
 				Write: forge.Write{Action: forge.ActionClose, Source: gtSrc, Number: 5},

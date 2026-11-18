@@ -85,7 +85,7 @@ func (e *issueWriter) Write(ctx context.Context, w Write) Result {
 	case ActionAddAssignee:
 		return e.addAssignee(ctx, auth, w)
 	case ActionRemoveAssignee:
-		return e.send(ctx, auth, http.MethodDelete, e.issue(w)+"/assignees", map[string]any{"assignees": []string{w.Login}}, false)
+		return e.removeAssignee(ctx, auth, w)
 	case ActionClose:
 		return e.send(ctx, auth, http.MethodPatch, e.issue(w), map[string]string{"state": "closed"}, false)
 	case ActionReopen:
@@ -158,6 +158,26 @@ func (e *issueWriter) addAssignee(ctx context.Context, auth func(*http.Request),
 	return failed(r.Status, "the forge did not assign %q: not an assignable user", w.Login)
 }
 
+// removeAssignee deletes the login. GitHub ignores a removal by a caller without push access and
+// still answers 200, so the issue in the answer is the proof; an answer that cannot be read is
+// retryable, a removal being repeatable.
+func (e *issueWriter) removeAssignee(ctx context.Context, auth func(*http.Request), w Write) Result {
+	r := call(ctx, e.http, auth, http.MethodDelete, e.issue(w)+"/assignees", map[string]any{"assignees": []string{w.Login}})
+	if !r.ok() {
+		return r.failure(false)
+	}
+	var issue issueRef
+	if err := json.Unmarshal(r.Body, &issue); err != nil {
+		return Result{Outcome: OutcomeRetry, Status: r.Status, Err: errors.New("the forge answered 2xx without the issue")}
+	}
+	for _, a := range issue.Assignees {
+		if strings.EqualFold(a.Login, w.Login) {
+			return failed(r.Status, "the forge did not unassign %q: still assigned", w.Login)
+		}
+	}
+	return applied(r.Status)
+}
+
 func hasLabel(labels []labelRef, name string) bool {
 	for _, l := range labels {
 		if strings.EqualFold(l.Name, name) {
@@ -220,6 +240,10 @@ func (e *issueWriter) FindCreated(ctx context.Context, lk Lookup) (LookupResult,
 	if err != nil {
 		return LookupResult{}, err
 	}
+	// The settle interval is judged from when the listing began: a create that finishes while the
+	// pages are being read may be missing from them, so a listing that ends after the interval but
+	// began inside it proves nothing.
+	started := e.now()
 	issues, r := getAll[issueRef](ctx, e, auth, e.listing(e, lk.Source, lk.SentAt.Add(-lookupSkew)), e.maxPages)
 	if !r.ok() {
 		if r.Err != nil {
@@ -241,7 +265,7 @@ func (e *issueWriter) FindCreated(ctx context.Context, lk Lookup) (LookupResult,
 	if found.Found {
 		return found, nil
 	}
-	if until := lk.SentAt.Add(lk.Settle); e.now().Before(until) {
+	if until := lk.SentAt.Add(lk.Settle); started.Before(until) {
 		return LookupResult{}, &NotSettledError{Until: until}
 	}
 	return LookupResult{}, nil

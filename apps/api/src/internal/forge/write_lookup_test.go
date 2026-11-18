@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -197,6 +198,23 @@ func runLookupContract(t *testing.T, c lookupContract) {
 		var ns *forge.NotSettledError
 		if !errors.As(err, &ns) || !ns.Until.Equal(sent.Add(settle)) {
 			t.Fatalf("want a NotSettledError until %s, got %v", sent.Add(settle), err)
+		}
+	})
+
+	t.Run("a listing that began before the interval ended proves nothing, even if it ends after it", func(t *testing.T) {
+		// The clock moves past the interval while the forge is answering: the create may have
+		// finished while the listing was being read, after the page was cut.
+		var clock atomic.Int64
+		clock.Store(sent.Add(settle - time.Second).UnixNano())
+		srv := serve(t, func(w http.ResponseWriter, r *http.Request) {
+			clock.Store(sent.Add(settle + time.Minute).UnixNano())
+			_, _ = w.Write([]byte(listing()))
+		})
+		moving := func() time.Time { return time.Unix(0, clock.Load()) }
+		_, err := c.New(srv.URL, moving).FindCreated(context.Background(), q(42))
+		var ns *forge.NotSettledError
+		if !errors.As(err, &ns) {
+			t.Fatalf("want a NotSettledError, got %v", err)
 		}
 	})
 

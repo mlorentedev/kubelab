@@ -281,12 +281,20 @@ func (r reply) failure(create bool) Result {
 }
 
 // rateLimited reports a forge's own limit: 429, or the 403 GitHub sends for its primary
-// (X-RateLimit-Remaining 0) and secondary (Retry-After) limits.
+// (X-RateLimit-Remaining 0) and secondary (Retry-After, or its message alone) limits.
 func (r reply) rateLimited() bool {
 	if r.Status == http.StatusTooManyRequests {
 		return true
 	}
-	return r.Status == http.StatusForbidden && (r.Header.Get("Retry-After") != "" || r.Header.Get("X-RateLimit-Remaining") == "0")
+	if r.Status != http.StatusForbidden {
+		return false
+	}
+	if r.Header.Get("Retry-After") != "" || r.Header.Get("X-RateLimit-Remaining") == "0" {
+		return true
+	}
+	// A secondary limit can come with neither header and be named only in its message. A
+	// permission refusal ("Resource not accessible by integration") says nothing of limits.
+	return strings.Contains(strings.ToLower(r.message()), "rate limit")
 }
 
 func (r reply) retryAfter() time.Duration {
@@ -297,14 +305,21 @@ func (r reply) retryAfter() time.Duration {
 	return time.Duration(secs) * time.Second
 }
 
-// statusError names the status and, when the forge sent one, its message (both forges answer
-// {"message": ...}), cut short. Nothing of the request is echoed.
-func (r reply) statusError() error {
+// message is the forge's own {"message": ...}, empty when there is none.
+func (r reply) message() string {
 	var body struct {
 		Message string `json:"message"`
 	}
-	if json.Unmarshal(r.Body, &body) == nil && body.Message != "" {
-		msg := body.Message
+	if json.Unmarshal(r.Body, &body) != nil {
+		return ""
+	}
+	return body.Message
+}
+
+// statusError names the status and, when the forge sent one, its message (both forges answer
+// {"message": ...}), cut short. Nothing of the request is echoed.
+func (r reply) statusError() error {
+	if msg := r.message(); msg != "" {
 		if len(msg) > 200 {
 			msg = msg[:200]
 		}

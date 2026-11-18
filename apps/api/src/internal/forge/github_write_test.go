@@ -158,6 +158,22 @@ func TestGitHubWriter(t *testing.T) {
 				Want: wantResult{Outcome: forge.OutcomeApplied, Status: 200},
 			},
 			{
+				// GitHub ignores a removal by a caller without push access and still answers 200: the
+				// issue in the answer is what says the login is gone.
+				Name:  "remove_assignee whose answer still lists the login is a terminal failure",
+				Write: forge.Write{Action: forge.ActionRemoveAssignee, Source: ghSrc, Number: 5, Login: "bob"},
+				Calls: []exchange{{Method: "DELETE", Path: "/repos/o/r/issues/5/assignees", Status: 200,
+					Body: map[string]any{"assignees": []any{"bob"}}, Answer: `{"assignees":[{"login":"bob"}]}`}},
+				Want: wantResult{Outcome: forge.OutcomeFailed, Status: 200},
+			},
+			{
+				Name:  "remove_assignee whose answer cannot be read is retryable, a removal being repeatable",
+				Write: forge.Write{Action: forge.ActionRemoveAssignee, Source: ghSrc, Number: 5, Login: "bob"},
+				Calls: []exchange{{Method: "DELETE", Path: "/repos/o/r/issues/5/assignees", Status: 200,
+					Body: map[string]any{"assignees": []any{"bob"}}, Answer: `<html>`}},
+				Want: wantResult{Outcome: forge.OutcomeRetry, Status: 200},
+			},
+			{
 				// issues/update: 200. Closing a closed issue is a 200 too, so it is applied.
 				Name:  "close",
 				Write: forge.Write{Action: forge.ActionClose, Source: ghSrc, Number: 5},
