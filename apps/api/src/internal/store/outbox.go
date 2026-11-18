@@ -280,3 +280,80 @@ func updateItem(ctx context.Context, tx pgx.Tx, q forge.Queued, set string, valu
 		WHERE forge = $1 AND owner = $2 AND repo = $3 AND number = $4`, args...)
 	return err
 }
+
+// ItemKind says whether the read model holds an issue or a pull request at a number.
+func (m ForgeModel) ItemKind(ctx context.Context, s forge.Source, number int) (forge.Kind, bool, error) {
+	db, err := Pool(m.Conf)
+	if err != nil {
+		return "", false, err
+	}
+	var kind string
+	err = db.QueryRow(ctx, `SELECT kind FROM forge_item WHERE forge = $1 AND owner = $2 AND repo = $3 AND number = $4`,
+		s.Forge, s.Owner, s.Repo, number).Scan(&kind)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	return forge.Kind(kind), true, nil
+}
+
+// maxWrites bounds what the queue lists of the outbox. A backlog past it is an incident the depth
+// metric reports, and a page that lists thousands of rows would not be read.
+const maxWrites = 500
+
+// Writes lists what the queue shows of the outbox: every row still owed (pending or in flight,
+// shown alike) and every failed row whose latest forge call, read from its audit rows, is not
+// older than failedSince. The window is the last call and not the queueing: a row that retried
+// for a day before the forge refused it is a fresh failure. A failed row with no audit row
+// falls back to its creation.
+func (m ForgeModel) Writes(ctx context.Context, failedSince time.Time) ([]forge.WriteRow, error) {
+	db, err := Pool(m.Conf)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := db.Query(ctx, `SELECT o.id, o.action, o.forge, o.owner, o.repo, o.number, o.payload,
+			CASE WHEN o.status = 'failed' THEN 'failed' ELSE 'pending' END, o.last_error, o.created_at
+		FROM forge_outbox o
+		WHERE o.status IN ('pending', 'in_flight')
+		   OR (o.status = 'failed' AND coalesce(
+		        (SELECT max(a.at) FROM forge_write_audit a WHERE a.outbox_id = o.id), o.created_at) >= $1)
+		ORDER BY o.id LIMIT $2`, failedSince, maxWrites)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (forge.WriteRow, error) {
+		var (
+			w       forge.WriteRow
+			action  string
+			number  *int
+			payload []byte
+			lastErr *string
+		)
+		if err := r.Scan(&w.ID, &action, &w.Source.Forge, &w.Source.Owner, &w.Source.Repo, &number, &payload,
+			&w.Status, &lastErr, &w.QueuedAt); err != nil {
+			return w, err
+		}
+		w.Action = forge.Action(action)
+		if number != nil {
+			w.Number = *number
+		}
+		if lastErr != nil {
+			w.LastError = *lastErr
+		}
+		var p forge.Payload
+		if err := json.Unmarshal(payload, &p); err != nil {
+			return w, fmt.Errorf("outbox %d: payload: %w", w.ID, err)
+		}
+		switch w.Action {
+		case forge.ActionCreate:
+			w.Detail = p.Title
+		case forge.ActionAddLabel, forge.ActionRemoveLabel:
+			w.Detail = p.Label
+		case forge.ActionAddAssignee, forge.ActionRemoveAssignee:
+			w.Detail = p.Login
+		}
+		return w, nil
+	})
+}

@@ -103,12 +103,17 @@ type itemView struct {
 // queueView is the answer of GET /console/queue. apps/console's fixtures and its TypeScript
 // contract (src/lib/contract.ts) mirror it, and TestFixturesMatchTheQueueContract holds them to it.
 // Next is the cursor of the following page, null on the last one. Total counts every open
-// item of the declared sources, so the page can say "N of M".
+// item of the declared sources, so the page can say "N of M". Writes are the outbox's: every
+// write still owed (pending, whether or not the worker holds it) and every write that failed in
+// the last 24 hours, counted from its latest forge call (ADR-066 A2: a write is shown as pending
+// until the forge confirms). They are not paged; the first page carries them and a later page
+// repeats them, since they are small and the client keeps the latest.
 type queueView struct {
 	Sources []sourceView `json:"sources"`
 	Items   []itemView   `json:"items"`
 	Total   int          `json:"total"`
 	Next    *string      `json:"next"`
+	Writes  []writeView  `json:"writes"`
 }
 
 // Deps returns the read model and the sources to show; a seam for tests.
@@ -137,16 +142,16 @@ type Usage func(ctx context.Context, identity string, at time.Time) (bool, error
 const usageTimeout = 2 * time.Second
 
 // Register adds the console's routes, answered only for its own host.
-func Register(r *gin.Engine, deps Deps, domain func() string, usage Usage) {
+func Register(r *gin.Engine, deps Deps, domain func() string, usage Usage, writes *Writes) {
 	g := r.Group("/console", onlyHost(domain))
 	// Every load of the frontend calls the queue, and the queue is where an open is counted
 	// (#3450): one row per identity per day, so the minute poll of an open tab writes the same
 	// row. The frontend is nginx's, so no other route sees an open.
 	g.GET("/queue", func(c *gin.Context) {
 		recordUsage(c, usage)
-		queueHandler(c, deps)
+		queueHandler(c, deps, writes)
 	})
-	registerWrites(g)
+	registerWrites(g, writes)
 }
 
 // recordUsage counts an open of the console for the identity Authelia names in Remote-User. A request
@@ -186,7 +191,7 @@ func onlyHost(domain func() string) gin.HandlerFunc {
 	}
 }
 
-func queueHandler(c *gin.Context, deps Deps) {
+func queueHandler(c *gin.Context, deps Deps, writes *Writes) {
 	reader, sources, err := deps()
 	if err != nil {
 		log.Printf("console queue: configuration unavailable")
@@ -199,6 +204,13 @@ func queueHandler(c *gin.Context, deps Deps) {
 		return
 	}
 	out := queueView{Sources: []sourceView{}, Items: []itemView{}}
+	owed, err := writes.writes(c.Request.Context())
+	if err != nil {
+		log.Printf("console queue: writes: %v", err)
+		c.Status(http.StatusServiceUnavailable)
+		return
+	}
+	out.Writes = owed
 	if len(sources) > 0 {
 		// One more than the page tells whether another page exists, without a count.
 		page, err := reader.Queue(c.Request.Context(), sources, after, limit+1)

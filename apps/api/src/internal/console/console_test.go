@@ -43,7 +43,7 @@ func serveHost(t *testing.T, q QueueReader, sources, domain, host, path string) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	Register(r, func() (QueueReader, []forge.Source, error) { return q, declared, nil }, func() string { return domain }, nil)
+	Register(r, func() (QueueReader, []forge.Source, error) { return q, declared, nil }, func() string { return domain }, nil, nil)
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, path, nil)
 	req.Host = host
@@ -223,7 +223,7 @@ func TestTheApiServesNoPageOfItsOwn(t *testing.T) {
 func TestQueueWithoutACatalogIs503(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	Register(r, Live(&fakeQueue{}, nil), func() string { return consoleHost }, nil)
+	Register(r, Live(&fakeQueue{}, nil), func() string { return consoleHost }, nil, nil)
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/console/queue", nil)
 	req.Host = consoleHost
@@ -243,7 +243,7 @@ func TestQueueShowsAWildcardNotYetListed(t *testing.T) {
 	q := &fakeQueue{}
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	Register(r, Live(q, &forge.Catalog{Declared: sources}), func() string { return consoleHost }, nil)
+	Register(r, Live(q, &forge.Catalog{Declared: sources}), func() string { return consoleHost }, nil, nil)
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/console/queue", nil)
 	req.Host = consoleHost

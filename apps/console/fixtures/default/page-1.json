@@ -562,5 +562,27 @@
     }
   ],
   "total": 95,
-  "next": "eyJ1IjoiMjAyNi0xMS0xMVQxNjoxMDowMFoiLCJzIjoiZ2l0ZWE6cGVyc29uYWwvcmVzdW1lIiwibiI6MzYxfQ"
+  "next": "eyJ1IjoiMjAyNi0xMS0xMVQxNjoxMDowMFoiLCJzIjoiZ2l0ZWE6cGVyc29uYWwvcmVzdW1lIiwibiI6MzYxfQ",
+  "writes": [
+    {
+      "id": 41,
+      "action": "add_label",
+      "source": "github:mlorentedev/kubelab",
+      "number": 3500,
+      "detail": "status:in-progress",
+      "status": "pending",
+      "error": null,
+      "queued_at": "2026-11-17T18:02:11Z"
+    },
+    {
+      "id": 40,
+      "action": "create",
+      "source": "github:mlorentedev/kubelab",
+      "number": null,
+      "detail": "Renew the staging certificate",
+      "status": "failed",
+      "error": "forge answered 422: validation failed",
+      "queued_at": "2026-11-17T17:40:03Z"
+    }
+  ]
 }

@@ -19,7 +19,7 @@ func consoleEngine(t *testing.T) *gin.Engine {
 		t.Fatal(err)
 	}
 	Register(r, func() (QueueReader, []forge.Source, error) { return &fakeQueue{}, declared, nil },
-		func() string { return consoleHost }, nil)
+		func() string { return consoleHost }, nil, nil)
 	return r
 }
 

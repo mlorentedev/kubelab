@@ -66,6 +66,7 @@ func TestFixturesMatchTheQueueContract(t *testing.T) {
 		var parts struct {
 			Sources []json.RawMessage `json:"sources"`
 			Items   []json.RawMessage `json:"items"`
+			Writes  []json.RawMessage `json:"writes"`
 		}
 		if err := json.Unmarshal(raw, &parts); err != nil {
 			t.Fatal(err)
@@ -73,6 +74,26 @@ func TestFixturesMatchTheQueueContract(t *testing.T) {
 		for _, s := range parts.Sources {
 			if want := emittedKeys(t, sourceView{}); !reflect.DeepEqual(jsonKeys(t, s), want) {
 				t.Fatalf("%s source keys %v, handler writes %v", file, jsonKeys(t, s), want)
+			}
+		}
+		for _, w := range parts.Writes {
+			if want := emittedKeys(t, writeView{}); !reflect.DeepEqual(jsonKeys(t, w), want) {
+				t.Fatalf("%s write keys %v, handler writes %v", file, jsonKeys(t, w), want)
+			}
+		}
+		for _, w := range got.Writes {
+			if src, err := forge.ParseSources(w.Source); err != nil || len(src) != 1 {
+				t.Fatalf("%s write source %q is not one the handler names", file, w.Source)
+			}
+			if w.Status != forge.StatusPending && w.Status != forge.StatusFailed {
+				t.Fatalf("%s write status %q is neither pending nor failed", file, w.Status)
+			}
+			known := false
+			for _, a := range forge.Actions {
+				known = known || string(a) == w.Action
+			}
+			if !known {
+				t.Fatalf("%s write action %q is not one the outbox holds", file, w.Action)
 			}
 		}
 		for _, it := range parts.Items {
