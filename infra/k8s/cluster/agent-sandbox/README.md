@@ -5,11 +5,12 @@ OUTSIDE the Argo CD overlay by the toolkit (ADR-047 / TOOL-009), declared in the
 `cluster_bootstrap` list in `infra/config/values/common.yaml`.
 
 - **Upstream:** <https://github.com/kubernetes-sigs/agent-sandbox>
-- **Release:** `v0.5.0rc1` (pre-release; core API graduated to `v1beta1`)
-- **Asset:** `manifest.yaml` — the official single-file install, vendored verbatim.
+- **Release:** `v0.5.6` (the version pinned in `common.yaml`)
+- **Asset:** `sandbox.yaml` — the core-only single-file install (upstream no longer publishes `manifest.yaml` since v0.5.6), vendored verbatim.
 - **Provides:** the `sandboxes.agents.x-k8s.io` CRD (Kind `Sandbox`, `v1beta1`), the
-  `agent-sandbox-controller` Deployment + RBAC, and the `agent-sandbox-system` namespace.
-- **Image:** `registry.k8s.io/agent-sandbox/agent-sandbox-controller:v0.5.0rc1`
+  `agent-sandbox-controller` Deployment + RBAC, the webhook Service the CRD's `v1alpha1` conversion uses, and the
+  `agent-sandbox-system` namespace.
+- **Image:** `registry.k8s.io/agent-sandbox/agent-sandbox-controller:v0.5.6`
 
 ## Refresh
 
