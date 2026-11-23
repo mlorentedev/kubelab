@@ -1847,7 +1847,7 @@ apps:
 
       headscale:
         name: headscale
-        image: headscale/headscale:v0.28.0
+        image: headscale/headscale:v0.29.7
         domain: vpn.kubelab.live
         # Headscale v0.28 CLI uses numeric user IDs (not names)
         # Users: 1=manu (personal), 2=kubelab (infra nodes), 3=work (Windows PCs),
