@@ -101,7 +101,7 @@ jobs:
       # API
       - name: Set up Go (for api)
         if: steps.changes.outputs.should_build == 'true' && inputs.app == 'api'
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5  # v7
         with:
           # Read from go.mod so CI can never build on an older toolchain than the
           # module declares (a literal here fell behind go.mod in #2429).
@@ -156,7 +156,7 @@ jobs:
       # Console (apps/console, ADR-074)
       - name: Set up Go (for the console's fixture contract)
         if: steps.changes.outputs.should_build == 'true' && inputs.app == 'console'
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5  # v7
         with:
           go-version-file: './apps/api/src/go.mod'
           cache-dependency-path: './apps/api/src/go.sum'
