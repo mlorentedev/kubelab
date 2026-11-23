@@ -233,7 +233,7 @@ default_language_version:
   # to install. A local node does not help: pre-commit ignores one installed
   # under the home directory (mise, nvm) and falls back to nodeenv. Renovate
   # bumps this line (the `node-version` custom manager in renovate.json, #3070).
-  node: 24.22.1
+  node: 24.22.3
 
 # Files to exclude
 exclude: |
